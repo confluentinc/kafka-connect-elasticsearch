@@ -49,7 +49,7 @@ public class IncompleteRecordBatches {
 
   public int numIncompletes() {
     synchronized (incomplete) {
-      return  incomplete.size();
+      return incomplete.size();
     }
   }
 }

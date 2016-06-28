@@ -16,18 +16,17 @@
 
 package io.confluent.connect.elasticsearch;
 
-import org.elasticsearch.client.Client;
-import org.elasticsearch.index.mapper.MapperException;
 import org.junit.Before;
 import org.junit.Test;
 
 import java.nio.ByteBuffer;
 
 import io.confluent.connect.elasticsearch.internals.BulkProcessor;
+import io.confluent.connect.elasticsearch.internals.Client;
 import io.confluent.connect.elasticsearch.internals.ESRequest;
-import io.confluent.connect.elasticsearch.internals.ESResponse;
 import io.confluent.connect.elasticsearch.internals.Listener;
 import io.confluent.connect.elasticsearch.internals.RecordBatch;
+import io.confluent.connect.elasticsearch.internals.Response;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -36,8 +35,6 @@ import static org.junit.Assert.fail;
 
 public class BulkProcessorTest {
 
-  private final String testName = "BulkProcessorTest";
-  private Client client = new MockClient(testName, 0);
   private volatile int numFailure = 0;
   private volatile int numSuccess = 0;
   private volatile int numExecute = 0;
@@ -65,6 +62,7 @@ public class BulkProcessorTest {
     int maxInFlightRequests = 2;
     int batchSize = 5;
     int numRecords = 10;
+    Client<Response> client = new MockHttpClient(0);
 
     BulkProcessor bulkProcessor = new BulkProcessor(client, maxInFlightRequests, batchSize, lingerMs, maxRetry, retryBackoffMs, createTestListener());
     bulkProcessor.start();
@@ -85,6 +83,7 @@ public class BulkProcessorTest {
     int batchSize = 5;
     int numRecords = 4;
 
+    Client<Response> client = new MockHttpClient(0);
     BulkProcessor bulkProcessor = new BulkProcessor(client, maxInFlightRequests, batchSize, lingerMs, maxRetry, retryBackoffMs, createTestListener());
     bulkProcessor.start();
 
@@ -104,8 +103,9 @@ public class BulkProcessorTest {
     int batchSize = 5;
     int numRecords = 10;
 
-    Client client = new MockClient(testName, 1);
+    Client<Response> client = new MockHttpClient(1);
     BulkProcessor bulkProcessor = new BulkProcessor(client, maxInFlightRequests, batchSize, lingerMs, maxRetry, retryBackoffMs, createTestListener());
+
     bulkProcessor.start();
 
     addRecords(bulkProcessor, numRecords);
@@ -119,12 +119,12 @@ public class BulkProcessorTest {
   }
 
   @Test
-  public void testBatchFailure() {
-    int maxInFlightRequests = 2;
+  public void testBatchFailure() throws Exception {
+    int maxInFlightRequests = 1;
     int batchSize = 5;
-    int numRecords = 10;
+    int numRecords = 5;
 
-    Client client = new MockClient(testName, 1, new MapperException("Non retriable exception."));
+    Client<Response> client = new MockHttpClient(1, false);
     BulkProcessor bulkProcessor = new BulkProcessor(client, maxInFlightRequests, batchSize, lingerMs, maxRetry, retryBackoffMs, createTestListener());
     bulkProcessor.start();
 
@@ -136,11 +136,12 @@ public class BulkProcessorTest {
       // expected
     }
 
+    Thread.sleep(1000);
     int numIncompletes = bulkProcessor.getNumIncompletes();
     assertEquals(0, numIncompletes);
     assertEquals(1, numFailure);
-    assertEquals(1, numSuccess);
-    assertEquals(2, numExecute);
+    assertEquals(0, numSuccess);
+    assertEquals(1, numExecute);
   }
 
   @Test
@@ -149,6 +150,7 @@ public class BulkProcessorTest {
     int batchSize = 5;
     int numRecords = 4;
 
+    Client<Response> client = new MockHttpClient(0);
     BulkProcessor bulkProcessor = new BulkProcessor(client, maxInFlightRequests, batchSize, lingerMs, maxRetry, retryBackoffMs, createTestListener());
     bulkProcessor.start();
 
@@ -172,7 +174,7 @@ public class BulkProcessorTest {
     long shortTimeoutMs = 500;
     long mediumTimeoutMs = 3000;
 
-    Client client = new MockClient(testName, 1);
+    Client<Response> client = new MockHttpClient(1);
     BulkProcessor bulkProcessor = new BulkProcessor(client, maxInFlightRequests, batchSize, lingerMs, maxRetry, retryBackoffMs, createTestListener());
     bulkProcessor.start();
 
@@ -211,7 +213,7 @@ public class BulkProcessorTest {
       }
 
       @Override
-      public void afterBulk(long executionId, RecordBatch batch, ESResponse response) {
+      public void afterBulk(long executionId, RecordBatch batch, Response response) {
         if (response.hasFailures()) {
           synchronized (this) {
             numFailure++;

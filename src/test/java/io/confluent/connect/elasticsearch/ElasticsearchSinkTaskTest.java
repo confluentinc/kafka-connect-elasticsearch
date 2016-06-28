@@ -20,10 +20,7 @@ import com.carrotsearch.randomizedtesting.annotations.ThreadLeakScope;
 
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.Struct;
-import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.sink.SinkRecord;
-import org.apache.kafka.connect.sink.SinkTask;
-import org.elasticsearch.client.Client;
 import org.elasticsearch.test.ESIntegTestCase;
 import org.elasticsearch.test.InternalTestCluster;
 import org.junit.Test;
@@ -39,30 +36,15 @@ public class ElasticsearchSinkTaskTest extends ElasticsearchSinkTestBase {
   private Map<String, String> createProps() {
     Map<String, String> props = new HashMap<>();
     props.put(ElasticsearchSinkConnectorConfig.TYPE_NAME_CONFIG, TYPE);
-    props.put(ElasticsearchSinkConnectorConfig.TRANSPORT_ADDRESSES_CONFIG, "localhost");
+    props.put(ElasticsearchSinkConnectorConfig.HTTP_ADDRESSES_CONFIG, "localhost");
     props.put(ElasticsearchSinkConnectorConfig.KEY_IGNORE_CONFIG, "true");
     return props;
-  }
-
-  @Test
-  public void testStart() throws Exception {
-    Map<String, String> props = createProps();
-    SinkTask task = new ElasticsearchSinkTask();
-    task.initialize(context);
-    try {
-      task.start(props);
-      fail("Invalid transport address.");
-    } catch (ConnectException e) {
-      // expected
-    }
   }
 
   @Test
   public void testPutAndFlush() throws Exception {
     InternalTestCluster cluster = ESIntegTestCase.internalCluster();
     cluster.ensureAtLeastNumDataNodes(3);
-    Client client = cluster.client();
-
     Map<String, String> props = createProps();
 
     ElasticsearchSinkTask task = new ElasticsearchSinkTask();
@@ -85,7 +67,6 @@ public class ElasticsearchSinkTaskTest extends ElasticsearchSinkTestBase {
     task.flush(null);
 
     Thread.sleep(SLEEP_INTERVAL_MS);
-    verifySearch(records, search(client, "user", "liquan"), true);
-    verifySearch(records, search(client, "message", "elastic"), true);
+    verifySearch(records, search(client), true);
   }
 }

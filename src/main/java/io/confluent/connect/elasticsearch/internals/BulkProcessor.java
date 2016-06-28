@@ -13,11 +13,9 @@
  * License for the specific language governing permissions and limitations under
  * the License.
  **/
-
 package io.confluent.connect.elasticsearch.internals;
 
 import org.apache.kafka.connect.errors.RetriableException;
-import org.elasticsearch.client.Client;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -33,7 +31,7 @@ public class BulkProcessor implements Runnable {
 
   private static final Logger log = LoggerFactory.getLogger(BulkProcessor.class);
   private final ArrayDeque<RecordBatch> requests;
-  private final Client client;
+  private final Client<Response> client;
   private final int batchSize;
   private final ExecutorService executorService;
   private final AtomicLong executionIdGen = new AtomicLong();
@@ -49,7 +47,7 @@ public class BulkProcessor implements Runnable {
   private volatile boolean muted;
 
   public BulkProcessor(
-      Client client,
+      Client<Response> client,
       int maxInFlightRequests,
       int batchSize,
       long lingerMs,
@@ -123,9 +121,9 @@ public class BulkProcessor implements Runnable {
       } catch (Throwable t) {
         log.error("Error executing the beforeBulk callback", t);
       }
-      Callback<ESResponse> callback = new Callback<ESResponse>() {
+      Callback<Response> callback = new Callback<Response>() {
         @Override
-        public void onResponse(ESResponse response) {
+        public void onResponse(Response response) {
           if (!response.hasFailures()) {
             incomplete.remove(batch);
             batch.result().done(null);
@@ -156,8 +154,7 @@ public class BulkProcessor implements Runnable {
         }
       };
 
-      RecordBatchHandler requestHandler = new RecordBatchHandler(client, callback);
-      requestHandler.execute(batch);
+      client.execute(batch, callback);
     } catch (Throwable t) {
       log.warn("Failed to execute bulk request {}.", t, executionId);
       try {
@@ -186,6 +183,7 @@ public class BulkProcessor implements Runnable {
   }
 
   private void retryOrFail(RecordBatch batch, Throwable t) {
+    log.error("Failed to execute the batch, retry or fail", t);
     synchronized (requests) {
       batch.setRetry();
       batch.incrementAttempts();

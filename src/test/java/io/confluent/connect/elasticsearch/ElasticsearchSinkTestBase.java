@@ -16,26 +16,36 @@
 
 package io.confluent.connect.elasticsearch;
 
+import com.google.gson.JsonArray;
+
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.sink.SinkRecord;
 import org.apache.kafka.connect.sink.SinkTaskContext;
-import org.elasticsearch.action.search.SearchResponse;
-import org.elasticsearch.client.Client;
-import org.elasticsearch.index.query.QueryBuilders;
-import org.elasticsearch.search.SearchHit;
-import org.elasticsearch.search.SearchHits;
+import org.elasticsearch.cluster.metadata.IndexMetaData;
+import org.elasticsearch.common.settings.Settings;
+import org.elasticsearch.node.Node;
 import org.elasticsearch.test.ESIntegTestCase;
+import org.junit.After;
 import org.junit.AfterClass;
+import org.junit.Before;
 import org.junit.BeforeClass;
 
+import java.io.IOException;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+
+import io.searchbox.client.JestClient;
+import io.searchbox.client.JestClientFactory;
+import io.searchbox.client.config.HttpClientConfig;
+import io.searchbox.client.http.JestHttpClient;
+import io.searchbox.core.Search;
+import io.searchbox.core.SearchResult;
 
 public class ElasticsearchSinkTestBase extends ESIntegTestCase {
 
@@ -53,6 +63,9 @@ public class ElasticsearchSinkTestBase extends ESIntegTestCase {
   protected static final TopicPartition TOPIC_PARTITION3 = new TopicPartition(TOPIC, PARTITION3);
   protected static SinkTaskContext context;
 
+  protected final JestClientFactory factory = new JestClientFactory();
+  protected JestHttpClient client;
+
   @BeforeClass
   public static void createAssignment() {
     assignment = new HashSet<>();
@@ -66,6 +79,32 @@ public class ElasticsearchSinkTestBase extends ESIntegTestCase {
   public static void clearAssignment() {
     assignment.clear();
     context = null;
+  }
+
+  @Before
+  public void setUp() throws Exception {
+    super.setUp();
+    factory.setHttpClientConfig(
+        new HttpClientConfig
+            .Builder("http://localhost:" + getPort())
+            .multiThreaded(true).build()
+    );
+    client = (JestHttpClient) factory.getObject();
+  }
+
+  @After
+  public void tearDown() throws Exception {
+    super.tearDown();
+    if (client != null) {
+      client.shutdownClient();
+    }
+    client = null;
+  }
+
+  protected int getPort() {
+    assertTrue("There should be at least 1 HTTP endpoint exposed in the test cluster",
+               cluster().httpAddresses().length > 0);
+    return cluster().httpAddresses()[0].getPort();
   }
 
   protected Struct createRecord(Schema schema) {
@@ -94,22 +133,17 @@ public class ElasticsearchSinkTestBase extends ESIntegTestCase {
     return struct;
   }
 
-  protected SearchResponse search(Client client, String field, String query) {
-    return client.prepareSearch()
-        .setQuery(QueryBuilders.termQuery(field, query))
-        .execute().actionGet();
+  protected SearchResult search(JestClient client) throws IOException {
+    return client.execute(new Search.Builder("").build());
   }
 
-  protected SearchResponse search(Client client) {
-    return client.prepareSearch().execute().actionGet();
-  }
-
-  protected void verifySearch(Collection<SinkRecord> records, SearchResponse response, boolean ignoreKey) {
-    SearchHits hits = response.getHits();
-    assertEquals(records.size(), hits.getTotalHits());
+  protected void verifySearch(Collection<SinkRecord> records, SearchResult result, boolean ignoreKey) {
+    JsonArray hits = result.getJsonObject().getAsJsonObject("hits").getAsJsonArray("hits");
+    assertEquals(records.size(), hits.size());
     Set<String> hitIds = new HashSet<>();
-    for (SearchHit hit : hits.getHits()) {
-      hitIds.add(hit.getId());
+    for (int i = 0; i < hits.size(); ++i) {
+      String id = hits.get(i).getAsJsonObject().get("_id").getAsString();
+      hitIds.add(id);
     }
 
     if (ignoreKey) {
@@ -126,6 +160,16 @@ public class ElasticsearchSinkTestBase extends ESIntegTestCase {
         assertTrue(hitIds.contains(id));
       }
     }
+  }
+
+  @Override
+  protected Settings nodeSettings(int nodeOrdinal) {
+    return Settings.settingsBuilder()
+        .put(super.nodeSettings(nodeOrdinal))
+        .put(IndexMetaData.SETTING_NUMBER_OF_SHARDS, 1)
+        .put(IndexMetaData.SETTING_NUMBER_OF_REPLICAS, 1)
+        .put(Node.HTTP_ENABLED, true)
+        .build();
   }
 
   protected static class MockSinkTaskContext implements SinkTaskContext {

@@ -21,11 +21,10 @@ import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.sink.SinkRecord;
 import org.apache.kafka.connect.sink.SinkTaskContext;
 import org.apache.kafka.connect.storage.Converter;
-import org.elasticsearch.action.admin.indices.create.CreateIndexResponse;
-import org.elasticsearch.client.Client;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -34,9 +33,15 @@ import java.util.Set;
 
 import io.confluent.connect.elasticsearch.internals.BulkProcessor;
 import io.confluent.connect.elasticsearch.internals.ESRequest;
-import io.confluent.connect.elasticsearch.internals.ESResponse;
+import io.confluent.connect.elasticsearch.internals.HttpClient;
 import io.confluent.connect.elasticsearch.internals.Listener;
 import io.confluent.connect.elasticsearch.internals.RecordBatch;
+import io.confluent.connect.elasticsearch.internals.Response;
+import io.searchbox.action.Action;
+import io.searchbox.client.JestClient;
+import io.searchbox.client.JestResult;
+import io.searchbox.indices.CreateIndex;
+import io.searchbox.indices.IndicesExists;
 
 /**
  * The ElasticsearchWriter handles connections to Elasticsearch, sending data and flush.
@@ -47,8 +52,6 @@ import io.confluent.connect.elasticsearch.internals.RecordBatch;
  * Currently, we only send out requests to Elasticsearch when flush is called, which is not
  * desirable from the latency point of view.
  *
- * TODO: Use REST instead of transport client.
- *
  * TODO: Use offset as external version to fence requests with lower version.
  */
 public class ElasticsearchWriter {
@@ -56,7 +59,7 @@ public class ElasticsearchWriter {
 
   private final Converter converter;
 
-  private final Client client;
+  private final JestClient client;
   private final BulkProcessor bulkProcessor;
   private final String type;
   private final boolean ignoreKey;
@@ -80,10 +83,9 @@ public class ElasticsearchWriter {
    * @param batchSize Approximately the max number of records each writer will buffer.
    * @param lingerMs The time to wait before sending a batch.
    * @param context The SinkTaskContext.
-   * @param mock Whether to use mock Elasticsearch client.
    */
   ElasticsearchWriter(
-      Client client,
+      JestClient client,
       String type,
       boolean ignoreKey,
       boolean ignoreSchema,
@@ -96,8 +98,7 @@ public class ElasticsearchWriter {
       int maxRetry,
       long retryBackoffMs,
       SinkTaskContext context,
-      Converter converter,
-      boolean mock) {
+      Converter converter) {
 
     this.client = client;
     this.type = type;
@@ -116,15 +117,13 @@ public class ElasticsearchWriter {
     this.context = context;
 
     // create index if needed.
-    if (!mock) {
-      createIndices(topicConfigs);
-    }
+    createIndices(topicConfigs);
 
     // Config the JsonConverter
     this.converter = converter;
 
     // Start the BulkProcessor
-    bulkProcessor = new BulkProcessor(client, maxInFlightRequests, batchSize, lingerMs, maxRetry, retryBackoffMs, createDefaultListener());
+    bulkProcessor = new BulkProcessor(new HttpClient(client), maxInFlightRequests, batchSize, lingerMs, maxRetry, retryBackoffMs, createDefaultListener());
     bulkProcessor.start();
 
     //Create mapping cache
@@ -132,8 +131,7 @@ public class ElasticsearchWriter {
   }
 
   public static class Builder {
-
-    private final Client client;
+    private final JestClient client;
     private String type;
     private boolean ignoreKey = false;
     private boolean ignoreSchema = false;
@@ -147,13 +145,12 @@ public class ElasticsearchWriter {
     private long retryBackoffMs;
     private SinkTaskContext context;
     private Converter converter = ElasticsearchSinkTask.getConverter();
-    private boolean mock;
 
     /**
      * Constructor of ElasticsearchWriter Builder.
      * @param client The client to connect to Elasticsearch.
      */
-    public Builder(Client client) {
+    public Builder(JestClient client) {
       this.client = client;
     }
 
@@ -290,22 +287,12 @@ public class ElasticsearchWriter {
     }
 
     /**
-     * Set whether to use the mock client to connect to Elasticsearch.
-     * @param mock Whether to use mock client.
-     * @return an instance of ElasticsearchWriter Builder.
-     */
-    public Builder setMock(boolean mock) {
-      this.mock = mock;
-      return this;
-    }
-
-    /**
      * Build the ElasticsearchWriter.
      * @return an instance of ElasticsearchWriter.
      */
     public ElasticsearchWriter build() {
       return new ElasticsearchWriter(
-          client, type, ignoreKey, ignoreSchema, topicConfigs, flushTimeoutMs, maxBufferedRecords, maxInFlightRequests, batchSize, lingerMs, maxRetry, retryBackoffMs, context, converter, mock);
+          client, type, ignoreKey, ignoreSchema, topicConfigs, flushTimeoutMs, maxBufferedRecords, maxInFlightRequests, batchSize, lingerMs, maxRetry, retryBackoffMs, context, converter);
     }
   }
 
@@ -345,9 +332,14 @@ public class ElasticsearchWriter {
   }
 
   private boolean indexExists(String index) {
-    return client.admin().indices().prepareExists(index).execute().actionGet().isExists();
+    Action action = new IndicesExists.Builder(index).build();
+    try {
+      JestResult result = client.execute(action);
+      return result.isSucceeded();
+    } catch (IOException e) {
+      throw new ConnectException(e);
+    }
   }
-
 
   private void createIndices(Map<String, TopicConfig> topicConfigs) {
     Set<TopicPartition> assignment = context.assignment();
@@ -363,16 +355,16 @@ public class ElasticsearchWriter {
     for (String topic: topicConfigs.keySet()) {
       indices.add(topicConfigs.get(topic).getIndex());
     }
-
     for (String index: indices) {
       if (!indexExists(index)) {
-        CreateIndexResponse createIndexResponse = client.admin().indices()
-            .prepareCreate(index)
-            .execute()
-            .actionGet();
-
-        if (!createIndexResponse.isAcknowledged()) {
-          throw new ConnectException("Could not create index:" + index);
+        CreateIndex createIndex = new CreateIndex.Builder(index).build();
+        try {
+          JestResult result = client.execute(createIndex);
+          if (!result.isSucceeded()) {
+            throw new ConnectException("Could not create index:" + index);
+          }
+        } catch (IOException e) {
+          throw new ConnectException(e);
         }
       }
     }
@@ -386,7 +378,7 @@ public class ElasticsearchWriter {
       }
 
       @Override
-      public void afterBulk(long executionId, RecordBatch batch, ESResponse response) {
+      public void afterBulk(long executionId, RecordBatch batch, Response response) {
 
       }
 

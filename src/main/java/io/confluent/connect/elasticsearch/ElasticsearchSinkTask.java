@@ -24,27 +24,25 @@ import org.apache.kafka.connect.json.JsonConverter;
 import org.apache.kafka.connect.sink.SinkRecord;
 import org.apache.kafka.connect.sink.SinkTask;
 import org.apache.kafka.connect.storage.Converter;
-import org.elasticsearch.client.Client;
-import org.elasticsearch.client.transport.TransportClient;
-import org.elasticsearch.common.transport.InetSocketTransportAddress;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.net.InetAddress;
-import java.net.UnknownHostException;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+
+import io.searchbox.client.JestClient;
+import io.searchbox.client.JestClientFactory;
+import io.searchbox.client.config.HttpClientConfig;
 
 public class ElasticsearchSinkTask extends SinkTask {
 
   private static final Logger log = LoggerFactory.getLogger(ElasticsearchSinkTask.class);
   private ElasticsearchWriter writer;
-  private Client client;
+  private JestClient client;
   private ElasticsearchWriter.Builder builder;
   private static Converter converter;
 
@@ -67,7 +65,7 @@ public class ElasticsearchSinkTask extends SinkTask {
   }
 
   // public for testing
-  public void start(Map<String, String> props, Client client) {
+  public void start(Map<String, String> props, JestClient client) {
     try {
       log.info("Starting ElasticsearchSinkTask.");
 
@@ -92,14 +90,10 @@ public class ElasticsearchSinkTask extends SinkTask {
       if (client != null) {
         this.client = client;
       } else {
-        TransportClient transportClient = TransportClient.builder().build();
-        List<InetSocketTransportAddress> addresses = parseAddress(config.getList(ElasticsearchSinkConnectorConfig.TRANSPORT_ADDRESSES_CONFIG));
-
-        for (InetSocketTransportAddress address: addresses) {
-          transportClient.addTransportAddress(address);
-        }
-
-        this.client = transportClient;
+        List<String> addresses = config.getList(ElasticsearchSinkConnectorConfig.HTTP_ADDRESSES_CONFIG);
+        JestClientFactory factory = new JestClientFactory();
+        factory.setHttpClientConfig(new HttpClientConfig.Builder(addresses.get(0)).multiThreaded(true).build());
+        this.client = factory.getObject();
       }
 
       builder = new ElasticsearchWriter.Builder(this.client)
@@ -119,8 +113,6 @@ public class ElasticsearchSinkTask extends SinkTask {
 
     } catch (ConfigException e) {
       throw new ConnectException("Couldn't start ElasticsearchSinkTask due to configuration error:", e);
-    } catch (UnknownHostException e) {
-      throw new ConnectException("Couldn't start ElasticsearchSinkTask due to unknown host exception:", e);
     }
   }
 
@@ -154,7 +146,7 @@ public class ElasticsearchSinkTask extends SinkTask {
   public void stop() throws ConnectException {
     log.info("Stopping ElasticsearchSinkTask.");
     if (client != null) {
-      client.close();
+      client.shutdownClient();
     }
   }
 
@@ -181,29 +173,6 @@ public class ElasticsearchSinkTask extends SinkTask {
       topicConfigMap.put(topic, topicConfig);
     }
     return topicConfigMap;
-  }
-
-  private InetSocketTransportAddress parseAddress(String address) throws UnknownHostException {
-    String[] parts = address.split(":");
-    if (parts.length != 2) {
-      throw new ConfigException("Not valid address: " + address);
-    }
-    String host = parts[0];
-    int port;
-    try {
-      port = Integer.parseInt(parts[1]);
-    } catch (NumberFormatException e) {
-      throw new ConfigException("port is not a valid.", e);
-    }
-    return new InetSocketTransportAddress(InetAddress.getByName(host), port);
-  }
-
-  private List<InetSocketTransportAddress> parseAddress(List<String> addresses) throws UnknownHostException {
-    List<InetSocketTransportAddress> transportAddresses = new LinkedList<>();
-    for (String address: addresses) {
-      transportAddresses.add(parseAddress(address));
-    }
-    return transportAddresses;
   }
 
   public static Converter getConverter() {
