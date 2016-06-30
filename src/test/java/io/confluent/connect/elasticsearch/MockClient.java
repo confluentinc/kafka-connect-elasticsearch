@@ -16,24 +16,41 @@
 
 package io.confluent.connect.elasticsearch;
 
+import org.elasticsearch.ElasticsearchException;
+import org.elasticsearch.action.Action;
 import org.elasticsearch.action.ActionFuture;
 import org.elasticsearch.action.ActionListener;
+import org.elasticsearch.action.ActionRequest;
+import org.elasticsearch.action.ActionRequestBuilder;
+import org.elasticsearch.action.ActionResponse;
 import org.elasticsearch.action.bulk.BulkItemResponse;
 import org.elasticsearch.action.bulk.BulkRequest;
 import org.elasticsearch.action.bulk.BulkResponse;
 import org.elasticsearch.action.delete.DeleteResponse;
 import org.elasticsearch.action.support.PlainActionFuture;
+import org.elasticsearch.client.support.AbstractClient;
+import org.elasticsearch.client.support.Headers;
+import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.util.concurrent.EsRejectedExecutionException;
+import org.elasticsearch.threadpool.ThreadPool;
 
 import java.util.Random;
+import java.util.concurrent.TimeUnit;
 
-public class MockClient extends NoOpClient {
+public class MockClient extends AbstractClient {
+
   private int numberOfCallsToFail;
   private Random random = new Random();
+  private Throwable throwable;
+
+  public MockClient(String testName, int numberOfCallsToFail, Throwable throwable) {
+    super(Settings.EMPTY, new ThreadPool(testName), Headers.EMPTY);
+    this.numberOfCallsToFail = numberOfCallsToFail;
+    this.throwable = throwable;
+  }
 
   public MockClient(String testName, int numberOfCallsToFail) {
-    super(testName);
-    this.numberOfCallsToFail = numberOfCallsToFail;
+    this(testName, numberOfCallsToFail, new EsRejectedExecutionException("poll full"));
   }
 
   @Override
@@ -46,8 +63,11 @@ public class MockClient extends NoOpClient {
   @Override
   public void bulk(BulkRequest request, ActionListener<BulkResponse> listener) {
     // do everything synchronously, that's fine for a test
-    boolean shouldFail = numberOfCallsToFail > 0;
-    numberOfCallsToFail--;
+    boolean shouldFail;
+    synchronized (this) {
+      shouldFail = numberOfCallsToFail > 0;
+      numberOfCallsToFail--;
+    }
 
     BulkItemResponse[] itemResponses = new BulkItemResponse[request.requests().size()];
     // if we have to fail, we need to fail at least once "reliably", the rest can be random
@@ -67,6 +87,20 @@ public class MockClient extends NoOpClient {
   }
 
   private BulkItemResponse failedResponse() {
-    return new BulkItemResponse(1, "update", new BulkItemResponse.Failure("test", "test", "1", new EsRejectedExecutionException("pool full")));
+    return new BulkItemResponse(1, "update", new BulkItemResponse.Failure("test", "test", "1", throwable));
+  }
+
+  @Override
+  protected <Request extends ActionRequest, Response extends ActionResponse, RequestBuilder extends ActionRequestBuilder<Request, Response, RequestBuilder>> void doExecute(Action<Request, Response, RequestBuilder> action, Request request, ActionListener<Response> listener) {
+    listener.onResponse(null);
+  }
+
+  @Override
+  public void close() {
+    try {
+      ThreadPool.terminate(threadPool(), 10, TimeUnit.SECONDS);
+    } catch (Throwable t) {
+      throw new ElasticsearchException(t.getMessage(), t);
+    }
   }
 }

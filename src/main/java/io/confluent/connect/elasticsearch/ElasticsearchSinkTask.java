@@ -83,7 +83,11 @@ public class ElasticsearchSinkTask extends SinkTask {
 
       long flushTimeoutMs = config.getLong(ElasticsearchSinkConnectorConfig.FLUSH_TIMEOUT_MS_CONFIG);
       long maxBufferedRecords = config.getLong(ElasticsearchSinkConnectorConfig.MAX_BUFFERED_RECORDS_CONFIG);
-      long batchSize = config.getLong(ElasticsearchSinkConnectorConfig.BATCH_SIZE_CONFIG);
+      int batchSize = config.getInt(ElasticsearchSinkConnectorConfig.BATCH_SIZE_CONFIG);
+      long lingerMs = config.getLong(ElasticsearchSinkConnectorConfig.LINGER_MS_CONFIG);
+      int maxInFlightRequests = config.getInt(ElasticsearchSinkConnectorConfig.MAX_IN_FLIGHT_REQUESTS_CONFIG);
+      long retryBackoffMs = config.getLong(ElasticsearchSinkConnectorConfig.RETRY_BACKOFF_MS_CONFIG);
+      int maxRetry = config.getInt(ElasticsearchSinkConnectorConfig.MAX_RETRY_CONFIG);
 
       if (client != null) {
         this.client = client;
@@ -105,7 +109,11 @@ public class ElasticsearchSinkTask extends SinkTask {
           .setTopicConfigs(topicConfigs)
           .setFlushTimoutMs(flushTimeoutMs)
           .setMaxBufferedRecords(maxBufferedRecords)
+          .setMaxInFlightRequests(maxInFlightRequests)
           .setBatchSize(batchSize)
+          .setLingerMs(lingerMs)
+          .setRetryBackoffMs(retryBackoffMs)
+          .setMaxRetry(maxRetry)
           .setContext(context)
           .setConverter(converter);
 

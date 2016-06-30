@@ -21,31 +21,22 @@ import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.sink.SinkRecord;
 import org.apache.kafka.connect.sink.SinkTaskContext;
 import org.apache.kafka.connect.storage.Converter;
-import org.elasticsearch.ExceptionsHelper;
-import org.elasticsearch.action.ActionRequest;
 import org.elasticsearch.action.admin.indices.create.CreateIndexResponse;
-import org.elasticsearch.action.bulk.BackoffPolicy;
-import org.elasticsearch.action.bulk.BulkItemResponse;
-import org.elasticsearch.action.bulk.BulkProcessor;
-import org.elasticsearch.action.bulk.BulkRequest;
-import org.elasticsearch.action.bulk.BulkResponse;
-import org.elasticsearch.action.index.IndexRequest;
 import org.elasticsearch.client.Client;
-import org.elasticsearch.common.unit.ByteSizeValue;
-import org.elasticsearch.index.mapper.MapperException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Iterator;
-import java.util.LinkedList;
 import java.util.Map;
-import java.util.Queue;
 import java.util.Set;
-import java.util.concurrent.Semaphore;
-import java.util.concurrent.TimeUnit;
+
+import io.confluent.connect.elasticsearch.internals.BulkProcessor;
+import io.confluent.connect.elasticsearch.internals.ESRequest;
+import io.confluent.connect.elasticsearch.internals.ESResponse;
+import io.confluent.connect.elasticsearch.internals.Listener;
+import io.confluent.connect.elasticsearch.internals.RecordBatch;
 
 /**
  * The ElasticsearchWriter handles connections to Elasticsearch, sending data and flush.
@@ -55,8 +46,6 @@ import java.util.concurrent.TimeUnit;
  *
  * Currently, we only send out requests to Elasticsearch when flush is called, which is not
  * desirable from the latency point of view.
- *
- * TODO: Replace the Elasticsearch BulkProcessor with our own processor to handle batching and retry.
  *
  * TODO: Use REST instead of transport client.
  *
@@ -69,23 +58,13 @@ public class ElasticsearchWriter {
 
   private final Client client;
   private final BulkProcessor bulkProcessor;
-  private static final int CONCURRENT_REQUESTS = 1;
-  private final Semaphore semaphore = new Semaphore(CONCURRENT_REQUESTS);
-  private final Queue<SinkRecord> buffer;
-  private BulkRequest currentBulkRequest;
-
   private final String type;
   private final boolean ignoreKey;
   private final boolean ignoreSchema;
   private final Map<String, TopicConfig> topicConfigs;
   private final long flushTimeoutMs;
   private final long maxBufferedRecords;
-  private final long batchSize;
-
   private final SinkTaskContext context;
-  private final Set<TopicPartition> assignment;
-  private static final Class<? extends Throwable> NON_RETRIABLE_EXCEPTION_CLASS = MapperException.class;
-  private boolean canRetry;
   private final Set<String> mappings;
 
   /**
@@ -97,7 +76,9 @@ public class ElasticsearchWriter {
    * @param topicConfigs The map of per topic configs.
    * @param flushTimeoutMs The flush timeout.
    * @param maxBufferedRecords The max number of buffered records.
+   * @param maxInFlightRequests The max number of inflight requests allowed.
    * @param batchSize Approximately the max number of records each writer will buffer.
+   * @param lingerMs The time to wait before sending a batch.
    * @param context The SinkTaskContext.
    * @param mock Whether to use mock Elasticsearch client.
    */
@@ -109,7 +90,11 @@ public class ElasticsearchWriter {
       Map<String, TopicConfig> topicConfigs,
       long flushTimeoutMs,
       long maxBufferedRecords,
-      long batchSize,
+      int maxInFlightRequests,
+      int batchSize,
+      long lingerMs,
+      int maxRetry,
+      long retryBackoffMs,
       SinkTaskContext context,
       Converter converter,
       boolean mock) {
@@ -127,76 +112,20 @@ public class ElasticsearchWriter {
 
     this.flushTimeoutMs = flushTimeoutMs;
     this.maxBufferedRecords  = maxBufferedRecords;
-    this.batchSize = batchSize;
 
     this.context = context;
-    this.assignment = context.assignment();
-    this.canRetry = true;
-
-    this.currentBulkRequest = new BulkRequest();
 
     // create index if needed.
     if (!mock) {
       createIndices(topicConfigs);
     }
 
-    // create the buffer
-    buffer = new LinkedList<>();
-
     // Config the JsonConverter
     this.converter = converter;
 
-    // Create the bulkProcessor
-    bulkProcessor = BulkProcessor.builder(
-        client,
-        new BulkProcessor.Listener() {
-
-          @Override
-          public void beforeBulk(long executionId, BulkRequest request) {
-            log.debug("Before executing the request: {}", request);
-            try {
-              semaphore.acquire();
-            } catch (InterruptedException e) {
-              Thread.currentThread().interrupt();
-            }
-          }
-
-          @Override
-          public void afterBulk(long executionId, BulkRequest request, BulkResponse response) {
-            if (!response.hasFailures()) {
-              log.debug("Finished request with no failures.");
-              currentBulkRequest = new BulkRequest();
-            } else {
-              log.error("Failure:" + response.buildFailureMessage());
-              for (BulkItemResponse bulkItemResponse : response.getItems()) {
-                if (bulkItemResponse.isFailed()) {
-                  Throwable cause = bulkItemResponse.getFailure().getCause();
-                  Throwable rootCause = ExceptionsHelper.unwrapCause(cause);
-                  if (NON_RETRIABLE_EXCEPTION_CLASS.isAssignableFrom(rootCause.getClass())) {
-                    canRetry = false;
-                    break;
-                  }
-                }
-              }
-            }
-            semaphore.release();
-          }
-
-          @Override
-          public void afterBulk(long executionId, BulkRequest request, Throwable failure) {
-            log.error("Failure:", failure);
-            if (NON_RETRIABLE_EXCEPTION_CLASS.isAssignableFrom(failure.getClass())) {
-              canRetry = false;
-            }
-            semaphore.release();
-          }
-        })
-        .setBulkActions(-1)
-        .setBulkSize(new ByteSizeValue(-1))
-        .setFlushInterval(null)
-        .setConcurrentRequests(CONCURRENT_REQUESTS)
-        .setBackoffPolicy(BackoffPolicy.noBackoff())
-        .build();
+    // Start the BulkProcessor
+    bulkProcessor = new BulkProcessor(client, maxInFlightRequests, batchSize, lingerMs, maxRetry, retryBackoffMs, createDefaultListener());
+    bulkProcessor.start();
 
     //Create mapping cache
     mappings = new HashSet<>();
@@ -211,7 +140,11 @@ public class ElasticsearchWriter {
     private Map<String, TopicConfig> topicConfigs = new HashMap<>();
     private long flushTimeoutMs;
     private long maxBufferedRecords;
-    private long batchSize;
+    private int maxInFlightRequests;
+    private int batchSize;
+    private long lingerMs;
+    private int maxRetry;
+    private long retryBackoffMs;
     private SinkTaskContext context;
     private Converter converter = ElasticsearchSinkTask.getConverter();
     private boolean mock;
@@ -277,7 +210,7 @@ public class ElasticsearchWriter {
 
     /**
      * Set the max number of records to buffer for each writer.
-     * @param maxBufferedRecords The max number of buffered record.s
+     * @param maxBufferedRecords The max number of buffered records.
      * @return an instance of ElasticsearchWriter Builder.
      */
     public Builder setMaxBufferedRecords(long maxBufferedRecords) {
@@ -286,13 +219,53 @@ public class ElasticsearchWriter {
     }
 
     /**
-     * Set the number of requests to process as a batch when writing
+     * Set the max number of inflight requests.
+     * @param maxInFlightRequests The max allowed number of inflight requests.
+     * @return an instance of ElasticsearchWriter Builder.
+     */
+    public Builder setMaxInFlightRequests(int maxInFlightRequests) {
+      this.maxInFlightRequests = maxInFlightRequests;
+      return this;
+    }
+
+    /**
+     * Set the number of requests to process as a batch when writing.
      * to Elasticsearch.
      * @param batchSize the size of each batch.
      * @return an instance of ElasticsearchWriter Builder.
      */
-    public Builder setBatchSize(long batchSize) {
+    public Builder setBatchSize(int batchSize) {
       this.batchSize = batchSize;
+      return this;
+    }
+
+    /**
+     * Set the linger time.
+     * @param lingerMs The linger time to use in milliseconds.
+     * @return an instance of ElasticsearchWriter Builder.
+     */
+    public Builder setLingerMs(long lingerMs) {
+      this.lingerMs = lingerMs;
+      return this;
+    }
+
+    /**
+     * Set the max retry for a batch
+     * @param maxRetry The number of max retry.
+     * @return an instance of ElasticsearchWriter Builder.
+     */
+    public Builder setMaxRetry(int maxRetry) {
+      this.maxRetry = maxRetry;
+      return this;
+    }
+
+    /**
+     * Set the retry backoff.
+     * @param retryBackoffMs The retry backoff in milliseconds.
+     * @return an instance of ElasticsearchWriter Builder.
+     */
+    public Builder setRetryBackoffMs(long retryBackoffMs) {
+      this.retryBackoffMs = retryBackoffMs;
       return this;
     }
 
@@ -332,72 +305,42 @@ public class ElasticsearchWriter {
      */
     public ElasticsearchWriter build() {
       return new ElasticsearchWriter(
-          client, type, ignoreKey, ignoreSchema, topicConfigs, flushTimeoutMs, maxBufferedRecords, batchSize, context, converter, mock);
+          client, type, ignoreKey, ignoreSchema, topicConfigs, flushTimeoutMs, maxBufferedRecords, maxInFlightRequests, batchSize, lingerMs, maxRetry, retryBackoffMs, context, converter, mock);
     }
   }
 
   public void write(Collection<SinkRecord> records) {
+    if (bulkProcessor.getException() != null) {
+      throw new ConnectException("BulkProcessor fails with non reriable exception.", bulkProcessor.getException());
+    }
+    bulkProcessor.exceedMaxBufferedRecords(maxBufferedRecords, records.size());
 
     for (SinkRecord record: records) {
-      buffer.add(record);
-    }
-
-    if (buffer.size() > maxBufferedRecords) {
-      for (TopicPartition tp: assignment) {
-        context.pause(tp);
-      }
-    }
-
-    if (!currentBulkRequest.requests().isEmpty()) {
-      log.debug("We need to retry {}", currentBulkRequest);
-      return;
-    }
-
-    Iterator<SinkRecord> iter = buffer.iterator();
-    int size = 0;
-    while (iter.hasNext() && size < batchSize) {
-      size++;
-      SinkRecord record = iter.next();
-      iter.remove();
-      IndexRequest request = DataConverter.convertRecord(record, type, client, converter, ignoreKey, ignoreSchema, topicConfigs, mappings);
-      currentBulkRequest.add(request);
+      ESRequest request = DataConverter.convertRecord(record, type, client, converter, ignoreKey, ignoreSchema, topicConfigs, mappings);
+      bulkProcessor.add(request);
     }
   }
 
-  // TODO: fix the logic here. Currently we did not properly handle the case that the data is in the
-  // buffer but not yet flushed.
   public void flush() {
-    for (ActionRequest request: currentBulkRequest.requests()) {
-      bulkProcessor.add(request);
-    }
-    bulkProcessor.flush();
     try {
-      if (semaphore.tryAcquire(CONCURRENT_REQUESTS, flushTimeoutMs, TimeUnit.MILLISECONDS)) {
-        log.info("Bulk request finished.");
-        if (buffer.size() < maxBufferedRecords) {
-          for (TopicPartition tp: assignment) {
-            context.resume(tp);
-          }
-        }
-        semaphore.release();
-        if (!canRetry) {
-          throw new ConnectException("Cannot continue execution.");
-        }
-      } else {
-        // TODO: we want to cancel the current bulk request before submitting the next one
-        // Currently, the bulkProcessor thread may be blocked when retry
-        log.error("Not able to finish flushing before timeout:" + flushTimeoutMs);
+      if (!bulkProcessor.flush(flushTimeoutMs)) {
+        throw new ConnectException("Cannot finish flush messages within " + flushTimeoutMs);
       }
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
+    } catch (Throwable t) {
+      throw new ConnectException("Flush failed with non retriable exception.", t);
     }
   }
 
   public void close() {
+    bulkProcessor.stop();
     try {
-      bulkProcessor.awaitClose(flushTimeoutMs, TimeUnit.SECONDS);
+      bulkProcessor.awaitStop(flushTimeoutMs);
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
+    } catch (Throwable t) {
+      throw new ConnectException("Close failed with non retriable exception", t);
     }
   }
 
@@ -435,8 +378,22 @@ public class ElasticsearchWriter {
     }
   }
 
-  // public for testing
-  public BulkRequest getCurrentBulkRequest() {
-    return currentBulkRequest;
+  private Listener createDefaultListener() {
+    return new Listener() {
+      @Override
+      public void beforeBulk(long executionId, RecordBatch batch) {
+
+      }
+
+      @Override
+      public void afterBulk(long executionId, RecordBatch batch, ESResponse response) {
+
+      }
+
+      @Override
+      public void afterBulk(long executionId, RecordBatch batch, Throwable failure) {
+
+      }
+    };
   }
 }

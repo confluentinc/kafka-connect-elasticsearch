@@ -29,7 +29,6 @@ import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.errors.DataException;
 import org.apache.kafka.connect.sink.SinkRecord;
 import org.apache.kafka.connect.storage.Converter;
-import org.elasticsearch.action.index.IndexRequest;
 import org.elasticsearch.client.Client;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -40,6 +39,8 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Map;
 import java.util.Set;
+
+import io.confluent.connect.elasticsearch.internals.ESRequest;
 
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConstants.MAP_KEY;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConstants.MAP_VALUE;
@@ -96,7 +97,7 @@ public class DataConverter {
    * @return The converted IndexRequest.
    */
 
-  public static IndexRequest convertRecord(
+  public static ESRequest convertRecord(
       SinkRecord record,
       String type,
       Client client,
@@ -160,7 +161,7 @@ public class DataConverter {
     }
 
     byte[] json = converter.fromConnectData(topic, newSchema, newValue);
-    return new IndexRequest(index, type, id).source(json);
+    return new ESRequest(index, type, id, json);
   }
 
   // We need to pre process the Kafka Connect schema before converting to JSON as Elasticsearch
