@@ -24,7 +24,6 @@ import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.sink.SinkRecord;
-import org.elasticsearch.action.bulk.BulkRequest;
 import org.elasticsearch.client.Client;
 import org.elasticsearch.test.ESIntegTestCase;
 import org.elasticsearch.test.InternalTestCluster;
@@ -136,28 +135,6 @@ public class ElasticsearchWriterTest extends ElasticsearchSinkTestBase {
   }
 
   @Test
-  public void testWriterFailure() throws Exception {
-    Client client = new MockClient("test", 1);
-    Collection<SinkRecord> records = prepareData(2);
-
-    ElasticsearchWriter writer = createWriter(client, true, true, Collections.<String, TopicConfig>emptyMap(), true);
-
-    writer.write(records);
-    writer.flush();
-    BulkRequest request1 = writer.getCurrentBulkRequest();
-
-    writer.write(Collections.<SinkRecord>emptyList());
-    BulkRequest request2 = writer.getCurrentBulkRequest();
-    assertEquals(request1, request2);
-
-    writer.flush();
-    BulkRequest request3= writer.getCurrentBulkRequest();
-    assertNotEquals(request2, request3);
-    writer.close();
-    client.close();
-  }
-
-  @Test
   public void testMap() throws Exception {
     Client client = getClient();
 
@@ -231,7 +208,11 @@ public class ElasticsearchWriterTest extends ElasticsearchSinkTestBase {
         .setTopicConfigs(topicConfigs)
         .setFlushTimoutMs(10000)
         .setMaxBufferedRecords(10000)
-        .setBatchSize(100)
+        .setMaxInFlightRequests(1)
+        .setBatchSize(2)
+        .setLingerMs(2000)
+        .setRetryBackoffMs(3000)
+        .setMaxRetry(3)
         .setContext(context)
         .setMock(mock)
         .build();
