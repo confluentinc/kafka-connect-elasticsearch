@@ -117,13 +117,20 @@ public class ElasticsearchWriterTest extends ElasticsearchSinkTestBase {
     SinkRecord sinkRecord = new SinkRecord(TOPIC, PARTITION, Schema.STRING_SCHEMA, key, schema, record, 0);
     records.add(sinkRecord);
     expected.add(sinkRecord);
+    sinkRecord = new SinkRecord(TOPIC, PARTITION, Schema.STRING_SCHEMA, key, schema, record, 1);
+    records.add(sinkRecord);
+    expected.add(sinkRecord);
 
     ElasticsearchWriter writer = createWriter(client, true, false, Collections.<String, TopicConfig>emptyMap());
 
     writer.write(records);
     records.clear();
 
-    sinkRecord = new SinkRecord(TOPIC, PARTITION, Schema.STRING_SCHEMA, key, otherSchema, otherRecord, 1);
+    sinkRecord = new SinkRecord(TOPIC, PARTITION, Schema.STRING_SCHEMA, key, otherSchema, otherRecord, 2);
+    records.add(sinkRecord);
+    expected.add(sinkRecord);
+
+    sinkRecord = new SinkRecord(TOPIC, PARTITION, Schema.STRING_SCHEMA, key, otherSchema, otherRecord, 3);
     records.add(sinkRecord);
     expected.add(sinkRecord);
 
@@ -194,7 +201,7 @@ public class ElasticsearchWriterTest extends ElasticsearchSinkTestBase {
         .setIgnoreKey(ignoreKey)
         .setIgnoreSchema(ignoreSchema)
         .setTopicConfigs(topicConfigs)
-        .setFlushTimoutMs(30000)
+        .setFlushTimoutMs(10000)
         .setMaxBufferedRecords(10000)
         .setMaxInFlightRequests(1)
         .setBatchSize(2)

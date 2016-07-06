@@ -16,8 +16,14 @@
 
 package io.confluent.connect.elasticsearch.internals;
 
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.JsonNodeFactory;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.io.IOException;
 
 import io.searchbox.client.JestResult;
 import io.searchbox.core.BulkResult;
@@ -25,17 +31,19 @@ import io.searchbox.core.BulkResult.BulkResultItem;
 
 public class Response {
 
+  private static final Logger log = LoggerFactory.getLogger(Response.class);
   private Throwable throwable;
   private JestResult result;
-  private String nonRetriableError = "mapper_parse_exception";
+  private final String nonRetriableError = "mapper_parse_exception";
 
   public Response(BulkResult result) {
     this.result = result;
     Throwable firstException = null;
     for (BulkResultItem bulkResultItem: result.getFailedItems()) {
-      JsonObject obj = parseError(bulkResultItem.error);
-      if (obj.get("type").getAsString().equals(nonRetriableError)) {
-        throwable = new Throwable(obj.get("type").getAsString());
+      ObjectNode obj = parseError(bulkResultItem.error);
+      String exceptionType = obj.get("type").asText();
+      if (exceptionType.equals(nonRetriableError)) {
+        throwable = new Throwable(exceptionType);
         break;
       } else {
         if (firstException == null) {
@@ -64,10 +72,14 @@ public class Response {
     return !result.isSucceeded();
   }
 
-  private JsonObject parseError(String error) {
+  private ObjectNode parseError(String error) {
     if (error != null && !error.trim().isEmpty()) {
-      return new JsonParser().parse(error).getAsJsonObject();
+      try {
+        return (ObjectNode) new ObjectMapper().readTree(error);
+      } catch (IOException e) {
+        log.error("Exception when parsing to JSON:", e);
+      }
     }
-    return new JsonObject();
+    return JsonNodeFactory.instance.objectNode();
   }
 }

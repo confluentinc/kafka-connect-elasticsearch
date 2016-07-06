@@ -79,16 +79,16 @@ public class Mapping {
     }
     GetMapping getMapping = new GetMapping.Builder().addIndex(index).addType(type).build();
     JestResult result = client.execute(getMapping);
-    JsonObject resultJson = result.getJsonObject();
-    if (resultJson.getAsJsonObject(index) == null || resultJson.getAsJsonObject(index).getAsJsonObject(type) == null) {
+    JsonObject resultJson = result.getJsonObject().getAsJsonObject(index);
+    if (resultJson == null) {
       return false;
-    } else {
-      boolean exist = resultJson.getAsJsonObject(index).getAsJsonObject(type) != null;
-      if (exist) {
-        mappings.add(index);
-      }
-      return exist;
     }
+    JsonObject typeJson = resultJson.getAsJsonObject(type);
+    if (typeJson == null) {
+      return false;
+    }
+    mappings.add(index);
+    return true;
   }
 
   /**

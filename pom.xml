@@ -12,8 +12,8 @@
         <confluent.version>3.0.0-SNAPSHOT</confluent.version>
         <kafka.version>0.10.1.0-SNAPSHOT</kafka.version>
         <junit.version>4.12</junit.version>
-        <es.version>2.2.1</es.version>
-        <lucene.version>5.4.1</lucene.version>
+        <es.version>2.3.3</es.version>
+        <lucene.version>5.5.0</lucene.version>
         <slf4j.version>1.7.5</slf4j.version>
         <jna.version>4.2.1</jna.version>
         <hamcrest.version>2.0.0.0</hamcrest.version>

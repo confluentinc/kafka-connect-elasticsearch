@@ -22,9 +22,9 @@ import java.util.List;
 public class RecordBatch {
   private final List<ESRequest> requests;
   private final RecordBatchResult result;
-  private long lastAttemptMs;
+  private volatile long lastAttemptMs;
   private boolean retry;
-  private int attempts;
+  private volatile int attempts;
 
 
   public RecordBatch(long now) {

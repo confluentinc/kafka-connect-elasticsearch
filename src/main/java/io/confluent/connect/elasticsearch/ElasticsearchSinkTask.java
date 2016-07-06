@@ -90,9 +90,9 @@ public class ElasticsearchSinkTask extends SinkTask {
       if (client != null) {
         this.client = client;
       } else {
-        List<String> addresses = config.getList(ElasticsearchSinkConnectorConfig.HTTP_ADDRESSES_CONFIG);
+        String address = config.getString(ElasticsearchSinkConnectorConfig.HTTP_ADDRESSES_CONFIG);
         JestClientFactory factory = new JestClientFactory();
-        factory.setHttpClientConfig(new HttpClientConfig.Builder(addresses.get(0)).multiThreaded(true).build());
+        factory.setHttpClientConfig(new HttpClientConfig.Builder(address).multiThreaded(true).build());
         this.client = factory.getObject();
       }
 

@@ -19,6 +19,9 @@ package io.confluent.connect.elasticsearch.internals;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.IOException;
 import java.util.List;
 
@@ -28,11 +31,11 @@ import io.searchbox.core.Bulk;
 import io.searchbox.core.BulkResult;
 import io.searchbox.core.Index;
 
-public class HttpClient implements Client<Response>, JestResultHandler<BulkResult> {
+public class HttpClient implements Client<Response> {
 
+  private static final Logger log = LoggerFactory.getLogger(HttpClient.class);
   private ObjectMapper objectMapper = new ObjectMapper();
   private final JestClient jestClient;
-  private Callback<Response> callback;
 
   public HttpClient(JestClient jestClient) {
     this.jestClient = jestClient;
@@ -40,27 +43,16 @@ public class HttpClient implements Client<Response>, JestResultHandler<BulkResul
 
   @Override
   public void execute(RecordBatch batch, Callback<Response> callback) {
-    this.callback = callback;
-    Bulk bulk = constructBulk(batch);
-    jestClient.executeAsync(bulk, this);
+    Bulk bulk = constructBulk(batch, callback);
+    jestClient.executeAsync(bulk, new CallbackHandler(callback));
   }
 
   @Override
   public void close() {
-    jestClient.shutdownClient();
+    // We shutdown the JEST client when sink tasks are stopped.
   }
 
-  @Override
-  public void completed(BulkResult result) {
-    callback.onResponse(new Response(result));
-  }
-
-  @Override
-  public void failed(Exception e) {
-    callback.onFailure(e);
-  }
-
-  private Bulk constructBulk(RecordBatch batch) {
+  private Bulk constructBulk(RecordBatch batch, Callback<Response> callback) {
     Bulk.Builder builder = new Bulk.Builder();
     List<ESRequest> requests = batch.requests();
     for (ESRequest request: requests) {
@@ -78,5 +70,26 @@ public class HttpClient implements Client<Response>, JestResultHandler<BulkResul
       builder.addAction(index);
     }
     return builder.build();
+  }
+
+  private static class CallbackHandler implements JestResultHandler<BulkResult> {
+
+    private Callback<Response> callback;
+
+    public CallbackHandler(Callback<Response> callback) {
+      this.callback = callback;
+    }
+
+    @Override
+    public void completed(BulkResult result) {
+      log.debug("Request completed with result: {}", result);
+      callback.onResponse(new Response(result));
+    }
+
+    @Override
+    public void failed(Exception e) {
+      log.debug("Request failed with exception: {}", e.getMessage());
+      callback.onFailure(e);
+    }
   }
 }

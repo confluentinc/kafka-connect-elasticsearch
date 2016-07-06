@@ -119,7 +119,7 @@ public class BulkProcessorTest {
   }
 
   @Test
-  public void testBatchFailure() throws Exception {
+  public void testBatchFailure() throws Throwable {
     int maxInFlightRequests = 1;
     int batchSize = 5;
     int numRecords = 5;
@@ -136,9 +136,8 @@ public class BulkProcessorTest {
       // expected
     }
 
-    Thread.sleep(1000);
     int numIncompletes = bulkProcessor.getNumIncompletes();
-    assertEquals(0, numIncompletes);
+    assertEquals(1, numIncompletes);
     assertEquals(1, numFailure);
     assertEquals(0, numSuccess);
     assertEquals(1, numExecute);
