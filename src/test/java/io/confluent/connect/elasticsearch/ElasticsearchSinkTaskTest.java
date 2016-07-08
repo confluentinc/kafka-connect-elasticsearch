@@ -36,7 +36,7 @@ public class ElasticsearchSinkTaskTest extends ElasticsearchSinkTestBase {
   private Map<String, String> createProps() {
     Map<String, String> props = new HashMap<>();
     props.put(ElasticsearchSinkConnectorConfig.TYPE_NAME_CONFIG, TYPE);
-    props.put(ElasticsearchSinkConnectorConfig.HTTP_ADDRESSES_CONFIG, "localhost");
+    props.put(ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG, "localhost");
     props.put(ElasticsearchSinkConnectorConfig.KEY_IGNORE_CONFIG, "true");
     return props;
   }

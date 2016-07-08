@@ -190,7 +190,6 @@ public class BulkProcessor implements Runnable {
       if (batch.getAttempts() > maxRetry) {
         fail(batch, t);
       } else {
-        log.info("Retry with exception:{}", t.getMessage());
         requests.addFirst(batch);
         requests.notify();
       }
@@ -298,7 +297,7 @@ public class BulkProcessor implements Runnable {
     private final RecordBatch batch;
 
     BulkTask(RecordBatch batch) {
-      log.debug("Batch size: {}", batch.size());
+      log.trace("Batch size: {}", batch.size());
       this.batch = batch;
     }
 
