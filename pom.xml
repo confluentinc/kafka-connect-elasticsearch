@@ -13,10 +13,11 @@
         <kafka.version>0.10.1.0-SNAPSHOT</kafka.version>
         <junit.version>4.12</junit.version>
         <es.version>2.3.3</es.version>
-        <lucene.version>5.3.1</lucene.version>
+        <lucene.version>5.5.0</lucene.version>
         <slf4j.version>1.7.5</slf4j.version>
         <jna.version>4.2.1</jna.version>
         <hamcrest.version>2.0.0.0</hamcrest.version>
+        <jest.version>2.0.0</jest.version>
         <confluent.maven.repo>http://packages.confluent.io/maven/</confluent.maven.repo>
     </properties>
 
@@ -40,14 +41,9 @@
             <version>${kafka.version}</version>
         </dependency>
         <dependency>
-            <groupId>org.elasticsearch</groupId>
-            <artifactId>elasticsearch</artifactId>
-            <version>${es.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>org.apache.lucene</groupId>
-            <artifactId>lucene-expressions</artifactId>
-            <version>${lucene.version}</version>
+            <groupId>io.searchbox</groupId>
+            <artifactId>jest</artifactId>
+            <version>${jest.version}</version>
         </dependency>
         <dependency>
             <groupId>org.slf4j</groupId>
@@ -90,6 +86,18 @@
             <version>${es.version}</version>
             <scope>test</scope>
             <type>test-jar</type>
+        </dependency>
+        <dependency>
+            <groupId>org.elasticsearch</groupId>
+            <artifactId>elasticsearch</artifactId>
+            <version>${es.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.lucene</groupId>
+            <artifactId>lucene-expressions</artifactId>
+            <version>${lucene.version}</version>
+            <scope>test</scope>
         </dependency>
     </dependencies>
 

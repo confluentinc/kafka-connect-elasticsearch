@@ -15,9 +15,9 @@
  **/
 package io.confluent.connect.elasticsearch.internals;
 
-public interface Callback<R> {
+public interface Client<R> {
 
-  void onResponse(R response);
+  void execute(RecordBatch batch, Callback<R> responseCallback);
 
-  void onFailure(Throwable t);
+  void close();
 }

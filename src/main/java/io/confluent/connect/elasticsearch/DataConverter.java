@@ -29,7 +29,6 @@ import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.errors.DataException;
 import org.apache.kafka.connect.sink.SinkRecord;
 import org.apache.kafka.connect.storage.Converter;
-import org.elasticsearch.client.Client;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -41,6 +40,7 @@ import java.util.Map;
 import java.util.Set;
 
 import io.confluent.connect.elasticsearch.internals.ESRequest;
+import io.searchbox.client.JestClient;
 
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConstants.MAP_KEY;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConstants.MAP_VALUE;
@@ -100,7 +100,7 @@ public class DataConverter {
   public static ESRequest convertRecord(
       SinkRecord record,
       String type,
-      Client client,
+      JestClient client,
       Converter converter,
       boolean ignoreKey,
       boolean ignoreSchema,
@@ -138,16 +138,16 @@ public class DataConverter {
       id = DataConverter.convertKey(key, keySchema);
     }
 
-    if (!topicIgnoreSchema && !mappings.contains(index) && !Mapping.doesMappingExist(client, index, type, mappings)) {
-      try {
+    try {
+      if (!topicIgnoreSchema && !mappings.contains(index) && !Mapping.doesMappingExist(client, index, type, mappings)) {
         Mapping.createMapping(client, index, type, valueSchema);
         mappings.add(index);
-      } catch (IOException e) {
-        // TODO: It is possible that two clients are creating the mapping at the same time and
-        // one request to create mapping may fail. In this case, we should allow the task to
-        // proceed instead of throw the exception.
-        throw new ConnectException("Cannot create mapping:", e);
       }
+    } catch (IOException e) {
+      // TODO: It is possible that two clients are creating the mapping at the same time and
+      // one request to create mapping may fail. In this case, we should allow the task to
+      // proceed instead of throw the exception.
+      throw new ConnectException("Cannot create mapping:", e);
     }
 
     Schema newSchema;

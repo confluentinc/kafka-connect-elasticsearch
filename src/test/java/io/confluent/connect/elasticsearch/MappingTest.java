@@ -16,6 +16,8 @@
 
 package io.confluent.connect.elasticsearch;
 
+import com.google.gson.JsonObject;
+
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Field;
@@ -23,16 +25,14 @@ import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
-import org.elasticsearch.action.admin.indices.mapping.get.GetMappingsResponse;
-import org.elasticsearch.client.Client;
-import org.elasticsearch.cluster.metadata.MappingMetaData;
 import org.elasticsearch.test.ESIntegTestCase;
 import org.elasticsearch.test.InternalTestCluster;
 import org.junit.Test;
 
-import java.util.Map;
+import io.searchbox.client.JestResult;
+import io.searchbox.indices.mapping.GetMapping;
 
-public class MappingTest extends ESIntegTestCase {
+public class MappingTest extends ElasticsearchSinkTestBase {
 
   private static final String INDEX = "kafka-connect";
   private static final String TYPE = "kafka-connect-type";
@@ -43,23 +43,19 @@ public class MappingTest extends ESIntegTestCase {
     InternalTestCluster cluster = ESIntegTestCase.internalCluster();
     cluster.ensureAtLeastNumDataNodes(1);
 
-    Client client = cluster.client();
     createIndex(INDEX);
     Schema schema = createSchema();
     Mapping.createMapping(client, INDEX, TYPE, schema);
 
-    GetMappingsResponse mappingsResponse = client.admin().indices().
-        prepareGetMappings(INDEX).
-        setTypes(TYPE).get();
-
-    MappingMetaData mappingMetaData = mappingsResponse.getMappings().get(INDEX).get(TYPE);
-    assertNotNull(mappingMetaData);
-
-    Map<String, Object> mapping = mappingMetaData.getSourceAsMap();
+    GetMapping getMapping = new GetMapping.Builder().addIndex(INDEX).addType(TYPE).build();
+    JestResult result = client.execute(getMapping);
+    JsonObject resultJson = result.getJsonObject();
+    JsonObject mapping = resultJson.get(INDEX).getAsJsonObject().get("mappings").getAsJsonObject().get(TYPE).getAsJsonObject();
+    assertNotNull(mapping);
     verifyMapping(schema, mapping);
   }
 
-  private Schema createSchema() {
+  protected Schema createSchema() {
     Schema structSchema = createInnerSchema();
     return SchemaBuilder.struct().name("record")
         .field("boolean", Schema.BOOLEAN_SCHEMA)
@@ -102,7 +98,7 @@ public class MappingTest extends ESIntegTestCase {
   }
 
   @SuppressWarnings("unchecked")
-  private void verifyMapping(Schema schema, Map<String, Object> mapping) throws Exception {
+  private void verifyMapping(Schema schema, JsonObject mapping) throws Exception {
     String schemaName = schema.name();
 
     Object type = mapping.get("type");
@@ -111,10 +107,10 @@ public class MappingTest extends ESIntegTestCase {
         case Date.LOGICAL_NAME:
         case Time.LOGICAL_NAME:
         case Timestamp.LOGICAL_NAME:
-          assertEquals(ElasticsearchSinkConnectorConstants.DATE_TYPE, type);
+          assertEquals("\"" + ElasticsearchSinkConnectorConstants.DATE_TYPE + "\"", type.toString());
           return;
         case Decimal.LOGICAL_NAME:
-          assertEquals(ElasticsearchSinkConnectorConstants.DOUBLE_TYPE, type);
+          assertEquals("\"" + ElasticsearchSinkConnectorConstants.DOUBLE_TYPE + "\"", type.toString());
           return;
       }
     }
@@ -129,13 +125,13 @@ public class MappingTest extends ESIntegTestCase {
         verifyMapping(newSchema, mapping);
         break;
       case STRUCT:
-        Map<String, Object> properties = (Map<String, Object>) mapping.get("properties");
+        JsonObject properties = mapping.get("properties").getAsJsonObject();
         for (Field field: schema.fields()) {
-          verifyMapping(field.schema(), (Map<String, Object>) properties.get(field.name()));
+          verifyMapping(field.schema(), properties.get(field.name()).getAsJsonObject());
         }
         break;
       default:
-        assertEquals(ElasticsearchSinkConnectorConstants.TYPES.get(schemaType), type);
+        assertEquals("\"" + ElasticsearchSinkConnectorConstants.TYPES.get(schemaType) + "\"", type.toString());
     }
   }
 }

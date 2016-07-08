@@ -29,7 +29,7 @@ public interface Listener {
   /**
    * Callback after a successful execution of a batch.
    */
-  void afterBulk(long executionId, RecordBatch batch, ESResponse response);
+  void afterBulk(long executionId, RecordBatch batch, Response response);
 
   /**
    * Callback after a failed execution of a batch.

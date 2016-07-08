@@ -29,9 +29,9 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   private static final String ELASTICSEARCH_GROUP = "Elasticsearch";
   private static final String CONNECTOR_GROUP = "Connector";
 
-  public static final String TRANSPORT_ADDRESSES_CONFIG = "transport.addresses";
-  private static final String TRANSPORT_ADDRESSES_DOC = "The list of addresses to connect to Elasticsearch.";
-  private static final String TRANSPORT_ADDRESSES_DISPLAY = "Transport Addresses";
+  public static final String CONNECTION_URL_CONFIG = "connection.url";
+  private static final String CONNECTION_URL_DOC = "The URL to connect to Elasticsearch.";
+  private static final String CONNECTION_URL_DISPLAY = "Connection URL";
 
   public static final String TYPE_NAME_CONFIG = "type.name";
   private static final String TYPE_NAME_DOC = "The type to use for each index.";
@@ -119,7 +119,8 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
 
   public static ConfigDef baseConfigDef() {
     return new ConfigDef()
-        .define(TRANSPORT_ADDRESSES_CONFIG, Type.LIST, Importance.HIGH, TRANSPORT_ADDRESSES_DOC, ELASTICSEARCH_GROUP, 1, Width.LONG, TRANSPORT_ADDRESSES_DISPLAY)
+        .define(CONNECTION_URL_CONFIG, Type.STRING, Importance.HIGH, CONNECTION_URL_DOC, ELASTICSEARCH_GROUP, 1, Width.LONG,
+                CONNECTION_URL_DISPLAY)
         .define(TYPE_NAME_CONFIG, Type.STRING, Importance.HIGH, TYPE_NAME_DOC, ELASTICSEARCH_GROUP, 2, Width.SHORT, TYPE_NAME_DISPLAY)
         .define(KEY_IGNORE_CONFIG, Type.BOOLEAN, KEY_IGNORE_DEFAULT, Importance.HIGH, KEY_IGNORE_DOC, CONNECTOR_GROUP, 3, Width.SHORT, KEY_IGNORE_DISPLAY)
         .define(BATCH_SIZE_CONFIG, Type.INT, BATCH_SIZE_DEFAULT, Importance.MEDIUM, BATCH_SIZE_DOC, CONNECTOR_GROUP, 4, Width.SHORT, BATCH_SIZE_DISPLAY)
