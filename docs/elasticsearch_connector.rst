@@ -9,9 +9,9 @@ Elasticsearch is often used for text queries, analytics and as an key-value stor
 (`use cases <https://www.elastic.co/blog/found-uses-of-elasticsearch>`_). The connector covers
 both the analytics and key-value store use cases. For the analytics use case,
 each message is in Kafka is treated as an event and the connector uses ``topic+partition+offset``
-as unique identifiers for events, which then converted to unique documents in Elasticsearch.
+as a unique identifier for events, which then converted to unique documents in Elasticsearch.
 For the key-value store use case, it supports using keys from Kafka messages as document ids in
-Elasticsearch and provides configurations ensuring that updates to a key is written to Elasticsearch
+Elasticsearch and provides configurations ensuring that updates to a key are written to Elasticsearch
 in order. For both use cases, Elasticsearch's idempotent write semantics guarantees exactly once
 delivery.
 
@@ -19,7 +19,7 @@ delivery.
 process of defining how a document, and the fields it contains, are stored and indexed. Users can
 explicitly define mappings for types in indices. When mapping is not explicitly defined,
 Elasticsearch can determine field names and types from data, however, some types such as timestamp
-and decimal may not be correctly inferred. To ensure that the types are correctly inferred, the
+and decimal, may not be correctly inferred. To ensure that the types are correctly inferred, the
 connector provides a feature to infer mapping from the schemas of Kafka messages.
 
 Quickstart
@@ -171,5 +171,5 @@ connector jobs to achieve double writes:
    1. The connector job that ingest data to the old indices continue writing to the old indices.
    2. Create a new connector job that writes to new indices. This will copy both some old data and
       new data to the new indices as long as the data is in Kafka.
-   4. Once the data in the old indices are moved to the new indices by the reindexing process, we
+   3. Once the data in the old indices are moved to the new indices by the reindexing process, we
       can stop the old connector job.
