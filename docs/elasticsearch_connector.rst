@@ -42,14 +42,13 @@ different hostnames and ports.
 
 First, start the Avro console producer::
 
-  $ ./bin/kafka-avro-console-producer --broker-list localhost:9092 --topic test-elasticsearch \
+  $ ./bin/kafka-avro-console-producer --broker-list localhost:9092 --topic test-elasticsearch-sink \
   --property value.schema='{"type":"record","name":"myrecord","fields":[{"name":"f1","type":"string"}]}'
 
 Then in the console producer, type in::
 
   {"f1": "value1"}
-  {"f1": "value2"}
-  {"f1": "value3"}
+
 
 The three records entered are published to the Kafka topic ``test-elasticsearch`` in Avro format.
 
@@ -65,9 +64,35 @@ You should see that the process starts up and logs some messages, and then expor
 to Elasticsearch. Once the connector finishes ingesting data to Elasticsearch, check that the data
 is available in Elasticsearch::
 
-  $ search
-
-
+  $ curl -XGET 'http://localhost:9200/test-elasticsearch-sink/_search?pretty'
+  {
+   "took" : 2,
+   "timed_out" : false,
+   "_shards" : {
+     "total" : 5,
+     "successful" : 5,
+     "failed" : 0
+   },
+   "hits" : {
+     "total" : 1,
+     "max_score" : 1.0,
+     "hits" : [ {
+       "_index" : "test-elasticsearch-sink",
+       "_type" : "kafka-connect",
+       "_id" : "test-elasticsearch-sink+0+0",
+       "_score" : 1.0,
+       "_source" : {
+         "_children" : {
+           "f1" : {
+             "_value" : "value1"
+           }
+         },
+         "_nodeFactory" : {
+           "_cfgBigDecimalExact" : false
+         }
+       }
+     }]
+   }
 Features
 --------
 The Elasticsearch connector offers a bunch of features:
