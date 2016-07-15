@@ -70,17 +70,13 @@ public class DataConverter {
     }
 
     switch (schemaType) {
-      case BOOLEAN:
       case INT8:
       case INT16:
       case INT32:
       case INT64:
-      case FLOAT32:
-      case FLOAT64:
       case STRING:
         return String.valueOf(key);
       default:
-        // TODO: support more key types, also should we support BOOLEAN and FLOAT at all?
         throw new DataException(schemaType.name() + "is not supported as the document id.");
     }
   }
