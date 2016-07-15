@@ -41,11 +41,11 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   private static final String KEY_IGNORE_DOC =
       "Whether to ignore the key during indexing. When this is set to true, only the value from the message will be written to Elasticsearch."
       + "Note that this is a global config that applies to all topics. If this is set to true, "
-      + "Use `topic.key.ignore` to config for different topics. This value will be overridden by the per topic configuration.";
+      + "Use ``topic.key.ignore`` to config for different topics. This value will be overridden by the per topic configuration.";
   private static final boolean KEY_IGNORE_DEFAULT = false;
   private static final String KEY_IGNORE_DISPLAY = "Ignore Key";
 
-  // TODO: remove thid config when single message transform is in
+  // TODO: remove this config when single message transform is in
   public static final String TOPIC_INDEX_MAP_CONFIG = "topic.index.map";
   private static final String TOPIC_INDEX_MAP_DOC = "The map between Kafka topics and Elasticsearch indices.";
   private static final String TOPIC_INDEX_MAP_DEFAULT = "";
@@ -106,9 +106,9 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
 
   public static final String SCHEMA_IGNORE_CONFIG = "schema.ignore";
   private static final String SCHEMA_IGNORE_DOC =
-      "Whether to ignore schemas during indexing. When this is set to true, the schema in `SinkRecord` will be ignored and Elasticsearch will infer the mapping from data. "
+      "Whether to ignore schemas during indexing. When this is set to true, the schema in ``SinkRecord`` will be ignored and Elasticsearch will infer the mapping from data. "
       + "Note that this is a global config that applies to all topics."
-      + "Use `topic.schema.ignore` to config for different topics. This value will be overridden by the per topic configuration.";
+      + "Use ``topic.schema.ignore`` to config for different topics. This value will be overridden by the per topic configuration.";
   private static final boolean SCHEMA_IGNORE_DEFAULT = false;
   private static final String SCHEMA_IGNORE_DISPLAY = "Ignore Schema";
 
