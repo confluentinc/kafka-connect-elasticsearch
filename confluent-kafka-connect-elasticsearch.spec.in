@@ -1,0 +1,60 @@
+Summary: Kafka Connect connector for copying data between Kafka and Elasticsearch.
+Name: confluent-kafka-connect-elasticsearch
+Version: ##RPMVERSION##
+Release: ##RPMRELEASE##
+Group: Applications/Internet
+License: Apache (v2)
+Source0: confluent-kafka-connect-elasticsearch-%{version}.tar.gz
+URL: http://confluent.io
+BuildRoot: %{_tmppath}/%{name}-%{version}-root
+Vendor: Confluent, Inc.
+Packager: Confluent Packaging <packages@confluent.io>
+BuildArch: noarch
+
+Requires: confluent-common
+
+%description
+
+Kafka Connect Elasticsearch is a Kafka Connector for copying data between Kafka and Elasticsearch.
+
+%define __jar_repack %{nil}
+
+%pre
+
+exit 0
+
+%post
+
+%preun
+
+%postun
+
+%prep
+
+%setup
+
+%build
+
+%install
+
+# Clean out any previous builds not on slash
+[ "%{buildroot}" != "/" ] && %{__rm} -rf %{buildroot}
+
+%{__mkdir_p} %{buildroot}
+%{__cp} -R * %{buildroot}
+# The spec file gets included, get rid of it
+%{__rm} %{buildroot}/confluent-kafka-connect-elasticsearch.spec
+
+%files
+%defattr(-,root,root)
+/etc/kafka-connect-elasticsearch
+/usr/share/java/kafka-connect-elasticsearch
+/usr/share/doc/kafka-connect-elasticsearch
+
+%clean
+#used to cleanup things outside the build area and possibly inside.
+[ "%{buildroot}" != "/" ] && %{__rm} -rf %{buildroot}
+
+%changelog
+* Fri Jul 22 2016 Confluent Packaging <packages@confluent.io>
+- Initial import
