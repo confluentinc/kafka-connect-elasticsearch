@@ -1,0 +1,14 @@
+Source: confluent-kafka-connect-elasticsearch
+Section: misc
+Priority: optional
+Maintainer: Confluent Packaging <packages@confluent.io>
+Build-Depends: debhelper (>= 9), java7-jdk, javahelper (>= 0.40),
+ make, maven
+Standards-Version: 3.9.3
+Homepage: http://confluent.io
+
+Package: confluent-kafka-connect-elasticsearch
+Architecture: all
+Depends: confluent-common
+Description: Kafka Connect connector for copying data between Kafka and Elasticsearch
+ Kafka Connect Elasticsearch is a Kafka Connector for copying data between Kafka and Elasticsearch
