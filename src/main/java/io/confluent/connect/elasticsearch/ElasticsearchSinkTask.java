@@ -125,13 +125,17 @@ public class ElasticsearchSinkTask extends SinkTask {
   @Override
   public void put(Collection<SinkRecord> records) throws ConnectException {
     log.trace("Putting {} to Elasticsearch.", records);
-    writer.write(records);
+    if (writer != null) {
+      writer.write(records);
+    }
   }
 
   @Override
   public void flush(Map<TopicPartition, OffsetAndMetadata> offsets) {
     log.trace("Flushing data to Elasticsearch with the following offsets: {}", offsets);
-    writer.flush();
+    if (writer != null) {
+      writer.flush();
+    }
   }
 
   @Override
@@ -139,6 +143,7 @@ public class ElasticsearchSinkTask extends SinkTask {
     log.debug("Closing the task for topic partitions: {}", partitions);
     if (writer != null) {
       writer.close();
+      writer = null;
     }
   }
 

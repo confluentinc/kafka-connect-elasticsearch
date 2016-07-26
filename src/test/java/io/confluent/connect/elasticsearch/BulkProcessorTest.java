@@ -43,7 +43,7 @@ public class BulkProcessorTest {
   private final String type = "connect";
   private final String topic = "topic";
   private final int partition = 0;
-  private final long flushTimeoutMs = 20000;
+  private final long flushTimeoutMs = 30000;
   private final long lingerMs = 2000;
   private final int maxRetry = 5;
   private final long retryBackoffMs = 3000;
