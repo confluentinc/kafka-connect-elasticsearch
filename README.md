@@ -1,6 +1,6 @@
 # Kafka Connect Elasticsearch Connector
 
-kafka-connect-elasticsearch is a [Kafka Connector](http://kafka.apache.org/090/documentation.html#connect)
+kafka-connect-elasticsearch is a [Kafka Connector](http://kafka.apache.org/documentation.html#connect)
 for copying data between Kafka and Elasticsearch.
 
 # Development
