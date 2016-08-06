@@ -93,11 +93,11 @@ public class BulkProcessor implements Runnable {
           if (guaranteeOrdering) {
             muted = true;
           }
+          synchronized (requests) {
+            batch = requests.pollFirst();
+          }
           executorService.submit(new BulkTask(batch));
           batch.setLastAttemptMs(now);
-          synchronized (requests) {
-            requests.pollFirst();
-          }
         }
       }
     } catch (InterruptedException e) {
