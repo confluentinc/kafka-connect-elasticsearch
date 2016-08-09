@@ -156,7 +156,7 @@ public class BulkProcessor implements Runnable {
 
       client.execute(batch, callback);
     } catch (Throwable t) {
-      log.warn("Failed to execute bulk request {}.", t, executionId);
+      log.warn("Failed to execute bulk request {}.", executionId, t);
       try {
         listener.afterBulk(executionId, batch, t);
       } catch (Throwable tt) {
