@@ -82,11 +82,12 @@ is available in Elasticsearch::
        "_id" : "test-elasticsearch-sink+0+0",
        "_score" : 1.0,
        "_source" : {
-           "f1" : "value1"
-         },
+         "f1" : "value1"
        }
      }]
    }
+  }
+
 Features
 --------
 The Elasticsearch connector offers a bunch of features:
