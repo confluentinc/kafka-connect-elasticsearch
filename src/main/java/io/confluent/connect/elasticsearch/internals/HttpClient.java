@@ -62,7 +62,7 @@ public class HttpClient implements Client<Response> {
       } catch (IOException e) {
         callback.onFailure(e);
       }
-      Index index = new Index.Builder(data)
+      Index index = new Index.Builder(data.toString())
           .index(request.getIndex())
           .type(request.getType())
           .id(request.getId())
