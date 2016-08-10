@@ -82,14 +82,7 @@ is available in Elasticsearch::
        "_id" : "test-elasticsearch-sink+0+0",
        "_score" : 1.0,
        "_source" : {
-         "_children" : {
-           "f1" : {
-             "_value" : "value1"
-           }
-         },
-         "_nodeFactory" : {
-           "_cfgBigDecimalExact" : false
-         }
+         "f1" : "value1"
        }
      }]
    }
