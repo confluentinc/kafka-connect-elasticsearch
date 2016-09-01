@@ -67,12 +67,12 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   private static final String MAX_BUFFERED_RECORDS_DOC =
       "Approximately the max number of records each task will buffer. This config controls the memory usage for each task. When the number of "
       + "buffered records is larger than this value, the partitions assigned to this task will be paused.";
-  private static final long MAX_BUFFERED_RECORDS_DEFAULT = 100000;
+  private static final long MAX_BUFFERED_RECORDS_DEFAULT = 20000;
   private static final String MAX_BUFFERED_RECORDS_DISPLAY = "Max Number of Records to Buffer";
 
   public static final String BATCH_SIZE_CONFIG = "batch.size";
   private static final String BATCH_SIZE_DOC = "The number of requests to process as a batch when writing to Elasticsearch.";
-  private static final int BATCH_SIZE_DEFAULT = 10000;
+  private static final int BATCH_SIZE_DEFAULT = 2000;
   private static final String BATCH_SIZE_DISPLAY = "Batch Size";
 
   public static final String LINGER_MS_CONFIG = "linger.ms";
