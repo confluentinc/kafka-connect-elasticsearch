@@ -77,7 +77,7 @@ public class DataConverter {
       case STRING:
         return String.valueOf(key);
       default:
-        throw new DataException(schemaType.name() + "is not supported as the document id.");
+        throw new DataException(schemaType.name() + " is not supported as the document id.");
     }
   }
 
