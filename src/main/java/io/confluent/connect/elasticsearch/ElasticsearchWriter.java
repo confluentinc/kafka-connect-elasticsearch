@@ -18,6 +18,7 @@ package io.confluent.connect.elasticsearch;
 
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.connect.errors.ConnectException;
+import org.apache.kafka.connect.errors.RetriableException;
 import org.apache.kafka.connect.sink.SinkRecord;
 import org.apache.kafka.connect.sink.SinkTaskContext;
 import org.apache.kafka.connect.storage.Converter;
@@ -298,10 +299,11 @@ public class ElasticsearchWriter {
 
   public void write(Collection<SinkRecord> records) {
     if (bulkProcessor.getException() != null) {
-      throw new ConnectException("BulkProcessor fails with non reriable exception.", bulkProcessor.getException());
+      throw new ConnectException("BulkProcessor failed with non-retriable exception", bulkProcessor.getException());
     }
-    bulkProcessor.exceedMaxBufferedRecords(maxBufferedRecords, records.size());
-
+    if (bulkProcessor.getTotalBufferedRecords() + records.size() > maxBufferedRecords) {
+      throw new RetriableException("Exceeded max number of buffered records: " + maxBufferedRecords);
+    }
     for (SinkRecord record: records) {
       ESRequest request = DataConverter.convertRecord(record, type, client, converter, ignoreKey, ignoreSchema, topicConfigs, mappings);
       bulkProcessor.add(request);
