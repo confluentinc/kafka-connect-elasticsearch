@@ -62,7 +62,7 @@ public class Mapping {
     PutMapping putMapping = new PutMapping.Builder(index, type, obj.toString()).build();
     JestResult result = client.execute(putMapping);
     if (!result.isSucceeded()) {
-      throw new ConnectException("Cannot create mapping:" + obj.toString());
+      throw new ConnectException("Cannot create mapping " + obj + " -- " + result.getErrorMessage());
     }
   }
 
