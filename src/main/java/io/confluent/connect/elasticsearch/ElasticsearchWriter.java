@@ -16,16 +16,15 @@
 
 package io.confluent.connect.elasticsearch;
 
-import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.errors.RetriableException;
 import org.apache.kafka.connect.sink.SinkRecord;
-import org.apache.kafka.connect.sink.SinkTaskContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -65,7 +64,6 @@ public class ElasticsearchWriter {
   private final Map<String, TopicConfig> topicConfigs;
   private final long flushTimeoutMs;
   private final long maxBufferedRecords;
-  private final SinkTaskContext context;
   private final Set<String> mappings;
 
   /**
@@ -80,7 +78,6 @@ public class ElasticsearchWriter {
    * @param maxInFlightRequests The max number of inflight requests allowed.
    * @param batchSize Approximately the max number of records each writer will buffer.
    * @param lingerMs The time to wait before sending a batch.
-   * @param context The SinkTaskContext.
    */
   ElasticsearchWriter(
       JestClient client,
@@ -94,31 +91,20 @@ public class ElasticsearchWriter {
       int batchSize,
       long lingerMs,
       int maxRetry,
-      long retryBackoffMs,
-      SinkTaskContext context) {
+      long retryBackoffMs) {
 
     this.client = client;
     this.type = type;
     this.ignoreKey = ignoreKey;
     this.ignoreSchema = ignoreSchema;
 
-    if (topicConfigs == null) {
-      this.topicConfigs = new HashMap<>();
-    } else {
-      this.topicConfigs = topicConfigs;
-    }
+    this.topicConfigs = topicConfigs == null ? Collections.<String, TopicConfig>emptyMap() : topicConfigs;
 
     this.flushTimeoutMs = flushTimeoutMs;
     this.maxBufferedRecords  = maxBufferedRecords;
 
-    this.context = context;
-
-    // create index if needed.
-    createIndices(topicConfigs);
-
     // Start the BulkProcessor
     bulkProcessor = new BulkProcessor(new HttpClient(client), maxInFlightRequests, batchSize, lingerMs, maxRetry, retryBackoffMs, createDefaultListener());
-    bulkProcessor.start();
 
     //Create mapping cache
     mappings = new HashSet<>();
@@ -137,7 +123,6 @@ public class ElasticsearchWriter {
     private long lingerMs;
     private int maxRetry;
     private long retryBackoffMs;
-    private SinkTaskContext context;
 
     /**
      * Constructor of ElasticsearchWriter Builder.
@@ -260,22 +245,12 @@ public class ElasticsearchWriter {
     }
 
     /**
-     * Set the SinkTaskContext
-     * @param context The SinkTaskContext.
-     * @return an instance of ElasticsearchWriter Builder.
-     */
-    public Builder setContext(SinkTaskContext context) {
-      this.context = context;
-      return this;
-    }
-
-    /**
      * Build the ElasticsearchWriter.
      * @return an instance of ElasticsearchWriter.
      */
     public ElasticsearchWriter build() {
       return new ElasticsearchWriter(
-          client, type, ignoreKey, ignoreSchema, topicConfigs, flushTimeoutMs, maxBufferedRecords, maxInFlightRequests, batchSize, lingerMs, maxRetry, retryBackoffMs, context);
+          client, type, ignoreKey, ignoreSchema, topicConfigs, flushTimeoutMs, maxBufferedRecords, maxInFlightRequests, batchSize, lingerMs, maxRetry, retryBackoffMs);
     }
   }
 
@@ -304,7 +279,11 @@ public class ElasticsearchWriter {
     }
   }
 
-  public void close() {
+  public void start() {
+    bulkProcessor.start();
+  }
+
+  public void stop() {
     bulkProcessor.stop();
     try {
       bulkProcessor.awaitStop(flushTimeoutMs);
@@ -325,19 +304,15 @@ public class ElasticsearchWriter {
     }
   }
 
-  private void createIndices(Map<String, TopicConfig> topicConfigs) {
-    Set<TopicPartition> assignment = context.assignment();
-    Set<String> topics = new HashSet<>();
-    for (TopicPartition tp: assignment) {
-      String topic = tp.topic();
-      if (!topicConfigs.containsKey(topic)) {
-        topics.add(topic);
+  public void createIndices(Set<String> assignedTopics) {
+    Set<String> indices = new HashSet<>();
+    for (String topic: assignedTopics) {
+      final TopicConfig topicConfig = topicConfigs.get(topic);
+      if (topicConfig != null) {
+        indices.add(topicConfig.getIndex());
+      } else {
+        indices.add(topic);
       }
-    }
-
-    Set<String> indices = new HashSet<>(topics);
-    for (String topic: topicConfigs.keySet()) {
-      indices.add(topicConfigs.get(topic).getIndex());
     }
     for (String index: indices) {
       if (!indexExists(index)) {

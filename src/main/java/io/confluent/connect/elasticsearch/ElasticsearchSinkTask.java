@@ -41,7 +41,6 @@ public class ElasticsearchSinkTask extends SinkTask {
   private static final Logger log = LoggerFactory.getLogger(ElasticsearchSinkTask.class);
   private ElasticsearchWriter writer;
   private JestClient client;
-  private ElasticsearchWriter.Builder builder;
 
   @Override
   public String version() {
@@ -85,7 +84,7 @@ public class ElasticsearchSinkTask extends SinkTask {
         this.client = factory.getObject();
       }
 
-      builder = new ElasticsearchWriter.Builder(this.client)
+      ElasticsearchWriter.Builder builder = new ElasticsearchWriter.Builder(this.client)
           .setType(type)
           .setIgnoreKey(ignoreKey)
           .setIgnoreSchema(ignoreSchema)
@@ -96,9 +95,10 @@ public class ElasticsearchSinkTask extends SinkTask {
           .setBatchSize(batchSize)
           .setLingerMs(lingerMs)
           .setRetryBackoffMs(retryBackoffMs)
-          .setMaxRetry(maxRetry)
-          .setContext(context);
+          .setMaxRetry(maxRetry);
 
+      writer = builder.build();
+      writer.start();
     } catch (ConfigException e) {
       throw new ConnectException("Couldn't start ElasticsearchSinkTask due to configuration error:", e);
     }
@@ -107,37 +107,36 @@ public class ElasticsearchSinkTask extends SinkTask {
   @Override
   public void open(Collection<TopicPartition> partitions) {
     log.debug("Opening the task for topic partitions: {}", partitions);
-    writer = builder.build();
+    Set<String> topics = new HashSet<>();
+    for (TopicPartition tp: partitions) {
+      topics.add(tp.topic());
+    }
+    writer.createIndices(topics);
   }
 
   @Override
   public void put(Collection<SinkRecord> records) throws ConnectException {
     log.trace("Putting {} to Elasticsearch.", records);
-    if (writer != null) {
-      writer.write(records);
-    }
+    writer.write(records);
   }
 
   @Override
   public void flush(Map<TopicPartition, OffsetAndMetadata> offsets) {
     log.trace("Flushing data to Elasticsearch with the following offsets: {}", offsets);
-    if (writer != null) {
-      writer.flush();
-    }
+    writer.flush();
   }
 
   @Override
   public void close(Collection<TopicPartition> partitions) {
     log.debug("Closing the task for topic partitions: {}", partitions);
-    if (writer != null) {
-      writer.close();
-      writer = null;
-    }
   }
 
   @Override
   public void stop() throws ConnectException {
     log.info("Stopping ElasticsearchSinkTask.");
+    if (writer != null) {
+      writer.stop();
+    }
     if (client != null) {
       client.shutdownClient();
     }

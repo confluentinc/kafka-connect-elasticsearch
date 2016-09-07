@@ -26,8 +26,10 @@ import org.elasticsearch.test.InternalTestCluster;
 import org.junit.Test;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
 
 @ThreadLeakScope(ThreadLeakScope.Scope.NONE)
@@ -48,9 +50,8 @@ public class ElasticsearchSinkTaskTest extends ElasticsearchSinkTestBase {
     Map<String, String> props = createProps();
 
     ElasticsearchSinkTask task = new ElasticsearchSinkTask();
-    task.initialize(context);
     task.start(props, client);
-    task.open(assignment);
+    task.open(new HashSet<>(Arrays.asList(TOPIC_PARTITION, TOPIC_PARTITION2, TOPIC_PARTITION3)));
 
     String key = "key";
     Schema schema = createSchema();
