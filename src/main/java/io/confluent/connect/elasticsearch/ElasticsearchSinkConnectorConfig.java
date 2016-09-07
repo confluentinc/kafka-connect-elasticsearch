@@ -65,9 +65,8 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
 
   public static final String MAX_BUFFERED_RECORDS_CONFIG = "max.buffered.records";
   private static final String MAX_BUFFERED_RECORDS_DOC =
-      "Approximately the max number of records each task will buffer. This config controls the memory usage for each task. When the number of "
-      + "buffered records is larger than this value, the partitions assigned to this task will be paused.";
-  private static final long MAX_BUFFERED_RECORDS_DEFAULT = 20000;
+      "Approximately the max number of records each task will buffer. This config controls the memory usage for each task.";
+  private static final int MAX_BUFFERED_RECORDS_DEFAULT = 20000;
   private static final String MAX_BUFFERED_RECORDS_DISPLAY = "Max Number of Records to Buffer";
 
   public static final String BATCH_SIZE_CONFIG = "batch.size";
@@ -135,7 +134,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
         .define(RETRY_BACKOFF_MS_CONFIG, Type.LONG, RETRY_BACKOFF_MS_DEFAULT, Importance.LOW, RETRY_BACKOFF_MS_DOC, CONNECTOR_GROUP, 11, Width.SHORT, RETRY_BACKOFF_MS_DISPLAY)
         .define(MAX_RETRIES_CONFIG, Type.INT, MAX_RETRIES_DEFAULT, Importance.LOW, MAX_RETRIES_DOC, CONNECTOR_GROUP, 12, Width.SHORT, MAX_RETRIES_DISPLAY)
         .define(FLUSH_TIMEOUT_MS_CONFIG, Type.LONG, FLUSH_TIMEOUT_MS_DEFAULT, Importance.LOW, FLUSH_TIMEOUT_MS_DOC, CONNECTOR_GROUP, 13, Width.SHORT, FLUSH_TIMEOUT_MS_DISPLAY)
-        .define(MAX_BUFFERED_RECORDS_CONFIG, Type.LONG, MAX_BUFFERED_RECORDS_DEFAULT, Importance.LOW, MAX_BUFFERED_RECORDS_DOC, CONNECTOR_GROUP, 14, Width.SHORT, MAX_BUFFERED_RECORDS_DISPLAY);
+        .define(MAX_BUFFERED_RECORDS_CONFIG, Type.INT, MAX_BUFFERED_RECORDS_DEFAULT, Importance.LOW, MAX_BUFFERED_RECORDS_DOC, CONNECTOR_GROUP, 14, Width.SHORT, MAX_BUFFERED_RECORDS_DISPLAY);
   }
 
   static ConfigDef config = baseConfigDef();

@@ -68,7 +68,7 @@ public class ElasticsearchSinkTask extends SinkTask {
       Map<String, TopicConfig> topicConfigs = constructTopicConfig(topicIndex, topicIgnoreKey, topicIgnoreSchema);
 
       long flushTimeoutMs = config.getLong(ElasticsearchSinkConnectorConfig.FLUSH_TIMEOUT_MS_CONFIG);
-      long maxBufferedRecords = config.getLong(ElasticsearchSinkConnectorConfig.MAX_BUFFERED_RECORDS_CONFIG);
+      int maxBufferedRecords = config.getInt(ElasticsearchSinkConnectorConfig.MAX_BUFFERED_RECORDS_CONFIG);
       int batchSize = config.getInt(ElasticsearchSinkConnectorConfig.BATCH_SIZE_CONFIG);
       long lingerMs = config.getLong(ElasticsearchSinkConnectorConfig.LINGER_MS_CONFIG);
       int maxInFlightRequests = config.getInt(ElasticsearchSinkConnectorConfig.MAX_IN_FLIGHT_REQUESTS_CONFIG);
@@ -108,7 +108,7 @@ public class ElasticsearchSinkTask extends SinkTask {
   public void open(Collection<TopicPartition> partitions) {
     log.debug("Opening the task for topic partitions: {}", partitions);
     Set<String> topics = new HashSet<>();
-    for (TopicPartition tp: partitions) {
+    for (TopicPartition tp : partitions) {
       topics.add(tp.topic());
     }
     writer.createIndices(topics);

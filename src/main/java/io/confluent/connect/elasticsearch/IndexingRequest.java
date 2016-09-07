@@ -14,27 +14,36 @@
  * the License.
  **/
 
-package io.confluent.connect.elasticsearch.internals;
+package io.confluent.connect.elasticsearch;
 
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
+public class IndexingRequest {
 
-public class RecordBatchResult {
+  private final String index;
+  private final String type;
+  private final String id;
+  private final String payload;
 
-  private final CountDownLatch latch = new CountDownLatch(1);
-  private volatile Throwable error;
-
-  public void done(Throwable error) {
-    this.error = error;
-    latch.countDown();
+  public IndexingRequest(String index, String type, String id, String payload) {
+    this.index = index;
+    this.type = type;
+    this.id = id;
+    this.payload = payload;
   }
 
-  public boolean await(long timeout, TimeUnit unit) throws InterruptedException {
-    return latch.await(timeout, unit);
+  public String getIndex() {
+    return index;
   }
 
-  public Throwable getError() {
-    return error;
+  public String getType() {
+    return type;
+  }
+
+  public String getId() {
+    return id;
+  }
+
+  public String getPayload() {
+    return payload;
   }
 
 }

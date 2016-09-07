@@ -214,7 +214,7 @@ public class ElasticsearchWriterTest extends ElasticsearchSinkTestBase {
     return writer;
   }
 
-  private void writeDataAndWait(ElasticsearchWriter writer, Collection<SinkRecord> records, long waitInterval) throws InterruptedException {
+  private void writeDataAndWait(ElasticsearchWriter writer, Collection<SinkRecord> records, long waitInterval) throws Exception {
     writer.write(records);
     writer.flush();
     writer.stop();

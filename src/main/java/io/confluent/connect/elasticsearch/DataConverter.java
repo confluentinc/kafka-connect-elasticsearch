@@ -33,13 +33,13 @@ import org.apache.kafka.connect.storage.Converter;
 
 import java.io.IOException;
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Map;
 import java.util.Set;
 
-import io.confluent.connect.elasticsearch.internals.ESRequest;
 import io.searchbox.client.JestClient;
 
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConstants.MAP_KEY;
@@ -53,14 +53,6 @@ public class DataConverter {
     JSON_CONVERTER.configure(Collections.singletonMap("schemas.enable", "false"), false);
   }
 
-  /**
-   * Convert the key to the string representation.
-   *
-   * @param key The key of a SinkRecord.
-   * @param keySchema The key schema.
-   * @return The string representation of the key.
-   * @throws ConnectException if the key is null.
-   */
   public static String convertKey(Object key, Schema keySchema) {
     if (key == null) {
       throw new ConnectException("Key is used as document id and can not be null.");
@@ -86,26 +78,14 @@ public class DataConverter {
     }
   }
 
-  /**
-   * Convert a SinkRecord to an IndexRequest.
-   *
-   * @param record The SinkRecord to be converted.
-   * @param client The client to connect to Elasticsearch.
-   * @param ignoreKey Whether to ignore the key during indexing.
-   * @param ignoreSchema Whether to ignore the schema during indexing.
-   * @param topicConfigs The map of per topic configs.
-   * @param mappings The mapping cache.
-   * @return The converted IndexRequest.
-   */
-
-  public static ESRequest convertRecord(
+  public static IndexingRequest convertRecord(
       SinkRecord record,
       String type,
       JestClient client,
       boolean ignoreKey,
       boolean ignoreSchema,
       Map<String, TopicConfig> topicConfigs,
-      Set<String> mappings) {
+      Set<String> mappingCache) {
 
     String topic = record.topic();
     int partition = record.kafkaPartition();
@@ -139,9 +119,9 @@ public class DataConverter {
     }
 
     try {
-      if (!topicIgnoreSchema && !mappings.contains(index) && !Mapping.doesMappingExist(client, index, type, mappings)) {
+      if (!topicIgnoreSchema && !mappingCache.contains(index) && !Mapping.doesMappingExist(client, index, type, mappingCache)) {
         Mapping.createMapping(client, index, type, valueSchema);
-        mappings.add(index);
+        mappingCache.add(index);
       }
     } catch (IOException e) {
       // TODO: It is possible that two clients are creating the mapping at the same time and
@@ -160,8 +140,9 @@ public class DataConverter {
       newValue = value;
     }
 
-    byte[] json = JSON_CONVERTER.fromConnectData(topic, newSchema, newValue);
-    return new ESRequest(index, type, id, json);
+    String payload = new String(JSON_CONVERTER.fromConnectData(topic, newSchema, newValue), StandardCharsets.UTF_8);
+
+    return new IndexingRequest(index, type, id, payload);
   }
 
   // We need to pre process the Kafka Connect schema before converting to JSON as Elasticsearch
