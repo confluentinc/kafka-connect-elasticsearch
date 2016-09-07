@@ -1,5 +1,6 @@
 Configuration Options
 ---------------------
+
 ``connection.url``
   The URL to connect to Elasticsearch.
 
@@ -25,7 +26,7 @@ Configuration Options
   The number of requests to process as a batch when writing to Elasticsearch.
 
   * Type: int
-  * Default: 10000
+  * Default: 2000
   * Importance: medium
 
 ``max.in.flight.requests``
@@ -53,10 +54,10 @@ Configuration Options
   Approximately the max number of records each task will buffer. This config controls the memory usage for each task. When the number of buffered records is larger than this value, the partitions assigned to this task will be paused.
 
   * Type: long
-  * Default: 100000
+  * Default: 20000
   * Importance: low
 
-``max.retry``
+``max.retries``
   The max allowed number of retries. Allowing retries will potentially change the ordering of records.
 
   * Type: int

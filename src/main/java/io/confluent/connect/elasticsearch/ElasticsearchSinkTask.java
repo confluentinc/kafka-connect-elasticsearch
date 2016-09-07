@@ -85,7 +85,7 @@ public class ElasticsearchSinkTask extends SinkTask {
       long lingerMs = config.getLong(ElasticsearchSinkConnectorConfig.LINGER_MS_CONFIG);
       int maxInFlightRequests = config.getInt(ElasticsearchSinkConnectorConfig.MAX_IN_FLIGHT_REQUESTS_CONFIG);
       long retryBackoffMs = config.getLong(ElasticsearchSinkConnectorConfig.RETRY_BACKOFF_MS_CONFIG);
-      int maxRetry = config.getInt(ElasticsearchSinkConnectorConfig.MAX_RETRY_CONFIG);
+      int maxRetry = config.getInt(ElasticsearchSinkConnectorConfig.MAX_RETRIES_CONFIG);
 
       if (client != null) {
         this.client = client;
