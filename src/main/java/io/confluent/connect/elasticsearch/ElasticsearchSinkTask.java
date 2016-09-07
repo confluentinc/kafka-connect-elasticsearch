@@ -20,10 +20,8 @@ import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.connect.errors.ConnectException;
-import org.apache.kafka.connect.json.JsonConverter;
 import org.apache.kafka.connect.sink.SinkRecord;
 import org.apache.kafka.connect.sink.SinkTask;
-import org.apache.kafka.connect.storage.Converter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -44,15 +42,6 @@ public class ElasticsearchSinkTask extends SinkTask {
   private ElasticsearchWriter writer;
   private JestClient client;
   private ElasticsearchWriter.Builder builder;
-  private static Converter converter;
-
-  static {
-    // Config the JsonConverter
-    converter = new JsonConverter();
-    Map<String, String> configs = new HashMap<>();
-    configs.put("schemas.enable", "false");
-    converter.configure(configs, false);
-  }
 
   @Override
   public String version() {
@@ -108,8 +97,7 @@ public class ElasticsearchSinkTask extends SinkTask {
           .setLingerMs(lingerMs)
           .setRetryBackoffMs(retryBackoffMs)
           .setMaxRetry(maxRetry)
-          .setContext(context)
-          .setConverter(converter);
+          .setContext(context);
 
     } catch (ConfigException e) {
       throw new ConnectException("Couldn't start ElasticsearchSinkTask due to configuration error:", e);
@@ -180,7 +168,4 @@ public class ElasticsearchSinkTask extends SinkTask {
     return topicConfigMap;
   }
 
-  public static Converter getConverter() {
-    return converter;
-  }
 }
