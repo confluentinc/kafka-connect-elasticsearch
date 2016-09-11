@@ -78,7 +78,7 @@ public class DataConverter {
     }
   }
 
-  public static IndexingRequest convertRecord(
+  public static IndexableRecord convertRecord(
       SinkRecord record,
       String type,
       JestClient client,
@@ -142,7 +142,7 @@ public class DataConverter {
 
     String payload = new String(JSON_CONVERTER.fromConnectData(topic, newSchema, newValue), StandardCharsets.UTF_8);
 
-    return new IndexingRequest(index, type, id, payload);
+    return new IndexableRecord(index, type, id, payload);
   }
 
   // We need to pre process the Kafka Connect schema before converting to JSON as Elasticsearch

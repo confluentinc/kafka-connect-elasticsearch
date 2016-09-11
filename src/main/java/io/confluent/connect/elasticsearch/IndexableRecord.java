@@ -16,14 +16,14 @@
 
 package io.confluent.connect.elasticsearch;
 
-public class IndexingRequest {
+public class IndexableRecord {
 
   private final String index;
   private final String type;
   private final String id;
   private final String payload;
 
-  public IndexingRequest(String index, String type, String id, String payload) {
+  public IndexableRecord(String index, String type, String id, String payload) {
     this.index = index;
     this.type = type;
     this.id = id;

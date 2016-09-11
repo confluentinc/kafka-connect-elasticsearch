@@ -31,7 +31,7 @@ import io.searchbox.core.Bulk;
 import io.searchbox.core.BulkResult;
 import io.searchbox.core.Index;
 
-public class BulkIndexingClient implements BulkClient<IndexingRequest, Bulk> {
+public class BulkIndexingClient implements BulkClient<IndexableRecord, Bulk> {
 
   private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
   private static final Set<String> NON_RETRIABLE_ERROR_TYPES = Collections.singleton("mapper_parse_exception");
@@ -43,9 +43,9 @@ public class BulkIndexingClient implements BulkClient<IndexingRequest, Bulk> {
   }
 
   @Override
-  public Bulk bulkRequest(List<IndexingRequest> batch) {
+  public Bulk bulkRequest(List<IndexableRecord> batch) {
     final Bulk.Builder builder = new Bulk.Builder();
-    for (IndexingRequest request : batch) {
+    for (IndexableRecord request : batch) {
       builder.addAction(
           new Index.Builder(request.getPayload())
               .index(request.getIndex())

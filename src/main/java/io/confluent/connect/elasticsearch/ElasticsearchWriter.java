@@ -49,7 +49,7 @@ public class ElasticsearchWriter {
   private final long flushTimeoutMs;
 
   private final Set<String> mappings;
-  private final BulkProcessor<IndexingRequest, ?> bulkProcessor;
+  private final BulkProcessor<IndexableRecord, ?> bulkProcessor;
 
   ElasticsearchWriter(
       JestClient client,
@@ -168,7 +168,7 @@ public class ElasticsearchWriter {
 
   public void write(Collection<SinkRecord> records) {
     for (SinkRecord record : records) {
-      IndexingRequest request = DataConverter.convertRecord(record, type, client, ignoreKey, ignoreSchema, topicConfigs, mappings);
+      IndexableRecord request = DataConverter.convertRecord(record, type, client, ignoreKey, ignoreSchema, topicConfigs, mappings);
       bulkProcessor.add(request);
     }
   }
