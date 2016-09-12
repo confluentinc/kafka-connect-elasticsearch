@@ -117,9 +117,9 @@ public class BulkProcessorTest {
     client.expect(Arrays.asList(1, 2, 3, 4, 5), BulkResponse.success());
     client.expect(Arrays.asList(6, 7, 8, 9, 10), BulkResponse.success());
     client.expect(Arrays.asList(11, 12), BulkResponse.success()); // batch not full, but upon linger timeout
-    assertTrue(bulkProcessor.tick().get().succeeded);
-    assertTrue(bulkProcessor.tick().get().succeeded);
-    assertTrue(bulkProcessor.tick().get().succeeded);
+    assertTrue(bulkProcessor.submitBatchWhenReady().get().succeeded);
+    assertTrue(bulkProcessor.submitBatchWhenReady().get().succeeded);
+    assertTrue(bulkProcessor.submitBatchWhenReady().get().succeeded);
     assertTrue(client.expectationsMet());
   }
 
@@ -189,7 +189,7 @@ public class BulkProcessorTest {
     bulkProcessor.add(42);
     bulkProcessor.add(43);
 
-    assertTrue(bulkProcessor.tick().get().succeeded);
+    assertTrue(bulkProcessor.submitBatchWhenReady().get().succeeded);
   }
 
   @Test
@@ -221,7 +221,7 @@ public class BulkProcessorTest {
     bulkProcessor.add(43);
 
     try {
-      bulkProcessor.tick().get();
+      bulkProcessor.submitBatchWhenReady().get();
       fail();
     } catch (ExecutionException e) {
       assertTrue(e.getCause().getMessage().contains(errorInfo));

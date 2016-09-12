@@ -120,7 +120,7 @@ public class BulkProcessor<R, B> {
         log.debug("Starting farmer task");
         try {
           while (!stopRequested) {
-            tick();
+            submitBatchWhenReady();
           }
         } catch (InterruptedException e) {
           throw new ConnectException(e);
@@ -131,7 +131,7 @@ public class BulkProcessor<R, B> {
   }
 
   // Visible for testing
-  synchronized Future<BulkResponse> tick() throws InterruptedException {
+  synchronized Future<BulkResponse> submitBatchWhenReady() throws InterruptedException {
     for (long waitStartTimeMs = time.milliseconds(), elapsedMs = 0;
          !stopRequested && !canSubmit(elapsedMs);
          elapsedMs = time.milliseconds() - waitStartTimeMs) {
