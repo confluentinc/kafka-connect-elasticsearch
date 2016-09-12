@@ -56,9 +56,7 @@ public class BulkProcessor<R, B> {
   // thread-safe stats
   private final AtomicLong createdBatches = new AtomicLong();
   private final AtomicLong successfulRecords = new AtomicLong();
-  private final AtomicLong failedRecords = new AtomicLong();
   private final AtomicLong successfulBatches = new AtomicLong();
-  private final AtomicLong failedBatches = new AtomicLong();
 
   // thread-safe state, can be mutated safely without synchronization,
   // but may be part of synchronized(this) wait() conditions so need to notifyAll() on changes
@@ -327,7 +325,7 @@ public class BulkProcessor<R, B> {
       try {
         rsp = execute();
       } catch (Exception e) {
-        onBatchFailure(batch.size(), e);
+        failAndStop(e);
         throw e;
       }
       log.debug("Successfully executed batch {} of {} records", batchId, batch.size());
@@ -375,12 +373,6 @@ public class BulkProcessor<R, B> {
     notifyAll();
   }
 
-  private void onBatchFailure(int batchSize, Exception e) {
-    failedBatches.incrementAndGet();
-    failedRecords.addAndGet(batchSize);
-    failAndStop(e);
-  }
-
   private void failAndStop(Throwable t) {
     error.compareAndSet(null, toConnectException(t));
     stop();
@@ -408,6 +400,13 @@ public class BulkProcessor<R, B> {
   }
 
   /**
+   * @return count of batches that have been created
+   */
+  public long createdBatches() {
+    return createdBatches.get();
+  }
+
+  /**
    * @return count of batches successfully executed
    */
   public long successfulBatches() {
@@ -415,10 +414,10 @@ public class BulkProcessor<R, B> {
   }
 
   /**
-   * @return count of batches that failed
+   * @return count of records successfully sent
    */
-  public long failedBatches() {
-    return failedBatches.get();
+  public long successfulRecords() {
+    return successfulRecords.get();
   }
 
   private static ConnectException toConnectException(Throwable t) {
