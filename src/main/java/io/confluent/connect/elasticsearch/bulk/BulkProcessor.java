@@ -89,7 +89,7 @@ public class BulkProcessor<R, B> {
     unsentRecords = new ArrayDeque<>(maxBufferedRecords);
 
     final ThreadFactory threadFactory = makeThreadFactory();
-    farmer = new Thread(farmerTask());
+    farmer = threadFactory.newThread(farmerTask());
     executor = Executors.newFixedThreadPool(maxInFlightRequests, threadFactory);
   }
 
