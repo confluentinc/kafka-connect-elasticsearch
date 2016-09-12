@@ -138,7 +138,19 @@ public class BulkProcessor<R, B> {
       // when linger time has already elapsed, we still have to ensure the other submission conditions hence the wait(0) in that case
       wait(Math.max(0, lingerMs - elapsedMs));
     }
+    // at this point, either stopRequested or canSubmit
     return stopRequested ? null : submitBatch();
+  }
+
+  private synchronized Future<BulkResponse> submitBatch() {
+    assert !unsentRecords.isEmpty();
+    final int batchableSize = Math.min(batchSize, unsentRecords.size());
+    final List<R> batch = new ArrayList<>(batchableSize);
+    for (int i = 0; i < batchableSize; i++) {
+      batch.add(unsentRecords.removeFirst());
+    }
+    inFlightRecords += batchableSize;
+    return executor.submit(new BulkTask(batch));
   }
 
   /**
@@ -193,16 +205,6 @@ public class BulkProcessor<R, B> {
     } finally {
       executor.shutdownNow();
     }
-  }
-
-  private synchronized Future<BulkResponse> submitBatch() {
-    final int batchableSize = Math.min(batchSize, unsentRecords.size());
-    final List<R> batch = new ArrayList<>(batchableSize);
-    for (int i = 0; i < batchableSize; i++) {
-      batch.add(unsentRecords.removeFirst());
-    }
-    inFlightRecords += batchableSize;
-    return executor.submit(new BulkTask(batch));
   }
 
   /**
