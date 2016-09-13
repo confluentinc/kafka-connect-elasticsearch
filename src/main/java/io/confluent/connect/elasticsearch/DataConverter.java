@@ -179,6 +179,11 @@ public class DataConverter {
       switch (schemaName) {
         case Decimal.LOGICAL_NAME:
           builder = SchemaBuilder.float64();
+          if (schema.isOptional())
+            builder.optional();
+
+          if (schema.defaultValue() != null)
+            builder.defaultValue(preProcessValue(schema.defaultValue(), schema, schema));
           return builder.build();
         case Date.LOGICAL_NAME:
         case Time.LOGICAL_NAME:
@@ -194,6 +199,8 @@ public class DataConverter {
       case ARRAY:
         valueSchema = schema.valueSchema();
         builder = SchemaBuilder.array(preProcessSchema(valueSchema));
+        if (schema.isOptional())
+          builder.optional();
         return builder.build();
       case MAP:
         keySchema = schema.keySchema();
@@ -204,12 +211,16 @@ public class DataConverter {
             .field(MAP_KEY, preProcessSchema(keySchema))
             .field(MAP_VALUE, preProcessSchema(valueSchema))
             .build());
+        if (schema.isOptional())
+          builder.optional();
         return builder.build();
       case STRUCT:
         builder = SchemaBuilder.struct().name(schema.name());
         for (Field field: schema.fields()) {
           builder.field(field.name(), preProcessSchema(field.schema()));
         }
+        if (schema.isOptional())
+          builder.optional();
         return builder.build();
       default:
         return schema;
@@ -220,6 +231,13 @@ public class DataConverter {
   static Object preProcessValue(Object value, Schema schema, Schema newSchema) {
     if (schema == null) {
       return value;
+    }
+    if (value == null) {
+      if (schema.defaultValue() != null)
+        return schema.defaultValue();
+      if (schema.isOptional())
+        return null;
+      throw new DataException("Conversion error: null value for field that is required and has no default value");
     }
 
     // Handle logical types
