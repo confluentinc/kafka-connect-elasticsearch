@@ -23,24 +23,18 @@ import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.sink.SinkRecord;
-import org.apache.kafka.connect.sink.SinkTaskContext;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.node.Node;
 import org.elasticsearch.test.ESIntegTestCase;
 import org.junit.After;
-import org.junit.AfterClass;
 import org.junit.Before;
-import org.junit.BeforeClass;
 
 import java.io.IOException;
 import java.util.Collection;
-import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Map;
 import java.util.Set;
 
-import io.searchbox.client.JestClient;
 import io.searchbox.client.JestClientFactory;
 import io.searchbox.client.config.HttpClientConfig;
 import io.searchbox.client.http.JestHttpClient;
@@ -115,11 +109,9 @@ public class ElasticsearchSinkTestBase extends ESIntegTestCase {
     return struct;
   }
 
-  protected SearchResult search(JestClient client) throws IOException {
-    return client.execute(new Search.Builder("").build());
-  }
+  protected void verifySearchResults(Collection<SinkRecord> records, boolean ignoreKey) throws IOException {
+    SearchResult result = client.execute(new Search.Builder("").build());
 
-  protected void verifySearch(Collection<SinkRecord> records, SearchResult result, boolean ignoreKey) {
     JsonArray hits = result.getJsonObject().getAsJsonObject("hits").getAsJsonArray("hits");
     assertEquals(records.size(), hits.size());
     Set<String> hitIds = new HashSet<>();
