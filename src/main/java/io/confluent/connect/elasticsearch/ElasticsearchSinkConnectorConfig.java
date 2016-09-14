@@ -67,12 +67,12 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   private static final String MAX_BUFFERED_RECORDS_DOC =
       "Approximately the max number of records each task will buffer. This config controls the memory usage for each task. When the number of "
       + "buffered records is larger than this value, the partitions assigned to this task will be paused.";
-  private static final long MAX_BUFFERED_RECORDS_DEFAULT = 100000;
+  private static final long MAX_BUFFERED_RECORDS_DEFAULT = 20000;
   private static final String MAX_BUFFERED_RECORDS_DISPLAY = "Max Number of Records to Buffer";
 
   public static final String BATCH_SIZE_CONFIG = "batch.size";
   private static final String BATCH_SIZE_DOC = "The number of requests to process as a batch when writing to Elasticsearch.";
-  private static final int BATCH_SIZE_DEFAULT = 10000;
+  private static final int BATCH_SIZE_DEFAULT = 2000;
   private static final String BATCH_SIZE_DISPLAY = "Batch Size";
 
   public static final String LINGER_MS_CONFIG = "linger.ms";
@@ -99,10 +99,10 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   private static final long RETRY_BACKOFF_MS_DEFAULT = 100L;
   private static final String RETRY_BACKOFF_MS_DISPLAY = "Retry Backoff (ms)";
 
-  public static final String MAX_RETRY_CONFIG = "max.retry";
-  private static final String MAX_RETRY_DOC = "The max allowed number of retries. Allowing retries will potentially change the ordering of records.";
-  private static final int MAX_RETRY_DEFAULT = 5;
-  private static final String MAX_RETRY_DISPLAY = "Max Retry";
+  public static final String MAX_RETRIES_CONFIG = "max.retries";
+  private static final String MAX_RETRIES_DOC = "The max allowed number of retries. Allowing retries will potentially change the ordering of records.";
+  private static final int MAX_RETRIES_DEFAULT = 5;
+  private static final String MAX_RETRIES_DISPLAY = "Max Retries";
 
   public static final String SCHEMA_IGNORE_CONFIG = "schema.ignore";
   private static final String SCHEMA_IGNORE_DOC =
@@ -133,7 +133,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
         .define(TOPIC_SCHEMA_IGNORE_CONFIG, Type.LIST, TOPIC_SCHEMA_IGNORE_DEFAULT, Importance.LOW, TOPIC_SCHEMA_IGNORE_DOC, CONNECTOR_GROUP, 9, Width.LONG, TOPIC_SCHEMA_IGNORE_DISPLAY)
         .define(LINGER_MS_CONFIG, Type.LONG, LINGER_MS_DEFAULT, Importance.LOW, LINGER_MS_DOC, CONNECTOR_GROUP, 10, Width.SHORT, LINGER_MS_DISPLAY)
         .define(RETRY_BACKOFF_MS_CONFIG, Type.LONG, RETRY_BACKOFF_MS_DEFAULT, Importance.LOW, RETRY_BACKOFF_MS_DOC, CONNECTOR_GROUP, 11, Width.SHORT, RETRY_BACKOFF_MS_DISPLAY)
-        .define(MAX_RETRY_CONFIG, Type.INT, MAX_RETRY_DEFAULT, Importance.LOW, MAX_RETRY_DOC, CONNECTOR_GROUP, 12, Width.SHORT, MAX_RETRY_DISPLAY)
+        .define(MAX_RETRIES_CONFIG, Type.INT, MAX_RETRIES_DEFAULT, Importance.LOW, MAX_RETRIES_DOC, CONNECTOR_GROUP, 12, Width.SHORT, MAX_RETRIES_DISPLAY)
         .define(FLUSH_TIMEOUT_MS_CONFIG, Type.LONG, FLUSH_TIMEOUT_MS_DEFAULT, Importance.LOW, FLUSH_TIMEOUT_MS_DOC, CONNECTOR_GROUP, 13, Width.SHORT, FLUSH_TIMEOUT_MS_DISPLAY)
         .define(MAX_BUFFERED_RECORDS_CONFIG, Type.LONG, MAX_BUFFERED_RECORDS_DEFAULT, Importance.LOW, MAX_BUFFERED_RECORDS_DOC, CONNECTOR_GROUP, 14, Width.SHORT, MAX_BUFFERED_RECORDS_DISPLAY);
   }

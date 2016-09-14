@@ -15,7 +15,6 @@
  **/
 package io.confluent.connect.elasticsearch.internals;
 
-import org.apache.kafka.connect.errors.RetriableException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -156,7 +155,7 @@ public class BulkProcessor implements Runnable {
 
       client.execute(batch, callback);
     } catch (Throwable t) {
-      log.warn("Failed to execute bulk request {}.", t, executionId);
+      log.warn("Failed to execute bulk request {}.", executionId, t);
       try {
         listener.afterBulk(executionId, batch, t);
       } catch (Throwable tt) {
@@ -270,17 +269,14 @@ public class BulkProcessor implements Runnable {
     }
   }
 
-  public void exceedMaxBufferedRecords(long maxBufferedRecords, int batchSize) {
+  public int getTotalBufferedRecords() {
+    int total = 0;
     synchronized (requests) {
-      int total = 0;
       for (RecordBatch batch: requests) {
         total += batch.size();
       }
-      total += batchSize;
-      if (total > maxBufferedRecords) {
-        throw new RetriableException("Exceed max number of buffered records");
-      }
     }
+    return total;
   }
 
   // visible for testing

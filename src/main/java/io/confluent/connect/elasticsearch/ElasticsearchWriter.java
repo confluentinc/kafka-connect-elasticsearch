@@ -18,9 +18,9 @@ package io.confluent.connect.elasticsearch;
 
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.connect.errors.ConnectException;
+import org.apache.kafka.connect.errors.RetriableException;
 import org.apache.kafka.connect.sink.SinkRecord;
 import org.apache.kafka.connect.sink.SinkTaskContext;
-import org.apache.kafka.connect.storage.Converter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -56,8 +56,6 @@ import io.searchbox.indices.IndicesExists;
  */
 public class ElasticsearchWriter {
   private static final Logger log = LoggerFactory.getLogger(ElasticsearchWriter.class);
-
-  private final Converter converter;
 
   private final JestClient client;
   private final BulkProcessor bulkProcessor;
@@ -97,8 +95,7 @@ public class ElasticsearchWriter {
       long lingerMs,
       int maxRetry,
       long retryBackoffMs,
-      SinkTaskContext context,
-      Converter converter) {
+      SinkTaskContext context) {
 
     this.client = client;
     this.type = type;
@@ -118,9 +115,6 @@ public class ElasticsearchWriter {
 
     // create index if needed.
     createIndices(topicConfigs);
-
-    // Config the JsonConverter
-    this.converter = converter;
 
     // Start the BulkProcessor
     bulkProcessor = new BulkProcessor(new HttpClient(client), maxInFlightRequests, batchSize, lingerMs, maxRetry, retryBackoffMs, createDefaultListener());
@@ -144,7 +138,6 @@ public class ElasticsearchWriter {
     private int maxRetry;
     private long retryBackoffMs;
     private SinkTaskContext context;
-    private Converter converter = ElasticsearchSinkTask.getConverter();
 
     /**
      * Constructor of ElasticsearchWriter Builder.
@@ -277,33 +270,24 @@ public class ElasticsearchWriter {
     }
 
     /**
-     * Set the converter.
-     * @param converter The converter to use.
-     * @return an instance of ElasticsearchWriter Builder.
-     */
-    public Builder setConverter(Converter converter) {
-      this.converter = converter;
-      return this;
-    }
-
-    /**
      * Build the ElasticsearchWriter.
      * @return an instance of ElasticsearchWriter.
      */
     public ElasticsearchWriter build() {
       return new ElasticsearchWriter(
-          client, type, ignoreKey, ignoreSchema, topicConfigs, flushTimeoutMs, maxBufferedRecords, maxInFlightRequests, batchSize, lingerMs, maxRetry, retryBackoffMs, context, converter);
+          client, type, ignoreKey, ignoreSchema, topicConfigs, flushTimeoutMs, maxBufferedRecords, maxInFlightRequests, batchSize, lingerMs, maxRetry, retryBackoffMs, context);
     }
   }
 
   public void write(Collection<SinkRecord> records) {
     if (bulkProcessor.getException() != null) {
-      throw new ConnectException("BulkProcessor fails with non reriable exception.", bulkProcessor.getException());
+      throw new ConnectException("BulkProcessor failed with non-retriable exception", bulkProcessor.getException());
     }
-    bulkProcessor.exceedMaxBufferedRecords(maxBufferedRecords, records.size());
-
+    if (bulkProcessor.getTotalBufferedRecords() + records.size() > maxBufferedRecords) {
+      throw new RetriableException("Exceeded max number of buffered records: " + maxBufferedRecords);
+    }
     for (SinkRecord record: records) {
-      ESRequest request = DataConverter.convertRecord(record, type, client, converter, ignoreKey, ignoreSchema, topicConfigs, mappings);
+      ESRequest request = DataConverter.convertRecord(record, type, client, ignoreKey, ignoreSchema, topicConfigs, mappings);
       bulkProcessor.add(request);
     }
   }

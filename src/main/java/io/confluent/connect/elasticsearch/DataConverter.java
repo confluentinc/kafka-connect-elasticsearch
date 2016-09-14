@@ -27,15 +27,15 @@ import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.errors.DataException;
+import org.apache.kafka.connect.json.JsonConverter;
 import org.apache.kafka.connect.sink.SinkRecord;
 import org.apache.kafka.connect.storage.Converter;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Map;
 import java.util.Set;
 
@@ -47,10 +47,15 @@ import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConst
 
 public class DataConverter {
 
-  private static final Logger log = LoggerFactory.getLogger(DataConverter.class);
+  private static final Converter JSON_CONVERTER;
+  static {
+    JSON_CONVERTER = new JsonConverter();
+    JSON_CONVERTER.configure(Collections.singletonMap("schemas.enable", "false"), false);
+  }
 
   /**
    * Convert the key to the string representation.
+   *
    * @param key The key of a SinkRecord.
    * @param keySchema The key schema.
    * @return The string representation of the key.
@@ -77,15 +82,15 @@ public class DataConverter {
       case STRING:
         return String.valueOf(key);
       default:
-        throw new DataException(schemaType.name() + "is not supported as the document id.");
+        throw new DataException(schemaType.name() + " is not supported as the document id.");
     }
   }
 
   /**
    * Convert a SinkRecord to an IndexRequest.
+   *
    * @param record The SinkRecord to be converted.
    * @param client The client to connect to Elasticsearch.
-   * @param converter The converter to use to convert the value to JSON.
    * @param ignoreKey Whether to ignore the key during indexing.
    * @param ignoreSchema Whether to ignore the schema during indexing.
    * @param topicConfigs The map of per topic configs.
@@ -97,7 +102,6 @@ public class DataConverter {
       SinkRecord record,
       String type,
       JestClient client,
-      Converter converter,
       boolean ignoreKey,
       boolean ignoreSchema,
       Map<String, TopicConfig> topicConfigs,
@@ -156,7 +160,7 @@ public class DataConverter {
       newValue = value;
     }
 
-    byte[] json = converter.fromConnectData(topic, newSchema, newValue);
+    byte[] json = JSON_CONVERTER.fromConnectData(topic, newSchema, newValue);
     return new ESRequest(index, type, id, json);
   }
 
