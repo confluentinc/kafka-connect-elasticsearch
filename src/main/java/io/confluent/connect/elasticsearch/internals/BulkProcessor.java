@@ -29,6 +29,7 @@ import java.util.concurrent.atomic.AtomicLong;
 public class BulkProcessor implements Runnable {
 
   private static final Logger log = LoggerFactory.getLogger(BulkProcessor.class);
+
   private final ArrayDeque<RecordBatch> requests;
   private final Client<Response> client;
   private final int batchSize;
@@ -39,10 +40,11 @@ public class BulkProcessor implements Runnable {
   private final Listener listener;
   private final long lingerMs;
   private final long retryBackOffMs;
-  private volatile Throwable exception;
   private final Thread workThread;
   private final int maxRetry;
   private final boolean guaranteeOrdering;
+
+  private volatile Throwable exception;
   private volatile boolean muted;
 
   public BulkProcessor(
@@ -101,6 +103,9 @@ public class BulkProcessor implements Runnable {
       }
     } catch (InterruptedException e) {
       log.info("Work thread is interrupted, shutting down.");
+    } catch (Throwable t) {
+      log.error("Unexpected BulkProcessor.run() error", t);
+      fail(t);
     }
   }
 
@@ -198,6 +203,10 @@ public class BulkProcessor implements Runnable {
   private void fail(RecordBatch batch, Throwable t) {
     log.error("Batch failed with non retriable exception or exceed the max retry", t);
     batch.result().done(t);
+    fail(t);
+  }
+
+  private void fail(Throwable t) {
     exception = t;
     stop();
   }
