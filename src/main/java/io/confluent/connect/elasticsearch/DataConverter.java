@@ -142,7 +142,7 @@ public class DataConverter {
 
     String payload = new String(JSON_CONVERTER.fromConnectData(topic, newSchema, newValue), StandardCharsets.UTF_8);
 
-    return new IndexableRecord(index, type, id, payload);
+    return new IndexableRecord(new Key(index, type, id), payload, offset);
   }
 
   // We need to pre process the Kafka Connect schema before converting to JSON as Elasticsearch
