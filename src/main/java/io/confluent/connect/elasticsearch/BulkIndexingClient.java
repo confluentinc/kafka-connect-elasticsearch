@@ -18,23 +18,24 @@ package io.confluent.connect.elasticsearch;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
-import java.util.Set;
 
 import io.confluent.connect.elasticsearch.bulk.BulkClient;
 import io.confluent.connect.elasticsearch.bulk.BulkResponse;
 import io.searchbox.client.JestClient;
 import io.searchbox.core.Bulk;
 import io.searchbox.core.BulkResult;
-import io.searchbox.core.Index;
 
 public class BulkIndexingClient implements BulkClient<IndexableRecord, Bulk> {
 
+  private static final Logger LOG = LoggerFactory.getLogger(BulkIndexingClient.class);
+
   private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
-  private static final Set<String> NON_RETRIABLE_ERROR_TYPES = Collections.singleton("mapper_parse_exception");
 
   private final JestClient client;
 
@@ -45,52 +46,51 @@ public class BulkIndexingClient implements BulkClient<IndexableRecord, Bulk> {
   @Override
   public Bulk bulkRequest(List<IndexableRecord> batch) {
     final Bulk.Builder builder = new Bulk.Builder();
-    for (IndexableRecord request : batch) {
-      builder.addAction(
-          new Index.Builder(request.getPayload())
-              .index(request.getIndex())
-              .type(request.getType())
-              .id(request.getId())
-              .build()
-      );
+    for (IndexableRecord record : batch) {
+      builder.addAction(record.toIndexRequest());
     }
     return builder.build();
   }
 
   @Override
   public BulkResponse execute(Bulk bulk) throws IOException {
-    return toBulkResponse(client.execute(bulk));
-  }
+    final BulkResult result = client.execute(bulk);
 
-  private static BulkResponse toBulkResponse(BulkResult result) {
     if (result.isSucceeded()) {
       return BulkResponse.success();
     }
 
-    final List<BulkResult.BulkResultItem> failedItems = result.getFailedItems();
-    if (failedItems.isEmpty()) {
-      return BulkResponse.failure(true, result.getErrorMessage());
-    }
-
     boolean retriable = true;
-    final List<String> errors = new ArrayList<>(failedItems.size());
-    for (BulkResult.BulkResultItem failedItem : failedItems) {
-      errors.add(failedItem.error);
-      retriable &= isRetriableError(failedItem.error);
-    }
-    return BulkResponse.failure(retriable, errors.toString());
-  }
 
-  private static boolean isRetriableError(String error) {
-    if (error != null && !error.trim().isEmpty()) {
-      try {
-        final ObjectNode parsedError = (ObjectNode) OBJECT_MAPPER.readTree(error);
-        return !NON_RETRIABLE_ERROR_TYPES.contains(parsedError.get("type").asText());
-      } catch (IOException e) {
-        return true;
+    final List<Key> versionConflicts = new ArrayList<>();
+    final List<String> errors = new ArrayList<>();
+
+    for (BulkResult.BulkResultItem item : result.getItems()) {
+      if (item.error != null) {
+        final ObjectNode parsedError = (ObjectNode) OBJECT_MAPPER.readTree(item.error);
+        final String errorType = parsedError.get("type").asText("");
+        if ("version_conflict_engine_exception".equals(errorType)) {
+          versionConflicts.add(new Key(item.index, item.type, item.id));
+        } else if ("mapper_parse_exception".equals(errorType)) {
+          retriable = false;
+          errors.add(item.error);
+        } else {
+          errors.add(item.error);
+        }
       }
     }
-    return true;
+
+    if (!versionConflicts.isEmpty()) {
+      LOG.warn("Ignoring version conflicts for items: {}", versionConflicts);
+      if (errors.isEmpty()) {
+        // The only errors were version conflicts
+        return BulkResponse.success();
+      }
+    }
+
+    final String errorInfo = errors.isEmpty() ? result.getErrorMessage() : errors.toString();
+
+    return BulkResponse.failure(retriable, errorInfo);
   }
 
 }

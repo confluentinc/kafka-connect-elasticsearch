@@ -26,10 +26,12 @@ import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.sink.SinkRecord;
 import org.junit.Test;
 
+import java.io.IOException;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
@@ -104,7 +106,7 @@ public class ElasticsearchWriterTest extends ElasticsearchSinkTestBase {
 
     try {
       writer.flush();
-      fail("Should throw MapperParsingException: String cannot be casted to integer.");
+      fail("should fail because of mapper_parsing_exception");
     } catch (ConnectException e) {
       // expected
     }
@@ -136,6 +138,31 @@ public class ElasticsearchWriterTest extends ElasticsearchSinkTestBase {
 
     writeDataAndRefresh(writer, records);
     verifySearchResults(expected, true);
+  }
+
+  @Test
+  public void testSafeRedelivery() throws Exception {
+    final boolean ignoreKey = false;
+
+    final Struct value0 = new Struct(schema);
+    value0.put("user", "foo");
+    value0.put("message", "hi");
+    final SinkRecord sinkRecord0 = new SinkRecord(TOPIC, PARTITION, Schema.STRING_SCHEMA, key, schema, value0, 0);
+
+    final Struct value1 = new Struct(schema);
+    value1.put("user", "foo");
+    value1.put("message", "bye");
+    final SinkRecord sinkRecord1 = new SinkRecord(TOPIC, PARTITION, Schema.STRING_SCHEMA, key, schema, value1, 1);
+
+    final ElasticsearchWriter writer = initWriter(client, ignoreKey, false, Collections.<String, TopicConfig>emptyMap());
+    writer.write(Arrays.asList(sinkRecord0, sinkRecord1));
+    writer.flush();
+
+    // write the record with earlier offset again
+    writeDataAndRefresh(writer, Collections.singleton(sinkRecord0));
+
+    // last write should have been ignored due to version conflict
+    verifySearchResults(Collections.singleton(sinkRecord1), ignoreKey);
   }
 
   @Test
