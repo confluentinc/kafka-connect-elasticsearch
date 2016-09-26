@@ -13,36 +13,15 @@
  * License for the specific language governing permissions and limitations under
  * the License.
  **/
+package io.confluent.connect.elasticsearch.bulk;
 
-package io.confluent.connect.elasticsearch.internals;
+import java.io.IOException;
+import java.util.List;
 
-public class ESRequest {
+public interface BulkClient<R, B> {
 
-  private final String index;
-  private final String type;
-  private final String id;
-  private final byte[] payload;
+  B bulkRequest(List<R> batch);
 
-  public ESRequest(String index, String type, String id, byte[] payload) {
-    this.index = index;
-    this.type = type;
-    this.id = id;
-    this.payload = payload;
-  }
+  BulkResponse execute(B req) throws IOException;
 
-  public String getIndex() {
-    return index;
-  }
-
-  public String getType() {
-    return type;
-  }
-
-  public String getId() {
-    return id;
-  }
-
-  public byte[] getPayload() {
-    return payload;
-  }
 }

@@ -49,8 +49,6 @@ import io.searchbox.core.SearchResult;
 
 public class ElasticsearchSinkTestBase extends ESIntegTestCase {
 
-  protected static Set<TopicPartition> assignment;
-
   protected static final String TYPE = "kafka-connect";
   protected static final long SLEEP_INTERVAL_MS = 2000;
 
@@ -61,29 +59,13 @@ public class ElasticsearchSinkTestBase extends ESIntegTestCase {
   protected static final TopicPartition TOPIC_PARTITION = new TopicPartition(TOPIC, PARTITION);
   protected static final TopicPartition TOPIC_PARTITION2 = new TopicPartition(TOPIC, PARTITION2);
   protected static final TopicPartition TOPIC_PARTITION3 = new TopicPartition(TOPIC, PARTITION3);
-  protected static SinkTaskContext context;
 
-  protected final JestClientFactory factory = new JestClientFactory();
   protected JestHttpClient client;
-
-  @BeforeClass
-  public static void createAssignment() {
-    assignment = new HashSet<>();
-    assignment.add(TOPIC_PARTITION);
-    assignment.add(TOPIC_PARTITION2);
-    assignment.add(TOPIC_PARTITION3);
-    context = new MockSinkTaskContext();
-  }
-
-  @AfterClass
-  public static void clearAssignment() {
-    assignment.clear();
-    context = null;
-  }
 
   @Before
   public void setUp() throws Exception {
     super.setUp();
+    final JestClientFactory factory = new JestClientFactory();
     factory.setHttpClientConfig(
         new HttpClientConfig
             .Builder("http://localhost:" + getPort())
@@ -172,65 +154,4 @@ public class ElasticsearchSinkTestBase extends ESIntegTestCase {
         .build();
   }
 
-  protected static class MockSinkTaskContext implements SinkTaskContext {
-
-    private Map<TopicPartition, Long> offsets;
-    private long timeoutMs;
-
-    public MockSinkTaskContext() {
-      this.offsets = new HashMap<>();
-      this.timeoutMs = -1L;
-    }
-
-    @Override
-    public void offset(Map<TopicPartition, Long> offsets) {
-      this.offsets.putAll(offsets);
-    }
-
-    @Override
-    public void offset(TopicPartition tp, long offset) {
-      offsets.put(tp, offset);
-    }
-
-    /**
-     * Get offsets that the SinkTask has submitted to be reset. Used by the Copycat framework.
-     * @return the map of offsets
-     */
-    public Map<TopicPartition, Long> offsets() {
-      return offsets;
-    }
-
-    @Override
-    public void timeout(long timeoutMs) {
-      this.timeoutMs = timeoutMs;
-    }
-
-    /**
-     * Get the timeout in milliseconds set by SinkTasks. Used by the Copycat framework.
-     * @return the backoff timeout in milliseconds.
-     */
-    public long timeout() {
-      return timeoutMs;
-    }
-
-    /**
-     * Get the timeout in milliseconds set by SinkTasks. Used by the Copycat framework.
-     * @return the backoff timeout in milliseconds.
-     */
-
-    @Override
-    public Set<TopicPartition> assignment() {
-      return assignment;
-    }
-
-    @Override
-    public void pause(TopicPartition... partitions) {
-      return;
-    }
-
-    @Override
-    public void resume(TopicPartition... partitions) {
-      return;
-    }
-  }
 }
