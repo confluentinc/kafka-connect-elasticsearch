@@ -167,9 +167,9 @@ public class ElasticsearchWriter {
   }
 
   public void write(Collection<SinkRecord> records) {
-    for (SinkRecord record : records) {
-      IndexableRecord request = DataConverter.convertRecord(record, type, client, ignoreKey, ignoreSchema, topicConfigs, mappings);
-      bulkProcessor.add(request, flushTimeoutMs);
+    for (SinkRecord sinkRecord : records) {
+      final IndexableRecord indexableRecord = DataConverter.convertRecord(sinkRecord, type, client, ignoreKey, ignoreSchema, topicConfigs, mappings);
+      bulkProcessor.add(indexableRecord, flushTimeoutMs);
     }
   }
 
