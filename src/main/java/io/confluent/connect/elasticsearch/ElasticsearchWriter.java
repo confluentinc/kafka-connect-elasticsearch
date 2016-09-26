@@ -37,7 +37,6 @@ import io.searchbox.client.JestResult;
 import io.searchbox.indices.CreateIndex;
 import io.searchbox.indices.IndicesExists;
 
-// TODO: Use offset as external version to fence requests with lower version.
 public class ElasticsearchWriter {
   private static final Logger log = LoggerFactory.getLogger(ElasticsearchWriter.class);
 

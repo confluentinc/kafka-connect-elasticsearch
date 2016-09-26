@@ -16,34 +16,28 @@
 
 package io.confluent.connect.elasticsearch;
 
+import io.searchbox.core.Index;
+
 public class IndexableRecord {
 
-  private final String index;
-  private final String type;
-  private final String id;
-  private final String payload;
+  public final Key key;
+  public final String payload;
+  public final long version;
 
-  public IndexableRecord(String index, String type, String id, String payload) {
-    this.index = index;
-    this.type = type;
-    this.id = id;
+  public IndexableRecord(Key key, String payload, long version) {
+    this.key = key;
+    this.version = version;
     this.payload = payload;
   }
 
-  public String getIndex() {
-    return index;
-  }
-
-  public String getType() {
-    return type;
-  }
-
-  public String getId() {
-    return id;
-  }
-
-  public String getPayload() {
-    return payload;
+  public Index toIndexRequest() {
+    return new Index.Builder(payload)
+        .index(key.index)
+        .type(key.type)
+        .id(key.id)
+        .setParameter("version_type", "external")
+        .setParameter("version", version)
+        .build();
   }
 
 }

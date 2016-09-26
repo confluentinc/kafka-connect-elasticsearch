@@ -26,10 +26,12 @@ import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.sink.SinkRecord;
 import org.junit.Test;
 
+import java.io.IOException;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
@@ -50,18 +52,18 @@ public class ElasticsearchWriterTest extends ElasticsearchSinkTestBase {
   public void testWriter() throws Exception {
     Collection<SinkRecord> records = prepareData(2);
     ElasticsearchWriter writer = initWriter(client, false, false, Collections.<String, TopicConfig>emptyMap());
-    writeDataAndWait(writer, records, SLEEP_INTERVAL_MS);
+    writeDataAndRefresh(writer, records);
 
     Collection<SinkRecord> expected = Collections.singletonList(new SinkRecord(TOPIC, PARTITION, Schema.STRING_SCHEMA, key, schema, record, 1));
-    verifySearch(expected, search(client), false);
+    verifySearchResults(expected, false);
   }
 
   @Test
   public void testWriterIgnoreKey() throws Exception {
     Collection<SinkRecord> records = prepareData(2);
     ElasticsearchWriter writer = initWriter(client, true, false, Collections.<String, TopicConfig>emptyMap());
-    writeDataAndWait(writer, records, SLEEP_INTERVAL_MS);
-    verifySearch(records, search(client), true);
+    writeDataAndRefresh(writer, records);
+    verifySearchResults(records, true);
   }
 
   @Test
@@ -69,8 +71,8 @@ public class ElasticsearchWriterTest extends ElasticsearchSinkTestBase {
     Collection<SinkRecord> records = prepareData(2);
     ElasticsearchWriter writer = initWriter(client, true, true, Collections.<String, TopicConfig>emptyMap());
 
-    writeDataAndWait(writer, records, SLEEP_INTERVAL_MS);
-    verifySearch(records, search(client), true);
+    writeDataAndRefresh(writer, records);
+    verifySearchResults(records, true);
   }
 
   @Test
@@ -82,8 +84,8 @@ public class ElasticsearchWriterTest extends ElasticsearchSinkTestBase {
     topicConfigs.put(TOPIC, topicConfig);
 
     ElasticsearchWriter writer = initWriter(client, false, true, topicConfigs);
-    writeDataAndWait(writer, records, SLEEP_INTERVAL_MS);
-    verifySearch(records, search(client), true);
+    writeDataAndRefresh(writer, records);
+    verifySearchResults(records, true);
   }
 
   @Test
@@ -104,7 +106,7 @@ public class ElasticsearchWriterTest extends ElasticsearchSinkTestBase {
 
     try {
       writer.flush();
-      fail("Should throw MapperParsingException: String cannot be casted to integer.");
+      fail("should fail because of mapper_parsing_exception");
     } catch (ConnectException e) {
       // expected
     }
@@ -134,8 +136,33 @@ public class ElasticsearchWriterTest extends ElasticsearchSinkTestBase {
     records.add(sinkRecord);
     expected.add(sinkRecord);
 
-    writeDataAndWait(writer, records, SLEEP_INTERVAL_MS);
-    verifySearch(expected, search(client), true);
+    writeDataAndRefresh(writer, records);
+    verifySearchResults(expected, true);
+  }
+
+  @Test
+  public void testSafeRedelivery() throws Exception {
+    final boolean ignoreKey = false;
+
+    final Struct value0 = new Struct(schema);
+    value0.put("user", "foo");
+    value0.put("message", "hi");
+    final SinkRecord sinkRecord0 = new SinkRecord(TOPIC, PARTITION, Schema.STRING_SCHEMA, key, schema, value0, 0);
+
+    final Struct value1 = new Struct(schema);
+    value1.put("user", "foo");
+    value1.put("message", "bye");
+    final SinkRecord sinkRecord1 = new SinkRecord(TOPIC, PARTITION, Schema.STRING_SCHEMA, key, schema, value1, 1);
+
+    final ElasticsearchWriter writer = initWriter(client, ignoreKey, false, Collections.<String, TopicConfig>emptyMap());
+    writer.write(Arrays.asList(sinkRecord0, sinkRecord1));
+    writer.flush();
+
+    // write the record with earlier offset again
+    writeDataAndRefresh(writer, Collections.singleton(sinkRecord0));
+
+    // last write should have been ignored due to version conflict
+    verifySearchResults(Collections.singleton(sinkRecord1), ignoreKey);
   }
 
   @Test
@@ -157,9 +184,9 @@ public class ElasticsearchWriterTest extends ElasticsearchSinkTestBase {
 
     ElasticsearchWriter writer = initWriter(client, false, false, Collections.<String, TopicConfig>emptyMap());
 
-    writeDataAndWait(writer, records, SLEEP_INTERVAL_MS);
+    writeDataAndRefresh(writer, records);
 
-    verifySearch(records, search(client), false);
+    verifySearchResults(records, false);
   }
 
   @Test
@@ -181,9 +208,9 @@ public class ElasticsearchWriterTest extends ElasticsearchSinkTestBase {
 
     ElasticsearchWriter writer = initWriter(client, false, false, Collections.<String, TopicConfig>emptyMap());
 
-    writeDataAndWait(writer, records, SLEEP_INTERVAL_MS);
+    writeDataAndRefresh(writer, records);
 
-    verifySearch(records, search(client), false);
+    verifySearchResults(records, false);
   }
 
   private Collection<SinkRecord> prepareData(int numRecords) {
@@ -214,10 +241,10 @@ public class ElasticsearchWriterTest extends ElasticsearchSinkTestBase {
     return writer;
   }
 
-  private void writeDataAndWait(ElasticsearchWriter writer, Collection<SinkRecord> records, long waitInterval) throws Exception {
+  private void writeDataAndRefresh(ElasticsearchWriter writer, Collection<SinkRecord> records) throws Exception {
     writer.write(records);
     writer.flush();
     writer.stop();
-    Thread.sleep(waitInterval);
+    refresh();
   }
 }
