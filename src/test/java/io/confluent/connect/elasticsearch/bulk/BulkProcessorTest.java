@@ -17,6 +17,8 @@ package io.confluent.connect.elasticsearch.bulk;
 
 import org.apache.kafka.common.utils.SystemTime;
 import org.apache.kafka.connect.errors.ConnectException;
+import org.junit.After;
+import org.junit.Before;
 import org.junit.Test;
 
 import java.io.IOException;
@@ -80,10 +82,20 @@ public class BulkProcessorTest {
     }
   }
 
+  Client client;
+
+  @Before
+  public void createClient() {
+    client = new Client();
+  }
+
+  @After
+  public void checkClient() {
+    assertTrue(client.expectationsMet());
+  }
+
   @Test
   public void batchingAndLingering() throws InterruptedException, ExecutionException {
-    final Client client = new Client();
-
     final int maxBufferedRecords = 100;
     final int maxInFlightBatches = 5;
     final int batchSize = 5;
@@ -122,13 +134,10 @@ public class BulkProcessorTest {
     assertTrue(bulkProcessor.submitBatchWhenReady().get().succeeded);
     assertTrue(bulkProcessor.submitBatchWhenReady().get().succeeded);
     assertTrue(bulkProcessor.submitBatchWhenReady().get().succeeded);
-    assertTrue(client.expectationsMet());
   }
 
   @Test
   public void flushing() {
-    final Client client = new Client();
-
     final int maxBufferedRecords = 100;
     final int maxInFlightBatches = 5;
     final int batchSize = 5;
@@ -160,14 +169,10 @@ public class BulkProcessorTest {
 
     final int flushTimeoutMs = 10;
     bulkProcessor.flush(flushTimeoutMs);
-
-    assertTrue(client.expectationsMet());
   }
 
   @Test
   public void addBlocksWhenBufferFull() {
-    final Client client = new Client();
-
     final int maxBufferedRecords = 1;
     final int maxInFlightBatches = 1;
     final int batchSize = 1;
@@ -199,8 +204,6 @@ public class BulkProcessorTest {
 
   @Test
   public void retriableErrors() throws InterruptedException, ExecutionException {
-    final Client client = new Client();
-
     final int maxBufferedRecords = 100;
     final int maxInFlightBatches = 5;
     final int batchSize = 2;
@@ -232,8 +235,6 @@ public class BulkProcessorTest {
 
   @Test
   public void unretriableErrors() throws InterruptedException {
-    final Client client = new Client();
-
     final int maxBufferedRecords = 100;
     final int maxInFlightBatches = 5;
     final int batchSize = 2;
