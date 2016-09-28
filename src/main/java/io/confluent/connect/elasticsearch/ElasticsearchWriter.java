@@ -43,19 +43,23 @@ public class ElasticsearchWriter {
   private final JestClient client;
   private final String type;
   private final boolean ignoreKey;
+  private final Set<String> ignoreKeyTopics;
   private final boolean ignoreSchema;
-  private final Map<String, TopicConfig> topicConfigs;
+  private final Set<String> ignoreSchemaTopics;
+  private final Map<String, String> topicToIndexMap;
   private final long flushTimeoutMs;
-
-  private final Set<String> mappings;
   private final BulkProcessor<IndexableRecord, ?> bulkProcessor;
+
+  private final Set<String> existingMappings;
 
   ElasticsearchWriter(
       JestClient client,
       String type,
       boolean ignoreKey,
+      Set<String> ignoreKeyTopics,
       boolean ignoreSchema,
-      Map<String, TopicConfig> topicConfigs,
+      Set<String> ignoreSchemaTopics,
+      Map<String, String> topicToIndexMap,
       long flushTimeoutMs,
       int maxBufferedRecords,
       int maxInFlightRequests,
@@ -67,11 +71,11 @@ public class ElasticsearchWriter {
     this.client = client;
     this.type = type;
     this.ignoreKey = ignoreKey;
+    this.ignoreKeyTopics = ignoreKeyTopics;
     this.ignoreSchema = ignoreSchema;
-    this.topicConfigs = topicConfigs == null ? Collections.<String, TopicConfig>emptyMap() : topicConfigs;
+    this.ignoreSchemaTopics = ignoreSchemaTopics;
+    this.topicToIndexMap = topicToIndexMap;
     this.flushTimeoutMs = flushTimeoutMs;
-
-    mappings = new HashSet<>();
 
     bulkProcessor = new BulkProcessor<>(
         new SystemTime(),
@@ -83,14 +87,18 @@ public class ElasticsearchWriter {
         maxRetries,
         retryBackoffMs
     );
+
+    existingMappings = new HashSet<>();
   }
 
   public static class Builder {
     private final JestClient client;
     private String type;
     private boolean ignoreKey = false;
+    private Set<String> ignoreKeyTopics = Collections.emptySet();
     private boolean ignoreSchema = false;
-    private Map<String, TopicConfig> topicConfigs = new HashMap<>();
+    private Set<String> ignoreSchemaTopics = Collections.emptySet();
+    private Map<String, String> topicToIndexMap = new HashMap<>();
     private long flushTimeoutMs;
     private int maxBufferedRecords;
     private int maxInFlightRequests;
@@ -108,18 +116,20 @@ public class ElasticsearchWriter {
       return this;
     }
 
-    public Builder setIgnoreKey(boolean ignoreKey) {
+    public Builder setIgnoreKey(boolean ignoreKey, Set<String> ignoreKeyTopics) {
       this.ignoreKey = ignoreKey;
+      this.ignoreKeyTopics = ignoreKeyTopics;
       return this;
     }
 
-    public Builder setIgnoreSchema(boolean ignoreSchema) {
+    public Builder setIgnoreSchema(boolean ignoreSchema, Set<String> ignoreSchemaTopics) {
       this.ignoreSchema = ignoreSchema;
+      this.ignoreSchemaTopics = ignoreSchemaTopics;
       return this;
     }
 
-    public Builder setTopicConfigs(Map<String, TopicConfig> topicConfigs) {
-      this.topicConfigs = topicConfigs;
+    public Builder setTopicToIndexMap(Map<String, String> topicToIndexMap) {
+      this.topicToIndexMap = topicToIndexMap;
       return this;
     }
 
@@ -160,14 +170,44 @@ public class ElasticsearchWriter {
 
     public ElasticsearchWriter build() {
       return new ElasticsearchWriter(
-          client, type, ignoreKey, ignoreSchema, topicConfigs, flushTimeoutMs, maxBufferedRecords, maxInFlightRequests, batchSize, lingerMs, maxRetry, retryBackoffMs
+          client,
+          type,
+          ignoreKey,
+          ignoreKeyTopics,
+          ignoreSchema,
+          ignoreSchemaTopics,
+          topicToIndexMap,
+          flushTimeoutMs,
+          maxBufferedRecords,
+          maxInFlightRequests,
+          batchSize,
+          lingerMs,
+          maxRetry,
+          retryBackoffMs
       );
     }
   }
 
   public void write(Collection<SinkRecord> records) {
     for (SinkRecord sinkRecord : records) {
-      final IndexableRecord indexableRecord = DataConverter.convertRecord(sinkRecord, type, client, ignoreKey, ignoreSchema, topicConfigs, mappings);
+      final String index = sinkRecord.topic();
+      final boolean ignoreKey = ignoreKeyTopics.contains(sinkRecord.topic()) || this.ignoreKey;
+      final boolean ignoreSchema = ignoreSchemaTopics.contains(sinkRecord.topic()) || this.ignoreSchema;
+
+      if (!ignoreSchema && !existingMappings.contains(index)) {
+        try {
+          if (!Mapping.doesMappingExist(client, index, type)) {
+            Mapping.createMapping(client, index, type, sinkRecord.valueSchema());
+          }
+        } catch (IOException e) {
+          // FIXME: concurrent tasks could attempt to create the mapping and one of the requests may fail
+          throw new ConnectException("Failed to initialize mapping for index: " + index, e);
+        }
+        existingMappings.add(index);
+      }
+
+      final IndexableRecord indexableRecord = DataConverter.convertRecord(sinkRecord, index, type, ignoreKey, ignoreSchema);
+
       bulkProcessor.add(indexableRecord, flushTimeoutMs);
     }
   }
@@ -200,17 +240,8 @@ public class ElasticsearchWriter {
     }
   }
 
-  public void createIndices(Set<String> assignedTopics) {
-    Set<String> indices = new HashSet<>();
-    for (String topic : assignedTopics) {
-      final TopicConfig topicConfig = topicConfigs.get(topic);
-      if (topicConfig != null) {
-        indices.add(topicConfig.getIndex());
-      } else {
-        indices.add(topic);
-      }
-    }
-    for (String index : indices) {
+  public void createIndicesForTopics(Set<String> assignedTopics) {
+    for (String index : indicesForTopics(assignedTopics)) {
       if (!indexExists(index)) {
         CreateIndex createIndex = new CreateIndex.Builder(index).build();
         try {
@@ -223,6 +254,19 @@ public class ElasticsearchWriter {
         }
       }
     }
+  }
+
+  private Set<String> indicesForTopics(Set<String> assignedTopics) {
+    final Set<String> indices = new HashSet<>();
+    for (String topic : assignedTopics) {
+      final String index = topicToIndexMap.get(topic);
+      if (index != null) {
+        indices.add(index);
+      } else {
+        indices.add(topic);
+      }
+    }
+    return indices;
   }
 
 }

@@ -31,16 +31,12 @@ import org.apache.kafka.connect.json.JsonConverter;
 import org.apache.kafka.connect.sink.SinkRecord;
 import org.apache.kafka.connect.storage.Converter;
 
-import java.io.IOException;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Map;
-import java.util.Set;
-
-import io.searchbox.client.JestClient;
 
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConstants.MAP_KEY;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConstants.MAP_VALUE;
@@ -53,7 +49,7 @@ public class DataConverter {
     JSON_CONVERTER.configure(Collections.singletonMap("schemas.enable", "false"), false);
   }
 
-  public static String convertKey(Object key, Schema keySchema) {
+  private static String convertKey(Schema keySchema, Object key) {
     if (key == null) {
       throw new ConnectException("Key is used as document id and can not be null.");
     }
@@ -78,71 +74,26 @@ public class DataConverter {
     }
   }
 
-  public static IndexableRecord convertRecord(
-      SinkRecord record,
-      String type,
-      JestClient client,
-      boolean ignoreKey,
-      boolean ignoreSchema,
-      Map<String, TopicConfig> topicConfigs,
-      Set<String> mappingCache) {
-
-    String topic = record.topic();
-    int partition = record.kafkaPartition();
-    long offset = record.kafkaOffset();
-
-    Object key = record.key();
-    Schema keySchema = record.keySchema();
-    Object value = record.value();
-    Schema valueSchema = record.valueSchema();
-
-    String index;
-    String id;
-    boolean topicIgnoreKey;
-    boolean topicIgnoreSchema;
-
-    if (topicConfigs.containsKey(topic)) {
-      TopicConfig topicConfig = topicConfigs.get(topic);
-      index = topicConfig.getIndex();
-      topicIgnoreKey = topicConfig.ignoreKey();
-      topicIgnoreSchema = topicConfig.ignoreSchema();
+  public static IndexableRecord convertRecord(SinkRecord record, String index, String type, boolean ignoreKey, boolean ignoreSchema) {
+    final String id;
+    if (ignoreKey) {
+      id = record.topic() + "+" + String.valueOf((int) record.kafkaPartition()) + "+" + String.valueOf(record.kafkaOffset());
     } else {
-      index = topic;
-      topicIgnoreKey = ignoreKey;
-      topicIgnoreSchema = ignoreSchema;
+      id = DataConverter.convertKey(record.keySchema(), record.key());
     }
 
-    if (topicIgnoreKey) {
-      id = topic + "+" + String.valueOf(partition) + "+" + String.valueOf(offset);
+    final Schema schema;
+    final Object value;
+    if (!ignoreSchema) {
+      schema = preProcessSchema(record.valueSchema());
+      value = preProcessValue(record.value(), record.valueSchema(), schema);
     } else {
-      id = DataConverter.convertKey(key, keySchema);
+      schema = record.valueSchema();
+      value = record.value();
     }
 
-    try {
-      if (!topicIgnoreSchema && !mappingCache.contains(index) && !Mapping.doesMappingExist(client, index, type, mappingCache)) {
-        Mapping.createMapping(client, index, type, valueSchema);
-        mappingCache.add(index);
-      }
-    } catch (IOException e) {
-      // TODO: It is possible that two clients are creating the mapping at the same time and
-      // one request to create mapping may fail. In this case, we should allow the task to
-      // proceed instead of throw the exception.
-      throw new ConnectException("Cannot create mapping:", e);
-    }
-
-    Schema newSchema;
-    Object newValue;
-    if (!topicIgnoreSchema) {
-      newSchema = preProcessSchema(valueSchema);
-      newValue = preProcessValue(value, valueSchema, newSchema);
-    } else {
-      newSchema = valueSchema;
-      newValue = value;
-    }
-
-    String payload = new String(JSON_CONVERTER.fromConnectData(topic, newSchema, newValue), StandardCharsets.UTF_8);
-
-    return new IndexableRecord(new Key(index, type, id), payload, offset);
+    final String payload = new String(JSON_CONVERTER.fromConnectData(record.topic(), schema, value), StandardCharsets.UTF_8);
+    return new IndexableRecord(new Key(index, type, id), payload, record.kafkaOffset());
   }
 
   // We need to pre process the Kafka Connect schema before converting to JSON as Elasticsearch

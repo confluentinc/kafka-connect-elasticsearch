@@ -69,7 +69,7 @@ public class ElasticsearchSinkTaskTest extends ElasticsearchSinkTestBase {
 
     refresh();
 
-    verifySearchResults(records, true);
+    verifySearchResults(records, true, false);
   }
 
 }

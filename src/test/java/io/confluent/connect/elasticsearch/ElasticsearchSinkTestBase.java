@@ -17,6 +17,7 @@
 package io.confluent.connect.elasticsearch;
 
 import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
 
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.connect.data.Schema;
@@ -32,8 +33,8 @@ import org.junit.Before;
 
 import java.io.IOException;
 import java.util.Collection;
-import java.util.HashSet;
-import java.util.Set;
+import java.util.HashMap;
+import java.util.Map;
 
 import io.searchbox.client.JestClientFactory;
 import io.searchbox.client.config.HttpClientConfig;
@@ -44,7 +45,6 @@ import io.searchbox.core.SearchResult;
 public class ElasticsearchSinkTestBase extends ESIntegTestCase {
 
   protected static final String TYPE = "kafka-connect";
-  protected static final long SLEEP_INTERVAL_MS = 2000;
 
   protected static final String TOPIC = "topic";
   protected static final int PARTITION = 12;
@@ -109,30 +109,28 @@ public class ElasticsearchSinkTestBase extends ESIntegTestCase {
     return struct;
   }
 
-  protected void verifySearchResults(Collection<SinkRecord> records, boolean ignoreKey) throws IOException {
-    SearchResult result = client.execute(new Search.Builder("").build());
+  protected void verifySearchResults(Collection<SinkRecord> records, boolean ignoreKey, boolean ignoreSchema) throws IOException {
+    verifySearchResults(records, TOPIC, ignoreKey, ignoreSchema);
+  }
 
-    JsonArray hits = result.getJsonObject().getAsJsonObject("hits").getAsJsonArray("hits");
-    assertEquals(records.size(), hits.size());
-    Set<String> hitIds = new HashSet<>();
-    for (int i = 0; i < hits.size(); ++i) {
-      String id = hits.get(i).getAsJsonObject().get("_id").getAsString();
-      hitIds.add(id);
+  protected void verifySearchResults(Collection<SinkRecord> records, String index, boolean ignoreKey, boolean ignoreSchema) throws IOException {
+    final SearchResult result = client.execute(new Search.Builder("").build());
+
+    final JsonArray rawHits = result.getJsonObject().getAsJsonObject("hits").getAsJsonArray("hits");
+
+    assertEquals(records.size(), rawHits.size());
+
+    Map<String, String> hits = new HashMap<>();
+    for (int i = 0; i < rawHits.size(); ++i) {
+      final JsonObject hitData = rawHits.get(i).getAsJsonObject();
+      final String id = hitData.get("_id").getAsString();
+      final String source = hitData.get("_source").getAsJsonObject().toString();
+      hits.put(id, source);
     }
 
-    if (ignoreKey) {
-      for (SinkRecord record : records) {
-        String topic = record.topic();
-        int partition = record.kafkaPartition();
-        long offset = record.kafkaOffset();
-        String id = topic + "+" + String.valueOf(partition) + "+" + String.valueOf(offset);
-        assertTrue(hitIds.contains(id));
-      }
-    } else {
-      for (SinkRecord record : records) {
-        String id = DataConverter.convertKey(record.key(), record.keySchema());
-        assertTrue(hitIds.contains(id));
-      }
+    for (SinkRecord record : records) {
+      final IndexableRecord indexableRecord = DataConverter.convertRecord(record, index, TYPE, ignoreKey, ignoreSchema);
+      assertEquals(indexableRecord.payload, hits.get(indexableRecord.key.id));
     }
   }
 
