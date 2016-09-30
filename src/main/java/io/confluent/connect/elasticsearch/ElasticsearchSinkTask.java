@@ -62,10 +62,9 @@ public class ElasticsearchSinkTask extends SinkTask {
       boolean ignoreKey = config.getBoolean(ElasticsearchSinkConnectorConfig.KEY_IGNORE_CONFIG);
       boolean ignoreSchema = config.getBoolean(ElasticsearchSinkConnectorConfig.SCHEMA_IGNORE_CONFIG);
 
-      List<String> topicIndex = config.getList(ElasticsearchSinkConnectorConfig.TOPIC_INDEX_MAP_CONFIG);
-      List<String> topicIgnoreKey = config.getList(ElasticsearchSinkConnectorConfig.TOPIC_KEY_IGNORE_CONFIG);
-      List<String> topicIgnoreSchema = config.getList(ElasticsearchSinkConnectorConfig.TOPIC_SCHEMA_IGNORE_CONFIG);
-      Map<String, TopicConfig> topicConfigs = constructTopicConfig(topicIndex, topicIgnoreKey, topicIgnoreSchema);
+      Map<String, String> topicToIndexMap = parseMapConfig(config.getList(ElasticsearchSinkConnectorConfig.TOPIC_INDEX_MAP_CONFIG));
+      Set<String> topicIgnoreKey = new HashSet<>(config.getList(ElasticsearchSinkConnectorConfig.TOPIC_KEY_IGNORE_CONFIG));
+      Set<String> topicIgnoreSchema =  new HashSet<>(config.getList(ElasticsearchSinkConnectorConfig.TOPIC_SCHEMA_IGNORE_CONFIG));
 
       long flushTimeoutMs = config.getLong(ElasticsearchSinkConnectorConfig.FLUSH_TIMEOUT_MS_CONFIG);
       int maxBufferedRecords = config.getInt(ElasticsearchSinkConnectorConfig.MAX_BUFFERED_RECORDS_CONFIG);
@@ -86,9 +85,9 @@ public class ElasticsearchSinkTask extends SinkTask {
 
       ElasticsearchWriter.Builder builder = new ElasticsearchWriter.Builder(this.client)
           .setType(type)
-          .setIgnoreKey(ignoreKey)
-          .setIgnoreSchema(ignoreSchema)
-          .setTopicConfigs(topicConfigs)
+          .setIgnoreKey(ignoreKey, topicIgnoreKey)
+          .setIgnoreSchema(ignoreSchema, topicIgnoreSchema)
+          .setTopicToIndexMap(topicToIndexMap)
           .setFlushTimoutMs(flushTimeoutMs)
           .setMaxBufferedRecords(maxBufferedRecords)
           .setMaxInFlightRequests(maxInFlightRequests)
@@ -111,7 +110,7 @@ public class ElasticsearchSinkTask extends SinkTask {
     for (TopicPartition tp : partitions) {
       topics.add(tp.topic());
     }
-    writer.createIndices(topics);
+    writer.createIndicesForTopics(topics);
   }
 
   @Override
@@ -151,20 +150,6 @@ public class ElasticsearchSinkTask extends SinkTask {
       map.put(topic, type);
     }
     return map;
-  }
-
-  private Map<String, TopicConfig> constructTopicConfig(List<String> topicType, List<String> topicIgnoreKey, List<String> topicIgnoreSchema) {
-    Map<String, TopicConfig> topicConfigMap = new HashMap<>();
-    Map<String, String> topicTypeMap = parseMapConfig(topicType);
-    Set<String> topicIgnoreKeySet = new HashSet<>(topicIgnoreKey);
-    Set<String> topicIgnoreSchemaSet = new HashSet<>(topicIgnoreSchema);
-
-    for (String topic: topicTypeMap.keySet()) {
-      String type = topicTypeMap.get(topic);
-      TopicConfig topicConfig = new TopicConfig(type, topicIgnoreKeySet.contains(topic), topicIgnoreSchemaSet.contains(topic));
-      topicConfigMap.put(topic, topicConfig);
-    }
-    return topicConfigMap;
   }
 
 }

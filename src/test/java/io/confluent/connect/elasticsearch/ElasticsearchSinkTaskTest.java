@@ -67,7 +67,9 @@ public class ElasticsearchSinkTaskTest extends ElasticsearchSinkTestBase {
     task.put(records);
     task.flush(null);
 
-    Thread.sleep(SLEEP_INTERVAL_MS);
-    verifySearch(records, search(client), true);
+    refresh();
+
+    verifySearchResults(records, true, false);
   }
+
 }
