@@ -16,7 +16,7 @@ Configuration Options
   * Importance: high
 
 ``key.ignore``
-  Whether to ignore the key during indexing. When this is set to true, only the value from the message will be written to Elasticsearch.Note that this is a global config that applies to all topics. If this is set to true, Use ``topic.key.ignore`` to config for different topics. This value will be overridden by the per topic configuration.
+  Whether to ignore the key during indexing. When this is set to true, only the value from the message will be written to Elasticsearch. Note that this is a global config that applies to all topics. If this is set to true, Use ``topic.key.ignore`` to config for different topics. This value will be overridden by the per topic configuration.
 
   * Type: boolean
   * Default: false
@@ -30,7 +30,7 @@ Configuration Options
   * Importance: medium
 
 ``max.in.flight.requests``
-  The maximum number of incomplete batches each task will send before blocking. Note that if this is set to be greater than 1 and there are failed sends, there is a risk of message re-ordering due to retries
+  The maximum number of incomplete batches each task will send before blocking.
 
   * Type: int
   * Default: 5
@@ -51,14 +51,14 @@ Configuration Options
   * Importance: low
 
 ``max.buffered.records``
-  Approximately the max number of records each task will buffer. This config controls the memory usage for each task. When the number of buffered records is larger than this value, the partitions assigned to this task will be paused.
+  Approximately the max number of records each task will buffer. This config controls the memory usage for each task.
 
-  * Type: long
+  * Type: int
   * Default: 20000
   * Importance: low
 
 ``max.retries``
-  The max allowed number of retries. Allowing retries will potentially change the ordering of records.
+  The max allowed number of retries.
 
   * Type: int
   * Default: 5

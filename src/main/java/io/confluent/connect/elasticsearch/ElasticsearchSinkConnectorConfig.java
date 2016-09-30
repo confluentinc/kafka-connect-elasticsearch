@@ -39,7 +39,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
 
   public static final String KEY_IGNORE_CONFIG = "key.ignore";
   private static final String KEY_IGNORE_DOC =
-      "Whether to ignore the key during indexing. When this is set to true, only the value from the message will be written to Elasticsearch."
+      "Whether to ignore the key during indexing. When this is set to true, only the value from the message will be written to Elasticsearch. "
       + "Note that this is a global config that applies to all topics. If this is set to true, "
       + "Use ``topic.key.ignore`` to config for different topics. This value will be overridden by the per topic configuration.";
   private static final boolean KEY_IGNORE_DEFAULT = false;
@@ -86,8 +86,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
 
   public static final String MAX_IN_FLIGHT_REQUESTS_CONFIG = "max.in.flight.requests";
   private static final String MAX_IN_FLIGHT_REQUESTS_DOC =
-      "The maximum number of incomplete batches each task will send before blocking. Note that if this is set to be greater "
-      + "than 1 and there are failed sends, there is a risk of message re-ordering due to retries";
+      "The maximum number of incomplete batches each task will send before blocking.";
   private static final int MAX_IN_FLIGHT_REQUESTS_DEFAULT = 5;
   private static final String MAX_IN_FLIGHT_REQUESTS_DISPLAY = "Max in Flight Requests";
 
@@ -99,7 +98,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   private static final String RETRY_BACKOFF_MS_DISPLAY = "Retry Backoff (ms)";
 
   public static final String MAX_RETRIES_CONFIG = "max.retries";
-  private static final String MAX_RETRIES_DOC = "The max allowed number of retries. Allowing retries will potentially change the ordering of records.";
+  private static final String MAX_RETRIES_DOC = "The max allowed number of retries.";
   private static final int MAX_RETRIES_DEFAULT = 5;
   private static final String MAX_RETRIES_DISPLAY = "Max Retries";
 

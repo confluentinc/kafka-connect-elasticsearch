@@ -111,12 +111,11 @@ The Elasticsearch connector offers a bunch of features:
 Delivery Semantics
 ------------------
 The connector supports batching and pipelined writes to Elasticsearch to boost throughput. It
-accumulates messages in batches and allows concurrent processing of multiple batches. However,
-when piplining is enabled, the ordering of batches written to Elasticsearch is not guaranteed.
-A transient failure can cause a batch to be retried and because of this, a batch sent later may
-be written to Elasticsearch first. Pipeplining should be turned off when order of batches is
-important (set ``max.in.flight.requests=1``). Moreover, batching should be turned off when message
-order is important (set ``batch.size=1``).
+accumulates messages in batches and allows concurrent processing of multiple batches.
+
+Document-level update ordering is ensured by using the partition-level Kafka offset as the
+`document version <https://www.elastic.co/guide/en/elasticsearch/reference/current/docs-index_.html#index-versioning>`_,
+and using ``version_mode=external``.
 
 Mapping Management
 ------------------
