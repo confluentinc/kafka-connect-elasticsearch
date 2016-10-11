@@ -1,100 +1,110 @@
 Configuration Options
 ---------------------
 
+Connector
+^^^^^^^^^
+
 ``connection.url``
-  The URL to connect to Elasticsearch.
+  Elasticsearch HTTP connection URL e.g. ``http://eshost:9200``.
 
   * Type: string
-  * Default: ""
-  * Importance: high
-
-``type.name``
-  The type to use for each index.
-
-  * Type: string
-  * Default: ""
-  * Importance: high
-
-``key.ignore``
-  Whether to ignore the key during indexing. When this is set to true, only the value from the message will be written to Elasticsearch. Note that this is a global config that applies to all topics. If this is set to true, Use ``topic.key.ignore`` to config for different topics. This value will be overridden by the per topic configuration.
-
-  * Type: boolean
-  * Default: false
   * Importance: high
 
 ``batch.size``
-  The number of requests to process as a batch when writing to Elasticsearch.
+  The number of records to process as a batch when writing to Elasticsearch.
 
   * Type: int
   * Default: 2000
   * Importance: medium
 
-``max.in.flight.requests``
-  The maximum number of incomplete batches each task will send before blocking.
-
-  * Type: int
-  * Default: 5
-  * Importance: medium
-
-``flush.timeout.ms``
-  The timeout when flushing data to Elasticsearch.
-
-  * Type: long
-  * Default: 10000
-  * Importance: low
-
-``linger.ms``
-  The task groups together any records that arrive in between request transmissions into a single batched request. Normally this occurs only under load when records arrive faster than they can be sent out. However in some circumstances the tasks may want to reduce the number of requests even under moderate load. This setting accomplishes this by adding a small amount of artificial delay. Rather than immediately sending out a record the task will wait for up to the given delay to allow other records to be sent so that the sends can be batched together.
-
-  * Type: long
-  * Default: 1
-  * Importance: low
-
 ``max.buffered.records``
-  Approximately the max number of records each task will buffer. This config controls the memory usage for each task.
+  The maximum number of records each task will buffer before blocking acceptance of more records. This config can be used to limit the memory usage for each task.
 
   * Type: int
   * Default: 20000
   * Importance: low
 
+``linger.ms``
+  Linger time in milliseconds for batching.
+
+  Records that arrive in between request transmissions are batched into a single bulk indexing request, based on the ``batch.size`` configuration. Normally this only occurs under load when records arrive faster than they can be sent out. However it may be desirable to reduce the number of requests even under light load and benefit from bulk indexing. This setting helps accomplish that - when a pending batch is not full, rather than immediately sending it out the task will wait up to the given delay to allow other records to be added so that they can be batched into a single request.
+
+  * Type: long
+  * Default: 1
+  * Importance: low
+
+``flush.timeout.ms``
+  The timeout in milliseconds to use for periodic flushing, and when waiting for buffer space to be made available by completed requests as records are added. If this timeout is exceeded the task will fail.
+
+  * Type: long
+  * Default: 10000
+  * Importance: low
+
+``max.in.flight.requests``
+  The maximum number of indexing requests that can be in-flight to Elasticsearch before blocking further requests.
+
+  * Type: int
+  * Default: 5
+  * Importance: medium
+
 ``max.retries``
-  The max allowed number of retries.
+  The maximum number of retries that are allowed for failed indexing requests. If the retry attempts are exhausted the task will fail.
 
   * Type: int
   * Default: 5
   * Importance: low
 
 ``retry.backoff.ms``
-  The amount of time to wait before attempting to retry a failed batch. This avoids repeatedly sending requests in a tight loop under some failure scenarios.
+  How long to wait in milliseconds before attempting to retry a failed indexing request. This avoids retrying in a tight loop under failure scenarios.
 
   * Type: long
   * Default: 100
   * Importance: low
 
+Data Conversion
+^^^^^^^^^^^^^^^
+
+``type.name``
+  The Elasticsearch type name to use when indexing.
+
+  * Type: string
+  * Importance: high
+
+``key.ignore``
+  Whether to ignore the record key for the purpose of forming the Elasticsearch document ID. When this is set to ``true``, document IDs will be generated as the record's ``topic+partition+offset``.
+
+  Note that this is a global config that applies to all topics, use ``topic.key.ignore`` to override as ``true`` for specific topics.
+
+  * Type: boolean
+  * Default: false
+  * Importance: high
+
 ``schema.ignore``
-  Whether to ignore schemas during indexing. When this is set to true, the schema in ``SinkRecord`` will be ignored and Elasticsearch will infer the mapping from data. Note that this is a global config that applies to all topics.Use ``topic.schema.ignore`` to config for different topics. This value will be overridden by the per topic configuration.
+  Whether to ignore schemas during indexing. When this is set to ``true``, the record schema will be ignored for the purpose of registering an Elasticsearch mapping. Elasticsearch will infer the mapping from the data (dynamic mapping needs to be enabled by the user).
+
+  Note that this is a global config that applies to all topics, use ``topic.schema.ignore`` to override as ``true`` for specific topics.
 
   * Type: boolean
   * Default: false
   * Importance: low
 
 ``topic.index.map``
-  The map between Kafka topics and Elasticsearch indices.
+  A map from Kafka topic name to the destination Elasticsearch index, represented as a list of ``topic:index`` pairs.
 
   * Type: list
-  * Default: []
+  * Default: ""
   * Importance: low
 
 ``topic.key.ignore``
-  A list of topics to ignore key when indexing. In case that the key for a topic can be null, you should include the topic in this config in order to generate a valid document id.
+  List of topics for which ``key.ignore`` should be ``true``.
 
   * Type: list
-  * Default: []
+  * Default: ""
   * Importance: low
 
 ``topic.schema.ignore``
-  A list of topics to ignore schema.
+  List of topics for which ``schema.ignore`` should be ``true``.
 
   * Type: list
-  * Default: []
+  * Default: ""
   * Importance: low

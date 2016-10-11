@@ -69,6 +69,6 @@ public class ElasticsearchSinkConnector extends SinkConnector {
 
   @Override
   public ConfigDef config() {
-    return ElasticsearchSinkConnectorConfig.config;
+    return ElasticsearchSinkConnectorConfig.CONFIG;
   }
 }
