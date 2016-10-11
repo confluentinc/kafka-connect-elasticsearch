@@ -65,17 +65,21 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
                   + "Records that arrive in between request transmissions are batched into a single bulk indexing request, based on the ``" + BATCH_SIZE_CONFIG + "`` configuration. "
                   + "Normally this only occurs under load when records arrive faster than they can be sent out. "
                   + "However it may be desirable to reduce the number of requests even under light load and benefit from bulk indexing. "
-                  + "This setting helps accomplishes that - rather than immediately sending out a record, "
-                  + "the task will wait upto the given delay to allow other records to be added so that they can be batched into a single request.",
+                  + "This setting helps accomplish that - when a pending batch is not full, rather than immediately sending it out "
+                  + "the task will wait up to the given delay to allow other records to be added so that they can be batched into a single request.",
                   group, ++order, Width.SHORT, "Linger (ms)")
           .define(FLUSH_TIMEOUT_MS_CONFIG, Type.LONG, 10000L, Importance.LOW,
-                  "The timeout in milliseconds when flushing records to Elasticsearch.",
+                  "The timeout in milliseconds to use for periodic flushing, "
+                  + "and when waiting for buffer space to be made available by completed requests as records are added. "
+                  + "If this timeout is exceeded the task will fail.",
                   group, ++order, Width.SHORT, "Flush Timeout (ms)")
           .define(MAX_RETRIES_CONFIG, Type.INT, 5, Importance.LOW,
-                  "The maximum number of retries that are allowed.",
+                  "The maximum number of retries that are allowed for failed indexing requests. "
+                  + "If the retry attempts are exhausted the task will fail.",
                   group, ++order, Width.SHORT, "Max Retries")
           .define(RETRY_BACKOFF_MS_CONFIG, Type.LONG, 100L, Importance.LOW,
-                  "How long to wait in milliseconds, before attempting to retry a failed batch. This avoids retrying requests in a tight loop under certain failure scenarios.",
+                  "How long to wait in milliseconds before attempting to retry a failed indexing request. "
+                  + "This avoids retrying in a tight loop under failure scenarios.",
                   group, ++order, Width.SHORT, "Retry Backoff (ms)");
     }
 
