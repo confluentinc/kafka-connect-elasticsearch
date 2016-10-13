@@ -152,8 +152,9 @@ public class DataConverter {
     if (source.isOptional()) {
       target.optional();
     }
-    if (source.defaultValue() != null) {
-      target.defaultValue(source.defaultValue());
+    if (source.defaultValue() != null && source.type() != Schema.Type.STRUCT) {
+      final Object preProcessedDefaultValue = preProcessValue(source.defaultValue(), source, target);
+      target.defaultValue(preProcessedDefaultValue);
     }
     return target;
   }
