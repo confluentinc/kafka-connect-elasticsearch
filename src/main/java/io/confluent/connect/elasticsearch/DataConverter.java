@@ -31,16 +31,12 @@ import org.apache.kafka.connect.json.JsonConverter;
 import org.apache.kafka.connect.sink.SinkRecord;
 import org.apache.kafka.connect.storage.Converter;
 
-import java.io.IOException;
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Map;
-import java.util.Set;
-
-import io.confluent.connect.elasticsearch.internals.ESRequest;
-import io.searchbox.client.JestClient;
 
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConstants.MAP_KEY;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConstants.MAP_VALUE;
@@ -53,23 +49,17 @@ public class DataConverter {
     JSON_CONVERTER.configure(Collections.singletonMap("schemas.enable", "false"), false);
   }
 
-  /**
-   * Convert the key to the string representation.
-   *
-   * @param key The key of a SinkRecord.
-   * @param keySchema The key schema.
-   * @return The string representation of the key.
-   * @throws ConnectException if the key is null.
-   */
-  public static String convertKey(Object key, Schema keySchema) {
+  private static String convertKey(Schema keySchema, Object key) {
     if (key == null) {
       throw new ConnectException("Key is used as document id and can not be null.");
     }
-    Schema.Type schemaType;
+
+    final Schema.Type schemaType;
     if (keySchema == null) {
       schemaType = ConnectSchema.schemaType(key.getClass());
-      if (schemaType == null)
+      if (schemaType == null) {
         throw new DataException("Java class " + key.getClass() + " does not have corresponding schema type.");
+      }
     } else {
       schemaType = keySchema.type();
     }
@@ -86,82 +76,26 @@ public class DataConverter {
     }
   }
 
-  /**
-   * Convert a SinkRecord to an IndexRequest.
-   *
-   * @param record The SinkRecord to be converted.
-   * @param client The client to connect to Elasticsearch.
-   * @param ignoreKey Whether to ignore the key during indexing.
-   * @param ignoreSchema Whether to ignore the schema during indexing.
-   * @param topicConfigs The map of per topic configs.
-   * @param mappings The mapping cache.
-   * @return The converted IndexRequest.
-   */
-
-  public static ESRequest convertRecord(
-      SinkRecord record,
-      String type,
-      JestClient client,
-      boolean ignoreKey,
-      boolean ignoreSchema,
-      Map<String, TopicConfig> topicConfigs,
-      Set<String> mappings) {
-
-    String topic = record.topic();
-    int partition = record.kafkaPartition();
-    long offset = record.kafkaOffset();
-
-    Object key = record.key();
-    Schema keySchema = record.keySchema();
-    Object value = record.value();
-    Schema valueSchema = record.valueSchema();
-
-    String index;
-    String id;
-    boolean topicIgnoreKey;
-    boolean topicIgnoreSchema;
-
-    if (topicConfigs.containsKey(topic)) {
-      TopicConfig topicConfig = topicConfigs.get(topic);
-      index = topicConfig.getIndex();
-      topicIgnoreKey = topicConfig.ignoreKey();
-      topicIgnoreSchema = topicConfig.ignoreSchema();
+  public static IndexableRecord convertRecord(SinkRecord record, String index, String type, boolean ignoreKey, boolean ignoreSchema) {
+    final String id;
+    if (ignoreKey) {
+      id = record.topic() + "+" + String.valueOf((int) record.kafkaPartition()) + "+" + String.valueOf(record.kafkaOffset());
     } else {
-      index = topic;
-      topicIgnoreKey = ignoreKey;
-      topicIgnoreSchema = ignoreSchema;
+      id = DataConverter.convertKey(record.keySchema(), record.key());
     }
 
-    if (topicIgnoreKey) {
-      id = topic + "+" + String.valueOf(partition) + "+" + String.valueOf(offset);
+    final Schema schema;
+    final Object value;
+    if (!ignoreSchema) {
+      schema = preProcessSchema(record.valueSchema());
+      value = preProcessValue(record.value(), record.valueSchema(), schema);
     } else {
-      id = DataConverter.convertKey(key, keySchema);
+      schema = record.valueSchema();
+      value = record.value();
     }
 
-    try {
-      if (!topicIgnoreSchema && !mappings.contains(index) && !Mapping.doesMappingExist(client, index, type, mappings)) {
-        Mapping.createMapping(client, index, type, valueSchema);
-        mappings.add(index);
-      }
-    } catch (IOException e) {
-      // TODO: It is possible that two clients are creating the mapping at the same time and
-      // one request to create mapping may fail. In this case, we should allow the task to
-      // proceed instead of throw the exception.
-      throw new ConnectException("Cannot create mapping:", e);
-    }
-
-    Schema newSchema;
-    Object newValue;
-    if (!topicIgnoreSchema) {
-      newSchema = preProcessSchema(valueSchema);
-      newValue = preProcessValue(value, valueSchema, newSchema);
-    } else {
-      newSchema = valueSchema;
-      newValue = value;
-    }
-
-    byte[] json = JSON_CONVERTER.fromConnectData(topic, newSchema, newValue);
-    return new ESRequest(index, type, id, json);
+    final String payload = new String(JSON_CONVERTER.fromConnectData(record.topic(), schema, value), StandardCharsets.UTF_8);
+    return new IndexableRecord(new Key(index, type, id), payload, record.kafkaOffset());
   }
 
   // We need to pre process the Kafka Connect schema before converting to JSON as Elasticsearch
@@ -173,13 +107,11 @@ public class DataConverter {
       return null;
     }
     // Handle logical types
-    SchemaBuilder builder;
     String schemaName = schema.name();
     if (schemaName != null) {
       switch (schemaName) {
         case Decimal.LOGICAL_NAME:
-          builder = SchemaBuilder.float64();
-          return builder.build();
+          return copySchemaBasics(schema, SchemaBuilder.float64()).build();
         case Date.LOGICAL_NAME:
         case Time.LOGICAL_NAME:
         case Timestamp.LOGICAL_NAME:
@@ -188,38 +120,58 @@ public class DataConverter {
     }
 
     Schema.Type schemaType = schema.type();
-    Schema keySchema;
-    Schema valueSchema;
     switch (schemaType) {
-      case ARRAY:
-        valueSchema = schema.valueSchema();
-        builder = SchemaBuilder.array(preProcessSchema(valueSchema));
-        return builder.build();
-      case MAP:
-        keySchema = schema.keySchema();
-        valueSchema = schema.valueSchema();
+      case ARRAY: {
+        return copySchemaBasics(schema, SchemaBuilder.array(preProcessSchema(schema.valueSchema()))).build();
+      }
+      case MAP: {
+        Schema keySchema = schema.keySchema();
+        Schema valueSchema = schema.valueSchema();
         String keyName = keySchema.name() == null ? keySchema.type().name() : keySchema.name();
         String valueName = valueSchema.name() == null ? valueSchema.type().name() : valueSchema.name();
-        builder = SchemaBuilder.array(SchemaBuilder.struct().name(keyName + "-" + valueName)
+        Schema elementSchema = SchemaBuilder.struct().name(keyName + "-" + valueName)
             .field(MAP_KEY, preProcessSchema(keySchema))
             .field(MAP_VALUE, preProcessSchema(valueSchema))
-            .build());
-        return builder.build();
-      case STRUCT:
-        builder = SchemaBuilder.struct().name(schema.name());
-        for (Field field: schema.fields()) {
-          builder.field(field.name(), preProcessSchema(field.schema()));
+            .build();
+        return copySchemaBasics(schema, SchemaBuilder.array(elementSchema)).build();
+      }
+      case STRUCT: {
+        SchemaBuilder structBuilder = copySchemaBasics(schema, SchemaBuilder.struct().name(schemaName));
+        for (Field field : schema.fields()) {
+          structBuilder.field(field.name(), preProcessSchema(field.schema()));
         }
-        return builder.build();
-      default:
+        return structBuilder.build();
+      }
+      default: {
         return schema;
+      }
     }
+  }
+
+  private static SchemaBuilder copySchemaBasics(Schema source, SchemaBuilder target) {
+    if (source.isOptional()) {
+      target.optional();
+    }
+    if (source.defaultValue() != null && source.type() != Schema.Type.STRUCT) {
+      final Object preProcessedDefaultValue = preProcessValue(source.defaultValue(), source, target);
+      target.defaultValue(preProcessedDefaultValue);
+    }
+    return target;
   }
 
   // visible for testing
   static Object preProcessValue(Object value, Schema schema, Schema newSchema) {
     if (schema == null) {
       return value;
+    }
+    if (value == null) {
+      if (schema.defaultValue() != null) {
+        return schema.defaultValue();
+      }
+      if (schema.isOptional()) {
+        return null;
+      }
+      throw new DataException("null value for field that is required and has no default value");
     }
 
     // Handle logical types

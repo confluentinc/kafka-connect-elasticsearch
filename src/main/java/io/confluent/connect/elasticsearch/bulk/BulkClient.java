@@ -13,29 +13,15 @@
  * License for the specific language governing permissions and limitations under
  * the License.
  **/
+package io.confluent.connect.elasticsearch.bulk;
 
-package io.confluent.connect.elasticsearch;
+import java.io.IOException;
+import java.util.List;
 
-public class TopicConfig {
-  private String index;
-  private boolean ignoreKey;
-  private boolean ignoreSchema;
+public interface BulkClient<R, B> {
 
-  public TopicConfig(String index, boolean ignoreKey, boolean ignoreSchema) {
-    this.index = index;
-    this.ignoreKey = ignoreKey;
-    this.ignoreSchema = ignoreSchema;
-  }
+  B bulkRequest(List<R> batch);
 
-  public String getIndex() {
-    return index;
-  }
+  BulkResponse execute(B req) throws IOException;
 
-  public boolean ignoreKey() {
-    return ignoreKey;
-  }
-
-  public boolean ignoreSchema() {
-    return ignoreSchema;
-  }
 }

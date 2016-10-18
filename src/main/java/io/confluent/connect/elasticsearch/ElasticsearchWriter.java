@@ -16,303 +16,218 @@
 
 package io.confluent.connect.elasticsearch;
 
-import org.apache.kafka.common.TopicPartition;
+import org.apache.kafka.common.utils.SystemTime;
 import org.apache.kafka.connect.errors.ConnectException;
-import org.apache.kafka.connect.errors.RetriableException;
 import org.apache.kafka.connect.sink.SinkRecord;
-import org.apache.kafka.connect.sink.SinkTaskContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
-import io.confluent.connect.elasticsearch.internals.BulkProcessor;
-import io.confluent.connect.elasticsearch.internals.ESRequest;
-import io.confluent.connect.elasticsearch.internals.HttpClient;
-import io.confluent.connect.elasticsearch.internals.Listener;
-import io.confluent.connect.elasticsearch.internals.RecordBatch;
-import io.confluent.connect.elasticsearch.internals.Response;
+import io.confluent.connect.elasticsearch.bulk.BulkProcessor;
 import io.searchbox.action.Action;
 import io.searchbox.client.JestClient;
 import io.searchbox.client.JestResult;
 import io.searchbox.indices.CreateIndex;
 import io.searchbox.indices.IndicesExists;
 
-/**
- * The ElasticsearchWriter handles connections to Elasticsearch, sending data and flush.
- * Transport client is used to send requests to Elasticsearch cluster. Requests are batched
- * when sending to Elasticsearch. To ensure delivery guarantee and order, we retry in case of
- * failures for a batch.
- *
- * Currently, we only send out requests to Elasticsearch when flush is called, which is not
- * desirable from the latency point of view.
- *
- * TODO: Use offset as external version to fence requests with lower version.
- */
 public class ElasticsearchWriter {
   private static final Logger log = LoggerFactory.getLogger(ElasticsearchWriter.class);
 
   private final JestClient client;
-  private final BulkProcessor bulkProcessor;
   private final String type;
   private final boolean ignoreKey;
+  private final Set<String> ignoreKeyTopics;
   private final boolean ignoreSchema;
-  private final Map<String, TopicConfig> topicConfigs;
+  private final Set<String> ignoreSchemaTopics;
+  private final Map<String, String> topicToIndexMap;
   private final long flushTimeoutMs;
-  private final long maxBufferedRecords;
-  private final SinkTaskContext context;
-  private final Set<String> mappings;
+  private final BulkProcessor<IndexableRecord, ?> bulkProcessor;
 
-  /**
-   * ElasticsearchWriter constructor
-   * @param client The client to connect to Elasticsearch.
-   * @param type The type to use when writing to Elasticsearch.
-   * @param ignoreKey Whether to ignore key during indexing.
-   * @param ignoreSchema Whether to ignore schema during indexing.
-   * @param topicConfigs The map of per topic configs.
-   * @param flushTimeoutMs The flush timeout.
-   * @param maxBufferedRecords The max number of buffered records.
-   * @param maxInFlightRequests The max number of inflight requests allowed.
-   * @param batchSize Approximately the max number of records each writer will buffer.
-   * @param lingerMs The time to wait before sending a batch.
-   * @param context The SinkTaskContext.
-   */
+  private final Set<String> existingMappings;
+
   ElasticsearchWriter(
       JestClient client,
       String type,
       boolean ignoreKey,
+      Set<String> ignoreKeyTopics,
       boolean ignoreSchema,
-      Map<String, TopicConfig> topicConfigs,
+      Set<String> ignoreSchemaTopics,
+      Map<String, String> topicToIndexMap,
       long flushTimeoutMs,
-      long maxBufferedRecords,
+      int maxBufferedRecords,
       int maxInFlightRequests,
       int batchSize,
       long lingerMs,
-      int maxRetry,
-      long retryBackoffMs,
-      SinkTaskContext context) {
-
+      int maxRetries,
+      long retryBackoffMs
+  ) {
     this.client = client;
     this.type = type;
     this.ignoreKey = ignoreKey;
+    this.ignoreKeyTopics = ignoreKeyTopics;
     this.ignoreSchema = ignoreSchema;
-
-    if (topicConfigs == null) {
-      this.topicConfigs = new HashMap<>();
-    } else {
-      this.topicConfigs = topicConfigs;
-    }
-
+    this.ignoreSchemaTopics = ignoreSchemaTopics;
+    this.topicToIndexMap = topicToIndexMap;
     this.flushTimeoutMs = flushTimeoutMs;
-    this.maxBufferedRecords  = maxBufferedRecords;
 
-    this.context = context;
+    bulkProcessor = new BulkProcessor<>(
+        new SystemTime(),
+        new BulkIndexingClient(client),
+        maxBufferedRecords,
+        maxInFlightRequests,
+        batchSize,
+        lingerMs,
+        maxRetries,
+        retryBackoffMs
+    );
 
-    // create index if needed.
-    createIndices(topicConfigs);
-
-    // Start the BulkProcessor
-    bulkProcessor = new BulkProcessor(new HttpClient(client), maxInFlightRequests, batchSize, lingerMs, maxRetry, retryBackoffMs, createDefaultListener());
-    bulkProcessor.start();
-
-    //Create mapping cache
-    mappings = new HashSet<>();
+    existingMappings = new HashSet<>();
   }
 
   public static class Builder {
     private final JestClient client;
     private String type;
     private boolean ignoreKey = false;
+    private Set<String> ignoreKeyTopics = Collections.emptySet();
     private boolean ignoreSchema = false;
-    private Map<String, TopicConfig> topicConfigs = new HashMap<>();
+    private Set<String> ignoreSchemaTopics = Collections.emptySet();
+    private Map<String, String> topicToIndexMap = new HashMap<>();
     private long flushTimeoutMs;
-    private long maxBufferedRecords;
+    private int maxBufferedRecords;
     private int maxInFlightRequests;
     private int batchSize;
     private long lingerMs;
     private int maxRetry;
     private long retryBackoffMs;
-    private SinkTaskContext context;
 
-    /**
-     * Constructor of ElasticsearchWriter Builder.
-     * @param client The client to connect to Elasticsearch.
-     */
     public Builder(JestClient client) {
       this.client = client;
     }
 
-    /**
-     * Set the index.
-     * @param type The type to use for each index.
-     * @return an instance of ElasticsearchWriter Builder.
-     */
     public Builder setType(String type) {
       this.type = type;
       return this;
     }
 
-    /**
-     * Set whether to ignore key during indexing.
-     * @param ignoreKey Whether to ignore key.
-     * @return an instance of ElasticsearchWriter Builder.
-     */
-
-    public Builder setIgnoreKey(boolean ignoreKey) {
+    public Builder setIgnoreKey(boolean ignoreKey, Set<String> ignoreKeyTopics) {
       this.ignoreKey = ignoreKey;
+      this.ignoreKeyTopics = ignoreKeyTopics;
       return this;
     }
 
-    /**
-     * Set whether to ignore schema during indexing.
-     * @param ignoreSchema Whether to ignore key.
-     * @return an instance of ElasticsearchWriter Builder.
-     */
-    public Builder setIgnoreSchema(boolean ignoreSchema) {
+    public Builder setIgnoreSchema(boolean ignoreSchema, Set<String> ignoreSchemaTopics) {
       this.ignoreSchema = ignoreSchema;
+      this.ignoreSchemaTopics = ignoreSchemaTopics;
       return this;
     }
 
-    /**
-     * Set per topic configurations.
-     * @param topicConfigs The map of per topic configuration.
-     * @return an instance of ElasticsearchWriter Builder.
-     */
-    public Builder setTopicConfigs(Map<String, TopicConfig> topicConfigs) {
-      this.topicConfigs = topicConfigs;
+    public Builder setTopicToIndexMap(Map<String, String> topicToIndexMap) {
+      this.topicToIndexMap = topicToIndexMap;
       return this;
     }
 
-    /**
-     * Set the flush timeout.
-     * @param flushTimeoutMs The flush timeout in milliseconds.
-     * @return an instance of ElasticsearchWriter Builder.
-     */
     public Builder setFlushTimoutMs(long flushTimeoutMs) {
       this.flushTimeoutMs = flushTimeoutMs;
       return this;
     }
 
-    /**
-     * Set the max number of records to buffer for each writer.
-     * @param maxBufferedRecords The max number of buffered records.
-     * @return an instance of ElasticsearchWriter Builder.
-     */
-    public Builder setMaxBufferedRecords(long maxBufferedRecords) {
+    public Builder setMaxBufferedRecords(int maxBufferedRecords) {
       this.maxBufferedRecords = maxBufferedRecords;
       return this;
     }
 
-    /**
-     * Set the max number of inflight requests.
-     * @param maxInFlightRequests The max allowed number of inflight requests.
-     * @return an instance of ElasticsearchWriter Builder.
-     */
     public Builder setMaxInFlightRequests(int maxInFlightRequests) {
       this.maxInFlightRequests = maxInFlightRequests;
       return this;
     }
 
-    /**
-     * Set the number of requests to process as a batch when writing.
-     * to Elasticsearch.
-     * @param batchSize the size of each batch.
-     * @return an instance of ElasticsearchWriter Builder.
-     */
     public Builder setBatchSize(int batchSize) {
       this.batchSize = batchSize;
       return this;
     }
 
-    /**
-     * Set the linger time.
-     * @param lingerMs The linger time to use in milliseconds.
-     * @return an instance of ElasticsearchWriter Builder.
-     */
     public Builder setLingerMs(long lingerMs) {
       this.lingerMs = lingerMs;
       return this;
     }
 
-    /**
-     * Set the max retry for a batch
-     * @param maxRetry The number of max retry.
-     * @return an instance of ElasticsearchWriter Builder.
-     */
     public Builder setMaxRetry(int maxRetry) {
       this.maxRetry = maxRetry;
       return this;
     }
 
-    /**
-     * Set the retry backoff.
-     * @param retryBackoffMs The retry backoff in milliseconds.
-     * @return an instance of ElasticsearchWriter Builder.
-     */
     public Builder setRetryBackoffMs(long retryBackoffMs) {
       this.retryBackoffMs = retryBackoffMs;
       return this;
     }
 
-    /**
-     * Set the SinkTaskContext
-     * @param context The SinkTaskContext.
-     * @return an instance of ElasticsearchWriter Builder.
-     */
-    public Builder setContext(SinkTaskContext context) {
-      this.context = context;
-      return this;
-    }
-
-    /**
-     * Build the ElasticsearchWriter.
-     * @return an instance of ElasticsearchWriter.
-     */
     public ElasticsearchWriter build() {
       return new ElasticsearchWriter(
-          client, type, ignoreKey, ignoreSchema, topicConfigs, flushTimeoutMs, maxBufferedRecords, maxInFlightRequests, batchSize, lingerMs, maxRetry, retryBackoffMs, context);
+          client,
+          type,
+          ignoreKey,
+          ignoreKeyTopics,
+          ignoreSchema,
+          ignoreSchemaTopics,
+          topicToIndexMap,
+          flushTimeoutMs,
+          maxBufferedRecords,
+          maxInFlightRequests,
+          batchSize,
+          lingerMs,
+          maxRetry,
+          retryBackoffMs
+      );
     }
   }
 
   public void write(Collection<SinkRecord> records) {
-    if (bulkProcessor.getException() != null) {
-      throw new ConnectException("BulkProcessor failed with non-retriable exception", bulkProcessor.getException());
-    }
-    if (bulkProcessor.getTotalBufferedRecords() + records.size() > maxBufferedRecords) {
-      throw new RetriableException("Exceeded max number of buffered records: " + maxBufferedRecords);
-    }
-    for (SinkRecord record: records) {
-      ESRequest request = DataConverter.convertRecord(record, type, client, ignoreKey, ignoreSchema, topicConfigs, mappings);
-      bulkProcessor.add(request);
+    for (SinkRecord sinkRecord : records) {
+      final String index = sinkRecord.topic();
+      final boolean ignoreKey = ignoreKeyTopics.contains(sinkRecord.topic()) || this.ignoreKey;
+      final boolean ignoreSchema = ignoreSchemaTopics.contains(sinkRecord.topic()) || this.ignoreSchema;
+
+      if (!ignoreSchema && !existingMappings.contains(index)) {
+        try {
+          if (!Mapping.doesMappingExist(client, index, type)) {
+            Mapping.createMapping(client, index, type, sinkRecord.valueSchema());
+          }
+        } catch (IOException e) {
+          // FIXME: concurrent tasks could attempt to create the mapping and one of the requests may fail
+          throw new ConnectException("Failed to initialize mapping for index: " + index, e);
+        }
+        existingMappings.add(index);
+      }
+
+      final IndexableRecord indexableRecord = DataConverter.convertRecord(sinkRecord, index, type, ignoreKey, ignoreSchema);
+
+      bulkProcessor.add(indexableRecord, flushTimeoutMs);
     }
   }
 
   public void flush() {
-    try {
-      if (!bulkProcessor.flush(flushTimeoutMs)) {
-        throw new ConnectException("Cannot finish flush messages within " + flushTimeoutMs);
-      }
-    } catch (InterruptedException e) {
-      Thread.currentThread().interrupt();
-    } catch (Throwable t) {
-      throw new ConnectException("Flush failed with non retriable exception.", t);
-    }
+    bulkProcessor.flush(flushTimeoutMs);
   }
 
-  public void close() {
-    bulkProcessor.stop();
+  public void start() {
+    bulkProcessor.start();
+  }
+
+  public void stop() {
     try {
-      bulkProcessor.awaitStop(flushTimeoutMs);
-    } catch (InterruptedException e) {
-      Thread.currentThread().interrupt();
-    } catch (Throwable t) {
-      throw new ConnectException("Close failed with non retriable exception", t);
+      bulkProcessor.flush(flushTimeoutMs);
+    } catch (Exception e) {
+      log.warn("Failed to flush during stop", e);
     }
+    bulkProcessor.stop();
+    bulkProcessor.awaitStop(flushTimeoutMs);
   }
 
   private boolean indexExists(String index) {
@@ -325,21 +240,8 @@ public class ElasticsearchWriter {
     }
   }
 
-  private void createIndices(Map<String, TopicConfig> topicConfigs) {
-    Set<TopicPartition> assignment = context.assignment();
-    Set<String> topics = new HashSet<>();
-    for (TopicPartition tp: assignment) {
-      String topic = tp.topic();
-      if (!topicConfigs.containsKey(topic)) {
-        topics.add(topic);
-      }
-    }
-
-    Set<String> indices = new HashSet<>(topics);
-    for (String topic: topicConfigs.keySet()) {
-      indices.add(topicConfigs.get(topic).getIndex());
-    }
-    for (String index: indices) {
+  public void createIndicesForTopics(Set<String> assignedTopics) {
+    for (String index : indicesForTopics(assignedTopics)) {
       if (!indexExists(index)) {
         CreateIndex createIndex = new CreateIndex.Builder(index).build();
         try {
@@ -354,22 +256,17 @@ public class ElasticsearchWriter {
     }
   }
 
-  private Listener createDefaultListener() {
-    return new Listener() {
-      @Override
-      public void beforeBulk(long executionId, RecordBatch batch) {
-
+  private Set<String> indicesForTopics(Set<String> assignedTopics) {
+    final Set<String> indices = new HashSet<>();
+    for (String topic : assignedTopics) {
+      final String index = topicToIndexMap.get(topic);
+      if (index != null) {
+        indices.add(index);
+      } else {
+        indices.add(topic);
       }
-
-      @Override
-      public void afterBulk(long executionId, RecordBatch batch, Response response) {
-
-      }
-
-      @Override
-      public void afterBulk(long executionId, RecordBatch batch, Throwable failure) {
-
-      }
-    };
+    }
+    return indices;
   }
+
 }

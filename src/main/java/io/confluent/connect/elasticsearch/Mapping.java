@@ -34,7 +34,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.util.Set;
 
 import io.searchbox.client.JestClient;
 import io.searchbox.client.JestResult;
@@ -73,10 +72,7 @@ public class Mapping {
    * @param type The type to check.
    * @return Whether the type exists or not.
    */
-  public static boolean doesMappingExist(JestClient client, String index, String type, Set<String> mappings) throws IOException {
-    if (mappings.contains(index)) {
-      return true;
-    }
+  public static boolean doesMappingExist(JestClient client, String index, String type) throws IOException {
     GetMapping getMapping = new GetMapping.Builder().addIndex(index).addType(type).build();
     JestResult result = client.execute(getMapping);
     JsonObject resultJson = result.getJsonObject().getAsJsonObject(index);
@@ -84,11 +80,7 @@ public class Mapping {
       return false;
     }
     JsonObject typeJson = resultJson.getAsJsonObject(type);
-    if (typeJson == null) {
-      return false;
-    }
-    mappings.add(index);
-    return true;
+    return typeJson != null;
   }
 
   /**
