@@ -114,7 +114,7 @@ public class ElasticsearchSinkTestBase extends ESIntegTestCase {
   }
 
   protected void verifySearchResults(Collection<SinkRecord> records, String index, boolean ignoreKey, boolean ignoreSchema) throws IOException {
-    final SearchResult result = client.execute(new Search.Builder("").build());
+    final SearchResult result = client.execute(new Search.Builder("").addIndex(index).build());
 
     final JsonArray rawHits = result.getJsonObject().getAsJsonObject("hits").getAsJsonArray("hits");
 
