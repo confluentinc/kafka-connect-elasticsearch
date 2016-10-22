@@ -190,7 +190,8 @@ public class ElasticsearchWriter {
 
   public void write(Collection<SinkRecord> records) {
     for (SinkRecord sinkRecord : records) {
-      final String index = sinkRecord.topic();
+      final String indexOverride = topicToIndexMap.get(sinkRecord.topic());
+      final String index = indexOverride != null ? indexOverride : sinkRecord.topic();
       final boolean ignoreKey = ignoreKeyTopics.contains(sinkRecord.topic()) || this.ignoreKey;
       final boolean ignoreSchema = ignoreSchemaTopics.contains(sinkRecord.topic()) || this.ignoreSchema;
 
