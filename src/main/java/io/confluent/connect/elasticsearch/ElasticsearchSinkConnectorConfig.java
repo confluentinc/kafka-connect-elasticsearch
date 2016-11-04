@@ -48,9 +48,9 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
       final String group = "Connector";
       int order = 0;
       configDef
-          .define(CONNECTION_URL_CONFIG, Type.STRING, Importance.HIGH,
-                  "Elasticsearch HTTP connection URL e.g. ``http://eshost:9200``.",
-                  group, ++order, Width.LONG, "Connection URL")
+          .define(CONNECTION_URL_CONFIG, Type.LIST, Importance.HIGH,
+                  "List of Elasticsearch HTTP connection URLs e.g. ``http://eshost1:9200,http://eshost2:9200``.",
+                  group, ++order, Width.LONG, "Connection URLs")
           .define(BATCH_SIZE_CONFIG, Type.INT, 2000, Importance.MEDIUM,
                   "The number of records to process as a batch when writing to Elasticsearch.",
                   group, ++order, Width.SHORT, "Batch Size")
@@ -122,6 +122,6 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   }
 
   public static void main(String[] args) {
-    System.out.println(CONFIG.toRst());
+    System.out.println(CONFIG.toEnrichedRst());
   }
 }

@@ -5,9 +5,9 @@ Connector
 ^^^^^^^^^
 
 ``connection.url``
-  Elasticsearch HTTP connection URL e.g. ``http://eshost:9200``.
+  List of Elasticsearch HTTP connection URLs e.g. ``http://eshost1:9200,http://eshost2:9200``.
 
-  * Type: string
+  * Type: list
   * Importance: high
 
 ``batch.size``
