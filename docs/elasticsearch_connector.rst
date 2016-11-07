@@ -192,3 +192,7 @@ connector jobs to achieve double writes:
       new data to the new indices as long as the data is in Kafka.
    3. Once the data in the old indices are moved to the new indices by the reindexing process, we
       can stop the old connector job.
+      
+Security
+--------
+The Elasticsearch connector can read data from secure Kafka by following the instructions in the :ref:`Connect security documentation <connect_security>`. The functionality to write data to a secured Elasticsearch instance is not yet implemented.
