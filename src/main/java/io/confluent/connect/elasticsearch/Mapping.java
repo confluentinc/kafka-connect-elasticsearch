@@ -34,6 +34,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
 
 import io.searchbox.client.JestClient;
 import io.searchbox.client.JestResult;
@@ -166,6 +167,9 @@ public class Mapping {
         case ElasticsearchSinkConnectorConstants.STRING_TYPE:
           defaultValueNode = JsonNodeFactory.instance.textNode((String) defaultValue);
           break;
+        case ElasticsearchSinkConnectorConstants.BINARY_TYPE:
+          defaultValueNode = JsonNodeFactory.instance.binaryNode(bytes(defaultValue));
+          break;
         case ElasticsearchSinkConnectorConstants.BOOLEAN_TYPE:
           defaultValueNode = JsonNodeFactory.instance.booleanNode((boolean) defaultValue);
           break;
@@ -181,4 +185,17 @@ public class Mapping {
     }
     return obj;
   }
+
+  private static byte[] bytes(Object value) {
+    final byte[] bytes;
+    if (value instanceof ByteBuffer) {
+      final ByteBuffer buffer = ((ByteBuffer) value).slice();
+      bytes = new byte[buffer.remaining()];
+      buffer.get(bytes);
+    } else {
+      bytes = (byte[]) value;
+    }
+    return bytes;
+  }
+
 }
