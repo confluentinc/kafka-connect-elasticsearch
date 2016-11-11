@@ -79,8 +79,7 @@ public class Mapping {
     if (resultJson == null) {
       return false;
     }
-    JsonObject typeJson = resultJson.getAsJsonObject(type);
-    return typeJson != null;
+    return (resultJson.entrySet().size() != 0);
   }
 
   /**
