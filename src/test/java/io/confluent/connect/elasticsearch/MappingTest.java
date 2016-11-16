@@ -47,10 +47,7 @@ public class MappingTest extends ElasticsearchSinkTestBase {
     Schema schema = createSchema();
     Mapping.createMapping(client, INDEX, TYPE, schema);
 
-    GetMapping getMapping = new GetMapping.Builder().addIndex(INDEX).addType(TYPE).build();
-    JestResult result = client.execute(getMapping);
-    JsonObject resultJson = result.getJsonObject();
-    JsonObject mapping = resultJson.get(INDEX).getAsJsonObject().get("mappings").getAsJsonObject().get(TYPE).getAsJsonObject();
+    JsonObject mapping = Mapping.getMapping(client, INDEX, TYPE);
     assertNotNull(mapping);
     verifyMapping(schema, mapping);
   }

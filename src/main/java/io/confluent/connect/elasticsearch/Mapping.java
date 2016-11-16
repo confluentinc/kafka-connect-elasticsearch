@@ -66,21 +66,19 @@ public class Mapping {
   }
 
   /**
-   * Check the whether a mapping exists or not for a type.
-   * @param client The client to connect to Elasticsearch.
-   * @param index The index to write to Elasticsearch.
-   * @param type The type to check.
-   * @return Whether the type exists or not.
+   * Get the JSON mapping for given index and type. Returns {@code null} if it does not exist.
    */
-  public static boolean doesMappingExist(JestClient client, String index, String type) throws IOException {
-    GetMapping getMapping = new GetMapping.Builder().addIndex(index).addType(type).build();
-    JestResult result = client.execute(getMapping);
-    JsonObject resultJson = result.getJsonObject().getAsJsonObject(index);
-    if (resultJson == null) {
-      return false;
+  public static JsonObject getMapping(JestClient client, String index, String type) throws IOException {
+    final JestResult result = client.execute(new GetMapping.Builder().addIndex(index).addType(type).build());
+    final JsonObject indexRoot = result.getJsonObject().getAsJsonObject(index);
+    if (indexRoot == null) {
+      return null;
     }
-    JsonObject typeJson = resultJson.getAsJsonObject(type);
-    return typeJson != null;
+    final JsonObject mappingsJson = indexRoot.getAsJsonObject("mappings");
+    if (mappingsJson == null) {
+      return  null;
+    }
+    return mappingsJson.getAsJsonObject(type);
   }
 
   /**
