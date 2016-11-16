@@ -81,7 +81,7 @@ public class BulkIndexingClient implements BulkClient<IndexableRecord, Bulk> {
     }
 
     if (!versionConflicts.isEmpty()) {
-      LOG.warn("Ignoring version conflicts for items: {}", versionConflicts);
+      LOG.debug("Ignoring version conflicts for items: {}", versionConflicts);
       if (errors.isEmpty()) {
         // The only errors were version conflicts
         return BulkResponse.success();
