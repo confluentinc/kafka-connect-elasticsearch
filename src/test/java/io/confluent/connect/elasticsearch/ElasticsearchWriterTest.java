@@ -34,6 +34,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -152,7 +153,7 @@ public class ElasticsearchWriterTest extends ElasticsearchSinkTestBase {
   }
 
   @Test
-  public void testSafeRedelivery() throws Exception {
+  public void testSafeRedeliveryRegularKey() throws Exception {
     final boolean ignoreKey = false;
     final boolean ignoreSchema = false;
 
@@ -175,6 +176,34 @@ public class ElasticsearchWriterTest extends ElasticsearchSinkTestBase {
 
     // last write should have been ignored due to version conflict
     verifySearchResults(Collections.singleton(sinkRecord1), ignoreKey, ignoreSchema);
+  }
+
+  @Test
+  public void testSafeRedeliveryOffsetInKey() throws Exception {
+    final boolean ignoreKey = true;
+    final boolean ignoreSchema = false;
+
+    final Struct value0 = new Struct(schema);
+    value0.put("user", "foo");
+    value0.put("message", "hi");
+    final SinkRecord sinkRecord0 = new SinkRecord(TOPIC, PARTITION, Schema.STRING_SCHEMA, key, schema, value0, 0);
+
+    final Struct value1 = new Struct(schema);
+    value1.put("user", "foo");
+    value1.put("message", "bye");
+    final SinkRecord sinkRecord1 = new SinkRecord(TOPIC, PARTITION, Schema.STRING_SCHEMA, key, schema, value1, 1);
+
+    final List<SinkRecord> records = Arrays.asList(sinkRecord0, sinkRecord1);
+
+    final ElasticsearchWriter writer = initWriter(client, ignoreKey, ignoreSchema);
+    writer.write(records);
+    writer.flush();
+
+    // write them again
+    writeDataAndRefresh(writer, records);
+
+    // last write should have been ignored due to version conflict
+    verifySearchResults(records, ignoreKey, ignoreSchema);
   }
 
   @Test
