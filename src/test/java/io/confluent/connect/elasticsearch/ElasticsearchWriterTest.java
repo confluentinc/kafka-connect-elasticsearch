@@ -256,6 +256,27 @@ public class ElasticsearchWriterTest extends ElasticsearchSinkTestBase {
     verifySearchResults(records, ignoreKey, ignoreSchema);
   }
 
+  @Test
+  public void testBytes() throws Exception {
+    final boolean ignoreKey = false;
+    final boolean ignoreSchema = false;
+
+    Schema structSchema = SchemaBuilder.struct().name("struct")
+        .field("bytes", SchemaBuilder.BYTES_SCHEMA)
+        .build();
+
+    Struct struct = new Struct(structSchema);
+    struct.put("bytes", new byte[]{42});
+
+    Collection<SinkRecord> records = new ArrayList<>();
+    SinkRecord sinkRecord = new SinkRecord(TOPIC, PARTITION, Schema.STRING_SCHEMA, key, structSchema, struct, 0);
+    records.add(sinkRecord);
+
+    ElasticsearchWriter writer = initWriter(client, ignoreKey, ignoreSchema);
+    writeDataAndRefresh(writer, records);
+    verifySearchResults(records, ignoreKey, ignoreSchema);
+  }
+
   private Collection<SinkRecord> prepareData(int numRecords) {
     Collection<SinkRecord> records = new ArrayList<>();
     for (int i = 0; i < numRecords; ++i) {

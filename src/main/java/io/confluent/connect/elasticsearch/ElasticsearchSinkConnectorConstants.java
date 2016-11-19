@@ -27,6 +27,7 @@ public class ElasticsearchSinkConnectorConstants {
 
   public static final String BOOLEAN_TYPE = "boolean";
   public static final String BYTE_TYPE = "byte";
+  public static final String BINARY_TYPE = "binary";
   public static final String SHORT_TYPE = "short";
   public static final String INTEGER_TYPE = "integer";
   public static final String LONG_TYPE = "long";
@@ -46,6 +47,6 @@ public class ElasticsearchSinkConnectorConstants {
     TYPES.put(Type.FLOAT32, FLOAT_TYPE);
     TYPES.put(Type.FLOAT64, DOUBLE_TYPE);
     TYPES.put(Type.STRING, STRING_TYPE);
-    TYPES.put(Type.BYTES, BYTE_TYPE);
+    TYPES.put(Type.BYTES, BINARY_TYPE);
   }
 }
