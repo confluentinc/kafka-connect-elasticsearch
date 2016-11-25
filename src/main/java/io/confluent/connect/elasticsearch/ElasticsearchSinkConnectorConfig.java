@@ -40,6 +40,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   public static final String TOPIC_KEY_IGNORE_CONFIG = "topic.key.ignore";
   public static final String SCHEMA_IGNORE_CONFIG = "schema.ignore";
   public static final String TOPIC_SCHEMA_IGNORE_CONFIG = "topic.schema.ignore";
+  public static final String NODE_DISCOVERY_FREQUENCY = "discovery.frequency";
 
   protected static ConfigDef baseConfigDef() {
     final ConfigDef configDef = new ConfigDef();
@@ -57,6 +58,10 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
           .define(MAX_IN_FLIGHT_REQUESTS_CONFIG, Type.INT, 5, Importance.MEDIUM,
                   "The maximum number of indexing requests that can be in-flight to Elasticsearch before blocking further requests.",
                   group, 5, Width.SHORT, "Max In-flight Requests")
+          .define(NODE_DISCOVERY_FREQUENCY, Type.LONG, 60, Importance.MEDIUM,
+                  "Enables node discovery polling every defined seconds. "
+                   + "The node discovery will (poll) and update the list of servers periodically.",
+                   group, ++order, Width.SHORT, "Node discovery frequency")
           .define(MAX_BUFFERED_RECORDS_CONFIG, Type.INT, 20000, Importance.LOW,
                   "The maximum number of records each task will buffer before blocking acceptance of more records. This config can be used to limit the memory usage for each task.",
                   group, ++order, Width.SHORT, "Max Buffered Records")
