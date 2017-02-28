@@ -36,6 +36,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.Map;
 
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConstants.MAP_KEY;
@@ -130,10 +131,14 @@ public class DataConverter {
         Schema valueSchema = schema.valueSchema();
         String keyName = keySchema.name() == null ? keySchema.type().name() : keySchema.name();
         String valueName = valueSchema.name() == null ? valueSchema.type().name() : valueSchema.name();
-        Schema elementSchema = SchemaBuilder.struct().name(keyName + "-" + valueName)
-            .field(MAP_KEY, preProcessSchema(keySchema))
-            .field(MAP_VALUE, preProcessSchema(valueSchema))
-            .build();
+        Schema elementSchema;
+        if (keySchema.type() == Schema.Type.STRING) {
+          return SchemaBuilder.map(preProcessSchema(keySchema), preProcessSchema(valueSchema)).build();
+        }
+        elementSchema = SchemaBuilder.struct().name(keyName + "-" + valueName)
+                  .field(MAP_KEY, preProcessSchema(keySchema))
+                  .field(MAP_VALUE, preProcessSchema(valueSchema))
+                  .build();
         return copySchemaBasics(schema, SchemaBuilder.array(elementSchema)).build();
       }
       case STRUCT: {
@@ -205,6 +210,14 @@ public class DataConverter {
         ArrayList<Struct> mapStructs = new ArrayList<>();
         Map<?, ?> map = (Map<?, ?>) value;
         Schema newValueSchema = newSchema.valueSchema();
+        if (keySchema.type() == Schema.Type.STRING) {
+          Map<Object, Object> toReturn = new HashMap<>();
+          for (Map.Entry<?, ?> entry: map.entrySet()) {
+            toReturn.put(preProcessValue(entry.getKey(), keySchema, newSchema.keySchema()),
+                    preProcessValue(entry.getValue(), valueSchema, newSchema.valueSchema()));
+          }
+          return toReturn;
+        }
         for (Map.Entry<?, ?> entry: map.entrySet()) {
           Struct mapStruct = new Struct(newValueSchema);
           mapStruct.put(MAP_KEY, preProcessValue(entry.getKey(), keySchema, newValueSchema.field(MAP_KEY).schema()));

@@ -117,12 +117,12 @@ public class DataConverterTest {
 
   @Test
   public void map() {
-    Schema origSchema = SchemaBuilder.map(Schema.STRING_SCHEMA, Decimal.schema(2)).build();
+    Schema origSchema = SchemaBuilder.map(Schema.INT32_SCHEMA, Decimal.schema(2)).build();
     Schema preProcessedSchema = DataConverter.preProcessSchema(origSchema);
     assertEquals(
         SchemaBuilder.array(
-            SchemaBuilder.struct().name(Schema.STRING_SCHEMA.type().name() + "-" + Decimal.LOGICAL_NAME)
-                .field(ElasticsearchSinkConnectorConstants.MAP_KEY, Schema.STRING_SCHEMA)
+            SchemaBuilder.struct().name(Schema.INT32_SCHEMA.type().name() + "-" + Decimal.LOGICAL_NAME)
+                .field(ElasticsearchSinkConnectorConstants.MAP_KEY, Schema.INT32_SCHEMA)
                 .field(ElasticsearchSinkConnectorConstants.MAP_VALUE, Schema.FLOAT64_SCHEMA)
                 .build()
         ).build(),
@@ -130,15 +130,15 @@ public class DataConverterTest {
     );
 
     Map<Object, Object> origValue = new HashMap<>();
-    origValue.put("field1", new BigDecimal("0.02"));
-    origValue.put("field2", new BigDecimal("0.42"));
+    origValue.put(1, new BigDecimal("0.02"));
+    origValue.put(2, new BigDecimal("0.42"));
     assertEquals(
         new HashSet<>(Arrays.asList(
             new Struct(preProcessedSchema.valueSchema())
-                .put(ElasticsearchSinkConnectorConstants.MAP_KEY, "field1")
+                .put(ElasticsearchSinkConnectorConstants.MAP_KEY, 1)
                 .put(ElasticsearchSinkConnectorConstants.MAP_VALUE, 0.02),
             new Struct(preProcessedSchema.valueSchema())
-                .put(ElasticsearchSinkConnectorConstants.MAP_KEY, "field2")
+                .put(ElasticsearchSinkConnectorConstants.MAP_KEY, 2)
                 .put(ElasticsearchSinkConnectorConstants.MAP_VALUE, 0.42)
         )),
         new HashSet<>((List) DataConverter.preProcessValue(origValue, origSchema, preProcessedSchema))
@@ -147,14 +147,34 @@ public class DataConverterTest {
     // optional
     assertEquals(
         SchemaBuilder.array(preProcessedSchema.valueSchema()).optional().build(),
-        DataConverter.preProcessSchema(SchemaBuilder.map(Schema.STRING_SCHEMA, Decimal.schema(2)).optional().build())
+        DataConverter.preProcessSchema(SchemaBuilder.map(Schema.INT32_SCHEMA, Decimal.schema(2)).optional().build())
     );
 
     // defval
     assertEquals(
         SchemaBuilder.array(preProcessedSchema.valueSchema()).defaultValue(Collections.emptyList()).build(),
-        DataConverter.preProcessSchema(SchemaBuilder.map(Schema.STRING_SCHEMA, Decimal.schema(2)).defaultValue(Collections.emptyMap()).build())
+        DataConverter.preProcessSchema(SchemaBuilder.map(Schema.INT32_SCHEMA, Decimal.schema(2)).defaultValue(Collections.emptyMap()).build())
     );
+  }
+
+  @Test
+  public void stringKeyedMap() {
+    Schema origSchema = SchemaBuilder.map(Schema.STRING_SCHEMA, Schema.INT32_SCHEMA).build();
+    Schema preProcessedSchema = DataConverter.preProcessSchema(origSchema);
+    assertEquals(
+            SchemaBuilder.map(Schema.STRING_SCHEMA, Schema.INT32_SCHEMA).build(),
+            preProcessedSchema
+    );
+
+    Map<Object, Object> origValue = new HashMap<>();
+    origValue.put("field1", 1);
+    origValue.put("field2", 2);
+    HashMap newValue = (HashMap) DataConverter.preProcessValue(origValue, origSchema, preProcessedSchema);
+    assertEquals(
+            origValue,
+            newValue
+    );
+
   }
 
   @Test
