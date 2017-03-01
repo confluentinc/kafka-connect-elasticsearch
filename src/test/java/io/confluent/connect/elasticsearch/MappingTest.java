@@ -29,9 +29,6 @@ import org.elasticsearch.test.ESIntegTestCase;
 import org.elasticsearch.test.InternalTestCluster;
 import org.junit.Test;
 
-import io.searchbox.client.JestResult;
-import io.searchbox.indices.mapping.GetMapping;
-
 public class MappingTest extends ElasticsearchSinkTestBase {
 
   private static final String INDEX = "kafka-connect";
@@ -119,7 +116,9 @@ public class MappingTest extends ElasticsearchSinkTestBase {
         break;
       case MAP:
         Schema newSchema = DataConverter.preProcessSchema(schema);
-        verifyMapping(newSchema, mapping);
+        JsonObject mapProperties = mapping.get("properties").getAsJsonObject();
+        verifyMapping(newSchema.keySchema(), mapProperties.get(ElasticsearchSinkConnectorConstants.MAP_KEY).getAsJsonObject());
+        verifyMapping(newSchema.valueSchema(), mapProperties.get(ElasticsearchSinkConnectorConstants.MAP_VALUE).getAsJsonObject());
         break;
       case STRUCT:
         JsonObject properties = mapping.get("properties").getAsJsonObject();

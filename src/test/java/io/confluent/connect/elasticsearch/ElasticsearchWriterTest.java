@@ -17,6 +17,7 @@
 package io.confluent.connect.elasticsearch;
 
 import com.carrotsearch.randomizedtesting.annotations.ThreadLeakScope;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Schema;
@@ -229,6 +230,26 @@ public class ElasticsearchWriterTest extends ElasticsearchSinkTestBase {
     ElasticsearchWriter writer = initWriter(client, ignoreKey, ignoreSchema);
     writeDataAndRefresh(writer, records);
     verifySearchResults(records, ignoreKey, ignoreSchema);
+  }
+
+  @Test
+  public void testStringKeyedMap() throws Exception {
+    boolean ignoreKey = false;
+    boolean ignoreSchema = false;
+
+    Schema mapSchema = SchemaBuilder.map(Schema.STRING_SCHEMA, Schema.INT32_SCHEMA).build();
+
+    Map<String, Integer> map = new HashMap<>();
+    map.put("One", 1);
+    map.put("Two", 2);
+
+    SinkRecord sinkRecord = new SinkRecord(TOPIC, PARTITION, Schema.STRING_SCHEMA, key, mapSchema, map, 0);
+
+    ElasticsearchWriter writer = initWriter(client, ignoreKey, ignoreSchema);
+    writeDataAndRefresh(writer, Collections.singletonList(sinkRecord));
+
+    Collection<?> expectedRecords = Collections.singletonList(new ObjectMapper().writeValueAsString(map));
+    verifySearchResults(expectedRecords, TOPIC, ignoreKey, ignoreSchema);
   }
 
   @Test

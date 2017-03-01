@@ -113,7 +113,7 @@ public class ElasticsearchSinkTestBase extends ESIntegTestCase {
     verifySearchResults(records, TOPIC, ignoreKey, ignoreSchema);
   }
 
-  protected void verifySearchResults(Collection<SinkRecord> records, String index, boolean ignoreKey, boolean ignoreSchema) throws IOException {
+  protected void verifySearchResults(Collection<?> records, String index, boolean ignoreKey, boolean ignoreSchema) throws IOException {
     final SearchResult result = client.execute(new Search.Builder("").addIndex(index).build());
 
     final JsonArray rawHits = result.getJsonObject().getAsJsonObject("hits").getAsJsonArray("hits");
@@ -128,9 +128,13 @@ public class ElasticsearchSinkTestBase extends ESIntegTestCase {
       hits.put(id, source);
     }
 
-    for (SinkRecord record : records) {
-      final IndexableRecord indexableRecord = DataConverter.convertRecord(record, index, TYPE, ignoreKey, ignoreSchema);
-      assertEquals(indexableRecord.payload, hits.get(indexableRecord.key.id));
+    for (Object record : records) {
+      if (record instanceof SinkRecord) {
+        IndexableRecord indexableRecord = DataConverter.convertRecord((SinkRecord) record, index, TYPE, ignoreKey, ignoreSchema);
+        assertEquals(indexableRecord.payload, hits.get(indexableRecord.key.id));
+      } else {
+        assertEquals(record, hits.get("key"));
+      }
     }
   }
 
