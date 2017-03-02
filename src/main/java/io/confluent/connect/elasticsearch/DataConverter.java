@@ -36,6 +36,8 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConstants.MAP_KEY;
@@ -130,10 +132,13 @@ public class DataConverter {
         Schema valueSchema = schema.valueSchema();
         String keyName = keySchema.name() == null ? keySchema.type().name() : keySchema.name();
         String valueName = valueSchema.name() == null ? valueSchema.type().name() : valueSchema.name();
+        if (keySchema.type() == Schema.Type.STRING) {
+          return SchemaBuilder.map(preProcessSchema(keySchema), preProcessSchema(valueSchema)).build();
+        }
         Schema elementSchema = SchemaBuilder.struct().name(keyName + "-" + valueName)
-            .field(MAP_KEY, preProcessSchema(keySchema))
-            .field(MAP_VALUE, preProcessSchema(valueSchema))
-            .build();
+             .field(MAP_KEY, preProcessSchema(keySchema))
+             .field(MAP_VALUE, preProcessSchema(valueSchema))
+             .build();
         return copySchemaBasics(schema, SchemaBuilder.array(elementSchema)).build();
       }
       case STRUCT: {
@@ -189,22 +194,28 @@ public class DataConverter {
     }
 
     Schema.Type schemaType = schema.type();
-    Schema keySchema;
-    Schema valueSchema;
     switch (schemaType) {
       case ARRAY:
         Collection collection = (Collection) value;
-        ArrayList<Object> result = new ArrayList<>();
+        List<Object> result = new ArrayList<>();
         for (Object element: collection) {
           result.add(preProcessValue(element, schema.valueSchema(), newSchema.valueSchema()));
         }
         return result;
       case MAP:
-        keySchema = schema.keySchema();
-        valueSchema = schema.valueSchema();
-        ArrayList<Struct> mapStructs = new ArrayList<>();
-        Map<?, ?> map = (Map<?, ?>) value;
+        Schema keySchema = schema.keySchema();
+        Schema valueSchema = schema.valueSchema();
         Schema newValueSchema = newSchema.valueSchema();
+        Map<?, ?> map = (Map<?, ?>) value;
+        if (keySchema.type() == Schema.Type.STRING) {
+          Map<Object, Object> processedMap = new HashMap<>();
+          for (Map.Entry<?, ?> entry: map.entrySet()) {
+            processedMap.put(preProcessValue(entry.getKey(), keySchema, newSchema.keySchema()),
+                preProcessValue(entry.getValue(), valueSchema, newValueSchema));
+          }
+          return processedMap;
+        }
+        List<Struct> mapStructs = new ArrayList<>();
         for (Map.Entry<?, ?> entry: map.entrySet()) {
           Struct mapStruct = new Struct(newValueSchema);
           mapStruct.put(MAP_KEY, preProcessValue(entry.getKey(), keySchema, newValueSchema.field(MAP_KEY).schema()));
