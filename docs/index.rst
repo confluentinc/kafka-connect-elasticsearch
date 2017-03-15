@@ -10,3 +10,4 @@ Contents:
 
    elasticsearch_connector
    configuration_options
+   changelog
