@@ -76,6 +76,13 @@ public class ElasticsearchSinkTask extends SinkTask {
 
       if (client != null) {
         this.client = client;
+      } else if (config.getList(ElasticsearchSinkConnectorConfig.CONNECTION_USERNAME)) {
+        List<String> address = config.getList(ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG);
+        String username = config.getList(ElasticsearchSinkConnectorConfig.CONNECTION_USERNAME);
+        String password = config.getList(ElasticsearchSinkConnectorConfig.CONNECTION_PASSWORD);
+        JestClientFactory factory = new JestClientFactory();
+        factory.setHttpClientConfig(new HttpClientConfig.Builder(address).defaultCredentials(username, password).multiThreaded(true).build());
+        this.client = factory.getObject();
       } else {
         List<String> address = config.getList(ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG);
         JestClientFactory factory = new JestClientFactory();
