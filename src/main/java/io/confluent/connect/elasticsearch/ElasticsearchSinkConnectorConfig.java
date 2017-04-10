@@ -53,10 +53,10 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
           .define(CONNECTION_URL_CONFIG, Type.LIST, Importance.HIGH,
                   "List of Elasticsearch HTTP connection URLs e.g. ``http://eshost1:9200,http://eshost2:9200``.",
                   group, ++order, Width.LONG, "Connection URLs")
-          .define(CONNECTION_USERNAME, Type.STRING, Importance.LOW,
+          .define(CONNECTION_USERNAME, Type.STRING, null, Importance.LOW,
                   "The username to use for HTTP Basic Authentication.",
                   group, ++order, Width.MEDIUM, "Connection Username")
-          .define(CONNECTION_PASSWORD, Type.PASSWORD, Importance.LOW,
+          .define(CONNECTION_PASSWORD, Type.PASSWORD, null, Importance.LOW,
                   "The password to use for HTTP Basic Authentication.",
                   group, ++order, Width.MEDIUM, "Connection Password")
           .define(BATCH_SIZE_CONFIG, Type.INT, 2000, Importance.MEDIUM,
