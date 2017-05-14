@@ -46,6 +46,7 @@ import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConst
 public class DataConverter {
 
   private static final Converter JSON_CONVERTER;
+
   static {
     JSON_CONVERTER = new JsonConverter();
     JSON_CONVERTER.configure(Collections.singletonMap("schemas.enable", "false"), false);
@@ -66,7 +67,11 @@ public class DataConverter {
     if (keySchema == null) {
       schemaType = ConnectSchema.schemaType(key.getClass());
       if (schemaType == null) {
-        throw new DataException("Java class " + key.getClass() + " does not have corresponding schema type.");
+        throw new DataException(
+            "Java class "
+            + key.getClass()
+            + " does not have corresponding schema type."
+        );
       }
     } else {
       schemaType = keySchema.type();
@@ -84,10 +89,18 @@ public class DataConverter {
     }
   }
 
-  public IndexableRecord convertRecord(SinkRecord record, String index, String type, boolean ignoreKey, boolean ignoreSchema) {
+  public IndexableRecord convertRecord(
+      SinkRecord record,
+      String index,
+      String type,
+      boolean ignoreKey,
+      boolean ignoreSchema
+  ) {
     final String id;
     if (ignoreKey) {
-      id = record.topic() + "+" + String.valueOf((int) record.kafkaPartition()) + "+" + String.valueOf(record.kafkaOffset());
+      id = record.topic()
+           + "+" + String.valueOf((int) record.kafkaPartition())
+           + "+" + String.valueOf(record.kafkaOffset());
     } else {
       id = convertKey(record.keySchema(), record.key());
     }
@@ -102,16 +115,17 @@ public class DataConverter {
       value = record.value();
     }
 
-    final String payload = new String(JSON_CONVERTER.fromConnectData(record.topic(), schema, value), StandardCharsets.UTF_8);
+    byte[] rawJsonPayload = JSON_CONVERTER.fromConnectData(record.topic(), schema, value);
+    final String payload = new String(rawJsonPayload, StandardCharsets.UTF_8);
     final Long version = ignoreKey ? null : record.kafkaOffset();
     return new IndexableRecord(new Key(index, type, id), payload, version);
   }
 
   // We need to pre process the Kafka Connect schema before converting to JSON as Elasticsearch
-  // expects a different JSON format from the current JSON converter provides. Rather than completely
-  // rewrite a converter for Elasticsearch, we will refactor the JSON converter to support customized
-  // translation. The pre process is no longer needed once we have the JSON converter refactored.
-  // visible for testing
+  // expects a different JSON format from the current JSON converter provides. Rather than
+  // completely rewrite a converter for Elasticsearch, we will refactor the JSON converter to
+  // support customized translation. The pre process is no longer needed once we have the JSON
+  // converter refactored.
   Schema preProcessSchema(Schema schema) {
     if (schema == null) {
       return null;
@@ -126,39 +140,53 @@ public class DataConverter {
         case Time.LOGICAL_NAME:
         case Timestamp.LOGICAL_NAME:
           return schema;
+        default:
+          // User type or unknown logical type
+          break;
       }
     }
 
     Schema.Type schemaType = schema.type();
     switch (schemaType) {
-      case ARRAY: {
-        return copySchemaBasics(schema, SchemaBuilder.array(preProcessSchema(schema.valueSchema()))).build();
-      }
-      case MAP: {
-        Schema keySchema = schema.keySchema();
-        Schema valueSchema = schema.valueSchema();
-        String keyName = keySchema.name() == null ? keySchema.type().name() : keySchema.name();
-        String valueName = valueSchema.name() == null ? valueSchema.type().name() : valueSchema.name();
-        if (useCompactMapEntries && keySchema.type() == Schema.Type.STRING) {
-          return SchemaBuilder.map(preProcessSchema(keySchema), preProcessSchema(valueSchema)).build();
-        }
-        Schema elementSchema = SchemaBuilder.struct().name(keyName + "-" + valueName)
-             .field(MAP_KEY, preProcessSchema(keySchema))
-             .field(MAP_VALUE, preProcessSchema(valueSchema))
-             .build();
-        return copySchemaBasics(schema, SchemaBuilder.array(elementSchema)).build();
-      }
-      case STRUCT: {
-        SchemaBuilder structBuilder = copySchemaBasics(schema, SchemaBuilder.struct().name(schemaName));
-        for (Field field : schema.fields()) {
-          structBuilder.field(field.name(), preProcessSchema(field.schema()));
-        }
-        return structBuilder.build();
-      }
-      default: {
+      case ARRAY:
+        return preProcessArraySchema(schema);
+      case MAP:
+        return preProcessMapSchema(schema);
+      case STRUCT:
+        return preProcessStructSchema(schema);
+      default:
         return schema;
-      }
     }
+  }
+
+  private Schema preProcessArraySchema(Schema schema) {
+    Schema valSchema = preProcessSchema(schema.valueSchema());
+    return copySchemaBasics(schema, SchemaBuilder.array(valSchema)).build();
+  }
+
+  private Schema preProcessMapSchema(Schema schema) {
+    Schema keySchema = schema.keySchema();
+    Schema valueSchema = schema.valueSchema();
+    String keyName = keySchema.name() == null ? keySchema.type().name() : keySchema.name();
+    String valueName = valueSchema.name() == null ? valueSchema.type().name() : valueSchema.name();
+    Schema preprocessedKeySchema = preProcessSchema(keySchema);
+    Schema preprocessedValueSchema = preProcessSchema(valueSchema);
+    if (useCompactMapEntries && keySchema.type() == Schema.Type.STRING) {
+      return SchemaBuilder.map(preprocessedKeySchema, preprocessedValueSchema).build();
+    }
+    Schema elementSchema = SchemaBuilder.struct().name(keyName + "-" + valueName)
+        .field(MAP_KEY, preprocessedKeySchema)
+        .field(MAP_VALUE, preprocessedValueSchema)
+        .build();
+    return copySchemaBasics(schema, SchemaBuilder.array(elementSchema)).build();
+  }
+
+  private Schema preProcessStructSchema(Schema schema) {
+    SchemaBuilder builder = copySchemaBasics(schema, SchemaBuilder.struct().name(schema.name()));
+    for (Field field : schema.fields()) {
+      builder.field(field.name(), preProcessSchema(field.schema()));
+    }
+    return builder.build();
   }
 
   private SchemaBuilder copySchemaBasics(Schema source, SchemaBuilder target) {
@@ -166,80 +194,116 @@ public class DataConverter {
       target.optional();
     }
     if (source.defaultValue() != null && source.type() != Schema.Type.STRUCT) {
-      final Object preProcessedDefaultValue = preProcessValue(source.defaultValue(), source, target);
-      target.defaultValue(preProcessedDefaultValue);
+      final Object defaultVal = preProcessValue(source.defaultValue(), source, target);
+      target.defaultValue(defaultVal);
     }
     return target;
   }
 
   // visible for testing
   Object preProcessValue(Object value, Schema schema, Schema newSchema) {
+    // Handle missing schemas and acceptable null values
     if (schema == null) {
       return value;
     }
     if (value == null) {
-      if (schema.defaultValue() != null) {
-        return schema.defaultValue();
+      Object result = preProcessNullValue(schema);
+      if (result != null) {
+        return result;
       }
-      if (schema.isOptional()) {
-        return null;
-      }
-      throw new DataException("null value for field that is required and has no default value");
     }
 
     // Handle logical types
     String schemaName = schema.name();
     if (schemaName != null) {
-      switch (schemaName) {
-        case Decimal.LOGICAL_NAME:
-          return ((BigDecimal) value).doubleValue();
-        case Date.LOGICAL_NAME:
-        case Time.LOGICAL_NAME:
-        case Timestamp.LOGICAL_NAME:
-          return value;
+      Object result = preProcessLogicalValue(schemaName, value);
+      if (result != null) {
+        return result;
       }
     }
 
     Schema.Type schemaType = schema.type();
     switch (schemaType) {
       case ARRAY:
-        Collection collection = (Collection) value;
-        List<Object> result = new ArrayList<>();
-        for (Object element: collection) {
-          result.add(preProcessValue(element, schema.valueSchema(), newSchema.valueSchema()));
-        }
-        return result;
+        return preProcessArrayValue(value, schema, newSchema);
       case MAP:
-        Schema keySchema = schema.keySchema();
-        Schema valueSchema = schema.valueSchema();
-        Schema newValueSchema = newSchema.valueSchema();
-        Map<?, ?> map = (Map<?, ?>) value;
-        if (useCompactMapEntries && keySchema.type() == Schema.Type.STRING) {
-          Map<Object, Object> processedMap = new HashMap<>();
-          for (Map.Entry<?, ?> entry: map.entrySet()) {
-            processedMap.put(preProcessValue(entry.getKey(), keySchema, newSchema.keySchema()),
-                preProcessValue(entry.getValue(), valueSchema, newValueSchema));
-          }
-          return processedMap;
-        }
-        List<Struct> mapStructs = new ArrayList<>();
-        for (Map.Entry<?, ?> entry: map.entrySet()) {
-          Struct mapStruct = new Struct(newValueSchema);
-          mapStruct.put(MAP_KEY, preProcessValue(entry.getKey(), keySchema, newValueSchema.field(MAP_KEY).schema()));
-          mapStruct.put(MAP_VALUE, preProcessValue(entry.getValue(), valueSchema, newValueSchema.field(MAP_VALUE).schema()));
-          mapStructs.add(mapStruct);
-        }
-        return mapStructs;
+        return preProcessMapValue(value, schema, newSchema);
       case STRUCT:
-        Struct struct = (Struct) value;
-        Struct newStruct = new Struct(newSchema);
-        for (Field field : schema.fields()) {
-          Object converted =  preProcessValue(struct.get(field), field.schema(), newSchema.field(field.name()).schema());
-          newStruct.put(field.name(), converted);
-        }
-        return newStruct;
+        return preProcessStructValue(value, schema, newSchema);
       default:
         return value;
     }
+  }
+
+  private Object preProcessNullValue(Schema schema) {
+    if (schema.defaultValue() != null) {
+      return schema.defaultValue();
+    }
+    if (schema.isOptional()) {
+      return null;
+    }
+    throw new DataException("null value for field that is required and has no default value");
+  }
+
+  // @returns the decoded logical value or null if this isn't a known logical type
+  private Object preProcessLogicalValue(String schemaName, Object value) {
+    switch (schemaName) {
+      case Decimal.LOGICAL_NAME:
+        return ((BigDecimal) value).doubleValue();
+      case Date.LOGICAL_NAME:
+      case Time.LOGICAL_NAME:
+      case Timestamp.LOGICAL_NAME:
+        return value;
+      default:
+        // User-defined type or unknown built-in
+        return null;
+    }
+  }
+
+  private Object preProcessArrayValue(Object value, Schema schema, Schema newSchema) {
+    Collection collection = (Collection) value;
+    List<Object> result = new ArrayList<>();
+    for (Object element: collection) {
+      result.add(preProcessValue(element, schema.valueSchema(), newSchema.valueSchema()));
+    }
+    return result;
+  }
+
+  private Object preProcessMapValue(Object value, Schema schema, Schema newSchema) {
+    Schema keySchema = schema.keySchema();
+    Schema valueSchema = schema.valueSchema();
+    Schema newValueSchema = newSchema.valueSchema();
+    Map<?, ?> map = (Map<?, ?>) value;
+    if (useCompactMapEntries && keySchema.type() == Schema.Type.STRING) {
+      Map<Object, Object> processedMap = new HashMap<>();
+      for (Map.Entry<?, ?> entry: map.entrySet()) {
+        processedMap.put(
+            preProcessValue(entry.getKey(), keySchema, newSchema.keySchema()),
+            preProcessValue(entry.getValue(), valueSchema, newValueSchema)
+        );
+      }
+      return processedMap;
+    }
+    List<Struct> mapStructs = new ArrayList<>();
+    for (Map.Entry<?, ?> entry: map.entrySet()) {
+      Struct mapStruct = new Struct(newValueSchema);
+      Schema mapKeySchema = newValueSchema.field(MAP_KEY).schema();
+      Schema mapValueSchema = newValueSchema.field(MAP_VALUE).schema();
+      mapStruct.put(MAP_KEY, preProcessValue(entry.getKey(), keySchema, mapKeySchema));
+      mapStruct.put(MAP_VALUE, preProcessValue(entry.getValue(), valueSchema, mapValueSchema));
+      mapStructs.add(mapStruct);
+    }
+    return mapStructs;
+  }
+
+  private Object preProcessStructValue(Object value, Schema schema, Schema newSchema) {
+    Struct struct = (Struct) value;
+    Struct newStruct = new Struct(newSchema);
+    for (Field field : schema.fields()) {
+      Schema newFieldSchema = newSchema.field(field.name()).schema();
+      Object converted = preProcessValue(struct.get(field), field.schema(), newFieldSchema);
+      newStruct.put(field.name(), converted);
+    }
+    return newStruct;
   }
 }
