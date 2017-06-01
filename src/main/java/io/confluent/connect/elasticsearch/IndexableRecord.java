@@ -16,7 +16,9 @@
 
 package io.confluent.connect.elasticsearch;
 
+import io.searchbox.action.BulkableAction;
 import io.searchbox.core.Index;
+import io.searchbox.core.Delete;
 
 public class IndexableRecord {
 
@@ -30,6 +32,15 @@ public class IndexableRecord {
     this.payload = payload;
   }
 
+  public BulkableAction toBulkableAction() {
+    // Null payload is treated as a tombstone and will delete from the index.
+    if (this.payload == null) {
+      return this.toDeleteRequest();
+    } else {
+      return this.toIndexRequest();
+    }
+  }
+
   public Index toIndexRequest() {
     Index.Builder req = new Index.Builder(payload)
         .index(key.index)
@@ -38,6 +49,13 @@ public class IndexableRecord {
     if (version != null) {
       req.setParameter("version_type", "external").setParameter("version", version);
     }
+    return req.build();
+  }
+
+  public Delete toDeleteRequest() {
+    Delete.Builder req = new Delete.Builder(key.id)
+        .index(key.index)
+        .type(key.type);
     return req.build();
   }
 
