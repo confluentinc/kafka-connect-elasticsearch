@@ -56,6 +56,30 @@ public class ElasticsearchSinkTestBase extends ESIntegTestCase {
 
   protected JestHttpClient client;
 
+  private static class StubDocument {
+    private final String id;
+    private final String source;
+    private final Long version;
+
+    public StubDocument(String id, String source, Long version) {
+      this.id = id;
+      this.source = source;
+      this.version = version;
+    }
+
+    public String getId() {
+      return id;
+    }
+
+    public String getSource() {
+      return source;
+    }
+
+    public Long getVersion() {
+      return version;
+    }
+  }
+
   @Before
   public void setUp() throws Exception {
     super.setUp();
@@ -112,29 +136,42 @@ public class ElasticsearchSinkTestBase extends ESIntegTestCase {
   protected void verifySearchResults(Collection<SinkRecord> records, boolean ignoreKey, boolean ignoreSchema) throws IOException {
     verifySearchResults(records, TOPIC, ignoreKey, ignoreSchema);
   }
+  protected void verifySearchResults(Collection<?> records, String index, boolean ignoreKey, boolean ignoreSchema ) throws IOException {
+    verifySearchResults(records, index, ignoreKey, ignoreSchema, ElasticsearchSinkConnectorConfig.DocumentVersionSource.partition_offset);
 
-  protected void verifySearchResults(Collection<?> records, String index, boolean ignoreKey, boolean ignoreSchema) throws IOException {
-    final SearchResult result = client.execute(new Search.Builder("").addIndex(index).build());
+  }
+
+  protected void verifySearchResults(Collection<?> records,
+                                     String index,
+                                     boolean ignoreKey,
+                                     boolean ignoreSchema,
+                                     ElasticsearchSinkConnectorConfig.DocumentVersionSource versionSource) throws IOException {
+    final SearchResult result = client.execute(new Search.Builder("{ \"version\" : true }").setParameter("version", true).addIndex(index).build());
 
     final JsonArray rawHits = result.getJsonObject().getAsJsonObject("hits").getAsJsonArray("hits");
 
     assertEquals(records.size(), rawHits.size());
 
-    Map<String, String> hits = new HashMap<>();
+    Map<String, StubDocument> hits = new HashMap<>();
     for (int i = 0; i < rawHits.size(); ++i) {
       final JsonObject hitData = rawHits.get(i).getAsJsonObject();
       final String id = hitData.get("_id").getAsString();
+
       final String source = hitData.get("_source").getAsJsonObject().toString();
-      hits.put(id, source);
+      final Long version = hitData.get("_version").getAsLong();
+      hits.put(id, new StubDocument(id, source, version));
     }
 
     for (Object record : records) {
-      if (record instanceof SinkRecord) {
-        IndexableRecord indexableRecord = DataConverter.convertRecord((SinkRecord) record, index, TYPE, ignoreKey, ignoreSchema);
-        assertEquals(indexableRecord.payload, hits.get(indexableRecord.key.id));
-      } else {
-        assertEquals(record, hits.get("key"));
-      }
+       if (record instanceof SinkRecord) {
+         IndexableRecord indexableRecord = DataConverter.convertRecord((SinkRecord) record, index, TYPE, ignoreKey, ignoreSchema, versionSource);
+         assertEquals(indexableRecord.payload, hits.get(indexableRecord.key.id).getSource());
+         if (!ignoreKey) {
+           assertEquals(indexableRecord.version, hits.get(indexableRecord.key.id).getVersion());
+         }
+       } else {
+         assertEquals(record, hits.get("key").getSource());
+       }
     }
   }
 

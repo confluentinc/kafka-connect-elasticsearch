@@ -19,6 +19,7 @@ package io.confluent.connect.elasticsearch;
 import com.carrotsearch.randomizedtesting.annotations.ThreadLeakScope;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import org.apache.kafka.common.record.TimestampType;
 import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaBuilder;
@@ -98,7 +99,14 @@ public class ElasticsearchWriterTest extends ElasticsearchSinkTestBase {
     final String indexOverride = "index";
 
     Collection<SinkRecord> records = prepareData(2);
-    ElasticsearchWriter writer = initWriter(client, ignoreKey, Collections.<String>emptySet(), ignoreSchema, Collections.<String>emptySet(), Collections.singletonMap(TOPIC, indexOverride), false);
+    ElasticsearchWriter writer = initWriter(client,
+            ignoreKey,
+            Collections.<String>emptySet(),
+            ignoreSchema,
+            Collections.<String>emptySet(),
+            Collections.singletonMap(TOPIC, indexOverride),
+            false,
+            ElasticsearchSinkConnectorConfig.DocumentVersionSource.partition_offset);
     writeDataAndRefresh(writer, records);
     verifySearchResults(records, indexOverride, ignoreKey, ignoreSchema);
   }
@@ -185,6 +193,43 @@ public class ElasticsearchWriterTest extends ElasticsearchSinkTestBase {
   }
 
   @Test
+  public void testSafeRedeliveryRegularKeyWithRecordTimestampAsVersion() throws Exception {
+    final boolean ignoreKey = false;
+    final boolean ignoreSchema = false;
+
+    final Struct value0 = new Struct(schema);
+    value0.put("user", "foo");
+    value0.put("message", "hi");
+    final SinkRecord sinkRecordWithTs0 = new SinkRecord(TOPIC, PARTITION, Schema.STRING_SCHEMA, key, schema, value0, 1, 0l, TimestampType.LOG_APPEND_TIME );
+
+
+    final Struct value1 = new Struct(schema);
+    value1.put("user", "foo");
+    value1.put("message", "bye");
+    final SinkRecord sinkRecordWithTs1 = new SinkRecord(TOPIC, PARTITION, Schema.STRING_SCHEMA, key, schema, value1, 0,1l,TimestampType.LOG_APPEND_TIME);
+
+
+    final ElasticsearchWriter writer = initWriter(client,
+            ignoreKey,
+            ignoreSchema,
+            ElasticsearchSinkConnectorConfig.DocumentVersionSource.record_timestamp);
+    writer.write(Arrays.asList(sinkRecordWithTs0, sinkRecordWithTs1));
+    writer.flush();
+
+    // write the record with earlier offset again
+    writeDataAndRefresh(writer, Collections.singleton(sinkRecordWithTs0));
+
+    // last write should have been ignored due to version conflict
+    verifySearchResults(
+            Collections.singleton(sinkRecordWithTs1),
+            TOPIC,
+            ignoreKey,
+            ignoreSchema,
+            ElasticsearchSinkConnectorConfig.DocumentVersionSource.record_timestamp);
+
+  }
+
+  @Test
   public void testSafeRedeliveryOffsetInKey() throws Exception {
     final boolean ignoreKey = true;
     final boolean ignoreSchema = false;
@@ -209,7 +254,7 @@ public class ElasticsearchWriterTest extends ElasticsearchSinkTestBase {
     writeDataAndRefresh(writer, records);
 
     // last write should have been ignored due to version conflict
-    verifySearchResults(records, ignoreKey, ignoreSchema);
+    verifySearchResults(records, TOPIC, ignoreKey, ignoreSchema);
   }
 
   @Test
@@ -359,14 +404,59 @@ public class ElasticsearchWriterTest extends ElasticsearchSinkTestBase {
   }
 
   private ElasticsearchWriter initWriter(JestClient client, boolean ignoreKey, boolean ignoreSchema) {
-    return initWriter(client, ignoreKey, Collections.<String>emptySet(), ignoreSchema, Collections.<String>emptySet(), Collections.<String, String>emptyMap(), false);
+
+    return initWriter(
+            client,
+            ignoreKey,
+            Collections.<String>emptySet(),
+            ignoreSchema,
+            Collections.<String>emptySet(),
+            Collections.<String, String>emptyMap(),
+            false,
+            ElasticsearchSinkConnectorConfig.DocumentVersionSource.partition_offset);
   }
 
-  private ElasticsearchWriter initWriter(JestClient client, boolean ignoreKey, boolean ignoreSchema, boolean dropInvalidMessage) {
-    return initWriter(client, ignoreKey, Collections.<String>emptySet(), ignoreSchema, Collections.<String>emptySet(), Collections.<String, String>emptyMap(), dropInvalidMessage);
+  private ElasticsearchWriter initWriter(JestClient client,
+                                         boolean ignoreKey,
+                                         boolean ignoreSchema,
+                                         boolean dropInvalidMessage) {
+
+    return initWriter(
+            client,
+            ignoreKey,
+            Collections.<String>emptySet(),
+            ignoreSchema,
+            Collections.<String>emptySet(),
+            Collections.<String, String>emptyMap(),
+            dropInvalidMessage,
+            ElasticsearchSinkConnectorConfig.DocumentVersionSource.partition_offset);
   }
 
-  private ElasticsearchWriter initWriter(JestClient client, boolean ignoreKey, Set<String> ignoreKeyTopics, boolean ignoreSchema, Set<String> ignoreSchemaTopics, Map<String, String> topicToIndexMap, boolean dropInvalidMessage) {
+  private ElasticsearchWriter initWriter(JestClient client,
+                                         boolean ignoreKey,
+                                         boolean ignoreSchema,
+                                         ElasticsearchSinkConnectorConfig.DocumentVersionSource versionSource) {
+
+    return initWriter(
+            client,
+            ignoreKey,
+            Collections.<String>emptySet(),
+            ignoreSchema,
+            Collections.<String>emptySet(),
+            Collections.<String, String>emptyMap(),
+            false,
+            versionSource);
+  }
+
+  private ElasticsearchWriter initWriter(JestClient client,
+                                         boolean ignoreKey,
+                                         Set<String> ignoreKeyTopics,
+                                         boolean ignoreSchema,
+                                         Set<String> ignoreSchemaTopics,
+                                         Map<String, String> topicToIndexMap,
+                                         boolean dropInvalidMessage,
+                                         ElasticsearchSinkConnectorConfig.DocumentVersionSource versionSource) {
+
     ElasticsearchWriter writer = new ElasticsearchWriter.Builder(client)
         .setType(TYPE)
         .setIgnoreKey(ignoreKey, ignoreKeyTopics)
@@ -380,6 +470,7 @@ public class ElasticsearchWriterTest extends ElasticsearchSinkTestBase {
         .setRetryBackoffMs(1000)
         .setMaxRetry(3)
         .setDropInvalidMessage(dropInvalidMessage)
+        .setVersionSource(versionSource)
         .build();
     writer.start();
     writer.createIndicesForTopics(Collections.singleton(TOPIC));

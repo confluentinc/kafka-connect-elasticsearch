@@ -52,6 +52,7 @@ public class ElasticsearchWriter {
   private final boolean dropInvalidMessage;
 
   private final Set<String> existingMappings;
+  private final ElasticsearchSinkConnectorConfig.DocumentVersionSource versionSource;
 
   ElasticsearchWriter(
       JestClient client,
@@ -68,7 +69,8 @@ public class ElasticsearchWriter {
       long lingerMs,
       int maxRetries,
       long retryBackoffMs,
-      boolean dropInvalidMessage
+      boolean dropInvalidMessage,
+      ElasticsearchSinkConnectorConfig.DocumentVersionSource versionSource
   ) {
     this.client = client;
     this.type = type;
@@ -79,6 +81,7 @@ public class ElasticsearchWriter {
     this.topicToIndexMap = topicToIndexMap;
     this.flushTimeoutMs = flushTimeoutMs;
     this.dropInvalidMessage = dropInvalidMessage;
+    this.versionSource = versionSource;
 
     bulkProcessor = new BulkProcessor<>(
         new SystemTime(),
@@ -89,6 +92,7 @@ public class ElasticsearchWriter {
         lingerMs,
         maxRetries,
         retryBackoffMs
+
     );
 
     existingMappings = new HashSet<>();
@@ -110,6 +114,7 @@ public class ElasticsearchWriter {
     private int maxRetry;
     private long retryBackoffMs;
     private boolean dropInvalidMessage;
+    private ElasticsearchSinkConnectorConfig.DocumentVersionSource versionSource;
 
     public Builder(JestClient client) {
       this.client = client;
@@ -172,6 +177,11 @@ public class ElasticsearchWriter {
       return this;
     }
 
+    public Builder setVersionSource(ElasticsearchSinkConnectorConfig.DocumentVersionSource versionType) {
+      this.versionSource = versionType;
+      return this;
+    }
+
     public Builder setDropInvalidMessage(boolean dropInvalidMessage) {
       this.dropInvalidMessage = dropInvalidMessage;
       return this;
@@ -193,7 +203,8 @@ public class ElasticsearchWriter {
           lingerMs,
           maxRetry,
           retryBackoffMs,
-          dropInvalidMessage
+          dropInvalidMessage,
+          versionSource
       );
     }
   }
