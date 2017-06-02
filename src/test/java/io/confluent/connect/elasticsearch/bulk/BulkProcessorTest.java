@@ -167,7 +167,7 @@ public class BulkProcessorTest {
 
     assertFalse(client.expectationsMet());
 
-    final int flushTimeoutMs = 10;
+    final int flushTimeoutMs = 100;
     bulkProcessor.flush(flushTimeoutMs);
   }
 
