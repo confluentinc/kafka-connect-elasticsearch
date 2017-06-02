@@ -92,6 +92,8 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
       + TOPIC_SCHEMA_IGNORE_CONFIG + "`` to override as ``true`` for specific topics.";
   private static final String TOPIC_SCHEMA_IGNORE_DOC =
       "List of topics for which ``" + SCHEMA_IGNORE_CONFIG + "`` should be ``true``.";
+  public static final String DROP_INVALID_MESSAGE = "drop.invalid.message";
+
 
   protected static ConfigDef baseConfigDef() {
     final ConfigDef configDef = new ConfigDef();

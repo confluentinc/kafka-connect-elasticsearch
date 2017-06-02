@@ -64,6 +64,7 @@ public class ElasticsearchSinkTask extends SinkTask {
       boolean ignoreSchema =
           config.getBoolean(ElasticsearchSinkConnectorConfig.SCHEMA_IGNORE_CONFIG);
 
+
       Map<String, String> topicToIndexMap =
           parseMapConfig(config.getList(ElasticsearchSinkConnectorConfig.TOPIC_INDEX_MAP_CONFIG));
       Set<String> topicIgnoreKey =
@@ -86,6 +87,8 @@ public class ElasticsearchSinkTask extends SinkTask {
           config.getLong(ElasticsearchSinkConnectorConfig.RETRY_BACKOFF_MS_CONFIG);
       int maxRetry =
           config.getInt(ElasticsearchSinkConnectorConfig.MAX_RETRIES_CONFIG);
+      boolean dropInvalidMessage =
+          config.getBoolean(ElasticsearchSinkConnectorConfig.DROP_INVALID_MESSAGE);
 
       if (client != null) {
         this.client = client;
@@ -112,7 +115,8 @@ public class ElasticsearchSinkTask extends SinkTask {
           .setBatchSize(batchSize)
           .setLingerMs(lingerMs)
           .setRetryBackoffMs(retryBackoffMs)
-          .setMaxRetry(maxRetry);
+          .setMaxRetry(maxRetry)
+          .setDropInvalidMessage(dropInvalidMessage);
 
       writer = builder.build();
       writer.start();

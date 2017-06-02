@@ -49,6 +49,7 @@ public class ElasticsearchWriter {
   private final Map<String, String> topicToIndexMap;
   private final long flushTimeoutMs;
   private final BulkProcessor<IndexableRecord, ?> bulkProcessor;
+  private final boolean dropInvalidMessage;
 
   private final Set<String> existingMappings;
 
@@ -66,7 +67,8 @@ public class ElasticsearchWriter {
       int batchSize,
       long lingerMs,
       int maxRetries,
-      long retryBackoffMs
+      long retryBackoffMs,
+      boolean dropInvalidMessage
   ) {
     this.client = client;
     this.type = type;
@@ -76,6 +78,7 @@ public class ElasticsearchWriter {
     this.ignoreSchemaTopics = ignoreSchemaTopics;
     this.topicToIndexMap = topicToIndexMap;
     this.flushTimeoutMs = flushTimeoutMs;
+    this.dropInvalidMessage = dropInvalidMessage;
 
     bulkProcessor = new BulkProcessor<>(
         new SystemTime(),
@@ -106,6 +109,7 @@ public class ElasticsearchWriter {
     private long lingerMs;
     private int maxRetry;
     private long retryBackoffMs;
+    private boolean dropInvalidMessage;
 
     public Builder(JestClient client) {
       this.client = client;
@@ -168,6 +172,11 @@ public class ElasticsearchWriter {
       return this;
     }
 
+    public Builder setDropInvalidMessage(boolean dropInvalidMessage) {
+      this.dropInvalidMessage = dropInvalidMessage;
+      return this;
+    }
+
     public ElasticsearchWriter build() {
       return new ElasticsearchWriter(
           client,
@@ -183,7 +192,8 @@ public class ElasticsearchWriter {
           batchSize,
           lingerMs,
           maxRetry,
-          retryBackoffMs
+          retryBackoffMs,
+          dropInvalidMessage
       );
     }
   }
@@ -209,15 +219,26 @@ public class ElasticsearchWriter {
         existingMappings.add(index);
       }
 
-      final IndexableRecord indexableRecord = DataConverter.convertRecord(
-          sinkRecord,
-          index,
-          type,
-          ignoreKey,
-          ignoreSchema
-      );
+      IndexableRecord indexableRecord = null;
 
-      bulkProcessor.add(indexableRecord, flushTimeoutMs);
+      try {
+        indexableRecord = DataConverter.convertRecord(sinkRecord, index, type, ignoreKey, ignoreSchema);
+      } catch (ConnectException convertException) {
+        if (dropInvalidMessage) {
+          log.error("Can't convert record from topic {} with partition {} and offset {}. Error message: {}",
+                  sinkRecord.topic(),
+                  sinkRecord.kafkaPartition(),
+                  sinkRecord.kafkaOffset(),
+                  convertException.getMessage());
+        } else {
+          throw convertException;
+        }
+      }
+
+      if (indexableRecord != null) {
+        bulkProcessor.add(indexableRecord, flushTimeoutMs);
+      }
+
     }
   }
 
