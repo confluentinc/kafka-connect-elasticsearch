@@ -55,7 +55,7 @@ public class ElasticsearchSinkTask extends SinkTask {
   // public for testing
   public void start(Map<String, String> props, JestClient client) {
     try {
-      log.info("Starting ElasticsearchSinkTask.");
+      log.info("Starting Bridg ElasticsearchSinkTask with tombstone support.");
 
       ElasticsearchSinkConnectorConfig config = new ElasticsearchSinkConnectorConfig(props);
       String type = config.getString(ElasticsearchSinkConnectorConfig.TYPE_NAME_CONFIG);

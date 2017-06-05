@@ -96,7 +96,12 @@ public class DataConverter {
       value = record.value();
     }
 
-    final String payload = new String(JSON_CONVERTER.fromConnectData(record.topic(), schema, value), StandardCharsets.UTF_8);
+    // Handle null values as tombstones. Cannot convert as JSON here.
+    String payload = null;
+    if (value != null) {
+      payload = new String(JSON_CONVERTER.fromConnectData(record.topic(), schema, value), StandardCharsets.UTF_8);
+    }
+
     final Long version = ignoreKey ? null : record.kafkaOffset();
     return new IndexableRecord(new Key(index, type, id), payload, version);
   }
