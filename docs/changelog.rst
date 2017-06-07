@@ -3,6 +3,11 @@
 Changelog
 =========
 
+Version 3.2.2
+-------------
+
+* `PR-89 <https://github.com/confluentinc/kafka-connect-elasticsearch/pull/89>`_ - Increase flush timeout in BulkProcessorTest to make the test more reliable when the test server has other CPU load.
+
 Version 3.2.1
 -------------
 
