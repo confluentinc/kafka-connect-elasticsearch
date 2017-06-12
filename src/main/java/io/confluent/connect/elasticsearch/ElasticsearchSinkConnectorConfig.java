@@ -27,6 +27,8 @@ import java.util.Map;
 public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
 
   public static final String CONNECTION_URL_CONFIG = "connection.url";
+  public static final String CONNECTION_USERNAME = "connection.username";
+  public static final String CONNECTION_PASSWORD = "connection.password";
   public static final String BATCH_SIZE_CONFIG = "batch.size";
   public static final String MAX_IN_FLIGHT_REQUESTS_CONFIG = "max.in.flight.requests";
   public static final String MAX_BUFFERED_RECORDS_CONFIG = "max.buffered.records";
@@ -51,6 +53,12 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
           .define(CONNECTION_URL_CONFIG, Type.LIST, Importance.HIGH,
                   "List of Elasticsearch HTTP connection URLs e.g. ``http://eshost1:9200,http://eshost2:9200``.",
                   group, ++order, Width.LONG, "Connection URLs")
+          .define(CONNECTION_USERNAME, Type.STRING, null, Importance.LOW,
+                  "The username to use for HTTP Basic Authentication.",
+                  group, ++order, Width.MEDIUM, "Connection Username")
+          .define(CONNECTION_PASSWORD, Type.PASSWORD, null, Importance.LOW,
+                  "The password to use for HTTP Basic Authentication.",
+                  group, ++order, Width.MEDIUM, "Connection Password")
           .define(BATCH_SIZE_CONFIG, Type.INT, 2000, Importance.MEDIUM,
                   "The number of records to process as a batch when writing to Elasticsearch.",
                   group, ++order, Width.SHORT, "Batch Size")
