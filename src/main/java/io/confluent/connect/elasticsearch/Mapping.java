@@ -54,23 +54,29 @@ public class Mapping {
    * @param index The index to write to Elasticsearch.
    * @param type The type to create mapping for.
    * @param schema The schema used to infer mapping.
-   * @throws IOException
+   * @throws IOException from underlying JestClient
    */
-  public static void createMapping(JestClient client, String index, String type, Schema schema) throws IOException {
+  public static void createMapping(JestClient client, String index, String type, Schema schema)
+      throws IOException {
     ObjectNode obj = JsonNodeFactory.instance.objectNode();
     obj.set(type, inferMapping(schema));
     PutMapping putMapping = new PutMapping.Builder(index, type, obj.toString()).build();
     JestResult result = client.execute(putMapping);
     if (!result.isSucceeded()) {
-      throw new ConnectException("Cannot create mapping " + obj + " -- " + result.getErrorMessage());
+      throw new ConnectException(
+          "Cannot create mapping " + obj + " -- " + result.getErrorMessage()
+      );
     }
   }
 
   /**
    * Get the JSON mapping for given index and type. Returns {@code null} if it does not exist.
    */
-  public static JsonObject getMapping(JestClient client, String index, String type) throws IOException {
-    final JestResult result = client.execute(new GetMapping.Builder().addIndex(index).addType(type).build());
+  public static JsonObject getMapping(JestClient client, String index, String type)
+      throws IOException {
+    final JestResult result = client.execute(
+        new GetMapping.Builder().addIndex(index).addType(type).build()
+    );
     final JsonObject indexRoot = result.getJsonObject().getAsJsonObject(index);
     if (indexRoot == null) {
       return null;
@@ -92,45 +98,51 @@ public class Mapping {
     }
 
     // Handle logical types
-    String schemaName = schema.name();
-    Object defaultValue = schema.defaultValue();
-    if (schemaName != null) {
-      switch (schemaName) {
-        case Date.LOGICAL_NAME:
-        case Time.LOGICAL_NAME:
-        case Timestamp.LOGICAL_NAME:
-          return inferPrimitive(ElasticsearchSinkConnectorConstants.DATE_TYPE, defaultValue);
-        case Decimal.LOGICAL_NAME:
-          return inferPrimitive(ElasticsearchSinkConnectorConstants.DOUBLE_TYPE, defaultValue);
-      }
+    JsonNode logicalConversion = inferLogicalMapping(schema);
+    if (logicalConversion != null) {
+      return logicalConversion;
     }
 
-    Schema keySchema;
-    Schema valueSchema;
     Schema.Type schemaType = schema.type();
     ObjectNode properties = JsonNodeFactory.instance.objectNode();
     ObjectNode fields = JsonNodeFactory.instance.objectNode();
     switch (schemaType) {
       case ARRAY:
-        valueSchema = schema.valueSchema();
-        return inferMapping(valueSchema);
+        return inferMapping(schema.valueSchema());
       case MAP:
-        keySchema = schema.keySchema();
-        valueSchema = schema.valueSchema();
         properties.set("properties", fields);
-        fields.set(MAP_KEY, inferMapping(keySchema));
-        fields.set(MAP_VALUE, inferMapping(valueSchema));
+        fields.set(MAP_KEY, inferMapping(schema.keySchema()));
+        fields.set(MAP_VALUE, inferMapping(schema.valueSchema()));
         return properties;
       case STRUCT:
         properties.set("properties", fields);
         for (Field field : schema.fields()) {
-          String fieldName = field.name();
-          Schema fieldSchema = field.schema();
-          fields.set(fieldName, inferMapping(fieldSchema));
+          fields.set(field.name(), inferMapping(field.schema()));
         }
         return properties;
       default:
-        return inferPrimitive(ElasticsearchSinkConnectorConstants.TYPES.get(schemaType), defaultValue);
+        String esType = ElasticsearchSinkConnectorConstants.TYPES.get(schemaType);
+        return inferPrimitive(esType, schema.defaultValue());
+    }
+  }
+
+  private static JsonNode inferLogicalMapping(Schema schema) {
+    String schemaName = schema.name();
+    Object defaultValue = schema.defaultValue();
+    if (schemaName == null) {
+      return null;
+    }
+
+    switch (schemaName) {
+      case Date.LOGICAL_NAME:
+      case Time.LOGICAL_NAME:
+      case Timestamp.LOGICAL_NAME:
+        return inferPrimitive(ElasticsearchSinkConnectorConstants.DATE_TYPE, defaultValue);
+      case Decimal.LOGICAL_NAME:
+        return inferPrimitive(ElasticsearchSinkConnectorConstants.DOUBLE_TYPE, defaultValue);
+      default:
+        // User-defined type or unknown built-in
+        return null;
     }
   }
 

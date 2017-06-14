@@ -193,7 +193,8 @@ public class ElasticsearchWriter {
       final String indexOverride = topicToIndexMap.get(sinkRecord.topic());
       final String index = indexOverride != null ? indexOverride : sinkRecord.topic();
       final boolean ignoreKey = ignoreKeyTopics.contains(sinkRecord.topic()) || this.ignoreKey;
-      final boolean ignoreSchema = ignoreSchemaTopics.contains(sinkRecord.topic()) || this.ignoreSchema;
+      final boolean ignoreSchema =
+          ignoreSchemaTopics.contains(sinkRecord.topic()) || this.ignoreSchema;
 
       if (!ignoreSchema && !existingMappings.contains(index)) {
         try {
@@ -201,13 +202,20 @@ public class ElasticsearchWriter {
             Mapping.createMapping(client, index, type, sinkRecord.valueSchema());
           }
         } catch (IOException e) {
-          // FIXME: concurrent tasks could attempt to create the mapping and one of the requests may fail
+          // FIXME: concurrent tasks could attempt to create the mapping and one of the requests may
+          // fail
           throw new ConnectException("Failed to initialize mapping for index: " + index, e);
         }
         existingMappings.add(index);
       }
 
-      final IndexableRecord indexableRecord = DataConverter.convertRecord(sinkRecord, index, type, ignoreKey, ignoreSchema);
+      final IndexableRecord indexableRecord = DataConverter.convertRecord(
+          sinkRecord,
+          index,
+          type,
+          ignoreKey,
+          ignoreSchema
+      );
 
       bulkProcessor.add(indexableRecord, flushTimeoutMs);
     }
