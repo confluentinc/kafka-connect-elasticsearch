@@ -36,7 +36,7 @@ public class ElasticsearchSinkConnectorConstants {
   public static final String STRING_TYPE = "string";
   public static final String DATE_TYPE = "date";
 
-  public static final Map<Type, String> TYPES = new HashMap<>();
+  static final Map<Type, String> TYPES = new HashMap<>();
 
   static {
     TYPES.put(Type.BOOLEAN, BOOLEAN_TYPE);
