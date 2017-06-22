@@ -3,6 +3,12 @@
 Changelog
 =========
 
+Version 3.3.0
+-------------
+
+* `PR-69 <https://github.com/confluentinc/kafka-connect-elasticsearch/pull/69>`_ - Fix map output for String keyed maps.
+* `PR-83 <https://github.com/confluentinc/kafka-connect-elasticsearch/pull/83>`_ - ST-336: Move slf4j-simple into test scope so it is not pulled into the packaged version.
+
 Version 3.2.2
 -------------
 
