@@ -88,7 +88,7 @@ public class ElasticsearchSinkTask extends SinkTask {
       int maxRetry =
           config.getInt(ElasticsearchSinkConnectorConfig.MAX_RETRIES_CONFIG);
       boolean dropInvalidMessage =
-          config.getBoolean(ElasticsearchSinkConnectorConfig.DROP_INVALID_MESSAGE);
+          config.getBoolean(ElasticsearchSinkConnectorConfig.DROP_INVALID_MESSAGE_CONFIG);
 
       if (client != null) {
         this.client = client;
