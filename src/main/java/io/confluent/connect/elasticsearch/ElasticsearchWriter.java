@@ -219,27 +219,47 @@ public class ElasticsearchWriter {
         existingMappings.add(index);
       }
 
-      IndexableRecord indexableRecord = null;
-
-      try {
-        indexableRecord = DataConverter.convertRecord(sinkRecord, index, type, ignoreKey, ignoreSchema);
-      } catch (ConnectException convertException) {
-        if (dropInvalidMessage) {
-          log.error("Can't convert record from topic {} with partition {} and offset {}. Error message: {}",
-                  sinkRecord.topic(),
-                  sinkRecord.kafkaPartition(),
-                  sinkRecord.kafkaOffset(),
-                  convertException.getMessage());
-        } else {
-          throw convertException;
-        }
-      }
+      final IndexableRecord indexableRecord = tryGetIndexableRecord(
+              sinkRecord,
+              index,
+              ignoreKey,
+              ignoreSchema);
 
       if (indexableRecord != null) {
         bulkProcessor.add(indexableRecord, flushTimeoutMs);
       }
 
     }
+  }
+
+  private IndexableRecord tryGetIndexableRecord(
+          SinkRecord sinkRecord,
+          String index,
+          boolean ignoreKey,
+          boolean ignoreSchema) {
+
+    IndexableRecord indexableRecord = null;
+
+    try {
+      indexableRecord = DataConverter.convertRecord(
+              sinkRecord,
+              index,
+              type,
+              ignoreKey,
+              ignoreSchema);
+    } catch (ConnectException convertException) {
+      if (dropInvalidMessage) {
+        log.error("Can't convert record from topic {} with partition {} and offset {}."
+                   + " Error message: {}",
+                  sinkRecord.topic(),
+                  sinkRecord.kafkaPartition(),
+                  sinkRecord.kafkaOffset(),
+                  convertException.getMessage());
+      } else {
+        throw convertException;
+      }
+    }
+    return indexableRecord;
   }
 
   public void flush() {
