@@ -203,8 +203,7 @@ public class ElasticsearchWriter {
       final String indexOverride = topicToIndexMap.get(sinkRecord.topic());
       final String index = indexOverride != null ? indexOverride : sinkRecord.topic();
       final boolean ignoreKey = ignoreKeyTopics.contains(sinkRecord.topic()) || this.ignoreKey;
-      final boolean ignoreSchema =
-          ignoreSchemaTopics.contains(sinkRecord.topic()) || this.ignoreSchema;
+      final boolean ignoreSchema = ignoreSchemaTopics.contains(sinkRecord.topic()) || this.ignoreSchema;
 
       if (!ignoreSchema && !existingMappings.contains(index)) {
         try {
@@ -212,8 +211,7 @@ public class ElasticsearchWriter {
             Mapping.createMapping(client, index, type, sinkRecord.valueSchema());
           }
         } catch (IOException e) {
-          // FIXME: concurrent tasks could attempt to create the mapping and one of the requests may
-          // fail
+          // FIXME: concurrent tasks could attempt to create the mapping and one of the requests may fail
           throw new ConnectException("Failed to initialize mapping for index: " + index, e);
         }
         existingMappings.add(index);
@@ -227,7 +225,23 @@ public class ElasticsearchWriter {
           ignoreSchema
       );
 
-      bulkProcessor.add(indexableRecord, flushTimeoutMs);
+      // In the event that the sink record's value was null and the data converter has been told to
+      // ignore null values, the returned record will be null.
+      // TODO: If necessary, move the check for null-valued records to the top of the for-loop to
+      //       avoid potential performance penalties. Leaving the check here since it relegates all
+      //       three kinds of null-record-handling behavior to the DataConverter class.
+      if (indexableRecord != null) {
+        bulkProcessor.add(indexableRecord, flushTimeoutMs);
+      } else {
+        log.debug(
+            "Ignoring sink record with key of {} and null value for topic/partition/offset "
+                + "{}/{}/{}",
+            sinkRecord.key(),
+            sinkRecord.topic(),
+            sinkRecord.kafkaPartition(),
+            sinkRecord.kafkaOffset()
+        );
+      }
     }
   }
 
