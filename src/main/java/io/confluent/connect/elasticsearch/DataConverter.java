@@ -102,7 +102,7 @@ public class DataConverter {
       id = DataConverter.convertKey(record.keySchema(), record.key());
     }
     if (versionSource == null) {
-      throw new IllegalArgumentException("Document must not be null");
+      throw new IllegalArgumentException("Document version source must not be null");
     }
 
     final Schema schema;
