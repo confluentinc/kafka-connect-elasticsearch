@@ -74,13 +74,16 @@ public class ElasticsearchSinkTask extends SinkTask {
       Set<String> topicIgnoreSchema = new HashSet<>(
           config.getList(ElasticsearchSinkConnectorConfig.TOPIC_SCHEMA_IGNORE_CONFIG)
       );
-      ElasticsearchSinkConnectorConfig.DocumentVersionSource versionSource = null;
+      DocumentVersionSource versionSource = null;
       try {
-        versionSource = ElasticsearchSinkConnectorConfig.DocumentVersionSource.valueOf(
-                config.getString(ElasticsearchSinkConnectorConfig.DOCUMENT_VERSION_SOURCE_CONFIG).toLowerCase());
+        versionSource = DocumentVersionSource.valueOf(config
+                        .getString(ElasticsearchSinkConnectorConfig.DOCUMENT_VERSION_SOURCE_CONFIG)
+                        .toLowerCase());
       } catch (IllegalArgumentException e) {
-           throw new IllegalArgumentException("Version may have one of the following values: " +
-                StringUtils.join(Arrays.asList(ElasticsearchSinkConnectorConfig.DocumentVersionSource.values()), ","));
+        throw new IllegalArgumentException("Version may have one of the following values: "
+                + StringUtils.join(
+                        Arrays.asList(DocumentVersionSource.values()),
+                        ","));
       }
 
       long flushTimeoutMs =

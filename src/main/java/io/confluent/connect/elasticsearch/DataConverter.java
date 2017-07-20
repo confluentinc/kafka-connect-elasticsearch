@@ -90,7 +90,7 @@ public class DataConverter {
       String type,
       boolean ignoreKey,
       boolean ignoreSchema,
-      ElasticsearchSinkConnectorConfig.DocumentVersionSource versionSource
+      DocumentVersionSource versionSource
   ) {
 
     final String id;
@@ -121,7 +121,9 @@ public class DataConverter {
     return new IndexableRecord(new Key(index, type, id), payload, version);
   }
 
-  private static Long getVersion(SinkRecord sinkRecord, ElasticsearchSinkConnectorConfig.DocumentVersionSource versionSource) {
+  private static Long getVersion(
+          SinkRecord sinkRecord,
+          DocumentVersionSource versionSource) {
 
     switch (versionSource) {
       case ignore:
@@ -130,7 +132,10 @@ public class DataConverter {
         return sinkRecord.kafkaOffset();
       case record_timestamp:
         if (sinkRecord.timestampType() == TimestampType.NO_TIMESTAMP_TYPE) {
-          throw new ConnectException("Kafka records must contain `timestamp` if ``" + ElasticsearchSinkConnectorConfig.DOCUMENT_VERSION_SOURCE_CONFIG + "=" + versionSource.name() + "`` set in connector config");
+          throw new ConnectException(
+                  "Kafka records must contain `timestamp` if ``"
+                  + ElasticsearchSinkConnectorConfig.DOCUMENT_VERSION_SOURCE_CONFIG
+                  + "set to ``" + versionSource.name() + "``in connector config");
         }
         return sinkRecord.timestamp();
       default:

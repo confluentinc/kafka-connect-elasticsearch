@@ -52,7 +52,8 @@ public class ElasticsearchWriter {
   private final boolean dropInvalidMessage;
 
   private final Set<String> existingMappings;
-  private final ElasticsearchSinkConnectorConfig.DocumentVersionSource versionSource;
+  private final DocumentVersionSource versionSource;
+
 
   ElasticsearchWriter(
       JestClient client,
@@ -70,7 +71,7 @@ public class ElasticsearchWriter {
       int maxRetries,
       long retryBackoffMs,
       boolean dropInvalidMessage,
-      ElasticsearchSinkConnectorConfig.DocumentVersionSource versionSource
+      DocumentVersionSource versionSource
   ) {
     this.client = client;
     this.type = type;
@@ -114,7 +115,7 @@ public class ElasticsearchWriter {
     private int maxRetry;
     private long retryBackoffMs;
     private boolean dropInvalidMessage;
-    private ElasticsearchSinkConnectorConfig.DocumentVersionSource versionSource;
+    private DocumentVersionSource versionSource;
 
     public Builder(JestClient client) {
       this.client = client;
@@ -177,7 +178,7 @@ public class ElasticsearchWriter {
       return this;
     }
 
-    public Builder setVersionSource(ElasticsearchSinkConnectorConfig.DocumentVersionSource versionType) {
+    public Builder setVersionSource(DocumentVersionSource versionType) {
       this.versionSource = versionType;
       return this;
     }
@@ -257,7 +258,8 @@ public class ElasticsearchWriter {
               index,
               type,
               ignoreKey,
-              ignoreSchema);
+              ignoreSchema,
+              versionSource);
     } catch (ConnectException convertException) {
       if (dropInvalidMessage) {
         log.error("Can't convert record from topic {} with partition {} and offset {}."

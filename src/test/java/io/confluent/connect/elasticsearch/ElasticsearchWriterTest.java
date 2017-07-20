@@ -106,7 +106,7 @@ public class ElasticsearchWriterTest extends ElasticsearchSinkTestBase {
             Collections.<String>emptySet(),
             Collections.singletonMap(TOPIC, indexOverride),
             false,
-            ElasticsearchSinkConnectorConfig.DocumentVersionSource.partition_offset);
+            DocumentVersionSource.partition_offset);
     writeDataAndRefresh(writer, records);
     verifySearchResults(records, indexOverride, ignoreKey, ignoreSchema);
   }
@@ -212,7 +212,7 @@ public class ElasticsearchWriterTest extends ElasticsearchSinkTestBase {
     final ElasticsearchWriter writer = initWriter(client,
             ignoreKey,
             ignoreSchema,
-            ElasticsearchSinkConnectorConfig.DocumentVersionSource.record_timestamp);
+            DocumentVersionSource.record_timestamp);
     writer.write(Arrays.asList(sinkRecordWithTs0, sinkRecordWithTs1));
     writer.flush();
 
@@ -225,7 +225,7 @@ public class ElasticsearchWriterTest extends ElasticsearchSinkTestBase {
             TOPIC,
             ignoreKey,
             ignoreSchema,
-            ElasticsearchSinkConnectorConfig.DocumentVersionSource.record_timestamp);
+            DocumentVersionSource.record_timestamp);
 
   }
 
@@ -413,7 +413,7 @@ public class ElasticsearchWriterTest extends ElasticsearchSinkTestBase {
             Collections.<String>emptySet(),
             Collections.<String, String>emptyMap(),
             false,
-            ElasticsearchSinkConnectorConfig.DocumentVersionSource.partition_offset);
+            DocumentVersionSource.partition_offset);
   }
 
   private ElasticsearchWriter initWriter(JestClient client,
@@ -429,13 +429,13 @@ public class ElasticsearchWriterTest extends ElasticsearchSinkTestBase {
             Collections.<String>emptySet(),
             Collections.<String, String>emptyMap(),
             dropInvalidMessage,
-            ElasticsearchSinkConnectorConfig.DocumentVersionSource.partition_offset);
+            DocumentVersionSource.partition_offset);
   }
 
   private ElasticsearchWriter initWriter(JestClient client,
                                          boolean ignoreKey,
                                          boolean ignoreSchema,
-                                         ElasticsearchSinkConnectorConfig.DocumentVersionSource versionSource) {
+                                         DocumentVersionSource versionSource) {
 
     return initWriter(
             client,
@@ -455,7 +455,7 @@ public class ElasticsearchWriterTest extends ElasticsearchSinkTestBase {
                                          Set<String> ignoreSchemaTopics,
                                          Map<String, String> topicToIndexMap,
                                          boolean dropInvalidMessage,
-                                         ElasticsearchSinkConnectorConfig.DocumentVersionSource versionSource) {
+                                         DocumentVersionSource versionSource) {
 
     ElasticsearchWriter writer = new ElasticsearchWriter.Builder(client)
         .setType(TYPE)

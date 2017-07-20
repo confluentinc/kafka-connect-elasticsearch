@@ -137,7 +137,7 @@ public class ElasticsearchSinkTestBase extends ESIntegTestCase {
     verifySearchResults(records, TOPIC, ignoreKey, ignoreSchema);
   }
   protected void verifySearchResults(Collection<?> records, String index, boolean ignoreKey, boolean ignoreSchema ) throws IOException {
-    verifySearchResults(records, index, ignoreKey, ignoreSchema, ElasticsearchSinkConnectorConfig.DocumentVersionSource.partition_offset);
+    verifySearchResults(records, index, ignoreKey, ignoreSchema, DocumentVersionSource.partition_offset);
 
   }
 
@@ -145,7 +145,7 @@ public class ElasticsearchSinkTestBase extends ESIntegTestCase {
                                      String index,
                                      boolean ignoreKey,
                                      boolean ignoreSchema,
-                                     ElasticsearchSinkConnectorConfig.DocumentVersionSource versionSource) throws IOException {
+                                     DocumentVersionSource versionSource) throws IOException {
     final SearchResult result = client.execute(new Search.Builder("{ \"version\" : true }").setParameter("version", true).addIndex(index).build());
 
     final JsonArray rawHits = result.getJsonObject().getAsJsonObject("hits").getAsJsonArray("hits");
