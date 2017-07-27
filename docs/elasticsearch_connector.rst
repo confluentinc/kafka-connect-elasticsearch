@@ -52,10 +52,6 @@ Every service will start in order, printing a message with its status:
     Starting connect
     connect is [UP]
 
-This Quickstart assumes that you started the required services with the default configurations.
-If you are not using the default settings, you should adjust the subsequent commands to account for
-different hostnames and ports.
-
 Next, start the Avro console producer to import a few records to Kafka:
 
 .. sourcecode:: bash
