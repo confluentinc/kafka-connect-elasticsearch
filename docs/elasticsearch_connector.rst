@@ -96,12 +96,6 @@ Then start the Elasticsearch connector by loading its configuration with the fol
      "tasks": []
    }
 
-.. tip::
-
-   This is equivalent to running::
-
-   $ confluent load elasticsearch-sink -d etc/kafka-connect-elasticsearch/quickstart-elasticsearch.properties
-
 To check that the connector started successfully view the Connect worker's log by running:
 
 .. sourcecode:: bash
