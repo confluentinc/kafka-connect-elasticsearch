@@ -27,42 +27,96 @@ Quickstart
 In this Quickstart, we use the Elasticsearch connector to export data produced by the Avro console
 producer to Elasticsearch.
 
-Start Zookeeper, Kafka and Schema Registry if you haven't done so. You also need to have
-Elasticsearch running locally or remotely and make sure that you know the address to connect to
-Elasticsearch.
+First, start all the necessary services using Confluent CLI:
 
-.. ifconfig:: platform_docs
+.. tip::
 
-   The instructions on how to start these services are available at the
-   :ref:`Confluent Platform quickstart<quickstart>`.
+   If not already in your PATH, add Confluent's ``bin`` directory by running: ``export PATH=<path-to-confluent>/bin:$PATH``
+
+.. sourcecode:: bash
+
+   $ confluent start
+
+Every service will start in order, printing a message with its status:
+
+.. sourcecode:: bash
+
+    Starting zookeeper
+    zookeeper is [UP]
+    Starting kafka
+    kafka is [UP]
+    Starting schema-registry
+    schema-registry is [UP]
+    Starting kafka-rest
+    kafka-rest is [UP]
+    Starting connect
+    connect is [UP]
 
 This Quickstart assumes that you started the required services with the default configurations.
 If you are not using the default settings, you should adjust the subsequent commands to account for
 different hostnames and ports.
 
-First, start the Avro console producer::
+Next, start the Avro console producer to import a few records to Kafka:
+
+.. sourcecode:: bash
 
   $ ./bin/kafka-avro-console-producer --broker-list localhost:9092 --topic test-elasticsearch-sink \
   --property value.schema='{"type":"record","name":"myrecord","fields":[{"name":"f1","type":"string"}]}'
 
-Then in the console producer, type in::
+Then in the console producer, type in:
+
+.. sourcecode:: bash
 
   {"f1": "value1"}
-
+  {"f1": "value2"}
+  {"f1": "value3"}
 
 The three records entered are published to the Kafka topic ``test-elasticsearch`` in Avro format.
 
 Before starting the connector, please make sure that the configurations in
 ``etc/kafka-connect-elasticsearch/quickstart-elasticsearch.properties`` are properly set to your
 configurations of Elasticsearch, e.g. ``connection.url`` points to the correct http address.
-Then run the following command to start Kafka Connect with the Elasticsearch connector::
+Then start the Elasticsearch connector by loading its configuration with the following command:
+
+.. sourcecode:: bash
 
   $ ./bin/connect-standalone etc/schema-registry/connect-avro-standalone.properties \
   etc/kafka-connect-elasticsearch/quickstart-elasticsearch.properties
 
-You should see that the process starts up and logs some messages, and then exports data from Kafka
-to Elasticsearch. Once the connector finishes ingesting data to Elasticsearch, check that the data
-is available in Elasticsearch::
+.. sourcecode:: bash
+
+   $ confluent load elasticsearch-sink
+   {
+     "name": "elasticsearch-sink",
+     "config": {
+       "connector.class": "io.confluent.connect.elasticsearch.ElasticsearchSinkConnector",
+       "tasks.max": "1",
+       "topics": "test-elasticsearch-sink",
+       "key.ignore": "true",
+       "connection.url": "http://localhost:9200",
+       "type.name": "kafka-connect",
+       "name": "elasticsearch-sink"
+     },
+     "tasks": []
+   }
+
+.. tip::
+
+   This is equivalent to running::
+
+   $ confluent load elasticsearch-sink -d etc/kafka-connect-elasticsearch/quickstart-elasticsearch.properties
+
+To check that the connector started successfully view the Connect worker's log by running:
+
+.. sourcecode:: bash
+
+  $ confluent log connect
+
+Towards the end of the log you should see that the connector starts, logs a few messages, and then exports
+data from Kafka to Elasticsearch.
+Once the connector finishes ingesting data to Elasticsearch, check that the data is available in Elasticsearch:
+
+.. sourcecode:: bash
 
   $ curl -XGET 'http://localhost:9200/test-elasticsearch-sink/_search?pretty'
   {
@@ -87,6 +141,39 @@ is available in Elasticsearch::
      }]
    }
   }
+
+Finally, stop the Connect worker as well as all the rest of the Confluent services by running:
+
+.. sourcecode:: bash
+
+      $ confluent stop
+      Stopping connect
+      connect is [DOWN]
+      Stopping kafka-rest
+      kafka-rest is [DOWN]
+      Stopping schema-registry
+      schema-registry is [DOWN]
+      Stopping kafka
+      kafka is [DOWN]
+      Stopping zookeeper
+      zookeeper is [DOWN]
+
+or stop all the services and additionally wipe out any data generated during this quickstart by running:
+
+.. sourcecode:: bash
+
+      $ confluent destroy
+      Stopping connect
+      connect is [DOWN]
+      Stopping kafka-rest
+      kafka-rest is [DOWN]
+      Stopping schema-registry
+      schema-registry is [DOWN]
+      Stopping kafka
+      kafka is [DOWN]
+      Stopping zookeeper
+      zookeeper is [DOWN]
+      Deleting: /tmp/confluent.w1CpYsaI
 
 Features
 --------
