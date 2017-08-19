@@ -43,7 +43,7 @@
         <lucene.version>5.5.2</lucene.version>
         <jna.version>4.2.1</jna.version>
         <hamcrest.version>2.0.0.0</hamcrest.version>
-        <jest.version>2.0.0</jest.version>
+        <jest.version>5.3.2</jest.version>
         <confluent.maven.repo>http://packages.confluent.io/maven/</confluent.maven.repo>
     </properties>
 

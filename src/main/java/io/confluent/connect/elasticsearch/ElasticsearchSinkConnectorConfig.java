@@ -27,6 +27,14 @@ import java.util.Map;
 public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
 
   public static final String CONNECTION_URL_CONFIG = "connection.url";
+
+  public static final String CONNECTION_USERNAME_CONFIG = "connection.username";
+  public static final String CONNECTION_USERNAME_DOC =
+      "HTTP Basic Auth username (towards Elasticsearch)";
+  public static final String CONNECTION_PASSWORD_CONFIG = "connection.password";
+  public static final String CONNECTION_PASSWORD_DOC =
+      "HTTP Basic Auth password (towards Elasticsearch)";
+
   private static final String CONNECTION_URL_DOC =
       "List of Elasticsearch HTTP connection URLs e.g. ``http://eshost1:9200,"
       + "http://eshost2:9200``.";
@@ -117,6 +125,26 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
         ++order,
         Width.LONG,
         "Connection URLs"
+    ).define(
+        CONNECTION_USERNAME_CONFIG,
+        Type.STRING,
+        null,
+        Importance.MEDIUM,
+        CONNECTION_USERNAME_DOC,
+        group,
+        ++order,
+        Width.MEDIUM,
+        "ES User Name"
+    ).define(
+        CONNECTION_PASSWORD_CONFIG,
+        Type.STRING,
+        null,
+        Importance.MEDIUM,
+        CONNECTION_PASSWORD_DOC,
+        group,
+        ++order,
+        Width.MEDIUM,
+        "ES password"
     ).define(
         BATCH_SIZE_CONFIG,
         Type.INT,
