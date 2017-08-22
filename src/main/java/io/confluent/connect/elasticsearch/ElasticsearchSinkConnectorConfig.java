@@ -124,6 +124,24 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
         Width.LONG,
         "Connection URLs"
     ).define(
+        CONNECTION_USERNAME_CONFIG,
+        Type.STRING,
+        Importance.HIGH,
+        CONNECTION_URL_DOC,
+        group,
+        ++order,
+        Width.SHORT,
+        "Connection Username"
+    ).define(
+        CONNECTION_PASSWORD_CONFIG,
+        Type.STRING,
+        Importance.HIGH,
+        CONNECTION_PASSWORD_DOC,
+        group,
+        ++order,
+        Width.SHORT,
+        "Connection Password"
+    ).define(
         BATCH_SIZE_CONFIG,
         Type.INT,
         2000,
