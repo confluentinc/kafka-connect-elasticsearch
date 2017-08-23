@@ -2,3 +2,6 @@ target
 docs/_build
 .idea
 *.iml
+/.settings/
+/.classpath
+/.project
