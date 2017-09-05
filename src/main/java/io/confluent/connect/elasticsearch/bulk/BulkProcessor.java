@@ -30,6 +30,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
@@ -51,7 +52,8 @@ public class BulkProcessor<R, B> {
   private final int batchSize;
   private final long lingerMs;
   private final int maxRetries;
-  private final long retryBackoffMs;
+  private final long minRetryBackoffMs;
+  private final long maxRetryBackoffMs;
 
   private final Thread farmer;
   private final ExecutorService executor;
@@ -75,7 +77,8 @@ public class BulkProcessor<R, B> {
       int batchSize,
       long lingerMs,
       int maxRetries,
-      long retryBackoffMs
+      long minRetryBackoffMs,
+      long maxRetryBackoffMs
   ) {
     this.time = time;
     this.bulkClient = bulkClient;
@@ -83,7 +86,8 @@ public class BulkProcessor<R, B> {
     this.batchSize = batchSize;
     this.lingerMs = lingerMs;
     this.maxRetries = maxRetries;
-    this.retryBackoffMs = retryBackoffMs;
+    this.minRetryBackoffMs = minRetryBackoffMs;
+    this.maxRetryBackoffMs = maxRetryBackoffMs;
 
     unsentRecords = new ArrayDeque<>(maxBufferedRecords);
 
@@ -357,34 +361,67 @@ public class BulkProcessor<R, B> {
         );
         throw e;
       }
-      for (int remainingRetries = maxRetries; true; remainingRetries--) {
+      int retryAttempt = 0;
+      int attempts = 0;
+      while (true) {
         boolean retriable = true;
+        ++attempts;
         try {
           log.trace("Executing batch {} of {} records", batchId, batch.size());
           final BulkResponse bulkRsp = bulkClient.execute(bulkReq);
           if (bulkRsp.isSucceeded()) {
+            if (attempts > 1) {
+              log.debug("Completed batch {} of {} records with attempt {}/{}", batchId, batch.size(), attempts, maxRetries + 1);
+            }
             return bulkRsp;
           }
           retriable = bulkRsp.isRetriable();
           throw new ConnectException("Bulk request failed: " + bulkRsp.getErrorInfo());
         } catch (Exception e) {
-          if (retriable && remainingRetries > 0) {
-            log.warn(
-                "Failed to execute batch {} of {} records, retrying after {} ms",
-                batchId,
-                batch.size(),
-                retryBackoffMs,
-                e
-            );
-            time.sleep(retryBackoffMs);
+          if (retriable && retryAttempt < maxRetries) {
+            ++retryAttempt;
+            long sleepTimeMs = computeRetryWaitTimeInMillis(retryAttempt, minRetryBackoffMs, maxRetryBackoffMs);
+            if (log.isDebugEnabled()) {
+              log.debug("Failed to execute batch {} of {} records with attempt {}/{}, will attempt retry after {} ms",
+                      batchId, batch.size(), attempts, maxRetries + 1, sleepTimeMs, e);
+            } else {
+              log.warn("Failed to execute batch {} of {} records with attempt {}/{}, will attempt retry after {} ms: {}",
+                      batchId, batch.size(), attempts, maxRetries + 1, sleepTimeMs, e.getMessage());
+            }
+            time.sleep(minRetryBackoffMs);
           } else {
-            log.error("Failed to execute batch {} of {} records", batchId, batch.size(), e);
+            log.error("Failed to execute batch {} of {} records after total of {} attempt(s)", batchId, batch.size(), attempts, e);
             throw e;
           }
         }
       }
     }
 
+  }
+
+  /**
+   * Compute the time to sleep using exponential backoff with jitter. This method computes the normal exponential backoff
+   * based upon the {@code minRetryBackoffMs} and the {@code retryAttempt}, bounding the result to be within {@code minRetryBackoffMs}
+   * and {@code maxRetryBackoffMs}, and then choosing a random value within that range.
+   * <p>
+   * The purposes of using exponential backoff is to give the ES service time to recover when it becomes overwhelmed.
+   * Adding jitter attempts to prevent a thundering herd, where large numbers of requests from many tasks overwhelm the
+   * ES service, and without randomization all tasks retry at the same time. Randomization should spread the retries
+   * out and should reduce the overall time required to complete all attempts.
+   * See <a href="https://www.awsarchitectureblog.com/2015/03/backoff.html">this blog post</a> for details.
+   *
+   * @param retryAttempt the retry attempt number, starting with 1 for the first retry
+   * @param minRetryBackoffMs the minimum time to wait before retrying; assumed to be 0 if value is negative
+   * @param maxRetryBackoffMs the maximum amount of time to wait before retrying
+   * @return the time in milliseconds to wait before the next retry attempt, in the range {@code minRetryBackoffMs}
+   * and {@code maxRetryBackoffMs} (inclusive), or {@code minRetryBackoffMs} if {@code minRangeBackoffMs}
+   * is greater than or equal to {@code maxRetryBackoffMs}
+   */
+  protected static long computeRetryWaitTimeInMillis(int retryAttempt, long minRetryBackoffMs, long maxRetryBackoffMs) {
+    if (minRetryBackoffMs >= maxRetryBackoffMs) return minRetryBackoffMs; // this was the original value and likely what they're setting
+    if (minRetryBackoffMs < 0) minRetryBackoffMs = 0;
+    long nextMaxTimeMs = Math.max(minRetryBackoffMs + 1, Math.min(maxRetryBackoffMs, minRetryBackoffMs * 2 ^ retryAttempt));
+    return ThreadLocalRandom.current().nextLong(minRetryBackoffMs, nextMaxTimeMs);
   }
 
   private synchronized void onBatchCompletion(int batchSize) {
