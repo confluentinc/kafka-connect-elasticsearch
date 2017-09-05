@@ -67,7 +67,8 @@ public class ElasticsearchWriter {
       int batchSize,
       long lingerMs,
       int maxRetries,
-      long retryBackoffMs,
+      long minRetryBackoffMs,
+      long maxRetryBackoffMs,
       boolean dropInvalidMessage
   ) {
     this.client = client;
@@ -88,7 +89,8 @@ public class ElasticsearchWriter {
         batchSize,
         lingerMs,
         maxRetries,
-        retryBackoffMs
+        minRetryBackoffMs,
+        maxRetryBackoffMs
     );
 
     existingMappings = new HashSet<>();
@@ -108,7 +110,8 @@ public class ElasticsearchWriter {
     private int batchSize;
     private long lingerMs;
     private int maxRetry;
-    private long retryBackoffMs;
+    private long minRetryBackoffMs;
+    private long maxRetryBackoffMs;
     private boolean dropInvalidMessage;
 
     public Builder(JestClient client) {
@@ -167,8 +170,13 @@ public class ElasticsearchWriter {
       return this;
     }
 
-    public Builder setRetryBackoffMs(long retryBackoffMs) {
-      this.retryBackoffMs = retryBackoffMs;
+    public Builder setMinRetryBackoffMs(long retryBackoffMs) {
+      this.minRetryBackoffMs = retryBackoffMs;
+      return this;
+    }
+
+    public Builder setMaxRetryBackoffMs(long retryBackoffMs) {
+      this.maxRetryBackoffMs = retryBackoffMs;
       return this;
     }
 
@@ -192,7 +200,8 @@ public class ElasticsearchWriter {
           batchSize,
           lingerMs,
           maxRetry,
-          retryBackoffMs,
+          minRetryBackoffMs,
+          maxRetryBackoffMs,
           dropInvalidMessage
       );
     }

@@ -101,7 +101,8 @@ public class BulkProcessorTest {
     final int batchSize = 5;
     final int lingerMs = 5;
     final int maxRetries = 0;
-    final int retryBackoffMs = 0;
+    final int minRetryBackoffMs = 0;
+    final int maxRetryBackoffMs = 100;
 
     final BulkProcessor<Integer, ?> bulkProcessor = new BulkProcessor<>(
         new SystemTime(),
@@ -111,7 +112,8 @@ public class BulkProcessorTest {
         batchSize,
         lingerMs,
         maxRetries,
-        retryBackoffMs
+        minRetryBackoffMs,
+        maxRetryBackoffMs
     );
 
     final int addTimeoutMs = 10;
@@ -143,7 +145,8 @@ public class BulkProcessorTest {
     final int batchSize = 5;
     final int lingerMs = 100000; // super high on purpose to make sure flush is what's causing the request
     final int maxRetries = 0;
-    final int retryBackoffMs = 0;
+    final int minRetryBackoffMs = 0;
+    final int maxRetryBackoffMs = 100;
 
     final BulkProcessor<Integer, ?> bulkProcessor = new BulkProcessor<>(
         new SystemTime(),
@@ -153,7 +156,8 @@ public class BulkProcessorTest {
         batchSize,
         lingerMs,
         maxRetries,
-        retryBackoffMs
+        minRetryBackoffMs,
+        maxRetryBackoffMs
     );
 
     client.expect(Arrays.asList(1, 2, 3), BulkResponse.success());
@@ -178,7 +182,8 @@ public class BulkProcessorTest {
     final int batchSize = 1;
     final int lingerMs = 10;
     final int maxRetries = 0;
-    final int retryBackoffMs = 0;
+    final int minRetryBackoffMs = 0;
+    final int maxRetryBackoffMs = 100;
 
     final BulkProcessor<Integer, ?> bulkProcessor = new BulkProcessor<>(
         new SystemTime(),
@@ -188,7 +193,8 @@ public class BulkProcessorTest {
         batchSize,
         lingerMs,
         maxRetries,
-        retryBackoffMs
+        minRetryBackoffMs,
+        maxRetryBackoffMs
     );
 
     final int addTimeoutMs = 10;
@@ -209,7 +215,8 @@ public class BulkProcessorTest {
     final int batchSize = 2;
     final int lingerMs = 5;
     final int maxRetries = 3;
-    final int retryBackoffMs = 1;
+    final int minRetryBackoffMs = 0;
+    final int maxRetryBackoffMs = 100;
 
     client.expect(Arrays.asList(42, 43), BulkResponse.failure(true, "a retiable error"));
     client.expect(Arrays.asList(42, 43), BulkResponse.failure(true, "a retriable error again"));
@@ -223,7 +230,8 @@ public class BulkProcessorTest {
         batchSize,
         lingerMs,
         maxRetries,
-        retryBackoffMs
+        minRetryBackoffMs,
+        maxRetryBackoffMs
     );
 
     final int addTimeoutMs = 10;
@@ -240,7 +248,8 @@ public class BulkProcessorTest {
     final int batchSize = 2;
     final int lingerMs = 5;
     final int maxRetries = 3;
-    final int retryBackoffMs = 1;
+    final int minRetryBackoffMs = 0;
+    final int maxRetryBackoffMs = 100;
 
     final String errorInfo = "an unretriable error";
     client.expect(Arrays.asList(42, 43), BulkResponse.failure(false, errorInfo));
@@ -253,7 +262,8 @@ public class BulkProcessorTest {
         batchSize,
         lingerMs,
         maxRetries,
-        retryBackoffMs
+        minRetryBackoffMs,
+        maxRetryBackoffMs
     );
 
     final int addTimeoutMs = 10;
@@ -265,6 +275,56 @@ public class BulkProcessorTest {
       fail();
     } catch (ExecutionException e) {
       assertTrue(e.getCause().getMessage().contains(errorInfo));
+    }
+  }
+
+  @Test
+  public void computeRetryBackoffForValidRanges() {
+    assertComputeRetryInRange(1, 10L, 10000L);
+    assertComputeRetryInRange(10, 10L, 10000L);
+    assertComputeRetryInRange(100, 10L, 10000L);
+
+    assertComputeRetryInRange(1, 100L, 1000L);
+    assertComputeRetryInRange(10, 100L, 1000L);
+    assertComputeRetryInRange(100, 100L, 1000L);
+
+    assertComputeRetryInRange(1, 100L, 100L);
+    assertComputeRetryInRange(10, 100L, 100L);
+    assertComputeRetryInRange(10, 100L, 101L);
+    assertComputeRetryInRange(100, 100L, 100L);
+  }
+
+  @Test
+  public void computeRetryBackoffForNegativeBackoffTime() {
+    assertComputeRetryInRange(1, -100L, 1000L);
+    assertComputeRetryInRange(10, -100L, 1000L);
+    assertComputeRetryInRange(100, -100L, 1000L);
+
+    assertComputeRetryInRange(1, 100L, -10L);
+    assertComputeRetryInRange(10, 100L, -10L);
+    assertComputeRetryInRange(100, 100L, -10L);
+
+    assertComputeRetryInRange(1, 100L, -1000L);
+    assertComputeRetryInRange(10, 100L, -1000L);
+    assertComputeRetryInRange(100, 100L, -1000L);
+  }
+
+  @Test
+  public void computeRetryBackoffForInvalidRanges() {
+    long minRetryBackoffMs = 100L;
+    long maxRetryBackoffMs = 10L;
+    for (int retryAttempt=1; retryAttempt < 100; ++retryAttempt) {
+      long result = BulkProcessor.computeRetryWaitTimeInMillis(retryAttempt, minRetryBackoffMs, maxRetryBackoffMs);
+      assertTrue(result >= maxRetryBackoffMs);
+    }
+  }
+
+  protected void assertComputeRetryInRange(int retryAttempts, long minRetryBackoffMs, long maxRetryBackoffMs) {
+    for (int retryAttempt=1; retryAttempt < retryAttempts; ++retryAttempt) {
+      long result = BulkProcessor.computeRetryWaitTimeInMillis(retryAttempt, minRetryBackoffMs, maxRetryBackoffMs);
+      if (maxRetryBackoffMs > 0) assertTrue(result <= maxRetryBackoffMs);
+      assertTrue(result >= minRetryBackoffMs);
+      assertTrue(result >= 0);
     }
   }
 

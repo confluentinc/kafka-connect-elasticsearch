@@ -377,7 +377,8 @@ public class ElasticsearchWriterTest extends ElasticsearchSinkTestBase {
         .setMaxInFlightRequests(1)
         .setBatchSize(2)
         .setLingerMs(1000)
-        .setRetryBackoffMs(1000)
+        .setMinRetryBackoffMs(1000)
+        .setMaxRetryBackoffMs(10000)
         .setMaxRetry(3)
         .setDropInvalidMessage(dropInvalidMessage)
         .build();

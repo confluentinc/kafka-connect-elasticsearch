@@ -83,8 +83,10 @@ public class ElasticsearchSinkTask extends SinkTask {
           config.getLong(ElasticsearchSinkConnectorConfig.LINGER_MS_CONFIG);
       int maxInFlightRequests =
           config.getInt(ElasticsearchSinkConnectorConfig.MAX_IN_FLIGHT_REQUESTS_CONFIG);
-      long retryBackoffMs =
-          config.getLong(ElasticsearchSinkConnectorConfig.RETRY_BACKOFF_MS_CONFIG);
+      long minRetryBackoffMs =
+          config.getLong(ElasticsearchSinkConnectorConfig.MIN_RETRY_BACKOFF_MS_CONFIG);
+      long maxRetryBackoffMs =
+          config.getLong(ElasticsearchSinkConnectorConfig.MAX_RETRY_BACKOFF_MS_CONFIG);
       int maxRetry =
           config.getInt(ElasticsearchSinkConnectorConfig.MAX_RETRIES_CONFIG);
       boolean dropInvalidMessage =
@@ -114,7 +116,8 @@ public class ElasticsearchSinkTask extends SinkTask {
           .setMaxInFlightRequests(maxInFlightRequests)
           .setBatchSize(batchSize)
           .setLingerMs(lingerMs)
-          .setRetryBackoffMs(retryBackoffMs)
+          .setMinRetryBackoffMs(minRetryBackoffMs)
+          .setMaxRetryBackoffMs(maxRetryBackoffMs)
           .setMaxRetry(maxRetry)
           .setDropInvalidMessage(dropInvalidMessage);
 

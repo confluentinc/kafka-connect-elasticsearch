@@ -19,6 +19,7 @@ package io.confluent.connect.elasticsearch;
 import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.common.config.ConfigDef.Importance;
+import org.apache.kafka.common.config.ConfigDef.Range;
 import org.apache.kafka.common.config.ConfigDef.Type;
 import org.apache.kafka.common.config.ConfigDef.Width;
 
@@ -61,10 +62,6 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   private static final String MAX_RETRIES_DOC =
       "The maximum number of retries that are allowed for failed indexing requests. If the retry "
       + "attempts are exhausted the task will fail.";
-  public static final String RETRY_BACKOFF_MS_CONFIG = "retry.backoff.ms";
-  private static final String RETRY_BACKOFF_MS_DOC =
-      "How long to wait in milliseconds before attempting to retry a failed indexing request. "
-      + "This avoids retrying in a tight loop under failure scenarios.";
 
   public static final String TYPE_NAME_CONFIG = "type.name";
   private static final String TYPE_NAME_DOC = "The Elasticsearch type name to use when indexing.";
@@ -72,6 +69,18 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   private static final String TOPIC_INDEX_MAP_DOC =
       "A map from Kafka topic name to the destination Elasticsearch index, represented as a list "
       + "of ``topic:index`` pairs.";
+
+  public static final String MIN_RETRY_BACKOFF_MS_CONFIG = "retry.backoff.ms";
+  private static final String MIN_RETRY_BACKOFF_MS_DOC =
+      "The minimum time to wait in milliseconds before attempting to retry a failed indexing request. "
+      + "Actual time to wait is computed using exponential backoff with jitter within minimum and maximum values. "
+      + "This avoids retrying in a tight loop under failure scenarios and avoids thundering herd problems with the source.";
+  public static final String MAX_RETRY_BACKOFF_MS_CONFIG = "max.retry.backoff.ms";
+  private static final String MAX_RETRY_BACKOFF_MS_DOC =
+      "The maximum time to wait in milliseconds before attempting to retry a failed indexing request. "
+      + "Actual time to wait is computed using exponential backoff with jitter within minimum and maximum values. "
+      + "This avoids retrying in a tight loop under failure scenarios and avoids thundering herd problems with the source.";
+
   public static final String KEY_IGNORE_CONFIG = "key.ignore";
   public static final String TOPIC_KEY_IGNORE_CONFIG = "topic.key.ignore";
   public static final String SCHEMA_IGNORE_CONFIG = "schema.ignore";
@@ -178,16 +187,28 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
         Width.SHORT,
         "Max Retries"
     ).define(
-        RETRY_BACKOFF_MS_CONFIG,
+        MIN_RETRY_BACKOFF_MS_CONFIG,
         Type.LONG,
         100L,
+        Range.atLeast(0),
         Importance.LOW,
-        RETRY_BACKOFF_MS_DOC,
+        MIN_RETRY_BACKOFF_MS_DOC,
         group,
         ++order,
         Width.SHORT,
         "Retry Backoff (ms)"
-      );
+    ).define(
+        MAX_RETRY_BACKOFF_MS_CONFIG,
+        Type.LONG,
+        10000L,
+        Range.atLeast(0),
+        Importance.LOW,
+        MAX_RETRY_BACKOFF_MS_DOC,
+        group,
+        ++order,
+        Width.SHORT,
+        "Max Retry Backoff (ms)"
+    );
   }
 
   private static void addConversionConfigs(ConfigDef configDef) {
