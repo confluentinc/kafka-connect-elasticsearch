@@ -241,6 +241,63 @@ The following change is not allowed:
 
 As mappings are more flexible, schema compatibility should be enforced when writing data to Kafka.
 
+Automatic Retries
+-----------------
+The Elasticsearch connector may experience problems writing to the Elasticsearch endpoint, such as when
+the Elasticsearch service is temporarily overloaded. In many cases, the connector will retry the request
+a number of times before failing. To prevent from further overloading the Elasticsearch service, the connector
+uses an exponential backoff technique to give the Elasticsearch service time to recover. The technique
+adds randomness, called jitter, to the calculated backoff times to prevent a thundering herd, where large
+numbers of requests from many tasks are submitted concurrently and overwhelm the service. Randomness spreads out
+the retries from many tasks and should reduce the overall time required to complete all outstanding requests
+compared to simple exponential backoff.
+
+The number of retries is dictated by the ``max.retries`` connector configuration property, which defaults
+to 5 attempts. The backoff time, which is the amount of time to wait before retrying, is a function of the
+retry attempt number and the initial backoff time specified in the ``retry.backoff.ms`` connector configuration
+property, which defaults to 500 milliseconds. For example, the following table shows the possible wait times
+before submitting each of the 5 retry attempts:
+
+.. table:: Range of backoff times for each retry using the default configuration
+   :widths: auto
+
+   =====  =====================  =====================  ==============================================
+   Retry  Minimum Backoff (sec)  Maximum Backoff (sec)  Total Potential Delay from First Attempt (sec)
+   =====  =====================  =====================  ==============================================
+     1         0.5                      0.5                              0.5
+     2         0.5                      1.0                              1.5
+     3         0.5                      2.0                              3.5
+     4         0.5                      4.0                              7.5
+     5         0.5                      8.0                             15.5
+   =====  =====================  =====================  ==============================================
+
+Note how the maximum wait time is simply the normal exponential backoff, calculated as ``${retry.backoff.ms} * 2 ^ (retry-1)``.
+Increasing the maximum number of retries adds more backoff:
+
+.. table:: Range of backoff times for additional retries
+   :widths: auto
+
+   =====  =====================  =====================  ==============================================
+   Retry  Minimum Backoff (sec)  Maximum Backoff (sec)  Total Potential Delay from First Attempt (sec)
+   =====  =====================  =====================  ==============================================
+     6         0.5                     16.0                             31.5
+     7         0.5                     32.0                             63.5
+     8         0.5                     64.0                            127.5
+     9         0.5                    128.0                            256.5
+    10         0.5                    256.0                            511.5
+    11         0.5                    512.0                           1023.5
+    12         0.5                   1024.0                           2047.5
+    13         0.5                   2048.0                           4095.5
+   =====  =====================  =====================  ==============================================
+
+By increasing ``max.retries`` to 10, the connector may take up to 511.5 seconds, or a little over 8.5 minutes,
+to successfully send a batch of records when experiencing an overloaded Elasticsearch service. Increasing the value
+to 13 quickly increases the maximum potential time to submit a batch of records to well over 1 hour 8 minutes.
+
+You can adjust both the ``max.retries`` and ``retry.backoff.ms`` connector configuration properties to achieve
+the desired backoff and retry characteristics.
+
+
 Reindexing
 ----------
 In some cases, the way to index a set of documents may need to be changed. For example, the analyzer,
