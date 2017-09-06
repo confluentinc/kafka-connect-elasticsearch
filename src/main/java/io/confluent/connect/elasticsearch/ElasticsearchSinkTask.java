@@ -31,6 +31,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 
 import io.searchbox.client.JestClient;
 import io.searchbox.client.JestClientFactory;
@@ -73,6 +74,16 @@ public class ElasticsearchSinkTask extends SinkTask {
       int maxInFlightRequests = config.getInt(ElasticsearchSinkConnectorConfig.MAX_IN_FLIGHT_REQUESTS_CONFIG);
       long retryBackoffMs = config.getLong(ElasticsearchSinkConnectorConfig.RETRY_BACKOFF_MS_CONFIG);
       int maxRetry = config.getInt(ElasticsearchSinkConnectorConfig.MAX_RETRIES_CONFIG);
+
+      // Calculate the maximum possible backoff time ...
+      long maxRetryBackoffMs = RetryUtil.computeRetryWaitTimeInMillis(maxRetry, retryBackoffMs);
+      if (maxRetryBackoffMs > RetryUtil.MAX_RETRY_TIME_MS) {
+        log.warn("This connector uses exponential backoff with jitter for retries, and using '{}={}' and '{}={}' " +
+                "results in an impractical but possible maximum backoff time greater than {} hours.",
+                ElasticsearchSinkConnectorConfig.MAX_RETRIES_CONFIG, maxRetry,
+                ElasticsearchSinkConnectorConfig.RETRY_BACKOFF_MS_CONFIG, retryBackoffMs,
+                TimeUnit.MILLISECONDS.toHours(maxRetryBackoffMs));
+      }
 
       if (client != null) {
         this.client = client;
