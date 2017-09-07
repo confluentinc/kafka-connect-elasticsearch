@@ -46,13 +46,17 @@ public class RetryUtilTest {
     assertEquals(3200L, RetryUtil.computeRetryWaitTimeInMillis(5, 100L));
   }
 
-  protected void assertComputeRetryInRange(int retryAttempts, long initialRetryBackoffMs) {
-    for (int retries = 0; retries <= retryAttempts; ++retries) {
-      long result = RetryUtil.computeRetryWaitTimeInMillis(retries, initialRetryBackoffMs);
-      if (initialRetryBackoffMs < 0) {
-        assertEquals(0, result);
-      } else {
-        assertTrue(result >= initialRetryBackoffMs);
+  protected void assertComputeRetryInRange(int retryAttempts, long retryBackoffMs) {
+    for (int i = 0; i != 20; ++i) {
+      for (int retries = 0; retries <= retryAttempts; ++retries) {
+        long maxResult = RetryUtil.computeRetryWaitTimeInMillis(retries, retryBackoffMs);
+        long result = RetryUtil.computeRandomRetryWaitTimeInMillis(retries, retryBackoffMs);
+        if (retryBackoffMs < 0) {
+          assertEquals(0, result);
+        } else {
+          assertTrue(result >= 0L);
+          assertTrue(result <= maxResult);
+        }
       }
     }
   }

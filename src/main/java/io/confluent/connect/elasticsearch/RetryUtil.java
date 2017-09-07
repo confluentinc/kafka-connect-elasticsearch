@@ -36,8 +36,7 @@ public class RetryUtil {
 
   /**
    * Compute the time to sleep using exponential backoff with jitter. This method computes the normal exponential backoff
-   * as {@code initialRetryBackoffMs << retryAttempt}, and then chooses a random value between {@code initialRetryBackoffMs}
-   * and that value.
+   * as {@code initialRetryBackoffMs << retryAttempt}, and then chooses a random value between 0 and that value.
    *
    * @param retryAttempts the number of previous retry attempts; must be non-negative
    * @param initialRetryBackoffMs the initial time to wait before retrying; assumed to be 0 if value is negative
@@ -45,14 +44,14 @@ public class RetryUtil {
    */
   public static long computeRandomRetryWaitTimeInMillis(int retryAttempts, long initialRetryBackoffMs) {
     if (initialRetryBackoffMs < 0) return 0;
-    if (retryAttempts <= 0) return initialRetryBackoffMs;
+    if (retryAttempts < 0) return initialRetryBackoffMs;
     long maxRetryTime = computeRetryWaitTimeInMillis(retryAttempts, initialRetryBackoffMs);
-    return ThreadLocalRandom.current().nextLong(initialRetryBackoffMs, maxRetryTime);
+    return ThreadLocalRandom.current().nextLong(0, maxRetryTime);
   }
 
   /**
    * Compute the time to sleep using exponential backoff. This method computes the normal exponential backoff
-   * as {@code initialRetryBackoffMs << retryAttempt}. bounded to always be less than {@link #MAX_RETRY_TIME_MS}.
+   * as {@code initialRetryBackoffMs << retryAttempt}, bounded to always be less than {@link #MAX_RETRY_TIME_MS}.
    *
    * @param retryAttempts the number of previous retry attempts; must be non-negative
    * @param initialRetryBackoffMs the initial time to wait before retrying; assumed to be 0 if value is negative
