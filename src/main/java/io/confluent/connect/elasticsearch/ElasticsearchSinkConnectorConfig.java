@@ -63,7 +63,9 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
       + "attempts are exhausted the task will fail.";
   public static final String RETRY_BACKOFF_MS_CONFIG = "retry.backoff.ms";
   private static final String RETRY_BACKOFF_MS_DOC =
-      "How long to wait in milliseconds before attempting to retry a failed indexing request. "
+      "How long to wait in milliseconds before attempting the first retry of a failed indexing "
+      + "request. Upon a failure, this connector may wait up to twice as long as the previous "
+      + "wait, up to the maximum number of retries. "
       + "This avoids retrying in a tight loop under failure scenarios.";
 
   public static final String TYPE_NAME_CONFIG = "type.name";
@@ -262,8 +264,6 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
         ++order,
         Width.LONG,
         "Drop invalid messages");
-
-
   }
 
   public static final ConfigDef CONFIG = baseConfigDef();

@@ -55,7 +55,7 @@ Connector
   * Importance: low
 
 ``retry.backoff.ms``
-  How long to wait in milliseconds before attempting to retry a failed indexing request. This avoids retrying in a tight loop under failure scenarios.
+  How long to wait in milliseconds before attempting to retry a the first failed indexing request. This connector uses exponential backoff with jitter, which means that upon additional failures, this connector may wait up to twice as long as the previous wait, up to the maximum number of retries. This avoids retrying in a tight loop under failure scenarios.
 
   * Type: long
   * Default: 100

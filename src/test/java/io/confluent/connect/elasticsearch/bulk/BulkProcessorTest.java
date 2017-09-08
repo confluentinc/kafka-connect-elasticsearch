@@ -234,6 +234,43 @@ public class BulkProcessorTest {
   }
 
   @Test
+  public void retriableErrorsHitMaxRetries() throws InterruptedException, ExecutionException {
+    final int maxBufferedRecords = 100;
+    final int maxInFlightBatches = 5;
+    final int batchSize = 2;
+    final int lingerMs = 5;
+    final int maxRetries = 2;
+    final int retryBackoffMs = 1;
+    final String errorInfo = "a final retriable error again";
+
+    client.expect(Arrays.asList(42, 43), BulkResponse.failure(true, "a retiable error"));
+    client.expect(Arrays.asList(42, 43), BulkResponse.failure(true, "a retriable error again"));
+    client.expect(Arrays.asList(42, 43), BulkResponse.failure(true, errorInfo));
+
+    final BulkProcessor<Integer, ?> bulkProcessor = new BulkProcessor<>(
+        new SystemTime(),
+        client,
+        maxBufferedRecords,
+        maxInFlightBatches,
+        batchSize,
+        lingerMs,
+        maxRetries,
+        retryBackoffMs
+    );
+
+    final int addTimeoutMs = 10;
+    bulkProcessor.add(42, addTimeoutMs);
+    bulkProcessor.add(43, addTimeoutMs);
+
+    try {
+      bulkProcessor.submitBatchWhenReady().get();
+      fail();
+    } catch (ExecutionException e) {
+      assertTrue(e.getCause().getMessage().contains(errorInfo));
+    }
+  }
+
+  @Test
   public void unretriableErrors() throws InterruptedException {
     final int maxBufferedRecords = 100;
     final int maxInFlightBatches = 5;
