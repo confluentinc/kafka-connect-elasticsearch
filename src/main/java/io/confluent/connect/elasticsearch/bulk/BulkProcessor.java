@@ -15,6 +15,7 @@
  **/
 package io.confluent.connect.elasticsearch.bulk;
 
+import io.confluent.connect.elasticsearch.RetryUtil;
 import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.slf4j.Logger;
@@ -341,28 +342,34 @@ public class BulkProcessor<R, B> {
         log.error("Failed to create bulk request from batch {} of {} records", batchId, batch.size(), e);
         throw e;
       }
-      for (int remainingRetries = maxRetries; true; remainingRetries--) {
+      final int maxAttempts = maxRetries + 1;
+      for (int attempts = 1, retryAttempts = 0; true; ++attempts, ++retryAttempts) {
         boolean retriable = true;
         try {
-          log.trace("Executing batch {} of {} records", batchId, batch.size());
+          log.trace("Executing batch {} of {} records with attempt {}/{}", batchId, batch.size(), attempts, maxAttempts);
           final BulkResponse bulkRsp = bulkClient.execute(bulkReq);
           if (bulkRsp.isSucceeded()) {
+            if (attempts > 1) {
+              // We only logged failures, so log the success immediately after a failure ...
+              log.debug("Completed batch {} of {} records with attempt {}/{}", batchId, batch.size(), attempts, maxAttempts);
+            }
             return bulkRsp;
           }
           retriable = bulkRsp.isRetriable();
           throw new ConnectException("Bulk request failed: " + bulkRsp.getErrorInfo());
         } catch (Exception e) {
-          if (retriable && remainingRetries > 0) {
-            log.warn("Failed to execute batch {} of {} records, retrying after {} ms", batchId, batch.size(), retryBackoffMs, e);
-            time.sleep(retryBackoffMs);
+          if (retriable && attempts < maxAttempts) {
+            long sleepTimeMs = RetryUtil.computeRandomRetryWaitTimeInMillis(retryAttempts, retryBackoffMs);
+            log.warn("Failed to execute batch {} of {} records with attempt {}/{}, will attempt retry after {} ms. Failure reason: {}",
+                      batchId, batch.size(), attempts, maxAttempts, sleepTimeMs, e.getMessage());
+            time.sleep(sleepTimeMs);
           } else {
-            log.error("Failed to execute batch {} of {} records", batchId, batch.size(), e);
+            log.error("Failed to execute batch {} of {} records after total of {} attempt(s)", batchId, batch.size(), attempts, e);
             throw e;
           }
         }
       }
     }
-
   }
 
   private synchronized void onBatchCompletion(int batchSize) {
