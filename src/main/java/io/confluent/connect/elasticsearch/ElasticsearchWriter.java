@@ -297,7 +297,8 @@ public class ElasticsearchWriter {
         try {
           JestResult result = client.execute(createIndex);
           if (!result.isSucceeded()) {
-            throw new ConnectException("Could not create index:" + index);
+            String msg = result.getErrorMessage() != null ? ": " + result.getErrorMessage() : "";
+            throw new ConnectException("Could not create index '" + index + "'" + msg);
           }
         } catch (IOException e) {
           throw new ConnectException(e);
