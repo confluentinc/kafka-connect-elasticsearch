@@ -152,7 +152,7 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
                 <configuration>
-                    <argLine>-Dtests.security.manager=false</argLine>
+                    <argLine>@{argLine} -Djava.awt.headless=true -Dtests.security.manager=false</argLine>
                 </configuration>
             </plugin>
             <plugin>
