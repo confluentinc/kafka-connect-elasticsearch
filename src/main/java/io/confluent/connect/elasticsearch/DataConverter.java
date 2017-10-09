@@ -52,7 +52,13 @@ public class DataConverter {
     JSON_CONVERTER.configure(Collections.singletonMap("schemas.enable", "false"), false);
   }
 
-  private static String convertKey(Schema keySchema, Object key) {
+  private final boolean useCompactMapEntries;
+
+  public DataConverter(boolean useCompactMapEntries) {
+    this.useCompactMapEntries = useCompactMapEntries;
+  }
+
+  private String convertKey(Schema keySchema, Object key) {
     if (key == null) {
       throw new ConnectException("Key is used as document id and can not be null.");
     }
@@ -83,7 +89,7 @@ public class DataConverter {
     }
   }
 
-  public static IndexableRecord convertRecord(
+  public IndexableRecord convertRecord(
       SinkRecord record,
       String index,
       String type,
@@ -96,7 +102,7 @@ public class DataConverter {
            + "+" + String.valueOf((int) record.kafkaPartition())
            + "+" + String.valueOf(record.kafkaOffset());
     } else {
-      id = DataConverter.convertKey(record.keySchema(), record.key());
+      id = convertKey(record.keySchema(), record.key());
     }
 
     final Schema schema;
@@ -120,7 +126,7 @@ public class DataConverter {
   // completely rewrite a converter for Elasticsearch, we will refactor the JSON converter to
   // support customized translation. The pre process is no longer needed once we have the JSON
   // converter refactored.
-  static Schema preProcessSchema(Schema schema) {
+  Schema preProcessSchema(Schema schema) {
     if (schema == null) {
       return null;
     }
@@ -153,19 +159,19 @@ public class DataConverter {
     }
   }
 
-  private static Schema preProcessArraySchema(Schema schema) {
+  private Schema preProcessArraySchema(Schema schema) {
     Schema valSchema = preProcessSchema(schema.valueSchema());
     return copySchemaBasics(schema, SchemaBuilder.array(valSchema)).build();
   }
 
-  private static Schema preProcessMapSchema(Schema schema) {
+  private Schema preProcessMapSchema(Schema schema) {
     Schema keySchema = schema.keySchema();
     Schema valueSchema = schema.valueSchema();
     String keyName = keySchema.name() == null ? keySchema.type().name() : keySchema.name();
     String valueName = valueSchema.name() == null ? valueSchema.type().name() : valueSchema.name();
     Schema preprocessedKeySchema = preProcessSchema(keySchema);
     Schema preprocessedValueSchema = preProcessSchema(valueSchema);
-    if (keySchema.type() == Schema.Type.STRING) {
+    if (useCompactMapEntries && keySchema.type() == Schema.Type.STRING) {
       return SchemaBuilder.map(preprocessedKeySchema, preprocessedValueSchema).build();
     }
     Schema elementSchema = SchemaBuilder.struct().name(keyName + "-" + valueName)
@@ -175,7 +181,7 @@ public class DataConverter {
     return copySchemaBasics(schema, SchemaBuilder.array(elementSchema)).build();
   }
 
-  private static Schema preProcessStructSchema(Schema schema) {
+  private Schema preProcessStructSchema(Schema schema) {
     SchemaBuilder builder = copySchemaBasics(schema, SchemaBuilder.struct().name(schema.name()));
     for (Field field : schema.fields()) {
       builder.field(field.name(), preProcessSchema(field.schema()));
@@ -183,7 +189,7 @@ public class DataConverter {
     return builder.build();
   }
 
-  private static SchemaBuilder copySchemaBasics(Schema source, SchemaBuilder target) {
+  private SchemaBuilder copySchemaBasics(Schema source, SchemaBuilder target) {
     if (source.isOptional()) {
       target.optional();
     }
@@ -195,7 +201,7 @@ public class DataConverter {
   }
 
   // visible for testing
-  static Object preProcessValue(Object value, Schema schema, Schema newSchema) {
+  Object preProcessValue(Object value, Schema schema, Schema newSchema) {
     // Handle missing schemas and acceptable null values
     if (schema == null) {
       return value;
@@ -229,7 +235,7 @@ public class DataConverter {
     }
   }
 
-  private static Object preProcessNullValue(Schema schema) {
+  private Object preProcessNullValue(Schema schema) {
     if (schema.defaultValue() != null) {
       return schema.defaultValue();
     }
@@ -240,7 +246,7 @@ public class DataConverter {
   }
 
   // @returns the decoded logical value or null if this isn't a known logical type
-  private static Object preProcessLogicalValue(String schemaName, Object value) {
+  private Object preProcessLogicalValue(String schemaName, Object value) {
     switch (schemaName) {
       case Decimal.LOGICAL_NAME:
         return ((BigDecimal) value).doubleValue();
@@ -254,7 +260,7 @@ public class DataConverter {
     }
   }
 
-  private static Object preProcessArrayValue(Object value, Schema schema, Schema newSchema) {
+  private Object preProcessArrayValue(Object value, Schema schema, Schema newSchema) {
     Collection collection = (Collection) value;
     List<Object> result = new ArrayList<>();
     for (Object element: collection) {
@@ -263,12 +269,12 @@ public class DataConverter {
     return result;
   }
 
-  private static Object preProcessMapValue(Object value, Schema schema, Schema newSchema) {
+  private Object preProcessMapValue(Object value, Schema schema, Schema newSchema) {
     Schema keySchema = schema.keySchema();
     Schema valueSchema = schema.valueSchema();
     Schema newValueSchema = newSchema.valueSchema();
     Map<?, ?> map = (Map<?, ?>) value;
-    if (keySchema.type() == Schema.Type.STRING) {
+    if (useCompactMapEntries && keySchema.type() == Schema.Type.STRING) {
       Map<Object, Object> processedMap = new HashMap<>();
       for (Map.Entry<?, ?> entry: map.entrySet()) {
         processedMap.put(
@@ -290,7 +296,7 @@ public class DataConverter {
     return mapStructs;
   }
 
-  private static Object preProcessStructValue(Object value, Schema schema, Schema newSchema) {
+  private Object preProcessStructValue(Object value, Schema schema, Schema newSchema) {
     Struct struct = (Struct) value;
     Struct newStruct = new Struct(newSchema);
     for (Field field : schema.fields()) {
