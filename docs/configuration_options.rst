@@ -88,6 +88,13 @@ Data Conversion
   * Default: false
   * Importance: low
 
+``compact.map.entries``
+  Defines how map entries with string keys within record values should be written to JSON. When this is set to ``true``, these entries are written compactly as ``"entryKey": "entryValue"``. Otherwise, map entries with string keys are written as a nested document ``{"key": "entryKey", "value": "entryValue"}``. All map entries with non-string keys are always written as nested documents. Prior to 3.3.0, this connector always wrote map entries as nested documents, so set this to ``false`` to use that older behavior.
+
+  * Type: boolean
+  * Default: true
+  * Importance: low
+
 ``topic.index.map``
   A map from Kafka topic name to the destination Elasticsearch index, represented as a list of ``topic:index`` pairs.
 

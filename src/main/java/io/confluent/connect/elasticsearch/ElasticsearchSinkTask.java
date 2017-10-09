@@ -62,6 +62,7 @@ public class ElasticsearchSinkTask extends SinkTask {
       String type = config.getString(ElasticsearchSinkConnectorConfig.TYPE_NAME_CONFIG);
       boolean ignoreKey = config.getBoolean(ElasticsearchSinkConnectorConfig.KEY_IGNORE_CONFIG);
       boolean ignoreSchema = config.getBoolean(ElasticsearchSinkConnectorConfig.SCHEMA_IGNORE_CONFIG);
+      boolean useCompactMapEntries = config.getBoolean(ElasticsearchSinkConnectorConfig.COMPACT_MAP_ENTRIES_CONFIG);
 
       Map<String, String> topicToIndexMap = parseMapConfig(config.getList(ElasticsearchSinkConnectorConfig.TOPIC_INDEX_MAP_CONFIG));
       Set<String> topicIgnoreKey = new HashSet<>(config.getList(ElasticsearchSinkConnectorConfig.TOPIC_KEY_IGNORE_CONFIG));
@@ -98,6 +99,7 @@ public class ElasticsearchSinkTask extends SinkTask {
           .setType(type)
           .setIgnoreKey(ignoreKey, topicIgnoreKey)
           .setIgnoreSchema(ignoreSchema, topicIgnoreSchema)
+          .setCompactMapEntries(useCompactMapEntries)
           .setTopicToIndexMap(topicToIndexMap)
           .setFlushTimoutMs(flushTimeoutMs)
           .setMaxBufferedRecords(maxBufferedRecords)

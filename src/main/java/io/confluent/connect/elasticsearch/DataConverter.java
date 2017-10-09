@@ -51,7 +51,13 @@ public class DataConverter {
     JSON_CONVERTER.configure(Collections.singletonMap("schemas.enable", "false"), false);
   }
 
-  private static String convertKey(Schema keySchema, Object key) {
+  private final boolean useCompactMapEntries;
+
+  public DataConverter(boolean useCompactMapEntries) {
+    this.useCompactMapEntries = useCompactMapEntries;
+  }
+
+  private String convertKey(Schema keySchema, Object key) {
     if (key == null) {
       throw new ConnectException("Key is used as document id and can not be null.");
     }
@@ -78,12 +84,12 @@ public class DataConverter {
     }
   }
 
-  public static IndexableRecord convertRecord(SinkRecord record, String index, String type, boolean ignoreKey, boolean ignoreSchema) {
+  public IndexableRecord convertRecord(SinkRecord record, String index, String type, boolean ignoreKey, boolean ignoreSchema) {
     final String id;
     if (ignoreKey) {
       id = record.topic() + "+" + String.valueOf((int) record.kafkaPartition()) + "+" + String.valueOf(record.kafkaOffset());
     } else {
-      id = DataConverter.convertKey(record.keySchema(), record.key());
+      id = convertKey(record.keySchema(), record.key());
     }
 
     final Schema schema;
@@ -105,7 +111,7 @@ public class DataConverter {
   // expects a different JSON format from the current JSON converter provides. Rather than completely
   // rewrite a converter for Elasticsearch, we will refactor the JSON converter to support customized
   // translation. The pre process is no longer needed once we have the JSON converter refactored.
-  static Schema preProcessSchema(Schema schema) {
+  Schema preProcessSchema(Schema schema) {
     if (schema == null) {
       return null;
     }
@@ -132,7 +138,7 @@ public class DataConverter {
         Schema valueSchema = schema.valueSchema();
         String keyName = keySchema.name() == null ? keySchema.type().name() : keySchema.name();
         String valueName = valueSchema.name() == null ? valueSchema.type().name() : valueSchema.name();
-        if (keySchema.type() == Schema.Type.STRING) {
+        if (useCompactMapEntries && keySchema.type() == Schema.Type.STRING) {
           return SchemaBuilder.map(preProcessSchema(keySchema), preProcessSchema(valueSchema)).build();
         }
         Schema elementSchema = SchemaBuilder.struct().name(keyName + "-" + valueName)
@@ -154,7 +160,7 @@ public class DataConverter {
     }
   }
 
-  private static SchemaBuilder copySchemaBasics(Schema source, SchemaBuilder target) {
+  SchemaBuilder copySchemaBasics(Schema source, SchemaBuilder target) {
     if (source.isOptional()) {
       target.optional();
     }
@@ -166,7 +172,7 @@ public class DataConverter {
   }
 
   // visible for testing
-  static Object preProcessValue(Object value, Schema schema, Schema newSchema) {
+  Object preProcessValue(Object value, Schema schema, Schema newSchema) {
     if (schema == null) {
       return value;
     }
@@ -207,7 +213,7 @@ public class DataConverter {
         Schema valueSchema = schema.valueSchema();
         Schema newValueSchema = newSchema.valueSchema();
         Map<?, ?> map = (Map<?, ?>) value;
-        if (keySchema.type() == Schema.Type.STRING) {
+        if (useCompactMapEntries && keySchema.type() == Schema.Type.STRING) {
           Map<Object, Object> processedMap = new HashMap<>();
           for (Map.Entry<?, ?> entry: map.entrySet()) {
             processedMap.put(preProcessValue(entry.getKey(), keySchema, newSchema.keySchema()),

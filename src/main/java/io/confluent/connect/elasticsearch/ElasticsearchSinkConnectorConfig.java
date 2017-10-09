@@ -40,6 +40,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   public static final String TOPIC_KEY_IGNORE_CONFIG = "topic.key.ignore";
   public static final String SCHEMA_IGNORE_CONFIG = "schema.ignore";
   public static final String TOPIC_SCHEMA_IGNORE_CONFIG = "topic.schema.ignore";
+  public static final String COMPACT_MAP_ENTRIES_CONFIG = "compact.map.entries";
 
   protected static ConfigDef baseConfigDef() {
     final ConfigDef configDef = new ConfigDef();
@@ -102,6 +103,15 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
                   + "Elasticsearch will infer the mapping from the data (dynamic mapping needs to be enabled by the user).\n"
                   + "Note that this is a global config that applies to all topics, use ``" + TOPIC_SCHEMA_IGNORE_CONFIG + "`` to override as ``true`` for specific topics.",
                   group, ++order, Width.SHORT, "Ignore Schema mode")
+          .define(COMPACT_MAP_ENTRIES_CONFIG, Type.BOOLEAN, true, Importance.LOW,
+                  "Defines how map entries with string keys within record values should be written to JSON. "
+                  + "When this is set to ``true``, these entries are written compactly as ``\"entryKey\": \"entryValue\"``. "
+                  + "Otherwise, map entries with string keys are written as a nested document "
+                  + "``{\"key\": \"entryKey\", \"value\": \"entryValue\"}``. "
+                  + "All map entries with non-string keys are always written as nested documents. "
+                  + "Prior to 3.3.0, this connector always wrote map entries as nested documents, so set this to ``false`` to use "
+                  + "that older behavior.",
+                  group, ++order, Width.SHORT, "Compact Map Entries")
           .define(TOPIC_INDEX_MAP_CONFIG, Type.LIST, "", Importance.LOW,
                   "A map from Kafka topic name to the destination Elasticsearch index, represented as a list of ``topic:index`` pairs.",
                   group, ++order, Width.LONG, "Topic to Index Map")
