@@ -20,6 +20,7 @@ import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Struct;
+import org.junit.Before;
 import org.junit.Test;
 
 import java.math.BigDecimal;
@@ -33,6 +34,13 @@ import java.util.Map;
 import static org.junit.Assert.assertEquals;
 
 public class DataConverterTest {
+  
+  private DataConverter converter;
+  
+  @Before
+  public void setUp() {
+    converter = new DataConverter(true);
+  }
 
   @Test
   public void primitives() {
@@ -67,58 +75,58 @@ public class DataConverterTest {
   }
 
   private void assertIdenticalAfterPreProcess(Schema schema) {
-    assertEquals(schema, DataConverter.preProcessSchema(schema));
+    assertEquals(schema, converter.preProcessSchema(schema));
   }
 
   @Test
   public void decimal() {
     Schema origSchema = Decimal.schema(2);
-    Schema preProcessedSchema = DataConverter.preProcessSchema(origSchema);
+    Schema preProcessedSchema = converter.preProcessSchema(origSchema);
     assertEquals(Schema.FLOAT64_SCHEMA, preProcessedSchema);
 
-    assertEquals(0.02, DataConverter.preProcessValue(new BigDecimal("0.02"), origSchema, preProcessedSchema));
+    assertEquals(0.02, converter.preProcessValue(new BigDecimal("0.02"), origSchema, preProcessedSchema));
 
     // optional
     assertEquals(
         Schema.OPTIONAL_FLOAT64_SCHEMA,
-        DataConverter.preProcessSchema(Decimal.builder(2).optional().build())
+        converter.preProcessSchema(Decimal.builder(2).optional().build())
     );
 
     // defval
     assertEquals(
         SchemaBuilder.float64().defaultValue(0.00).build(),
-        DataConverter.preProcessSchema(Decimal.builder(2).defaultValue(new BigDecimal("0.00")).build())
+        converter.preProcessSchema(Decimal.builder(2).defaultValue(new BigDecimal("0.00")).build())
     );
   }
 
   @Test
   public void array() {
     Schema origSchema = SchemaBuilder.array(Decimal.schema(2)).schema();
-    Schema preProcessedSchema = DataConverter.preProcessSchema(origSchema);
+    Schema preProcessedSchema = converter.preProcessSchema(origSchema);
     assertEquals(SchemaBuilder.array(Schema.FLOAT64_SCHEMA).build(), preProcessedSchema);
 
     assertEquals(
         Arrays.asList(0.02, 0.42),
-        DataConverter.preProcessValue(Arrays.asList(new BigDecimal("0.02"), new BigDecimal("0.42")), origSchema, preProcessedSchema)
+        converter.preProcessValue(Arrays.asList(new BigDecimal("0.02"), new BigDecimal("0.42")), origSchema, preProcessedSchema)
     );
 
     // optional
     assertEquals(
         SchemaBuilder.array(preProcessedSchema.valueSchema()).optional().build(),
-        DataConverter.preProcessSchema(SchemaBuilder.array(Decimal.schema(2)).optional().build())
+        converter.preProcessSchema(SchemaBuilder.array(Decimal.schema(2)).optional().build())
     );
 
     // defval
     assertEquals(
         SchemaBuilder.array(preProcessedSchema.valueSchema()).defaultValue(Collections.emptyList()).build(),
-        DataConverter.preProcessSchema(SchemaBuilder.array(Decimal.schema(2)).defaultValue(Collections.emptyList()).build())
+        converter.preProcessSchema(SchemaBuilder.array(Decimal.schema(2)).defaultValue(Collections.emptyList()).build())
     );
   }
 
   @Test
   public void map() {
     Schema origSchema = SchemaBuilder.map(Schema.INT32_SCHEMA, Decimal.schema(2)).build();
-    Schema preProcessedSchema = DataConverter.preProcessSchema(origSchema);
+    Schema preProcessedSchema = converter.preProcessSchema(origSchema);
     assertEquals(
         SchemaBuilder.array(
             SchemaBuilder.struct().name(Schema.INT32_SCHEMA.type().name() + "-" + Decimal.LOGICAL_NAME)
@@ -141,46 +149,79 @@ public class DataConverterTest {
                 .put(ElasticsearchSinkConnectorConstants.MAP_KEY, 2)
                 .put(ElasticsearchSinkConnectorConstants.MAP_VALUE, 0.42)
         )),
-        new HashSet<>((List) DataConverter.preProcessValue(origValue, origSchema, preProcessedSchema))
+        new HashSet<>((List) converter.preProcessValue(origValue, origSchema, preProcessedSchema))
     );
 
     // optional
     assertEquals(
         SchemaBuilder.array(preProcessedSchema.valueSchema()).optional().build(),
-        DataConverter.preProcessSchema(SchemaBuilder.map(Schema.INT32_SCHEMA, Decimal.schema(2)).optional().build())
+        converter.preProcessSchema(SchemaBuilder.map(Schema.INT32_SCHEMA, Decimal.schema(2)).optional().build())
     );
 
     // defval
     assertEquals(
         SchemaBuilder.array(preProcessedSchema.valueSchema()).defaultValue(Collections.emptyList()).build(),
-        DataConverter.preProcessSchema(SchemaBuilder.map(Schema.INT32_SCHEMA, Decimal.schema(2)).defaultValue(Collections.emptyMap()).build())
+        converter.preProcessSchema(SchemaBuilder.map(Schema.INT32_SCHEMA, Decimal.schema(2)).defaultValue(Collections.emptyMap()).build())
     );
   }
 
   @Test
-  public void stringKeyedMap() {
+  public void stringKeyedMapNonCompactFormat() {
     Schema origSchema = SchemaBuilder.map(Schema.STRING_SCHEMA, Schema.INT32_SCHEMA).build();
-    Schema preProcessedSchema = DataConverter.preProcessSchema(origSchema);
-    assertEquals(
-            SchemaBuilder.map(Schema.STRING_SCHEMA, Schema.INT32_SCHEMA).build(),
-            preProcessedSchema
-    );
 
     Map<Object, Object> origValue = new HashMap<>();
     origValue.put("field1", 1);
     origValue.put("field2", 2);
-    HashMap newValue = (HashMap) DataConverter.preProcessValue(origValue, origSchema, preProcessedSchema);
-    assertEquals(
-            origValue,
-            newValue
-    );
 
+    // Use the older non-compact format for map entries with string keys
+    converter = new DataConverter(false);
+
+    Schema preProcessedSchema = converter.preProcessSchema(origSchema);
+    assertEquals(
+        SchemaBuilder.array(
+            SchemaBuilder.struct().name(Schema.STRING_SCHEMA.type().name() + "-" + Schema.INT32_SCHEMA.type().name())
+                         .field(ElasticsearchSinkConnectorConstants.MAP_KEY, Schema.STRING_SCHEMA)
+                         .field(ElasticsearchSinkConnectorConstants.MAP_VALUE, Schema.INT32_SCHEMA)
+                         .build()
+        ).build(),
+        preProcessedSchema
+    );
+    assertEquals(
+        new HashSet<>(Arrays.asList(
+                new Struct(preProcessedSchema.valueSchema())
+                        .put(ElasticsearchSinkConnectorConstants.MAP_KEY, "field1")
+                        .put(ElasticsearchSinkConnectorConstants.MAP_VALUE, 1),
+                new Struct(preProcessedSchema.valueSchema())
+                        .put(ElasticsearchSinkConnectorConstants.MAP_KEY, "field2")
+                        .put(ElasticsearchSinkConnectorConstants.MAP_VALUE, 2)
+        )),
+        new HashSet<>((List) converter.preProcessValue(origValue, origSchema, preProcessedSchema))
+    );
+  }
+
+  @Test
+  public void stringKeyedMapCompactFormat() {
+    Schema origSchema = SchemaBuilder.map(Schema.STRING_SCHEMA, Schema.INT32_SCHEMA).build();
+
+    Map<Object, Object> origValue = new HashMap<>();
+    origValue.put("field1", 1);
+    origValue.put("field2", 2);
+
+    // Use the newer compact format for map entries with string keys
+    converter = new DataConverter(true);
+    Schema preProcessedSchema = converter.preProcessSchema(origSchema);
+    assertEquals(
+        SchemaBuilder.map(Schema.STRING_SCHEMA, Schema.INT32_SCHEMA).build(),
+        preProcessedSchema
+    );
+    HashMap newValue = (HashMap) converter.preProcessValue(origValue, origSchema, preProcessedSchema);
+    assertEquals(origValue, newValue);
   }
 
   @Test
   public void struct() {
     Schema origSchema = SchemaBuilder.struct().name("struct").field("decimal", Decimal.schema(2)).build();
-    Schema preProcessedSchema = DataConverter.preProcessSchema(origSchema);
+    Schema preProcessedSchema = converter.preProcessSchema(origSchema);
     assertEquals(
         SchemaBuilder.struct().name("struct").field("decimal", Schema.FLOAT64_SCHEMA).build(),
         preProcessedSchema
@@ -188,13 +229,13 @@ public class DataConverterTest {
 
     assertEquals(
         new Struct(preProcessedSchema).put("decimal", 0.02),
-        DataConverter.preProcessValue(new Struct(origSchema).put("decimal", new BigDecimal("0.02")), origSchema, preProcessedSchema)
+        converter.preProcessValue(new Struct(origSchema).put("decimal", new BigDecimal("0.02")), origSchema, preProcessedSchema)
     );
 
     // optional
     assertEquals(
         SchemaBuilder.struct().name("struct").field("decimal", Schema.FLOAT64_SCHEMA).optional().build(),
-        DataConverter.preProcessSchema(SchemaBuilder.struct().name("struct").field("decimal", Decimal.schema(2)).optional().build())
+        converter.preProcessSchema(SchemaBuilder.struct().name("struct").field("decimal", Decimal.schema(2)).optional().build())
     );
   }
 
