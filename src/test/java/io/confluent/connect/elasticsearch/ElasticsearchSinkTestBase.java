@@ -55,6 +55,7 @@ public class ElasticsearchSinkTestBase extends ESIntegTestCase {
   protected static final TopicPartition TOPIC_PARTITION3 = new TopicPartition(TOPIC, PARTITION3);
 
   protected JestHttpClient client;
+  private DataConverter converter;
 
   @Before
   public void setUp() throws Exception {
@@ -66,6 +67,7 @@ public class ElasticsearchSinkTestBase extends ESIntegTestCase {
             .multiThreaded(true).build()
     );
     client = (JestHttpClient) factory.getObject();
+    converter = new DataConverter(true);
   }
 
   @After
@@ -130,7 +132,7 @@ public class ElasticsearchSinkTestBase extends ESIntegTestCase {
 
     for (Object record : records) {
       if (record instanceof SinkRecord) {
-        IndexableRecord indexableRecord = DataConverter.convertRecord((SinkRecord) record, index, TYPE, ignoreKey, ignoreSchema);
+        IndexableRecord indexableRecord = converter.convertRecord((SinkRecord) record, index, TYPE, ignoreKey, ignoreSchema);
         assertEquals(indexableRecord.payload, hits.get(indexableRecord.key.id));
       } else {
         assertEquals(record, hits.get("key"));

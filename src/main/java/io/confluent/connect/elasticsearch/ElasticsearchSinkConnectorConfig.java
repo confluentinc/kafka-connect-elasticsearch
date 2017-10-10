@@ -99,6 +99,16 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   private static final String DROP_INVALID_MESSAGE_DOC =
           "Whether to drop kafka message when it cannot be converted to output message.";
 
+  public static final String COMPACT_MAP_ENTRIES_CONFIG = "compact.map.entries";
+  private static final String COMPACT_MAP_ENTRIES_DOC =
+      "Defines how map entries with string keys within record values should be written to JSON. "
+      + "When this is set to ``true``, these entries are written compactly as "
+      + "``\"entryKey\": \"entryValue\"``. "
+      + "Otherwise, map entries with string keys are written as a nested document "
+      + "``{\"key\": \"entryKey\", \"value\": \"entryValue\"}``. "
+      + "All map entries with non-string keys are always written as nested documents. "
+      + "Prior to 3.3.0, this connector always wrote map entries as nested documents, "
+      + "so set this to ``false`` to use that older behavior.";
 
   protected static ConfigDef baseConfigDef() {
     final ConfigDef configDef = new ConfigDef();
@@ -224,6 +234,16 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
         ++order,
         Width.SHORT,
         "Ignore Schema mode"
+    ).define(
+        COMPACT_MAP_ENTRIES_CONFIG,
+        Type.BOOLEAN,
+        true,
+        Importance.LOW,
+        COMPACT_MAP_ENTRIES_DOC,
+        group,
+        ++order,
+        Width.SHORT,
+        "Compact Map Entries"
     ).define(
         TOPIC_INDEX_MAP_CONFIG,
         Type.LIST,
