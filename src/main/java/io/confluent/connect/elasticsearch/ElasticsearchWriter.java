@@ -49,12 +49,14 @@ public class ElasticsearchWriter {
   private final Map<String, String> topicToIndexMap;
   private final long flushTimeoutMs;
   private final BulkProcessor<IndexableRecord, ?> bulkProcessor;
+  private final DataConverter converter;
 
   private final Set<String> existingMappings;
 
   ElasticsearchWriter(
       JestClient client,
       String type,
+      boolean useCompactMapEntries,
       boolean ignoreKey,
       Set<String> ignoreKeyTopics,
       boolean ignoreSchema,
@@ -76,6 +78,7 @@ public class ElasticsearchWriter {
     this.ignoreSchemaTopics = ignoreSchemaTopics;
     this.topicToIndexMap = topicToIndexMap;
     this.flushTimeoutMs = flushTimeoutMs;
+    this.converter = new DataConverter(useCompactMapEntries);
 
     bulkProcessor = new BulkProcessor<>(
         new SystemTime(),
@@ -94,6 +97,7 @@ public class ElasticsearchWriter {
   public static class Builder {
     private final JestClient client;
     private String type;
+    private boolean useCompactMapEntries = true;
     private boolean ignoreKey = false;
     private Set<String> ignoreKeyTopics = Collections.emptySet();
     private boolean ignoreSchema = false;
@@ -125,6 +129,11 @@ public class ElasticsearchWriter {
     public Builder setIgnoreSchema(boolean ignoreSchema, Set<String> ignoreSchemaTopics) {
       this.ignoreSchema = ignoreSchema;
       this.ignoreSchemaTopics = ignoreSchemaTopics;
+      return this;
+    }
+
+    public Builder setCompactMapEntries(boolean useCompactMapEntries) {
+      this.useCompactMapEntries = useCompactMapEntries;
       return this;
     }
 
@@ -172,6 +181,7 @@ public class ElasticsearchWriter {
       return new ElasticsearchWriter(
           client,
           type,
+          useCompactMapEntries,
           ignoreKey,
           ignoreKeyTopics,
           ignoreSchema,
@@ -207,7 +217,8 @@ public class ElasticsearchWriter {
         existingMappings.add(index);
       }
 
-      final IndexableRecord indexableRecord = DataConverter.convertRecord(sinkRecord, index, type, ignoreKey, ignoreSchema);
+      final IndexableRecord indexableRecord = converter.convertRecord(sinkRecord, index, type,
+                                                                      ignoreKey, ignoreSchema);
 
       bulkProcessor.add(indexableRecord, flushTimeoutMs);
     }

@@ -109,13 +109,14 @@ public class MappingTest extends ElasticsearchSinkTestBase {
       }
     }
 
+    DataConverter converter = new DataConverter(true);
     Schema.Type schemaType = schema.type();
     switch (schemaType) {
       case ARRAY:
         verifyMapping(schema.valueSchema(), mapping);
         break;
       case MAP:
-        Schema newSchema = DataConverter.preProcessSchema(schema);
+        Schema newSchema = converter.preProcessSchema(schema);
         JsonObject mapProperties = mapping.get("properties").getAsJsonObject();
         verifyMapping(newSchema.keySchema(), mapProperties.get(ElasticsearchSinkConnectorConstants.MAP_KEY).getAsJsonObject());
         verifyMapping(newSchema.valueSchema(), mapProperties.get(ElasticsearchSinkConnectorConstants.MAP_VALUE).getAsJsonObject());
