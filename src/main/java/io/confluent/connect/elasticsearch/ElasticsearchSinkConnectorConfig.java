@@ -115,6 +115,9 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
       + "All map entries with non-string keys are always written as nested documents. "
       + "Prior to 3.3.0, this connector always wrote map entries as nested documents, "
       + "so set this to ``false`` to use that older behavior.";
+  public static final String PIPELINE_CONFIG = "pipeline";
+  private static final String PIPELINE_DOC = 
+      "The pipeline used to pre-process documents before indexing.";
 
   public static final String CONNECTION_TIMEOUT_MS_CONFIG = "connection.timeout.ms";
   public static final String READ_TIMEOUT_MS_CONFIG = "read.timeout.ms";
@@ -222,7 +225,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
         ++order,
         Width.SHORT,
         "Retry Backoff (ms)"
-      ).define(
+    ).define(
         CONNECTION_TIMEOUT_MS_CONFIG, 
         Type.INT, 
         1000, 
@@ -241,7 +244,17 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
         group, 
         ++order, 
         Width.SHORT, 
-        "Read Timeout");
+        "Read Timeout"
+    ).define(
+        PIPELINE_CONFIG,
+        Type.STRING,
+        "",
+        Importance.LOW,
+        PIPELINE_DOC,
+        group,
+        ++order,
+        Width.MEDIUM, 
+        "Pipeline");
   }
 
   private static void addConversionConfigs(ConfigDef configDef) {

@@ -57,6 +57,12 @@ Connector
   * Type: long
   * Default: 100
   * Importance: low
+  
+``pipeline``
+  The pipeline used to pre-process documents before indexing.
+  
+  * Type: string
+  * Importance: low
 
 ``connection.timeout.ms``
   How long to wait in milliseconds when establishing a connection to the Elasticsearch server. The task fails if the client fails to connect to the server in this interval, and will need to be restarted.

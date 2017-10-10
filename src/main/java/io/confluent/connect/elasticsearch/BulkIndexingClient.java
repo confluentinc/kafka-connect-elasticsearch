@@ -25,6 +25,7 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import io.confluent.connect.elasticsearch.bulk.BulkClient;
 import io.confluent.connect.elasticsearch.bulk.BulkResponse;
@@ -40,13 +41,21 @@ public class BulkIndexingClient implements BulkClient<IndexableRecord, Bulk> {
 
   private final JestClient client;
 
-  public BulkIndexingClient(JestClient client) {
+  private final Map<String, Object> parameters;
+
+  public BulkIndexingClient(JestClient client, Map<String, Object> parameters) {
     this.client = client;
+    this.parameters = parameters;
   }
 
   @Override
   public Bulk bulkRequest(List<IndexableRecord> batch) {
     final Bulk.Builder builder = new Bulk.Builder();
+    if (parameters != null) {
+      for (Map.Entry<String, Object> parameter : parameters.entrySet()) {
+        builder.setParameter(parameter.getKey(), parameter.getValue());
+      }
+    }
     for (IndexableRecord record : batch) {
       builder.addAction(record.toBulkableAction());
     }
