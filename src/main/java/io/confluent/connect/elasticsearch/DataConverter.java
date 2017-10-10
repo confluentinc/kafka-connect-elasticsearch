@@ -126,6 +126,7 @@ public class DataConverter {
   // completely rewrite a converter for Elasticsearch, we will refactor the JSON converter to
   // support customized translation. The pre process is no longer needed once we have the JSON
   // converter refactored.
+  // visible for testing
   Schema preProcessSchema(Schema schema) {
     if (schema == null) {
       return null;
