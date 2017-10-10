@@ -111,6 +111,7 @@ public class DataConverter {
   // expects a different JSON format from the current JSON converter provides. Rather than completely
   // rewrite a converter for Elasticsearch, we will refactor the JSON converter to support customized
   // translation. The pre process is no longer needed once we have the JSON converter refactored.
+  // visible for testing
   Schema preProcessSchema(Schema schema) {
     if (schema == null) {
       return null;
@@ -160,7 +161,7 @@ public class DataConverter {
     }
   }
 
-  SchemaBuilder copySchemaBasics(Schema source, SchemaBuilder target) {
+  private SchemaBuilder copySchemaBasics(Schema source, SchemaBuilder target) {
     if (source.isOptional()) {
       target.optional();
     }
