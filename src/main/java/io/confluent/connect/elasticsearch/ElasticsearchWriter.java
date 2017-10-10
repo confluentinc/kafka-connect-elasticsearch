@@ -36,6 +36,7 @@ import io.searchbox.client.JestClient;
 import io.searchbox.client.JestResult;
 import io.searchbox.indices.CreateIndex;
 import io.searchbox.indices.IndicesExists;
+import io.searchbox.indices.aliases.AliasExists;
 
 public class ElasticsearchWriter {
   private static final Logger log = LoggerFactory.getLogger(ElasticsearchWriter.class);
@@ -280,10 +281,15 @@ public class ElasticsearchWriter {
     bulkProcessor.awaitStop(flushTimeoutMs);
   }
 
-  private boolean indexExists(String index) {
+  private boolean indexOrAliasExists(String index) {
     Action action = new IndicesExists.Builder(index).build();
     try {
       JestResult result = client.execute(action);
+      if (result.isSucceeded()) {
+        return true;
+      }
+      action = new AliasExists.Builder().alias(index).build();
+      result = client.execute(action);
       return result.isSucceeded();
     } catch (IOException e) {
       throw new ConnectException(e);
@@ -292,7 +298,7 @@ public class ElasticsearchWriter {
 
   public void createIndicesForTopics(Set<String> assignedTopics) {
     for (String index : indicesForTopics(assignedTopics)) {
-      if (!indexExists(index)) {
+      if (!indexOrAliasExists(index)) {
         CreateIndex createIndex = new CreateIndex.Builder(index).build();
         try {
           JestResult result = client.execute(createIndex);
