@@ -124,6 +124,9 @@
                         <descriptor>src/assembly/development.xml</descriptor>
                         <descriptor>src/assembly/package.xml</descriptor>
                     </descriptors>
+                    <descriptorRefs>
+                        <descriptorRef>jar-with-dependencies</descriptorRef>
+                    </descriptorRefs>
                 </configuration>
                 <executions>
                     <execution>

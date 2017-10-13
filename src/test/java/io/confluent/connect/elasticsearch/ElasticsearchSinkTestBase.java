@@ -129,7 +129,7 @@ public class ElasticsearchSinkTestBase extends ESIntegTestCase {
     }
 
     for (SinkRecord record : records) {
-      final IndexableRecord indexableRecord = DataConverter.convertRecord(record, index, TYPE, ignoreKey, ignoreSchema);
+      final IndexableRecord indexableRecord = DataConverter.convertRecord(record, record.key().toString(), index, TYPE, ignoreKey, ignoreSchema);
       assertEquals(indexableRecord.payload, hits.get(indexableRecord.key.id));
     }
   }

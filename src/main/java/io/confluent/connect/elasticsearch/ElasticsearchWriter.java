@@ -22,6 +22,9 @@ import org.apache.kafka.connect.sink.SinkRecord;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 import java.io.IOException;
 import java.util.Collection;
 import java.util.Collections;
@@ -49,6 +52,8 @@ public class ElasticsearchWriter {
   private final Map<String, String> topicToIndexMap;
   private final long flushTimeoutMs;
   private final BulkProcessor<IndexableRecord, ?> bulkProcessor;
+  private final String keyObjIndexName = "indexName";
+  private final String keyObjId = "uuid";
 
   private final Set<String> existingMappings;
 
@@ -191,9 +196,22 @@ public class ElasticsearchWriter {
   public void write(Collection<SinkRecord> records) {
     for (SinkRecord sinkRecord : records) {
       final String indexOverride = topicToIndexMap.get(sinkRecord.topic());
-      final String index = indexOverride != null ? indexOverride : sinkRecord.topic();
+      String index = indexOverride != null ? indexOverride : sinkRecord.topic();
       final boolean ignoreKey = ignoreKeyTopics.contains(sinkRecord.topic()) || this.ignoreKey;
       final boolean ignoreSchema = ignoreSchemaTopics.contains(sinkRecord.topic()) || this.ignoreSchema;
+      String recordId = sinkRecord.key().toString();
+
+      try {
+        ObjectMapper mapper = new ObjectMapper();
+        JsonNode sinkKeyObj = mapper.readTree(sinkRecord.key().toString());
+        index = sinkKeyObj.has(keyObjIndexName) ? sinkKeyObj.get(keyObjIndexName).textValue() : index;
+        recordId = sinkKeyObj.has(keyObjId) ? sinkKeyObj.get(keyObjId).textValue() : recordId;
+      } catch (Exception e) {
+        // N/A --> Key Record can be a String or JSON format
+      }
+
+      log.debug("Index --> " + index);
+      log.debug("Record Id --> " + recordId);
 
       if (!ignoreSchema && !existingMappings.contains(index)) {
         try {
@@ -207,7 +225,7 @@ public class ElasticsearchWriter {
         existingMappings.add(index);
       }
 
-      final IndexableRecord indexableRecord = DataConverter.convertRecord(sinkRecord, index, type, ignoreKey, ignoreSchema);
+      final IndexableRecord indexableRecord = DataConverter.convertRecord(sinkRecord, recordId, index, type, ignoreKey, ignoreSchema);
 
       bulkProcessor.add(indexableRecord, flushTimeoutMs);
     }
