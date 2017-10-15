@@ -7,8 +7,15 @@ for copying data between Kafka and Elasticsearch.
 
 # Development
 
-To build a development version you'll need a recent version of Kafka. You can build
-kafka-connect-elasticsearch with Maven using the standard lifecycle phases.
+To build a development version, you may need a development versions of
+[common](https://github.com/confluentinc/common) and
+[kafka](https://github.com/confluentinc/kafka).  After
+installing these, you can build the Kafka Connect Elasticsearch Connector
+with Maven. Because during development of the Elasticsearch connector
+we sometimes use a SNAPSHOT version of Kafka and other libraries
+in order to build and test against new features. 
+However, the public Confluent Maven repository only contains 
+release versions, not SNAPSHOT builds. 
 
 
 # Contribute
