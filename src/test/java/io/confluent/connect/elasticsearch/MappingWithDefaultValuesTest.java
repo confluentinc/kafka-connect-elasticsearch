@@ -97,8 +97,6 @@ public class MappingWithDefaultValuesTest extends ElasticsearchSinkTestBase {
   protected Schema createSchema() {
     return SchemaBuilder.struct().name("record")
         .field("boolean", SchemaBuilder.bool().defaultValue(false).build())
-        .field("bytes", SchemaBuilder.bytes().defaultValue(new byte[]{1}))
-        .field("byte_buffer", SchemaBuilder.bytes().defaultValue(ByteBuffer.wrap("bar".getBytes())))
         .field("int8", SchemaBuilder.int8().defaultValue((byte) 42).build())
         .field("int16", SchemaBuilder.int16().defaultValue((short) 42).build())
         .field("int32", SchemaBuilder.int32().defaultValue(42).build())
