@@ -3,6 +3,15 @@
 Changelog
 =========
 
+Version 3.3.1
+-------------
+
+* `PR-126 <https://github.com/confluentinc/kafka-connect-elasticsearch/pull/126>`_ - CC-1191: Added feature flag to control string-keyed map entry JSON serialization
+* `PR-120 <https://github.com/confluentinc/kafka-connect-elasticsearch/pull/120>`_ - Add upstream project so build are triggered automatically
+* `PR-117 <https://github.com/confluentinc/kafka-connect-elasticsearch/pull/117>`_ - CC-1096 Added ES error message when unable to create an index
+* `PR-116 <https://github.com/confluentinc/kafka-connect-elasticsearch/pull/116>`_ - CC-1059 Changed ES connector to use exponential backoff with jitter
+* `PR-105 <https://github.com/confluentinc/kafka-connect-elasticsearch/pull/105>`_ - Update quickstart to use Confluent CLI.
+
 Version 3.3.0
 -------------
 
