@@ -3,6 +3,13 @@
 Changelog
 =========
 
+Version 4.0.0
+-------------
+
+* `PR-122 <https://github.com/confluentinc/kafka-connect-elasticsearch/pull/122>`_ - Add argLine to surefire override configuration so we maintain the Jenkins features of the common pom.
+* `PR-91 <https://github.com/confluentinc/kafka-connect-elasticsearch/pull/91>`_ - Drop invalid messages if needed
+* `PR-88 <https://github.com/confluentinc/kafka-connect-elasticsearch/pull/88>`_ - Inherit from common pom
+
 Version 3.3.1
 -------------
 
