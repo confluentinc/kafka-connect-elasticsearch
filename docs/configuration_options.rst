@@ -33,19 +33,19 @@ Connector
   * Default: 1
   * Importance: low
 
-``flush.timeout.ms``
-  The timeout in milliseconds to use for periodic flushing, and when waiting for buffer space to be made available by completed requests as records are added. If this timeout is exceeded the task will fail.
-
-  * Type: long
-  * Default: 10000
-  * Importance: low
-
 ``max.in.flight.requests``
   The maximum number of indexing requests that can be in-flight to Elasticsearch before blocking further requests.
 
   * Type: int
   * Default: 5
   * Importance: medium
+
+``flush.timeout.ms``
+  The timeout in milliseconds to use for periodic flushing, and when waiting for buffer space to be made available by completed requests as records are added. If this timeout is exceeded the task will fail.
+
+  * Type: long
+  * Default: 10000
+  * Importance: low
 
 ``max.retries``
   The maximum number of retries that are allowed for failed indexing requests. If the retry attempts are exhausted the task will fail.
@@ -55,7 +55,7 @@ Connector
   * Importance: low
 
 ``retry.backoff.ms``
-  How long to wait in milliseconds before attempting to retry a the first failed indexing request. This connector uses exponential backoff with jitter, which means that upon additional failures, this connector may wait up to twice as long as the previous wait, up to the maximum number of retries. This avoids retrying in a tight loop under failure scenarios.
+  How long to wait in milliseconds before attempting the first retry of a failed indexing request. Upon a failure, this connector may wait up to twice as long as the previous wait, up to the maximum number of retries. This avoids retrying in a tight loop under failure scenarios.
 
   * Type: long
   * Default: 100
@@ -73,7 +73,7 @@ Data Conversion
 ``key.ignore``
   Whether to ignore the record key for the purpose of forming the Elasticsearch document ID. When this is set to ``true``, document IDs will be generated as the record's ``topic+partition+offset``.
 
-  Note that this is a global config that applies to all topics, use ``topic.key.ignore`` to override as ``true`` for specific topics.
+   Note that this is a global config that applies to all topics, use ``topic.key.ignore`` to override as ``true`` for specific topics.
 
   * Type: boolean
   * Default: false
@@ -82,7 +82,7 @@ Data Conversion
 ``schema.ignore``
   Whether to ignore schemas during indexing. When this is set to ``true``, the record schema will be ignored for the purpose of registering an Elasticsearch mapping. Elasticsearch will infer the mapping from the data (dynamic mapping needs to be enabled by the user).
 
-  Note that this is a global config that applies to all topics, use ``topic.schema.ignore`` to override as ``true`` for specific topics.
+   Note that this is a global config that applies to all topics, use ``topic.schema.ignore`` to override as ``true`` for specific topics.
 
   * Type: boolean
   * Default: false
@@ -114,4 +114,11 @@ Data Conversion
 
   * Type: list
   * Default: ""
+  * Importance: low
+
+``drop.invalid.message``
+  Whether to drop kafka message when it cannot be converted to output message.
+
+  * Type: boolean
+  * Default: false
   * Importance: low
