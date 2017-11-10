@@ -52,6 +52,7 @@ public class ElasticsearchWriter {
   private final DataConverter converter;
 
   private final Set<String> existingMappings;
+  private final boolean ignoreMappingErrors;
 
   ElasticsearchWriter(
       ElasticsearchClient client,
@@ -70,7 +71,8 @@ public class ElasticsearchWriter {
       int maxRetries,
       long retryBackoffMs,
       boolean dropInvalidMessage,
-      BehaviorOnNullValues behaviorOnNullValues
+      BehaviorOnNullValues behaviorOnNullValues,
+      boolean ignoreMappingErrors
   ) {
     this.client = client;
     this.type = type;
@@ -83,6 +85,7 @@ public class ElasticsearchWriter {
     this.dropInvalidMessage = dropInvalidMessage;
     this.behaviorOnNullValues = behaviorOnNullValues;
     this.converter = new DataConverter(useCompactMapEntries, behaviorOnNullValues);
+    this.ignoreMappingErrors = ignoreMappingErrors;
 
     bulkProcessor = new BulkProcessor<>(
         new SystemTime(),
@@ -92,7 +95,8 @@ public class ElasticsearchWriter {
         batchSize,
         lingerMs,
         maxRetries,
-        retryBackoffMs
+        retryBackoffMs,
+        ignoreMappingErrors
     );
 
     existingMappings = new HashSet<>();
@@ -116,6 +120,7 @@ public class ElasticsearchWriter {
     private long retryBackoffMs;
     private boolean dropInvalidMessage;
     private BehaviorOnNullValues behaviorOnNullValues = BehaviorOnNullValues.DEFAULT;
+    private boolean ignoreMappingErrors;
 
     public Builder(ElasticsearchClient client) {
       this.client = client;
@@ -200,6 +205,11 @@ public class ElasticsearchWriter {
       return this;
     }
 
+    public Builder setIgnoreMappingErrors(boolean ignoreMappingErrors) {
+      this.ignoreMappingErrors = ignoreMappingErrors;
+      return this;
+    }
+
     public ElasticsearchWriter build() {
       return new ElasticsearchWriter(
           client,
@@ -218,7 +228,8 @@ public class ElasticsearchWriter {
           maxRetry,
           retryBackoffMs,
           dropInvalidMessage,
-          behaviorOnNullValues
+          behaviorOnNullValues,
+          ignoreMappingErrors
       );
     }
   }

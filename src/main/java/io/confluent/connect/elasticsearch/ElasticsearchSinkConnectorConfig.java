@@ -132,6 +132,9 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
       + "non-null key and a null value (i.e. Kafka tombstone records). Valid options are "
       + "'ignore', 'delete', and 'fail'.";
 
+  public static final String IGNORE_MAPPING_ERRORS_CONFIG = "ignore.mapping.errors";
+  private static final String IGNORE_MAPPING_ERRORS_DOC = "Whether to ignore "
+      + "mapper_parsing_exceptions thrown by Elasticsearch upon indexing malformed documents.";
 
   protected static ConfigDef baseConfigDef() {
     final ConfigDef configDef = new ConfigDef();
@@ -336,7 +339,17 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
         group,
         ++order,
         Width.SHORT,
-        "Behavior for null-valued records");
+        "Behavior for null-valued records"
+    ).define(
+        IGNORE_MAPPING_ERRORS_CONFIG,
+        Type.BOOLEAN,
+        false,
+        Importance.LOW,
+        IGNORE_MAPPING_ERRORS_DOC,
+        group,
+        ++order,
+        Width.SHORT,
+        "Ignore Mapping Errors mode");
   }
 
   public static final ConfigDef CONFIG = baseConfigDef();

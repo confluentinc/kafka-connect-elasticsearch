@@ -95,6 +95,9 @@ public class ElasticsearchSinkTask extends SinkTask {
               config.getString(ElasticsearchSinkConnectorConfig.BEHAVIOR_ON_NULL_VALUES_CONFIG)
           );
 
+      boolean ignoreMappingErrors = config.getBoolean(
+          ElasticsearchSinkConnectorConfig.IGNORE_MAPPING_ERRORS_CONFIG);
+
       // Calculate the maximum possible backoff time ...
       long maxRetryBackoffMs =
           RetryUtil.computeRetryWaitTimeInMillis(maxRetry, retryBackoffMs);
@@ -127,7 +130,8 @@ public class ElasticsearchSinkTask extends SinkTask {
           .setRetryBackoffMs(retryBackoffMs)
           .setMaxRetry(maxRetry)
           .setDropInvalidMessage(dropInvalidMessage)
-          .setBehaviorOnNullValues(behaviorOnNullValues);
+          .setBehaviorOnNullValues(behaviorOnNullValues)
+          .setIgnoreMappingErrors(ignoreMappingErrors);
 
       writer = builder.build();
       writer.start();

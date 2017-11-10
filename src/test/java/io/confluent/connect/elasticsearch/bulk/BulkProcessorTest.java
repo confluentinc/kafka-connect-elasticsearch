@@ -102,6 +102,7 @@ public class BulkProcessorTest {
     final int lingerMs = 5;
     final int maxRetries = 0;
     final int retryBackoffMs = 0;
+    final boolean ignoreMappingErrors = false;
 
     final BulkProcessor<Integer, ?> bulkProcessor = new BulkProcessor<>(
         new SystemTime(),
@@ -111,7 +112,8 @@ public class BulkProcessorTest {
         batchSize,
         lingerMs,
         maxRetries,
-        retryBackoffMs
+        retryBackoffMs,
+        ignoreMappingErrors
     );
 
     final int addTimeoutMs = 10;
@@ -144,6 +146,7 @@ public class BulkProcessorTest {
     final int lingerMs = 100000; // super high on purpose to make sure flush is what's causing the request
     final int maxRetries = 0;
     final int retryBackoffMs = 0;
+    final boolean ignoreMappingErrors = false;
 
     final BulkProcessor<Integer, ?> bulkProcessor = new BulkProcessor<>(
         new SystemTime(),
@@ -153,7 +156,8 @@ public class BulkProcessorTest {
         batchSize,
         lingerMs,
         maxRetries,
-        retryBackoffMs
+        retryBackoffMs,
+        ignoreMappingErrors
     );
 
     client.expect(Arrays.asList(1, 2, 3), BulkResponse.success());
@@ -179,6 +183,7 @@ public class BulkProcessorTest {
     final int lingerMs = 10;
     final int maxRetries = 0;
     final int retryBackoffMs = 0;
+    final boolean ignoreMappingErrors = false;
 
     final BulkProcessor<Integer, ?> bulkProcessor = new BulkProcessor<>(
         new SystemTime(),
@@ -188,7 +193,8 @@ public class BulkProcessorTest {
         batchSize,
         lingerMs,
         maxRetries,
-        retryBackoffMs
+        retryBackoffMs,
+        ignoreMappingErrors
     );
 
     final int addTimeoutMs = 10;
@@ -210,6 +216,7 @@ public class BulkProcessorTest {
     final int lingerMs = 5;
     final int maxRetries = 3;
     final int retryBackoffMs = 1;
+    final boolean ignoreMappingErrors = false;
 
     client.expect(Arrays.asList(42, 43), BulkResponse.failure(true, "a retiable error"));
     client.expect(Arrays.asList(42, 43), BulkResponse.failure(true, "a retriable error again"));
@@ -223,7 +230,8 @@ public class BulkProcessorTest {
         batchSize,
         lingerMs,
         maxRetries,
-        retryBackoffMs
+        retryBackoffMs,
+        ignoreMappingErrors
     );
 
     final int addTimeoutMs = 10;
@@ -255,7 +263,8 @@ public class BulkProcessorTest {
         batchSize,
         lingerMs,
         maxRetries,
-        retryBackoffMs
+        retryBackoffMs,
+        false
     );
 
     final int addTimeoutMs = 10;
@@ -278,6 +287,7 @@ public class BulkProcessorTest {
     final int lingerMs = 5;
     final int maxRetries = 3;
     final int retryBackoffMs = 1;
+    final boolean ignoreMappingErrors = false;
 
     final String errorInfo = "an unretriable error";
     client.expect(Arrays.asList(42, 43), BulkResponse.failure(false, errorInfo));
@@ -290,7 +300,8 @@ public class BulkProcessorTest {
         batchSize,
         lingerMs,
         maxRetries,
-        retryBackoffMs
+        retryBackoffMs,
+        ignoreMappingErrors
     );
 
     final int addTimeoutMs = 10;
@@ -305,4 +316,84 @@ public class BulkProcessorTest {
     }
   }
 
+  @Test
+  public void ignoreMappingFalse() throws InterruptedException {
+    final int maxBufferedRecords = 100;
+    final int maxInFlightBatches = 5;
+    final int batchSize = 2;
+    final int lingerMs = 5;
+    final int maxRetries = 3;
+    final int retryBackoffMs = 1;
+    final boolean ignoreMappingErrors = false;
+
+    final String errorInfo = " [{\"type\":\"mapper_parsing_exception\",\"reason\":\"failed to parse\"," +
+        "\"caused_by\":{\"type\":\"illegal_argument_exception\",\"reason\":\"object\n" +
+        " field starting or ending with a [.] makes object resolution ambiguous: [avjpz{{.}}wjzse{{..}}gal9d]\"}}]";
+    client.expect(Arrays.asList(42, 43), BulkResponse.failure(false, errorInfo));
+
+    final BulkProcessor<Integer, ?> bulkProcessor = new BulkProcessor<>(
+        new SystemTime(),
+        client,
+        maxBufferedRecords,
+        maxInFlightBatches,
+        batchSize,
+        lingerMs,
+        maxRetries,
+        retryBackoffMs,
+        ignoreMappingErrors
+    );
+
+    bulkProcessor.start();
+
+    bulkProcessor.add(42, 1);
+    bulkProcessor.add(43, 1);
+
+    try {
+      bulkProcessor.flush(10);
+      fail();
+    } catch(ConnectException e) {
+      // expected
+      assertTrue(e.getMessage().contains("mapper_parsing_exception"));
+    }
+  }
+
+  @Test
+  public void ignoreMappingTrue() throws InterruptedException {
+    final int maxBufferedRecords = 100;
+    final int maxInFlightBatches = 5;
+    final int batchSize = 2;
+    final int lingerMs = 5;
+    final int maxRetries = 3;
+    final int retryBackoffMs = 1;
+    final boolean ignoreMappingErrors = true;
+
+    final String errorInfo = " [{\"type\":\"mapper_parsing_exception\",\"reason\":\"failed to parse\"," +
+        "\"caused_by\":{\"type\":\"illegal_argument_exception\",\"reason\":\"object\n" +
+        " field starting or ending with a [.] makes object resolution ambiguous: [avjpz{{.}}wjzse{{..}}gal9d]\"}}]";
+    client.expect(Arrays.asList(42, 43), BulkResponse.failure(false, errorInfo));
+
+    final BulkProcessor<Integer, ?> bulkProcessor = new BulkProcessor<>(
+        new SystemTime(),
+        client,
+        maxBufferedRecords,
+        maxInFlightBatches,
+        batchSize,
+        lingerMs,
+        maxRetries,
+        retryBackoffMs,
+        ignoreMappingErrors
+    );
+
+    bulkProcessor.start();
+
+    bulkProcessor.add(42, 1);
+    bulkProcessor.add(43, 1);
+
+
+    try {
+      bulkProcessor.flush(10);
+    } catch(ConnectException e) {
+      fail(e.getMessage());
+    }
+  }
 }

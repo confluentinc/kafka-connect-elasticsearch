@@ -53,6 +53,7 @@ public class BulkProcessor<R, B> {
   private final long lingerMs;
   private final int maxRetries;
   private final long retryBackoffMs;
+  private final boolean ignoreMappingErrors;
 
   private final Thread farmer;
   private final ExecutorService executor;
@@ -76,7 +77,8 @@ public class BulkProcessor<R, B> {
       int batchSize,
       long lingerMs,
       int maxRetries,
-      long retryBackoffMs
+      long retryBackoffMs,
+      boolean ignoreMappingErrors
   ) {
     this.time = time;
     this.bulkClient = bulkClient;
@@ -85,6 +87,7 @@ public class BulkProcessor<R, B> {
     this.lingerMs = lingerMs;
     this.maxRetries = maxRetries;
     this.retryBackoffMs = retryBackoffMs;
+    this.ignoreMappingErrors = ignoreMappingErrors;
 
     unsentRecords = new ArrayDeque<>(maxBufferedRecords);
 
@@ -371,6 +374,12 @@ public class BulkProcessor<R, B> {
               log.debug("Completed batch {} of {} records with attempt {}/{}",
                       batchId, batch.size(), attempts, maxAttempts);
             }
+            return bulkRsp;
+          }
+          if (ignoreMappingErrors && bulkRsp.getErrorInfo().contains("mapper_parsing_exception")) {
+            log.info("Encountered mapper_parsing_exception when execute batch {} of {} records."
+                    + " Ignoring. {}",
+                batchId, batch.size(), bulkRsp.getErrorInfo());
             return bulkRsp;
           }
           retriable = bulkRsp.isRetriable();
