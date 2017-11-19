@@ -376,11 +376,13 @@ public class BulkProcessor<R, B> {
             }
             return bulkRsp;
           }
-          if (ignoreMappingErrors && bulkRsp.getErrorInfo().contains("mapper_parsing_exception")) {
-            log.info("Encountered mapper_parsing_exception when execute batch {} of {} records."
-                    + " Ignoring. {}",
-                batchId, batch.size(), bulkRsp.getErrorInfo());
-            return bulkRsp;
+          if (ignoreMappingErrors) {
+            if (responseContainsMappingError(bulkRsp)) {
+              log.info("Encountered mapper_parsing_exception when executing batch {} of {} records."
+                      + " Ignoring. Error was {}",
+                  batchId, batch.size(), bulkRsp.getErrorInfo());
+              return bulkRsp;
+            }
           }
           retriable = bulkRsp.isRetriable();
           throw new ConnectException("Bulk request failed: " + bulkRsp.getErrorInfo());
@@ -400,6 +402,11 @@ public class BulkProcessor<R, B> {
         }
       }
     }
+  }
+
+  private boolean responseContainsMappingError(BulkResponse bulkRsp) {
+    return bulkRsp.getErrorInfo().contains("mapper_parsing_exception")
+        || bulkRsp.getErrorInfo().contains("illegal_argument_exception");
   }
 
   private synchronized void onBatchCompletion(int batchSize) {
