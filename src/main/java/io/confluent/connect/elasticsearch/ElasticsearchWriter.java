@@ -46,6 +46,9 @@ public class ElasticsearchWriter {
   private final Set<String> ignoreKeyTopics;
   private final boolean ignoreSchema;
   private final Set<String> ignoreSchemaTopics;
+  /**
+   * @deprecated This field is now deprecated. A future version may remove it completely.
+   */
   private final Map<String, String> topicToIndexMap;
   private final long flushTimeoutMs;
   private final BulkProcessor<IndexableRecord, ?> bulkProcessor;
