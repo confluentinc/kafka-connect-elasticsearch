@@ -73,7 +73,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
 
   /**
    * @deprecated This option is now deprecated. A future version may remove it completely. Please
-   * use single message transforms to map topic names to index names.
+   *             use single message transforms to map topic names to index names.
    */
   public static final String TOPIC_INDEX_MAP_CONFIG = "topic.index.map";
   private static final String TOPIC_INDEX_MAP_DOC =

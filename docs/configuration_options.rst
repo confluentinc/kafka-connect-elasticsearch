@@ -96,7 +96,7 @@ Data Conversion
   * Importance: low
 
 ``topic.index.map``
-  This option is now deprecated. A future version may remove it completely. Please use single message transforms to map topic names to index names.
+  This option is now deprecated. A future version may remove it completely. Please use single message transforms, such as RegexRouter, to map topic names to index names.
 
   A map from Kafka topic name to the destination Elasticsearch index, represented as a list of ``topic:index`` pairs.
 
