@@ -71,10 +71,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   public static final String TYPE_NAME_CONFIG = "type.name";
   private static final String TYPE_NAME_DOC = "The Elasticsearch type name to use when indexing.";
 
-  /**
-   * @deprecated This option is now deprecated. A future version may remove it completely. Please
-   *             use single message transforms to map topic names to index names.
-   */
+  @Deprecated
   public static final String TOPIC_INDEX_MAP_CONFIG = "topic.index.map";
   private static final String TOPIC_INDEX_MAP_DOC =
       "A map from Kafka topic name to the destination Elasticsearch index, represented as a list "
