@@ -70,10 +70,14 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
 
   public static final String TYPE_NAME_CONFIG = "type.name";
   private static final String TYPE_NAME_DOC = "The Elasticsearch type name to use when indexing.";
+
+  @Deprecated
   public static final String TOPIC_INDEX_MAP_CONFIG = "topic.index.map";
   private static final String TOPIC_INDEX_MAP_DOC =
-      "A map from Kafka topic name to the destination Elasticsearch index, represented as a list "
-      + "of ``topic:index`` pairs.";
+      "This option is now deprecated. A future version may remove it completely. Please use "
+          + "single message transforms, such as RegexRouter, to map topic names to index names.\n"
+          + "A map from Kafka topic name to the destination Elasticsearch index, represented as "
+          + "a list of ``topic:index`` pairs.";
   public static final String KEY_IGNORE_CONFIG = "key.ignore";
   public static final String TOPIC_KEY_IGNORE_CONFIG = "topic.key.ignore";
   public static final String SCHEMA_IGNORE_CONFIG = "schema.ignore";
