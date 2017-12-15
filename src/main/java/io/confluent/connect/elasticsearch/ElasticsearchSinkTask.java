@@ -92,6 +92,8 @@ public class ElasticsearchSinkTask extends SinkTask {
           config.getInt(ElasticsearchSinkConnectorConfig.MAX_RETRIES_CONFIG);
       boolean dropInvalidMessage =
           config.getBoolean(ElasticsearchSinkConnectorConfig.DROP_INVALID_MESSAGE_CONFIG);
+      String routingFieldName =
+              config.getString(ElasticsearchSinkConnectorConfig.ROUTING_FIELD_NAME);
 
       // Calculate the maximum possible backoff time ...
       long maxRetryBackoffMs = RetryUtil.computeRetryWaitTimeInMillis(maxRetry, retryBackoffMs);
@@ -131,7 +133,8 @@ public class ElasticsearchSinkTask extends SinkTask {
           .setLingerMs(lingerMs)
           .setRetryBackoffMs(retryBackoffMs)
           .setMaxRetry(maxRetry)
-          .setDropInvalidMessage(dropInvalidMessage);
+          .setDropInvalidMessage(dropInvalidMessage)
+          .setRoutingFieldName(routingFieldName);
 
       writer = builder.build();
       writer.start();

@@ -79,6 +79,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   public static final String SCHEMA_IGNORE_CONFIG = "schema.ignore";
   public static final String TOPIC_SCHEMA_IGNORE_CONFIG = "topic.schema.ignore";
   public static final String DROP_INVALID_MESSAGE_CONFIG = "drop.invalid.message";
+  public static final String ROUTING_FIELD_NAME = "routing.field.name";
 
   private static final String KEY_IGNORE_DOC =
       "Whether to ignore the record key for the purpose of forming the Elasticsearch document ID."
@@ -98,6 +99,8 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
       "List of topics for which ``" + SCHEMA_IGNORE_CONFIG + "`` should be ``true``.";
   private static final String DROP_INVALID_MESSAGE_DOC =
           "Whether to drop kafka message when it cannot be converted to output message.";
+  private static final String ROUTING_FIELD_NAME_DOC =
+          "Specify which filed should be used for routing, it must be a leaf field.";
 
   public static final String COMPACT_MAP_ENTRIES_CONFIG = "compact.map.entries";
   private static final String COMPACT_MAP_ENTRIES_DOC =
@@ -283,7 +286,17 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
         group,
         ++order,
         Width.LONG,
-        "Drop invalid messages");
+        "Drop invalid messages"
+    ).define(
+        ROUTING_FIELD_NAME,
+        Type.STRING,
+        null,
+        Importance.LOW,
+        ROUTING_FIELD_NAME_DOC,
+        group,
+        ++order,
+        Width.SHORT,
+        "Field used for routing");
   }
 
   public static final ConfigDef CONFIG = baseConfigDef();

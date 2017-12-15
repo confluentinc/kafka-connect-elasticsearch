@@ -112,10 +112,10 @@ public class ElasticsearchSinkTestBase extends ESIntegTestCase {
   }
 
   protected void verifySearchResults(Collection<SinkRecord> records, boolean ignoreKey, boolean ignoreSchema) throws IOException {
-    verifySearchResults(records, TOPIC, ignoreKey, ignoreSchema);
+    verifySearchResults(records, TOPIC, null, ignoreKey, ignoreSchema);
   }
 
-  protected void verifySearchResults(Collection<?> records, String index, boolean ignoreKey, boolean ignoreSchema) throws IOException {
+  protected void verifySearchResults(Collection<?> records, String index, String expectedRouting, boolean ignoreKey, boolean ignoreSchema) throws IOException {
     final SearchResult result = client.execute(new Search.Builder("").addIndex(index).build());
 
     final JsonArray rawHits = result.getJsonObject().getAsJsonObject("hits").getAsJsonArray("hits");
@@ -126,13 +126,17 @@ public class ElasticsearchSinkTestBase extends ESIntegTestCase {
     for (int i = 0; i < rawHits.size(); ++i) {
       final JsonObject hitData = rawHits.get(i).getAsJsonObject();
       final String id = hitData.get("_id").getAsString();
+      if (null != expectedRouting) {
+        final String routing = hitData.get("_routing").getAsString();
+        assertEquals(expectedRouting, routing);
+      }
       final String source = hitData.get("_source").getAsJsonObject().toString();
       hits.put(id, source);
     }
 
     for (Object record : records) {
       if (record instanceof SinkRecord) {
-        IndexableRecord indexableRecord = converter.convertRecord((SinkRecord) record, index, TYPE, ignoreKey, ignoreSchema);
+        IndexableRecord indexableRecord = converter.convertRecord((SinkRecord) record, index, TYPE, null, ignoreKey, ignoreSchema);
         assertEquals(indexableRecord.payload, hits.get(indexableRecord.key.id));
       } else {
         assertEquals(record, hits.get("key"));
