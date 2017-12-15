@@ -50,6 +50,7 @@ public class ElasticsearchWriter {
   private final long flushTimeoutMs;
   private final BulkProcessor<IndexableRecord, ?> bulkProcessor;
   private final boolean dropInvalidMessage;
+  private String routingFieldName;
   private final DataConverter converter;
 
   private final Set<String> existingMappings;
@@ -70,7 +71,8 @@ public class ElasticsearchWriter {
       long lingerMs,
       int maxRetries,
       long retryBackoffMs,
-      boolean dropInvalidMessage
+      boolean dropInvalidMessage,
+      String routingFieldName
   ) {
     this.client = client;
     this.type = type;
@@ -81,6 +83,7 @@ public class ElasticsearchWriter {
     this.topicToIndexMap = topicToIndexMap;
     this.flushTimeoutMs = flushTimeoutMs;
     this.dropInvalidMessage = dropInvalidMessage;
+    this.routingFieldName = routingFieldName;
     this.converter = new DataConverter(useCompactMapEntries);
 
     bulkProcessor = new BulkProcessor<>(
@@ -114,6 +117,7 @@ public class ElasticsearchWriter {
     private int maxRetry;
     private long retryBackoffMs;
     private boolean dropInvalidMessage;
+    private String routingFieldName;
 
     public Builder(JestClient client) {
       this.client = client;
@@ -186,6 +190,11 @@ public class ElasticsearchWriter {
       return this;
     }
 
+    public Builder setRoutingFieldName(String routingFieldName) {
+      this.routingFieldName = routingFieldName;
+      return this;
+    }
+
     public ElasticsearchWriter build() {
       return new ElasticsearchWriter(
           client,
@@ -203,7 +212,8 @@ public class ElasticsearchWriter {
           lingerMs,
           maxRetry,
           retryBackoffMs,
-          dropInvalidMessage
+          dropInvalidMessage,
+          routingFieldName
       );
     }
   }
@@ -255,6 +265,7 @@ public class ElasticsearchWriter {
               sinkRecord,
               index,
               type,
+              routingFieldName,
               ignoreKey,
               ignoreSchema);
     } catch (ConnectException convertException) {

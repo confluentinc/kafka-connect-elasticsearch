@@ -16,6 +16,7 @@
 
 package io.confluent.connect.elasticsearch;
 
+import org.apache.commons.lang3.ClassUtils;
 import org.apache.kafka.connect.data.ConnectSchema;
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
@@ -93,6 +94,7 @@ public class DataConverter {
       SinkRecord record,
       String index,
       String type,
+      String routingFieldName,
       boolean ignoreKey,
       boolean ignoreSchema
   ) {
@@ -115,10 +117,33 @@ public class DataConverter {
       value = record.value();
     }
 
+    String routing = null;
+    Object routingValue = null;
+    if (routingFieldName != null) {
+      // the value type here really depends on what kind of messages the upstream system
+      // is using, right now with the translator logic it is always a HashMap.
+      // it could be a org.apache.kafka.connect.data.Struct with contains a customized schema
+      // we won't handle that case at the moment
+      if (value instanceof HashMap) {
+        // in our current case, the value is always HashMap
+        routingValue = ((HashMap) value).get(routingFieldName);
+      } else {
+        // todo there are other types, need be figured out later
+        throw new ConnectException("unexpected value type");
+      }
+
+      if (routingValue != null && (ClassUtils.isPrimitiveOrWrapper(routingValue.getClass())
+              || routingValue instanceof String)) {
+        routing = routingValue.toString();
+      } else {
+        throw new ConnectException("routing field should be primitive or String");
+      }
+    }
+
     byte[] rawJsonPayload = JSON_CONVERTER.fromConnectData(record.topic(), schema, value);
     final String payload = new String(rawJsonPayload, StandardCharsets.UTF_8);
     final Long version = ignoreKey ? null : record.kafkaOffset();
-    return new IndexableRecord(new Key(index, type, id), payload, version);
+    return new IndexableRecord(new Key(index, type, id), routing, payload, version);
   }
 
   // We need to pre process the Kafka Connect schema before converting to JSON as Elasticsearch

@@ -98,9 +98,9 @@ public class ElasticsearchWriterTest extends ElasticsearchSinkTestBase {
     final String indexOverride = "index";
 
     Collection<SinkRecord> records = prepareData(2);
-    ElasticsearchWriter writer = initWriter(client, ignoreKey, Collections.<String>emptySet(), ignoreSchema, Collections.<String>emptySet(), Collections.singletonMap(TOPIC, indexOverride), false);
+    ElasticsearchWriter writer = initWriter(client, ignoreKey, Collections.<String>emptySet(), ignoreSchema, Collections.<String>emptySet(), Collections.singletonMap(TOPIC, indexOverride), false, null);
     writeDataAndRefresh(writer, records);
-    verifySearchResults(records, indexOverride, ignoreKey, ignoreSchema);
+    verifySearchResults(records, indexOverride, null, ignoreKey, ignoreSchema);
   }
 
   @Test
@@ -254,7 +254,30 @@ public class ElasticsearchWriterTest extends ElasticsearchSinkTestBase {
     writeDataAndRefresh(writer, Collections.singletonList(sinkRecord));
 
     Collection<?> expectedRecords = Collections.singletonList(new ObjectMapper().writeValueAsString(map));
-    verifySearchResults(expectedRecords, TOPIC, ignoreKey, ignoreSchema);
+    verifySearchResults(expectedRecords, TOPIC, null, ignoreKey, ignoreSchema);
+  }
+
+  @Test
+  public void testRoutingField() throws Exception {
+    boolean ignoreKey = false;
+    boolean ignoreSchema = false;
+
+    Schema mapSchema = SchemaBuilder.map(Schema.STRING_SCHEMA, Schema.STRING_SCHEMA).build();
+
+    String routingFieldName = "organizationId";
+    String routingFieldValue = "1";
+    Map<String, String> map = new HashMap<>();
+    map.put(routingFieldName, routingFieldValue);
+    map.put("firstName", "Echo");
+    map.put("lastname", "Xu");
+
+    SinkRecord sinkRecord = new SinkRecord(TOPIC, PARTITION, Schema.STRING_SCHEMA, key, mapSchema, map, 0);
+
+    ElasticsearchWriter writer = initWriter(client, ignoreKey, ignoreSchema, routingFieldName);
+    writeDataAndRefresh(writer, Collections.singletonList(sinkRecord));
+
+    Collection<?> expectedRecords = Collections.singletonList(new ObjectMapper().writeValueAsString(map));
+    verifySearchResults(expectedRecords, TOPIC, routingFieldValue, ignoreKey, ignoreSchema);
   }
 
   @Test
@@ -359,14 +382,18 @@ public class ElasticsearchWriterTest extends ElasticsearchSinkTestBase {
   }
 
   private ElasticsearchWriter initWriter(JestClient client, boolean ignoreKey, boolean ignoreSchema) {
-    return initWriter(client, ignoreKey, Collections.<String>emptySet(), ignoreSchema, Collections.<String>emptySet(), Collections.<String, String>emptyMap(), false);
+    return initWriter(client, ignoreKey, Collections.<String>emptySet(), ignoreSchema, Collections.<String>emptySet(), Collections.<String, String>emptyMap(), false, null);
+  }
+
+  private ElasticsearchWriter initWriter(JestClient client, boolean ignoreKey, boolean ignoreSchema, String routingFieldName) {
+    return initWriter(client, ignoreKey, Collections.<String>emptySet(), ignoreSchema, Collections.<String>emptySet(), Collections.<String, String>emptyMap(), false, routingFieldName);
   }
 
   private ElasticsearchWriter initWriter(JestClient client, boolean ignoreKey, boolean ignoreSchema, boolean dropInvalidMessage) {
-    return initWriter(client, ignoreKey, Collections.<String>emptySet(), ignoreSchema, Collections.<String>emptySet(), Collections.<String, String>emptyMap(), dropInvalidMessage);
+    return initWriter(client, ignoreKey, Collections.<String>emptySet(), ignoreSchema, Collections.<String>emptySet(), Collections.<String, String>emptyMap(), dropInvalidMessage, null);
   }
 
-  private ElasticsearchWriter initWriter(JestClient client, boolean ignoreKey, Set<String> ignoreKeyTopics, boolean ignoreSchema, Set<String> ignoreSchemaTopics, Map<String, String> topicToIndexMap, boolean dropInvalidMessage) {
+  private ElasticsearchWriter initWriter(JestClient client, boolean ignoreKey, Set<String> ignoreKeyTopics, boolean ignoreSchema, Set<String> ignoreSchemaTopics, Map<String, String> topicToIndexMap, boolean dropInvalidMessage, String routingFieldName) {
     ElasticsearchWriter writer = new ElasticsearchWriter.Builder(client)
         .setType(TYPE)
         .setIgnoreKey(ignoreKey, ignoreKeyTopics)
@@ -380,6 +407,7 @@ public class ElasticsearchWriterTest extends ElasticsearchSinkTestBase {
         .setRetryBackoffMs(1000)
         .setMaxRetry(3)
         .setDropInvalidMessage(dropInvalidMessage)
+        .setRoutingFieldName(routingFieldName)
         .build();
     writer.start();
     writer.createIndicesForTopics(Collections.singleton(TOPIC));

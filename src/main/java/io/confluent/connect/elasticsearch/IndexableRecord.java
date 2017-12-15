@@ -17,15 +17,18 @@
 package io.confluent.connect.elasticsearch;
 
 import io.searchbox.core.Index;
+import io.searchbox.params.Parameters;
 
 public class IndexableRecord {
 
   public final Key key;
   public final String payload;
   public final Long version;
+  public final String routing;
 
-  public IndexableRecord(Key key, String payload, Long version) {
+  public IndexableRecord(Key key, String routing, String payload, Long version) {
     this.key = key;
+    this.routing = routing;
     this.version = version;
     this.payload = payload;
   }
@@ -37,6 +40,9 @@ public class IndexableRecord {
         .id(key.id);
     if (version != null) {
       req.setParameter("version_type", "external").setParameter("version", version);
+    }
+    if (routing != null) {
+      req.setParameter(Parameters.ROUTING, routing);
     }
     return req.build();
   }
