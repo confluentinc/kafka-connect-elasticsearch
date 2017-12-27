@@ -61,6 +61,20 @@ Connector
   * Default: 100
   * Importance: low
 
+``conn.timeout.ms``
+  How long to wait (in milliseconds) when establishing a connection to the Elasticsearch server.
+
+  * Type: int
+  * Default: 1000
+  * Importance: low
+
+``read.timeout.ms``
+  How long to wait (in milliseconds) for the Elasticsearch server to send responses.
+
+  * Type: int
+  * Default: 3000
+  * Importance: low
+
 Data Conversion
 ^^^^^^^^^^^^^^^
 

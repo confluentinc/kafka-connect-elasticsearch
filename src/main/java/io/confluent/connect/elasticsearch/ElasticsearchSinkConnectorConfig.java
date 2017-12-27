@@ -40,6 +40,8 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   public static final String TOPIC_KEY_IGNORE_CONFIG = "topic.key.ignore";
   public static final String SCHEMA_IGNORE_CONFIG = "schema.ignore";
   public static final String TOPIC_SCHEMA_IGNORE_CONFIG = "topic.schema.ignore";
+  public static final String CONNECTION_TIMEOUT_MS_CONFIG = "conn.timeout.ms";
+  public static final String READ_TIMEOUT_MS_CONFIG = "read.timeout.ms";
 
   protected static ConfigDef baseConfigDef() {
     final ConfigDef configDef = new ConfigDef();
@@ -80,7 +82,13 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
           .define(RETRY_BACKOFF_MS_CONFIG, Type.LONG, 100L, Importance.LOW,
                   "How long to wait in milliseconds before attempting to retry a failed indexing request. "
                   + "This avoids retrying in a tight loop under failure scenarios.",
-                  group, ++order, Width.SHORT, "Retry Backoff (ms)");
+                  group, ++order, Width.SHORT, "Retry Backoff (ms)")
+          .define(CONNECTION_TIMEOUT_MS_CONFIG, Type.INT, 1000, Importance.LOW, "How long to wait "
+                  + "(in milliseconds) when establishing a connection to the Elasticsearch server.",
+                  group, ++order, Width.SHORT, "Connection Timeout")
+          .define(READ_TIMEOUT_MS_CONFIG, Type.INT, 3000, Importance.LOW, "How long to wait (in "
+                  + "milliseconds) for the Elasticsearch server to send responses.",
+                  group, ++order, Width.SHORT, "Read Timeout");
     }
 
     {
