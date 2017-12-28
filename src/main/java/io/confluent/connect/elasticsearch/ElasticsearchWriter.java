@@ -210,8 +210,7 @@ public class ElasticsearchWriter {
         // N/A --> Key Record can be a String or JSON format
       }
 
-      log.debug("Index --> " + index);
-      log.debug("Record Id --> " + recordId);
+      log.info("Arrived new Elasticsearch record with uuid: " + recordId);
 
       if (!ignoreSchema && !existingMappings.contains(index)) {
         try {

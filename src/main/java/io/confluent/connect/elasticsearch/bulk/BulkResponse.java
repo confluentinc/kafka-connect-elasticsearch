@@ -19,16 +19,21 @@ public class BulkResponse {
 
   private static final BulkResponse SUCCESS_RESPONSE = new BulkResponse(true, false, "");
 
-  public final boolean succeeded;
-  public final boolean retriable;
-  public final String errorInfo;
-
+  public boolean succeeded;
+  public  boolean retriable;
+  public  String errorInfo;
+  public long lastWrittenAt;
+  public String uuid;
   private BulkResponse(boolean succeeded, boolean retriable, String errorInfo) {
     this.succeeded = succeeded;
     this.retriable = retriable;
     this.errorInfo = errorInfo;
   }
-
+  public BulkResponse(boolean succeeded, String uuid, long time) {
+    this.succeeded = succeeded;
+    this.uuid = uuid;
+    this.lastWrittenAt = time;
+  }
   public static BulkResponse success() {
     return SUCCESS_RESPONSE;
   }
@@ -47,6 +52,22 @@ public class BulkResponse {
 
   public String getErrorInfo() {
     return errorInfo;
+  }
+
+  public long getLastWrittenAt() {
+    return lastWrittenAt;
+  }
+
+  public void setLastWrittenAt(long lastWrittenAt) {
+    this.lastWrittenAt = lastWrittenAt;
+  }
+
+  public String getUuid() {
+    return uuid;
+  }
+
+  public void setUuid(String uuid) {
+    this.uuid = uuid;
   }
 
 }

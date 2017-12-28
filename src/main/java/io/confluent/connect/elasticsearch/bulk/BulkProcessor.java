@@ -15,16 +15,15 @@
  **/
 package io.confluent.connect.elasticsearch.bulk;
 
-import org.apache.kafka.common.utils.Time;
-import org.apache.kafka.connect.errors.ConnectException;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
+import java.text.SimpleDateFormat;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.Deque;
 import java.util.List;
+import java.util.TimeZone;
 import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -33,6 +32,11 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
+
+import org.apache.kafka.common.utils.Time;
+import org.apache.kafka.connect.errors.ConnectException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * @param <R> record type
@@ -43,7 +47,6 @@ public class BulkProcessor<R, B> {
   private static final Logger log = LoggerFactory.getLogger(BulkProcessor.class);
 
   private static final AtomicLong BATCH_ID_GEN = new AtomicLong();
-
   private final Time time;
   private final BulkClient<R, B> bulkClient;
   private final int maxBufferedRecords;
@@ -51,10 +54,8 @@ public class BulkProcessor<R, B> {
   private final long lingerMs;
   private final int maxRetries;
   private final long retryBackoffMs;
-
   private final Thread farmer;
   private final ExecutorService executor;
-
   // thread-safe state, can be mutated safely without synchronization,
   // but may be part of synchronized(this) wait() conditions so need to notifyAll() on changes
   private volatile boolean stopRequested = false;
@@ -64,6 +65,7 @@ public class BulkProcessor<R, B> {
   // shared state, synchronized on (this), may be part of wait() conditions so need notifyAll() on changes
   private final Deque<R> unsentRecords;
   private int inFlightRecords = 0;
+  SimpleDateFormat sdf = new SimpleDateFormat();
 
   public BulkProcessor(
       Time time,
@@ -82,15 +84,16 @@ public class BulkProcessor<R, B> {
     this.lingerMs = lingerMs;
     this.maxRetries = maxRetries;
     this.retryBackoffMs = retryBackoffMs;
-
     unsentRecords = new ArrayDeque<>(maxBufferedRecords);
 
     final ThreadFactory threadFactory = makeThreadFactory();
     farmer = threadFactory.newThread(farmerTask());
     executor = Executors.newFixedThreadPool(maxInFlightRequests, threadFactory);
+    sdf.setTimeZone(TimeZone.getTimeZone("EST"));
   }
 
   private ThreadFactory makeThreadFactory() {
+   
     final AtomicInteger threadCounter = new AtomicInteger();
     final Thread.UncaughtExceptionHandler uncaughtExceptionHandler = new Thread.UncaughtExceptionHandler() {
       @Override
@@ -114,15 +117,16 @@ public class BulkProcessor<R, B> {
     return new Runnable() {
       @Override
       public void run() {
-        log.debug("Starting farmer task");
+        log.info("Starting farmer task at " + (new Date(System.currentTimeMillis())) + " (EST)");
         try {
           while (!stopRequested) {
-            submitBatchWhenReady();
+              Future<BulkResponse> resp = submitBatchWhenReady();
+              log.info("Written " + resp.get().getUuid() + " at " + sdf.format(new Date(resp.get().getLastWrittenAt())));
           }
-        } catch (InterruptedException e) {
+        } catch (InterruptedException | ExecutionException e) {
           throw new ConnectException(e);
         }
-        log.debug("Finished farmer task");
+        log.info("Finished farmer task");
       }
     };
   }
@@ -147,7 +151,10 @@ public class BulkProcessor<R, B> {
       batch.add(unsentRecords.removeFirst());
     }
     inFlightRecords += batchableSize;
-    return executor.submit(new BulkTask(batch));
+    
+    BulkTask task = new BulkTask(batch);
+    return executor.submit(task);
+    //thread to write to ES
   }
 
   /**
@@ -258,7 +265,6 @@ public class BulkProcessor<R, B> {
    */
   public synchronized void add(R record, long timeoutMs) {
     throwIfTerminal();
-
     if (bufferedRecords() >= maxBufferedRecords) {
       final long addStartTimeMs = time.milliseconds();
       for (long elapsedMs = time.milliseconds() - addStartTimeMs;
@@ -312,23 +318,22 @@ public class BulkProcessor<R, B> {
   private final class BulkTask implements Callable<BulkResponse> {
 
     final long batchId = BATCH_ID_GEN.incrementAndGet();
-
     final List<R> batch;
-
     BulkTask(List<R> batch) {
       this.batch = batch;
     }
 
     @Override
     public BulkResponse call() throws Exception {
-      final BulkResponse rsp;
+      BulkResponse rsp = null;
       try {
         rsp = execute();
       } catch (Exception e) {
+        log.info("ElasticSearch insert faild. Last Successfully inserted into ElasticSearch at {}",  (new Date(rsp.getLastWrittenAt())));
+        log.error(e.getMessage());
         failAndStop(e);
         throw e;
       }
-      log.debug("Successfully executed batch {} of {} records", batchId, batch.size());
       onBatchCompletion(batch.size());
       return rsp;
     }
@@ -363,6 +368,7 @@ public class BulkProcessor<R, B> {
       }
     }
 
+ 
   }
 
   private synchronized void onBatchCompletion(int batchSize) {
