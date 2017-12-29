@@ -1,3 +1,5 @@
+.. _elasticsearch-overview:
+
 Elasticsearch  Connector
 ========================
 The Elasticsearch connector allows moving data from Kafka to Elasticsearch. It writes data from
@@ -22,9 +24,11 @@ Elasticsearch can determine field names and types from data, however, some types
 and decimal, may not be correctly inferred. To ensure that the types are correctly inferred, the
 connector provides a feature to infer mapping from the schemas of Kafka messages.
 
-Quickstart
-----------
-In this Quickstart, we use the Elasticsearch connector to export data produced by the Avro console
+.. _elasticsearch-quickstart:
+
+Quick start
+-----------
+This quick start uses the Elasticsearch connector to export data produced by the Avro console
 producer to Elasticsearch.
 
 First, start all the necessary services using Confluent CLI:
@@ -148,7 +152,7 @@ Finally, stop the Connect worker as well as all the rest of the Confluent servic
       Stopping zookeeper
       zookeeper is [DOWN]
 
-or stop all the services and additionally wipe out any data generated during this quickstart by running:
+or stop all the services and additionally wipe out any data generated during this quick start by running:
 
 .. sourcecode:: bash
 
