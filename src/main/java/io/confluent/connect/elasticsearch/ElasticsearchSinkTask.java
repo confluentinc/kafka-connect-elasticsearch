@@ -16,6 +16,14 @@
 
 package io.confluent.connect.elasticsearch;
 
+import com.google.common.collect.Sets;
+import io.searchbox.client.JestClient;
+import io.searchbox.client.JestClientFactory;
+import io.searchbox.client.config.HttpClientConfig;
+import org.apache.http.HttpHost;
+import org.apache.http.auth.AuthScope;
+import org.apache.http.auth.UsernamePasswordCredentials;
+import org.apache.http.impl.client.BasicCredentialsProvider;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.config.ConfigException;
@@ -25,6 +33,8 @@ import org.apache.kafka.connect.sink.SinkTask;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -32,10 +42,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
-
-import io.searchbox.client.JestClient;
-import io.searchbox.client.JestClientFactory;
-import io.searchbox.client.config.HttpClientConfig;
 
 public class ElasticsearchSinkTask extends SinkTask {
 
@@ -109,12 +115,20 @@ public class ElasticsearchSinkTask extends SinkTask {
       } else {
         List<String> address =
             config.getList(ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG);
-        JestClientFactory factory = new JestClientFactory();
-        factory.setHttpClientConfig(
-            new HttpClientConfig.Builder(address)
-                .multiThreaded(true)
-                .build()
-        );
+        final JestClientFactory factory = new JestClientFactory();
+
+        HttpClientConfig.Builder clientConfig = new HttpClientConfig.Builder(address);
+        clientConfig.multiThreaded(true);
+        String username =
+            config.getString(ElasticsearchSinkConnectorConfig.CONNECTION_USERNAME_CONFIG);
+        String password =
+            config.getString(ElasticsearchSinkConnectorConfig.CONNECTION_PASSWORD_CONFIG);
+
+        if (username != null && password != null) {
+          new ElasticsearchAuth(address, clientConfig, username, password).invoke();
+        }
+
+        factory.setHttpClientConfig(clientConfig.build());
         this.client = factory.getObject();
       }
 
