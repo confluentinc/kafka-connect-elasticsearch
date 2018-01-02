@@ -61,15 +61,15 @@ Connector
   * Default: 100
   * Importance: low
 
-``conn.timeout.ms``
-  How long to wait (in milliseconds) when establishing a connection to the Elasticsearch server.
+``connection.timeout.ms``
+  How long to wait in milliseconds when establishing a connection to the Elasticsearch server. The task fails if the client fails to connect to the server in this interval, and will need to be restarted.
 
   * Type: int
   * Default: 1000
   * Importance: low
 
 ``read.timeout.ms``
-  How long to wait (in milliseconds) for the Elasticsearch server to send responses.
+  How long to wait in milliseconds for the Elasticsearch server to send a response. The task fails if any read operation times out, and will need to be restarted to resume further operations.
 
   * Type: int
   * Default: 3000
