@@ -104,16 +104,22 @@ public class ElasticsearchSinkTask extends SinkTask {
                 TimeUnit.MILLISECONDS.toHours(maxRetryBackoffMs));
       }
 
+      int connTimeout = config.getInt(
+          ElasticsearchSinkConnectorConfig.CONNECTION_TIMEOUT_MS_CONFIG);
+      int readTimeout = config.getInt(
+          ElasticsearchSinkConnectorConfig.READ_TIMEOUT_MS_CONFIG);
+
       if (client != null) {
         this.client = client;
       } else {
         List<String> address =
             config.getList(ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG);
         JestClientFactory factory = new JestClientFactory();
-        factory.setHttpClientConfig(
-            new HttpClientConfig.Builder(address)
-                .multiThreaded(true)
-                .build()
+        factory.setHttpClientConfig(new HttpClientConfig.Builder(address)
+            .connTimeout(connTimeout)
+            .readTimeout(readTimeout)
+            .multiThreaded(true)
+            .build()
         );
         this.client = factory.getObject();
       }

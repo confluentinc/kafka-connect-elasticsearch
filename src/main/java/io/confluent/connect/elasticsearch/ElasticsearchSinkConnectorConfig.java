@@ -114,6 +114,17 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
       + "Prior to 3.3.0, this connector always wrote map entries as nested documents, "
       + "so set this to ``false`` to use that older behavior.";
 
+  public static final String CONNECTION_TIMEOUT_MS_CONFIG = "connection.timeout.ms";
+  public static final String READ_TIMEOUT_MS_CONFIG = "read.timeout.ms";
+  private static final String CONNECTION_TIMEOUT_MS_CONFIG_DOC = "How long to wait "
+                  + "in milliseconds when establishing a connection to the Elasticsearch server. "
+                  + "The task fails if the client fails to connect to the server in this "
+                  + "interval, and will need to be restarted.";
+  private static final String READ_TIMEOUT_MS_CONFIG_DOC = "How long to wait in "
+                  + "milliseconds for the Elasticsearch server to send a response. The task fails "
+                  + "if any read operation times out, and will need to be restarted to resume "
+                  + "further operations.";
+
   protected static ConfigDef baseConfigDef() {
     final ConfigDef configDef = new ConfigDef();
     addConnectorConfigs(configDef);
@@ -203,7 +214,26 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
         ++order,
         Width.SHORT,
         "Retry Backoff (ms)"
-      );
+      ).define(
+        CONNECTION_TIMEOUT_MS_CONFIG, 
+        Type.INT, 
+        1000, 
+        Importance.LOW, 
+        CONNECTION_TIMEOUT_MS_CONFIG_DOC,
+        group, 
+        ++order, 
+        Width.SHORT, 
+        "Connection Timeout"
+        ).define(
+        READ_TIMEOUT_MS_CONFIG, 
+        Type.INT, 
+        3000, 
+        Importance.LOW, 
+        READ_TIMEOUT_MS_CONFIG_DOC,
+        group, 
+        ++order, 
+        Width.SHORT, 
+        "Read Timeout");
   }
 
   private static void addConversionConfigs(ConfigDef configDef) {
