@@ -84,7 +84,9 @@ public class ElasticsearchSinkTask extends SinkTask {
         factory.setHttpClientConfig(new HttpClientConfig.Builder(address)
             .connTimeout(connTimeout)
             .readTimeout(readTimeout)
-            .multiThreaded(true).build());
+            .multiThreaded(true)
+            .build()
+        );
         this.client = factory.getObject();
       }
 
