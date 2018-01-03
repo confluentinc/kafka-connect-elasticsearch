@@ -73,13 +73,20 @@ public class ElasticsearchSinkTask extends SinkTask {
       int maxInFlightRequests = config.getInt(ElasticsearchSinkConnectorConfig.MAX_IN_FLIGHT_REQUESTS_CONFIG);
       long retryBackoffMs = config.getLong(ElasticsearchSinkConnectorConfig.RETRY_BACKOFF_MS_CONFIG);
       int maxRetry = config.getInt(ElasticsearchSinkConnectorConfig.MAX_RETRIES_CONFIG);
+      int connTimeout = config.getInt(ElasticsearchSinkConnectorConfig.CONNECTION_TIMEOUT_MS_CONFIG);
+      int readTimeout = config.getInt(ElasticsearchSinkConnectorConfig.READ_TIMEOUT_MS_CONFIG);
 
       if (client != null) {
         this.client = client;
       } else {
         List<String> address = config.getList(ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG);
         JestClientFactory factory = new JestClientFactory();
-        factory.setHttpClientConfig(new HttpClientConfig.Builder(address).multiThreaded(true).build());
+        factory.setHttpClientConfig(new HttpClientConfig.Builder(address)
+            .connTimeout(connTimeout)
+            .readTimeout(readTimeout)
+            .multiThreaded(true)
+            .build()
+        );
         this.client = factory.getObject();
       }
 
