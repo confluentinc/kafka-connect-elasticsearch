@@ -2,3 +2,9 @@ target
 docs/_build
 .idea
 *.iml
+*.pyc
+.checkstyle
+.classpath
+.project
+.settings/
+

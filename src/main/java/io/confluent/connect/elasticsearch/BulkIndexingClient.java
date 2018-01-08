@@ -57,7 +57,9 @@ public class BulkIndexingClient implements BulkClient<IndexableRecord, Bulk> {
     final BulkResult result = client.execute(bulk);
 
     if (result.isSucceeded()) {
-      return BulkResponse.success();
+      for (BulkResult.BulkResultItem item : result.getItems()) {
+        return new BulkResponse(true, item.id, System.currentTimeMillis());
+      }
     }
 
     boolean retriable = true;

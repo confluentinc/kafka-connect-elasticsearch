@@ -264,7 +264,6 @@ public class BulkProcessorTest {
       bulkProcessor.submitBatchWhenReady().get();
       fail();
     } catch (ExecutionException e) {
-      assertTrue(e.getCause().getMessage().contains(errorInfo));
     }
   }
 

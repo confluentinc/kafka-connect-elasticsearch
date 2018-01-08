@@ -76,12 +76,12 @@ public class DataConverter {
     }
   }
 
-  public static IndexableRecord convertRecord(SinkRecord record, String index, String type, boolean ignoreKey, boolean ignoreSchema) {
+  public static IndexableRecord convertRecord(SinkRecord record, String recordId, String index, String type, boolean ignoreKey, boolean ignoreSchema) {
     final String id;
     if (ignoreKey) {
       id = record.topic() + "+" + String.valueOf((int) record.kafkaPartition()) + "+" + String.valueOf(record.kafkaOffset());
     } else {
-      id = DataConverter.convertKey(record.keySchema(), record.key());
+      id = DataConverter.convertKey(record.keySchema(), recordId);
     }
 
     final Schema schema;
