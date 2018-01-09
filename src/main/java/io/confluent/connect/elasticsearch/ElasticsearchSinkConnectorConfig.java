@@ -24,6 +24,8 @@ import org.apache.kafka.common.config.ConfigDef.Width;
 
 import java.util.Map;
 
+import static io.confluent.connect.elasticsearch.DataConverter.BehaviorOnNullValues;
+
 public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
 
   public static final String CONNECTION_URL_CONFIG = "connection.url";
@@ -43,6 +45,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   public static final String COMPACT_MAP_ENTRIES_CONFIG = "compact.map.entries";
   public static final String CONNECTION_TIMEOUT_MS_CONFIG = "connection.timeout.ms";
   public static final String READ_TIMEOUT_MS_CONFIG = "read.timeout.ms";
+  public static final String BEHAVIOR_ON_NULL_VALUES_CONFIG = "behavior.on.null.values";
 
   protected static ConfigDef baseConfigDef() {
     final ConfigDef configDef = new ConfigDef();
@@ -132,7 +135,13 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
                   group, ++order, Width.LONG, "Topics for 'Ignore Key' mode")
           .define(TOPIC_SCHEMA_IGNORE_CONFIG, Type.LIST, "", Importance.LOW,
                   "List of topics for which ``" + SCHEMA_IGNORE_CONFIG + "`` should be ``true``.",
-                  group, ++order, Width.LONG, "Topics for 'Ignore Schema' mode");
+                  group, ++order, Width.LONG, "Topics for 'Ignore Schema' mode")
+          .define(BEHAVIOR_ON_NULL_VALUES_CONFIG, Type.STRING,
+                  BehaviorOnNullValues.DEFAULT.toString(), BehaviorOnNullValues.VALIDATOR,
+                  Importance.LOW,
+                  "How to handle records with a non-null key and a null value (i.e. Kafka tombstone "
+                  + "records). Valid options are 'ignore', 'delete', and 'fail'.",
+                  group, ++order, Width.SHORT, "Behavior for null-valued records");
     }
 
     return configDef;
