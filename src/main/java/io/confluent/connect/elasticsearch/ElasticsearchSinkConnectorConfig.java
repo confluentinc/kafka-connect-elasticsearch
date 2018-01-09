@@ -114,6 +114,10 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
       + "the Elasticsearch server to send a response. The task fails if any read operation times "
       + "out, and will need to be restarted to resume further operations.";
 
+  public static final String BEHAVIOR_ON_NULL_VALUES_CONFIG = "behavior.on.null.values";
+  private static final String BEHAVIOR_ON_NULL_VALUES_DOC = "How to handle records with non-null "
+      + "keys but null values.";
+
   protected static ConfigDef baseConfigDef() {
     final ConfigDef configDef = new ConfigDef();
     addConnectorConfigs(configDef);
@@ -296,7 +300,17 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
         group,
         ++order,
         Width.LONG,
-        "Topics for 'Ignore Schema' mode");
+        "Topics for 'Ignore Schema' mode"
+    ).define(
+        BEHAVIOR_ON_NULL_VALUES_CONFIG,
+        Type.STRING,
+        "ignore",
+        Importance.LOW,
+        BEHAVIOR_ON_NULL_VALUES_DOC,
+        group,
+        ++order,
+        Width.SHORT,
+        "Behavior on null-valued records");
   }
 
   public static final ConfigDef CONFIG = baseConfigDef();
