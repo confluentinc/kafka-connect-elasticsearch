@@ -50,6 +50,7 @@ public class ElasticsearchWriter {
   private final long flushTimeoutMs;
   private final BulkProcessor<IndexableRecord, ?> bulkProcessor;
   private final DataConverter converter;
+  private final BehaviorOnNullValues behaviorOnNullValues;
 
   private final Set<String> existingMappings;
 
@@ -68,7 +69,8 @@ public class ElasticsearchWriter {
       int batchSize,
       long lingerMs,
       int maxRetries,
-      long retryBackoffMs
+      long retryBackoffMs,
+      BehaviorOnNullValues behaviorOnNullValues
   ) {
     this.client = client;
     this.type = type;
@@ -79,6 +81,7 @@ public class ElasticsearchWriter {
     this.topicToIndexMap = topicToIndexMap;
     this.flushTimeoutMs = flushTimeoutMs;
     this.converter = new DataConverter(useCompactMapEntries);
+    this.behaviorOnNullValues = behaviorOnNullValues;
 
     bulkProcessor = new BulkProcessor<>(
         new SystemTime(),
@@ -110,6 +113,7 @@ public class ElasticsearchWriter {
     private long lingerMs;
     private int maxRetry;
     private long retryBackoffMs;
+    private BehaviorOnNullValues behaviorOnNullValues = BehaviorOnNullValues.DEFAULT;
 
     public Builder(JestClient client) {
       this.client = client;
@@ -177,6 +181,11 @@ public class ElasticsearchWriter {
       return this;
     }
 
+    public Builder setBehaviorOnNullValues(BehaviorOnNullValues behaviorOnNullValues) {
+      this.behaviorOnNullValues = behaviorOnNullValues;
+      return this;
+    }
+
     public ElasticsearchWriter build() {
       return new ElasticsearchWriter(
           client,
@@ -193,7 +202,8 @@ public class ElasticsearchWriter {
           batchSize,
           lingerMs,
           maxRetry,
-          retryBackoffMs
+          retryBackoffMs,
+          behaviorOnNullValues
       );
     }
   }
@@ -303,4 +313,11 @@ public class ElasticsearchWriter {
     return indices;
   }
 
+  public enum BehaviorOnNullValues {
+    IGNORE,
+    DELETE,
+    FAIL;
+
+    public static final BehaviorOnNullValues DEFAULT = IGNORE;
+  }
 }
