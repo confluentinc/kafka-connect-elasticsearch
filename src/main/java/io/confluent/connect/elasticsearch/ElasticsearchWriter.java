@@ -50,7 +50,6 @@ public class ElasticsearchWriter {
   private final long flushTimeoutMs;
   private final BulkProcessor<IndexableRecord, ?> bulkProcessor;
   private final DataConverter converter;
-  private final DataConverter.BehaviorOnNullValues behaviorOnNullValues;
 
   private final Set<String> existingMappings;
 
@@ -80,8 +79,7 @@ public class ElasticsearchWriter {
     this.ignoreSchemaTopics = ignoreSchemaTopics;
     this.topicToIndexMap = topicToIndexMap;
     this.flushTimeoutMs = flushTimeoutMs;
-    this.converter = new DataConverter(useCompactMapEntries);
-    this.behaviorOnNullValues = behaviorOnNullValues;
+    this.converter = new DataConverter(useCompactMapEntries, behaviorOnNullValues);
 
     bulkProcessor = new BulkProcessor<>(
         new SystemTime(),

@@ -67,7 +67,7 @@ public class ElasticsearchSinkTestBase extends ESIntegTestCase {
             .multiThreaded(true).build()
     );
     client = (JestHttpClient) factory.getObject();
-    converter = new DataConverter(true);
+    converter = new DataConverter(true, getBehaviorOnNullValues());
   }
 
   @After
@@ -83,6 +83,10 @@ public class ElasticsearchSinkTestBase extends ESIntegTestCase {
     assertTrue("There should be at least 1 HTTP endpoint exposed in the test cluster",
                cluster().httpAddresses().length > 0);
     return cluster().httpAddresses()[0].getPort();
+  }
+
+  protected DataConverter.BehaviorOnNullValues getBehaviorOnNullValues() {
+    return DataConverter.BehaviorOnNullValues.DEFAULT;
   }
 
   protected Struct createRecord(Schema schema) {

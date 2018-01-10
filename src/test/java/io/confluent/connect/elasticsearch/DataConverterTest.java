@@ -20,6 +20,8 @@ import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Struct;
+import org.apache.kafka.connect.errors.DataException;
+import org.apache.kafka.connect.sink.SinkRecord;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -31,7 +33,11 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 
+import static io.confluent.connect.elasticsearch.DataConverter.BehaviorOnNullValues;
+
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.fail;
 
 public class DataConverterTest {
   
@@ -39,7 +45,7 @@ public class DataConverterTest {
   
   @Before
   public void setUp() {
-    converter = new DataConverter(true);
+    converter = new DataConverter(true, DataConverter.BehaviorOnNullValues.DEFAULT);
   }
 
   @Test
@@ -174,7 +180,7 @@ public class DataConverterTest {
     origValue.put("field2", 2);
 
     // Use the older non-compact format for map entries with string keys
-    converter = new DataConverter(false);
+    converter = new DataConverter(false, DataConverter.BehaviorOnNullValues.DEFAULT);
 
     Schema preProcessedSchema = converter.preProcessSchema(origSchema);
     assertEquals(
@@ -208,7 +214,7 @@ public class DataConverterTest {
     origValue.put("field2", 2);
 
     // Use the newer compact format for map entries with string keys
-    converter = new DataConverter(true);
+    converter = new DataConverter(true, DataConverter.BehaviorOnNullValues.DEFAULT);
     Schema preProcessedSchema = converter.preProcessSchema(origSchema);
     assertEquals(
         SchemaBuilder.map(Schema.STRING_SCHEMA, Schema.INT32_SCHEMA).build(),
@@ -237,6 +243,65 @@ public class DataConverterTest {
         SchemaBuilder.struct().name("struct").field("decimal", Schema.FLOAT64_SCHEMA).optional().build(),
         converter.preProcessSchema(SchemaBuilder.struct().name("struct").field("decimal", Decimal.schema(2)).optional().build())
     );
+  }
+
+  @Test
+  public void ignoreNull() {
+    final String key = "key";
+    final String topic = "topic";
+    final int partition = 12;
+    final long offset = 26;
+    final String index = "index";
+    final String type = "type";
+
+    converter = new DataConverter(true, BehaviorOnNullValues.IGNORE);
+
+    Schema schema = SchemaBuilder.struct().name("struct").field("string", Schema.STRING_SCHEMA).build();
+    SinkRecord sinkRecord = new SinkRecord(topic, partition, Schema.STRING_SCHEMA, key, schema, null, offset);
+
+    assertNull(converter.convertRecord(sinkRecord, index, type, false, false));
+  }
+
+  @Test
+  public void deleteNull() {
+    final String key = "key";
+    final String topic = "topic";
+    final int partition = 12;
+    final long offset = 26;
+    final String index = "index";
+    final String type = "type";
+
+    converter = new DataConverter(true, BehaviorOnNullValues.DELETE);
+
+    Schema schema = SchemaBuilder.struct().name("struct").field("string", Schema.STRING_SCHEMA).build();
+    SinkRecord sinkRecord = new SinkRecord(topic, partition, Schema.STRING_SCHEMA, key, schema, null, offset);
+
+    IndexableRecord expectedRecord = new IndexableRecord(new Key(index, type, key), null, offset);
+    IndexableRecord actualRecord = converter.convertRecord(sinkRecord, index, type, false, false);
+
+    assertEquals(expectedRecord, actualRecord);
+  }
+
+  @Test
+  public void failNull() {
+    final String key = "key";
+    final String topic = "topic";
+    final int partition = 12;
+    final long offset = 26;
+    final String index = "index";
+    final String type = "type";
+
+    converter = new DataConverter(true, BehaviorOnNullValues.FAIL);
+
+    Schema schema = SchemaBuilder.struct().name("struct").field("string", Schema.STRING_SCHEMA).build();
+    SinkRecord sinkRecord = new SinkRecord(topic, partition, Schema.STRING_SCHEMA, key, schema, null, offset);
+
+    try {
+      converter.convertRecord(sinkRecord, index, type, false, false);
+      fail("should fail on null-valued record with behaviorOnNullValues = FAIL");
+    } catch (DataException dexc) {
+      // expected
+    }
   }
 
 }

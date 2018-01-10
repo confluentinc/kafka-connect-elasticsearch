@@ -40,6 +40,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import static io.confluent.connect.elasticsearch.DataConverter.BehaviorOnNullValues.FAIL;
+import static io.confluent.connect.elasticsearch.DataConverter.BehaviorOnNullValues.IGNORE;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConstants.MAP_KEY;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConstants.MAP_VALUE;
 
@@ -53,9 +55,11 @@ public class DataConverter {
   }
 
   private final boolean useCompactMapEntries;
+  private final BehaviorOnNullValues behaviorOnNullValues;
 
-  public DataConverter(boolean useCompactMapEntries) {
+  public DataConverter(boolean useCompactMapEntries, BehaviorOnNullValues behaviorOnNullValues) {
     this.useCompactMapEntries = useCompactMapEntries;
+    this.behaviorOnNullValues = behaviorOnNullValues;
   }
 
   private String convertKey(Schema keySchema, Object key) {
@@ -96,6 +100,35 @@ public class DataConverter {
       boolean ignoreKey,
       boolean ignoreSchema
   ) {
+    if (record.value() == null) {
+      switch (behaviorOnNullValues) {
+        case IGNORE:
+          return null;
+        case DELETE:
+          // Will proceed as normal, ultimately creating an IndexableRecord with a null payload
+          break;
+        case FAIL:
+          throw new DataException(String.format(
+              "Sink record with key of %s and null value encountered for topic/partition/offset"
+                  + " %s/%s/%s (to ignore future records like this change the configuration "
+                  + "property '%s' from '%s' to '%s')",
+              record.key(),
+              record.topic(),
+              record.kafkaPartition(),
+              record.kafkaOffset(),
+              ElasticsearchSinkConnectorConfig.BEHAVIOR_ON_NULL_VALUES_CONFIG,
+              FAIL,
+              IGNORE
+          ));
+        default:
+          throw new RuntimeException(String.format(
+              "Unknown value for %s enum: %s",
+              BehaviorOnNullValues.class.getSimpleName(),
+              behaviorOnNullValues
+          ));
+      }
+    }
+
     final String id;
     if (ignoreKey) {
       id = record.topic()
@@ -109,14 +142,20 @@ public class DataConverter {
     final Object value;
     if (!ignoreSchema) {
       schema = preProcessSchema(record.valueSchema());
-      value = preProcessValue(record.value(), record.valueSchema(), schema);
+      value = record.value() == null
+          ? null
+          : preProcessValue(record.value(), record.valueSchema(), schema);
     } else {
       schema = record.valueSchema();
       value = record.value();
     }
 
-    byte[] rawJsonPayload = JSON_CONVERTER.fromConnectData(record.topic(), schema, value);
-    final String payload = new String(rawJsonPayload, StandardCharsets.UTF_8);
+    final String payload = value == null
+        ? null
+        : new String(
+            JSON_CONVERTER.fromConnectData(record.topic(), schema, value),
+            StandardCharsets.UTF_8
+        );
     final Long version = ignoreKey ? null : record.kafkaOffset();
     return new IndexableRecord(new Key(index, type, id), payload, version);
   }
