@@ -306,4 +306,12 @@ public class DataConverter {
     }
     return newStruct;
   }
+
+  public enum BehaviorOnNullValues {
+    IGNORE,
+    DELETE,
+    FAIL;
+
+    public static final BehaviorOnNullValues DEFAULT = IGNORE;
+  }
 }

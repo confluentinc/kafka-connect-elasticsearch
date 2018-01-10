@@ -94,7 +94,7 @@ public class ElasticsearchWriterTest extends ElasticsearchSinkTestBase {
     final String indexOverride = "index";
 
     Collection<SinkRecord> records = prepareData(2);
-    ElasticsearchWriter writer = initWriter(client, ignoreKey, Collections.<String>emptySet(), ignoreSchema, Collections.<String>emptySet(), Collections.singletonMap(TOPIC, indexOverride), ElasticsearchWriter.BehaviorOnNullValues.FAIL);
+    ElasticsearchWriter writer = initWriter(client, ignoreKey, Collections.<String>emptySet(), ignoreSchema, Collections.<String>emptySet(), Collections.singletonMap(TOPIC, indexOverride), DataConverter.BehaviorOnNullValues.FAIL);
     writeDataAndRefresh(writer, records);
     verifySearchResults(records, indexOverride, ignoreKey, ignoreSchema);
   }
@@ -308,7 +308,7 @@ public class ElasticsearchWriterTest extends ElasticsearchSinkTestBase {
     SinkRecord sinkRecord = new SinkRecord(TOPIC, PARTITION, Schema.STRING_SCHEMA, key, schema, null, 0);
     records.add(sinkRecord);
 
-    ElasticsearchWriter writer = initWriter(client, ignoreKey, ignoreSchema, ElasticsearchWriter.BehaviorOnNullValues.DELETE);
+    ElasticsearchWriter writer = initWriter(client, ignoreKey, ignoreSchema, DataConverter.BehaviorOnNullValues.DELETE);
     writeDataAndRefresh(writer, records);
     verifySearchResults(records, ignoreKey, ignoreSchema);
   }
@@ -322,7 +322,7 @@ public class ElasticsearchWriterTest extends ElasticsearchSinkTestBase {
     SinkRecord sinkRecord = new SinkRecord(TOPIC, PARTITION, Schema.STRING_SCHEMA, key, schema, null, 0);
     records.add(sinkRecord);
 
-    ElasticsearchWriter writer = initWriter(client, ignoreKey, ignoreSchema, ElasticsearchWriter.BehaviorOnNullValues.IGNORE);
+    ElasticsearchWriter writer = initWriter(client, ignoreKey, ignoreSchema, DataConverter.BehaviorOnNullValues.IGNORE);
     writeDataAndRefresh(writer, records);
     // Send an empty list of records to the verify method, since the empty record should have been skipped
     verifySearchResults(new ArrayList<SinkRecord>(), ignoreKey, ignoreSchema);
@@ -337,7 +337,7 @@ public class ElasticsearchWriterTest extends ElasticsearchSinkTestBase {
     SinkRecord sinkRecord = new SinkRecord(TOPIC, PARTITION, Schema.STRING_SCHEMA, key, schema, null, 0);
     records.add(sinkRecord);
 
-    ElasticsearchWriter writer = initWriter(client, ignoreKey, ignoreSchema, ElasticsearchWriter.BehaviorOnNullValues.FAIL);
+    ElasticsearchWriter writer = initWriter(client, ignoreKey, ignoreSchema, DataConverter.BehaviorOnNullValues.FAIL);
     try {
       writeDataAndRefresh(writer, records);
       fail("should fail because of behavior.on.null.values=fail");
@@ -360,10 +360,10 @@ public class ElasticsearchWriterTest extends ElasticsearchSinkTestBase {
   }
 
   private ElasticsearchWriter initWriter(JestClient client, boolean ignoreKey, Set<String> ignoreKeyTopics, boolean ignoreSchema, Set<String> ignoreSchemaTopics, Map<String, String> topicToIndexMap) {
-    return initWriter(client, ignoreKey, Collections.<String>emptySet(), ignoreSchema, Collections.<String>emptySet(), Collections.<String, String>emptyMap(), ElasticsearchWriter.BehaviorOnNullValues.FAIL);
+    return initWriter(client, ignoreKey, Collections.<String>emptySet(), ignoreSchema, Collections.<String>emptySet(), Collections.<String, String>emptyMap(), DataConverter.BehaviorOnNullValues.FAIL);
   }
 
-  private ElasticsearchWriter initWriter(JestClient client, boolean ignoreKey, boolean ignoreSchema, ElasticsearchWriter.BehaviorOnNullValues behavior) {
+  private ElasticsearchWriter initWriter(JestClient client, boolean ignoreKey, boolean ignoreSchema, DataConverter.BehaviorOnNullValues behavior) {
     return initWriter(client, ignoreKey, Collections.<String>emptySet(), ignoreSchema, Collections.<String>emptySet(), Collections.<String, String>emptyMap(), behavior);
   }
 
@@ -374,7 +374,7 @@ public class ElasticsearchWriterTest extends ElasticsearchSinkTestBase {
       boolean ignoreSchema,
       Set<String> ignoreSchemaTopics,
       Map<String, String> topicToIndexMap,
-      ElasticsearchWriter.BehaviorOnNullValues behavior
+      DataConverter.BehaviorOnNullValues behavior
   ) {
     ElasticsearchWriter writer = new ElasticsearchWriter.Builder(client)
         .setType(TYPE)

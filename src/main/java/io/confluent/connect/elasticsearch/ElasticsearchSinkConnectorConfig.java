@@ -304,7 +304,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
     ).define(
         BEHAVIOR_ON_NULL_VALUES_CONFIG,
         Type.STRING,
-        ElasticsearchWriter.BehaviorOnNullValues.DEFAULT,
+        DataConverter.BehaviorOnNullValues.DEFAULT,
         Importance.LOW,
         BEHAVIOR_ON_NULL_VALUES_DOC,
         group,
