@@ -29,6 +29,8 @@ import org.elasticsearch.test.ESIntegTestCase;
 import org.elasticsearch.test.InternalTestCluster;
 import org.junit.Test;
 
+import static io.confluent.connect.elasticsearch.DataConverter.BehaviorOnNullValues;
+
 public class MappingTest extends ElasticsearchSinkTestBase {
 
   private static final String INDEX = "kafka-connect";
@@ -109,7 +111,7 @@ public class MappingTest extends ElasticsearchSinkTestBase {
       }
     }
 
-    DataConverter converter = new DataConverter(true, DataConverter.BehaviorOnNullValues.DEFAULT);
+    DataConverter converter = new DataConverter(true, BehaviorOnNullValues.FAIL);
     Schema.Type schemaType = schema.type();
     switch (schemaType) {
       case ARRAY:

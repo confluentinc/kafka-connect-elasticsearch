@@ -35,12 +35,8 @@ public class IndexableRecord {
   }
 
   public BulkableAction toBulkableAction() {
-    // Null payload is treated as a tombstone and will delete from the index.
-    if (payload == null) {
-      return toDeleteRequest();
-    } else {
-      return toIndexRequest();
-    }
+    // If payload is null, the record was a tombstone and we should delete from the index.
+    return payload != null ? toIndexRequest() : toDeleteRequest();
   }
 
   public Delete toDeleteRequest() {

@@ -16,6 +16,7 @@
 
 package io.confluent.connect.elasticsearch;
 
+import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.connect.data.ConnectSchema;
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
@@ -39,9 +40,8 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
-import static io.confluent.connect.elasticsearch.DataConverter.BehaviorOnNullValues.FAIL;
-import static io.confluent.connect.elasticsearch.DataConverter.BehaviorOnNullValues.IGNORE;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConstants.MAP_KEY;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConstants.MAP_VALUE;
 
@@ -57,9 +57,17 @@ public class DataConverter {
   private final boolean useCompactMapEntries;
   private final BehaviorOnNullValues behaviorOnNullValues;
 
+  /**
+   * @param behaviorOnNullValues How to treat records with null values. Cannot be null; if in doubt,
+   * {@link BehaviorOnNullValues#DEFAULT} can be used.
+   */
   public DataConverter(boolean useCompactMapEntries, BehaviorOnNullValues behaviorOnNullValues) {
     this.useCompactMapEntries = useCompactMapEntries;
-    this.behaviorOnNullValues = behaviorOnNullValues;
+    this.behaviorOnNullValues = Objects.requireNonNull(
+        behaviorOnNullValues,
+        "behaviorOnNullValues cannot be null. Possible fix: use "
+            + "BehaviorOnNullValues.DEFAULT instead."
+    );
   }
 
   private String convertKey(Schema keySchema, Object key) {
@@ -117,8 +125,8 @@ public class DataConverter {
               record.kafkaPartition(),
               record.kafkaOffset(),
               ElasticsearchSinkConnectorConfig.BEHAVIOR_ON_NULL_VALUES_CONFIG,
-              FAIL,
-              IGNORE
+              BehaviorOnNullValues.FAIL,
+              BehaviorOnNullValues.IGNORE
           ));
         default:
           throw new RuntimeException(String.format(
@@ -142,20 +150,19 @@ public class DataConverter {
     final Object value;
     if (!ignoreSchema) {
       schema = preProcessSchema(record.valueSchema());
-      value = record.value() == null
-          ? null
-          : preProcessValue(record.value(), record.valueSchema(), schema);
+      value = record.value() != null
+          ? preProcessValue(record.value(), record.valueSchema(), schema)
+          : null;
     } else {
       schema = record.valueSchema();
       value = record.value();
     }
 
-    final String payload = value == null
-        ? null
-        : new String(
+    final String payload = value != null
+        ? new String(
             JSON_CONVERTER.fromConnectData(record.topic(), schema, value),
-            StandardCharsets.UTF_8
-        );
+            StandardCharsets.UTF_8)
+        : null;
     final Long version = ignoreKey ? null : record.kafkaOffset();
     return new IndexableRecord(new Key(index, type, id), payload, version);
   }
@@ -352,5 +359,38 @@ public class DataConverter {
     FAIL;
 
     public static final BehaviorOnNullValues DEFAULT = IGNORE;
+
+    // Want values for "behavior.on.null.values" property to be case-insensitive
+    public static final ConfigDef.Validator VALIDATOR = new ConfigDef.Validator() {
+      private final ConfigDef.ValidString validator = ConfigDef.ValidString.in(names());
+
+      @Override
+      public void ensureValid(String name, Object value) {
+        if (value instanceof String) {
+          value = ((String) value).toLowerCase();
+        }
+        validator.ensureValid(name, value);
+      }
+    };
+
+    public static String[] names() {
+      BehaviorOnNullValues[] behaviors = values();
+      String[] result = new String[behaviors.length];
+
+      for (int i = 0; i < behaviors.length; i++) {
+        result[i] = behaviors[i].toString();
+      }
+
+      return result;
+    }
+
+    public static BehaviorOnNullValues forValue(String value) {
+      return valueOf(value.toUpperCase());
+    }
+
+    @Override
+    public String toString() {
+      return name().toLowerCase();
+    }
   }
 }

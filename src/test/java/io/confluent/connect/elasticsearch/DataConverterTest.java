@@ -42,10 +42,24 @@ import static org.junit.Assert.fail;
 public class DataConverterTest {
   
   private DataConverter converter;
-  
+  private String key;
+  private String topic;
+  private int partition;
+  private long offset;
+  private String index;
+  private String type;
+  private Schema schema;
+
   @Before
   public void setUp() {
-    converter = new DataConverter(true, DataConverter.BehaviorOnNullValues.DEFAULT);
+    converter = new DataConverter(true, BehaviorOnNullValues.DEFAULT);
+    key = "key";
+    topic = "topic";
+    partition = 0;
+    offset = 0;
+    index = "index";
+    type = "type";
+    schema = SchemaBuilder.struct().name("struct").field("string", Schema.STRING_SCHEMA).build();
   }
 
   @Test
@@ -180,7 +194,7 @@ public class DataConverterTest {
     origValue.put("field2", 2);
 
     // Use the older non-compact format for map entries with string keys
-    converter = new DataConverter(false, DataConverter.BehaviorOnNullValues.DEFAULT);
+    converter = new DataConverter(false, BehaviorOnNullValues.DEFAULT);
 
     Schema preProcessedSchema = converter.preProcessSchema(origSchema);
     assertEquals(
@@ -214,7 +228,7 @@ public class DataConverterTest {
     origValue.put("field2", 2);
 
     // Use the newer compact format for map entries with string keys
-    converter = new DataConverter(true, DataConverter.BehaviorOnNullValues.DEFAULT);
+    converter = new DataConverter(true, BehaviorOnNullValues.DEFAULT);
     Schema preProcessedSchema = converter.preProcessSchema(origSchema);
     assertEquals(
         SchemaBuilder.map(Schema.STRING_SCHEMA, Schema.INT32_SCHEMA).build(),
@@ -247,36 +261,18 @@ public class DataConverterTest {
 
   @Test
   public void ignoreNull() {
-    final String key = "key";
-    final String topic = "topic";
-    final int partition = 12;
-    final long offset = 26;
-    final String index = "index";
-    final String type = "type";
-
     converter = new DataConverter(true, BehaviorOnNullValues.IGNORE);
 
-    Schema schema = SchemaBuilder.struct().name("struct").field("string", Schema.STRING_SCHEMA).build();
-    SinkRecord sinkRecord = new SinkRecord(topic, partition, Schema.STRING_SCHEMA, key, schema, null, offset);
-
+    SinkRecord sinkRecord = createSinkRecordWithValue(null);
     assertNull(converter.convertRecord(sinkRecord, index, type, false, false));
   }
 
   @Test
   public void deleteNull() {
-    final String key = "key";
-    final String topic = "topic";
-    final int partition = 12;
-    final long offset = 26;
-    final String index = "index";
-    final String type = "type";
-
     converter = new DataConverter(true, BehaviorOnNullValues.DELETE);
 
-    Schema schema = SchemaBuilder.struct().name("struct").field("string", Schema.STRING_SCHEMA).build();
-    SinkRecord sinkRecord = new SinkRecord(topic, partition, Schema.STRING_SCHEMA, key, schema, null, offset);
-
-    IndexableRecord expectedRecord = new IndexableRecord(new Key(index, type, key), null, offset);
+    SinkRecord sinkRecord = createSinkRecordWithValue(null);
+    IndexableRecord expectedRecord = createIndexableRecordWithPayload(null);
     IndexableRecord actualRecord = converter.convertRecord(sinkRecord, index, type, false, false);
 
     assertEquals(expectedRecord, actualRecord);
@@ -284,24 +280,23 @@ public class DataConverterTest {
 
   @Test
   public void failNull() {
-    final String key = "key";
-    final String topic = "topic";
-    final int partition = 12;
-    final long offset = 26;
-    final String index = "index";
-    final String type = "type";
-
     converter = new DataConverter(true, BehaviorOnNullValues.FAIL);
 
-    Schema schema = SchemaBuilder.struct().name("struct").field("string", Schema.STRING_SCHEMA).build();
-    SinkRecord sinkRecord = new SinkRecord(topic, partition, Schema.STRING_SCHEMA, key, schema, null, offset);
-
+    SinkRecord sinkRecord = createSinkRecordWithValue(null);
     try {
       converter.convertRecord(sinkRecord, index, type, false, false);
       fail("should fail on null-valued record with behaviorOnNullValues = FAIL");
     } catch (DataException dexc) {
       // expected
     }
+  }
+
+  public SinkRecord createSinkRecordWithValue(Object value) {
+    return new SinkRecord(topic, partition, Schema.STRING_SCHEMA, key, schema, value, offset);
+  }
+
+  public IndexableRecord createIndexableRecordWithPayload(String payload) {
+    return new IndexableRecord(new Key(index, type, key), payload, offset);
   }
 
 }

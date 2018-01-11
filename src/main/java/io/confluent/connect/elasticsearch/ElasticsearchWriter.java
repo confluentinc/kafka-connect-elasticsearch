@@ -23,11 +23,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.util.Collection;
 import java.util.Collections;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 import io.confluent.connect.elasticsearch.bulk.BulkProcessor;
@@ -36,6 +37,8 @@ import io.searchbox.client.JestClient;
 import io.searchbox.client.JestResult;
 import io.searchbox.indices.CreateIndex;
 import io.searchbox.indices.IndicesExists;
+
+import static io.confluent.connect.elasticsearch.DataConverter.BehaviorOnNullValues;
 
 public class ElasticsearchWriter {
   private static final Logger log = LoggerFactory.getLogger(ElasticsearchWriter.class);
@@ -69,7 +72,7 @@ public class ElasticsearchWriter {
       long lingerMs,
       int maxRetries,
       long retryBackoffMs,
-      DataConverter.BehaviorOnNullValues behaviorOnNullValues
+      BehaviorOnNullValues behaviorOnNullValues
   ) {
     this.client = client;
     this.type = type;
@@ -111,8 +114,7 @@ public class ElasticsearchWriter {
     private long lingerMs;
     private int maxRetry;
     private long retryBackoffMs;
-    private DataConverter.BehaviorOnNullValues behaviorOnNullValues =
-        DataConverter.BehaviorOnNullValues.DEFAULT;
+    private BehaviorOnNullValues behaviorOnNullValues = BehaviorOnNullValues.DEFAULT;
 
     public Builder(JestClient client) {
       this.client = client;
@@ -180,9 +182,18 @@ public class ElasticsearchWriter {
       return this;
     }
 
-    public Builder setBehaviorOnNullValues(
-        DataConverter.BehaviorOnNullValues behaviorOnNullValues) {
-      this.behaviorOnNullValues = behaviorOnNullValues;
+    /**
+     * Change the behavior that the resulting {@link ElasticsearchWriter} will have when it
+     * encounters records with null values.
+     * @param behaviorOnNullValues Cannot be null. If in doubt,
+     *                             {@link BehaviorOnNullValues#DEFAULT} can be used.
+     */
+    public Builder setBehaviorOnNullValues(BehaviorOnNullValues behaviorOnNullValues) {
+      this.behaviorOnNullValues = Objects.requireNonNull(
+          behaviorOnNullValues,
+          "behaviorOnNullValues cannot be null. Possible fix: use "
+              + "BehaviorOnNullValues.DEFAULT instead."
+      );
       return this;
     }
 

@@ -24,6 +24,8 @@ import org.apache.kafka.common.config.ConfigDef.Width;
 
 import java.util.Map;
 
+import static io.confluent.connect.elasticsearch.DataConverter.BehaviorOnNullValues;
+
 public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
 
   public static final String CONNECTION_URL_CONFIG = "connection.url";
@@ -115,8 +117,9 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
       + "out, and will need to be restarted to resume further operations.";
 
   public static final String BEHAVIOR_ON_NULL_VALUES_CONFIG = "behavior.on.null.values";
-  private static final String BEHAVIOR_ON_NULL_VALUES_DOC = "How to handle records with non-null "
-      + "keys but null values.";
+  private static final String BEHAVIOR_ON_NULL_VALUES_DOC = "How to handle records with a "
+      + "non-null key and a null value (i.e. Kafka tombstone records). "
+      + "Valid options are 'ignore', 'delete', and 'fail' (case-insensitive).";
 
   protected static ConfigDef baseConfigDef() {
     final ConfigDef configDef = new ConfigDef();
@@ -304,7 +307,8 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
     ).define(
         BEHAVIOR_ON_NULL_VALUES_CONFIG,
         Type.STRING,
-        DataConverter.BehaviorOnNullValues.DEFAULT,
+        BehaviorOnNullValues.DEFAULT.toString(),
+        BehaviorOnNullValues.VALIDATOR,
         Importance.LOW,
         BEHAVIOR_ON_NULL_VALUES_DOC,
         group,
