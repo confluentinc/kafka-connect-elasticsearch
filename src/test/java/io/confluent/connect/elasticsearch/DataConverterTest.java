@@ -59,7 +59,11 @@ public class DataConverterTest {
     offset = 0;
     index = "index";
     type = "type";
-    schema = SchemaBuilder.struct().name("struct").field("string", Schema.STRING_SCHEMA).build();
+    schema = SchemaBuilder
+        .struct()
+        .name("struct")
+        .field("string", Schema.STRING_SCHEMA)
+        .build();
   }
 
   @Test

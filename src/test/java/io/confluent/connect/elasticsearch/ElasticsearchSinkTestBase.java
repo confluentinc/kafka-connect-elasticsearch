@@ -69,7 +69,8 @@ public class ElasticsearchSinkTestBase extends ESIntegTestCase {
             .multiThreaded(true).build()
     );
     client = (JestHttpClient) factory.getObject();
-    // Shouldn't be told to verify any records with null values; if that happens, the test should automatically fail
+    // Shouldn't be told to verify any records with null values; if that happens, the test should
+    // automatically fail
     converter = new DataConverter(true, BehaviorOnNullValues.FAIL);
   }
 

@@ -125,9 +125,9 @@ public class DataConverter {
           break;
         case FAIL:
           throw new DataException(String.format(
-              "Sink record with key of %s and null value encountered for topic/partition/offset"
-                  + " %s/%s/%s (to ignore future records like this change the configuration "
-                  + "property '%s' from '%s' to '%s')",
+              "Sink record with key of %s and null value encountered for topic/partition/offset "
+              + "%s/%s/%s (to ignore future records like this change the configuration property "
+              + "'%s' from '%s' to '%s')",
               record.key(),
               record.topic(),
               record.kafkaPartition(),

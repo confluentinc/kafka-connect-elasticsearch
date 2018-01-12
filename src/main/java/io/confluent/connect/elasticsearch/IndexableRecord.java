@@ -73,8 +73,8 @@ public class IndexableRecord {
     }
     IndexableRecord that = (IndexableRecord) o;
     return Objects.equals(key, that.key)
-        && Objects.equals(payload, that.payload)
-        && Objects.equals(version, that.version);
+           && Objects.equals(payload, that.payload)
+           && Objects.equals(version, that.version);
   }
 
   @Override

@@ -185,8 +185,8 @@ public class ElasticsearchWriter {
     /**
      * Change the behavior that the resulting {@link ElasticsearchWriter} will have when it
      * encounters records with null values.
-     * @param behaviorOnNullValues Cannot be null. If in doubt,
-     *                             {@link BehaviorOnNullValues#DEFAULT} can be used.
+     * @param behaviorOnNullValues Cannot be null. If in doubt, {@link BehaviorOnNullValues#DEFAULT}
+     *                             can be used.
      */
     public Builder setBehaviorOnNullValues(BehaviorOnNullValues behaviorOnNullValues) {
       this.behaviorOnNullValues =
@@ -245,9 +245,9 @@ public class ElasticsearchWriter {
 
       // In the event that the sink record's value was null and the data converter has been told to
       // ignore null values, the returned record will be null.
-      // TODO: If necessary, move the check for null-valued records to the top of the for-loop to
-      //       avoid potential performance penalties. Leaving the check here since it relegates all
-      //       three kinds of null-record-handling behavior to the DataConverter class.
+      // TODO: If necessary, move the check for null-valued records to the top of the for-loop in
+      //       write() to avoid potential performance penalties. Leaving the check here since
+      //       DataConverter handles all of null-record behaviors.
       if (indexableRecord != null) {
         bulkProcessor.add(indexableRecord, flushTimeoutMs);
       } else {
