@@ -119,8 +119,8 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   public static final String BEHAVIOR_ON_NULL_VALUES_CONFIG = "behavior.on.null.values";
   private static final String BEHAVIOR_ON_NULL_VALUES_DOC = "How to handle records with a "
       + "non-null key and a null value (i.e. Kafka tombstone records). "
-      + "Valid options are 'ignore', 'delete', and 'fail' (case-insensitive).";
-
+      + "Valid options are 'ignore', 'delete', and 'fail'.";
+  
   protected static ConfigDef baseConfigDef() {
     final ConfigDef configDef = new ConfigDef();
     addConnectorConfigs(configDef);
