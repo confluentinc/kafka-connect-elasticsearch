@@ -378,6 +378,13 @@ public class DataConverter {
         }
         validator.ensureValid(name, value);
       }
+
+      // Overridden here so that ConfigDef.toEnrichedRst shows possible values correctly
+      @Override
+      public String toString() {
+        return validator.toString();
+      }
+
     };
 
     public static String[] names() {
