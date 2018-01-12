@@ -363,6 +363,17 @@ public class ElasticsearchWriterTest extends ElasticsearchSinkTestBase {
   }
 
   @Test
+  public void testDeleteWithNullKey() throws Exception {
+    Collection<SinkRecord> records = new ArrayList<>();
+    SinkRecord sinkRecord = new SinkRecord(TOPIC, PARTITION, Schema.STRING_SCHEMA, null, schema, null, 0);
+    records.add(sinkRecord);
+
+    ElasticsearchWriter writer = initWriter(client, BehaviorOnNullValues.DELETE);
+    writeDataAndRefresh(writer, records);
+    verifySearchResults(new ArrayList<SinkRecord>());
+  }
+
+  @Test
   public void testFailOnNullValue() throws Exception {
     Collection<SinkRecord> records = new ArrayList<>();
     SinkRecord sinkRecord = new SinkRecord(TOPIC, PARTITION, Schema.STRING_SCHEMA, key, schema, null, 0);

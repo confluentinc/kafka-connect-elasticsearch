@@ -113,6 +113,11 @@ public class DataConverter {
         case IGNORE:
           return null;
         case DELETE:
+          if (!ignoreKey && record.key() == null) {
+            // Since the record key is used as the ID of the index to delete and we don't have a kek for this record, we
+            // can't delete anything anyways, so we ignore the record.
+            return null;
+          }
           // Will proceed as normal, ultimately creating an IndexableRecord with a null payload
           break;
         case FAIL:

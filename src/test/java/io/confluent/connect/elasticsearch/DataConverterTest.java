@@ -260,7 +260,7 @@ public class DataConverterTest {
   }
 
   @Test
-  public void ignoreNull() {
+  public void ignoreOnNullValue() {
     converter = new DataConverter(true, BehaviorOnNullValues.IGNORE);
 
     SinkRecord sinkRecord = createSinkRecordWithValue(null);
@@ -268,7 +268,7 @@ public class DataConverterTest {
   }
 
   @Test
-  public void deleteNull() {
+  public void deleteOnNullValue() {
     converter = new DataConverter(true, BehaviorOnNullValues.DELETE);
 
     SinkRecord sinkRecord = createSinkRecordWithValue(null);
@@ -279,7 +279,16 @@ public class DataConverterTest {
   }
 
   @Test
-  public void failNull() {
+  public void ignoreDeleteOnNullValueWithNullKey() {
+    converter = new DataConverter(true, BehaviorOnNullValues.DELETE);
+    key = null;
+
+    SinkRecord sinkRecord = createSinkRecordWithValue(null);
+    assertNull(converter.convertRecord(sinkRecord, index, type, false, false));
+  }
+
+  @Test
+  public void failOnNullValue() {
     converter = new DataConverter(true, BehaviorOnNullValues.FAIL);
 
     SinkRecord sinkRecord = createSinkRecordWithValue(null);
