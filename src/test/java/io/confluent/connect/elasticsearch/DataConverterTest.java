@@ -295,7 +295,7 @@ public class DataConverterTest {
     try {
       converter.convertRecord(sinkRecord, index, type, false, false);
       fail("should fail on null-valued record with behaviorOnNullValues = FAIL");
-    } catch (DataException dexc) {
+    } catch (DataException e) {
       // expected
     }
   }

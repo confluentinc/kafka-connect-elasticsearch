@@ -375,7 +375,7 @@ public class ElasticsearchWriterTest extends ElasticsearchSinkTestBase {
     try {
       writeDataAndRefresh(writer, records);
       fail("should fail because of behavior.on.null.values=fail");
-    } catch (DataException dexc) {
+    } catch (DataException e) {
       // expected
     }
   }
