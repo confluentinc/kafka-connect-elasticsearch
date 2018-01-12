@@ -64,11 +64,8 @@ public class DataConverter {
    */
   public DataConverter(boolean useCompactMapEntries, BehaviorOnNullValues behaviorOnNullValues) {
     this.useCompactMapEntries = useCompactMapEntries;
-    this.behaviorOnNullValues = Objects.requireNonNull(
-        behaviorOnNullValues,
-        "behaviorOnNullValues cannot be null. Possible fix: use "
-            + "BehaviorOnNullValues.DEFAULT instead."
-    );
+    this.behaviorOnNullValues =
+        Objects.requireNonNull(behaviorOnNullValues, "behaviorOnNullValues cannot be null.");
   }
 
   private String convertKey(Schema keySchema, Object key) {
@@ -115,8 +112,8 @@ public class DataConverter {
           return null;
         case DELETE:
           if (!ignoreKey && record.key() == null) {
-            // Since the record key is used as the ID of the index to delete and we don't have a kek for this record, we
-            // can't delete anything anyways, so we ignore the record.
+            // Since the record key is used as the ID of the index to delete and we don't have a key
+            // for this record, we can't delete anything anyways, so we ignore the record.
             return null;
           }
           // Will proceed as normal, ultimately creating an IndexableRecord with a null payload

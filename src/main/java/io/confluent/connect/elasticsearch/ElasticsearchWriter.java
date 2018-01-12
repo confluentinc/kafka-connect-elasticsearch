@@ -189,11 +189,8 @@ public class ElasticsearchWriter {
      *                             {@link BehaviorOnNullValues#DEFAULT} can be used.
      */
     public Builder setBehaviorOnNullValues(BehaviorOnNullValues behaviorOnNullValues) {
-      this.behaviorOnNullValues = Objects.requireNonNull(
-          behaviorOnNullValues,
-          "behaviorOnNullValues cannot be null. Possible fix: use "
-              + "BehaviorOnNullValues.DEFAULT instead."
-      );
+      this.behaviorOnNullValues =
+          Objects.requireNonNull(behaviorOnNullValues, "behaviorOnNullValues cannot be null");
       return this;
     }
 
