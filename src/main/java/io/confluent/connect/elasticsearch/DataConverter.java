@@ -59,6 +59,13 @@ public class DataConverter {
   private final BehaviorOnNullValues behaviorOnNullValues;
 
   /**
+   * @param useCompactMapEntries Defines how map entries with string keys within record values
+   *                             should be written to JSON. When true, these entries are written
+   *                             compactly as "entryKey": "entryValue". Otherwise, map entries with
+   *                             string keys are written as a nested document
+   *                             {"key": "entryKey", "value": "entryValue"}.
+   *                             All map entries with non-string keys are always written as nested
+   *                             documents.
    * @param behaviorOnNullValues How to treat records with null values. Cannot be null; if in doubt,
    * {@link BehaviorOnNullValues#DEFAULT} can be used.
    */
