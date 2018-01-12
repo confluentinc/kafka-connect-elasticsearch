@@ -111,9 +111,14 @@ public class DataConverter {
         case IGNORE:
           return null;
         case DELETE:
-          if (!ignoreKey && record.key() == null) {
+          if (record.key() == null) {
             // Since the record key is used as the ID of the index to delete and we don't have a key
             // for this record, we can't delete anything anyways, so we ignore the record.
+            // We can also disregard the value of the ignoreKey parameter, since even if it's true
+            // the resulting index we'd try to delete would be based solely off topic/partition/
+            // offset information for the SinkRecord. Since that information is guaranteed to be
+            // unique per message, we can be confident that there wouldn't be any corresponding
+            // index present in ES to delete anyways.
             return null;
           }
           // Will proceed as normal, ultimately creating an IndexableRecord with a null payload
