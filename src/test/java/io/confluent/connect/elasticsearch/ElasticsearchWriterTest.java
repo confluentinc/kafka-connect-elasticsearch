@@ -48,14 +48,6 @@ import static io.confluent.connect.elasticsearch.DataConverter.BehaviorOnNullVal
 @ThreadLeakScope(ThreadLeakScope.Scope.NONE)
 public class ElasticsearchWriterTest extends ElasticsearchSinkTestBase {
 
-  // To be used as the ignoreKey paramter when calling initWriter
-  private static final boolean ENFORCE_KEY = false;
-  private static final boolean IGNORE_KEY  = true;
-
-  // To be used as the ignoreSchema paramter when calling initWriter
-  private static final boolean ENFORCE_SCHEMA = false;
-  private static final boolean IGNORE_SCHEMA  = true;
-
   private final String key = "key";
   private final Schema schema = createSchema();
   private final Struct record = createRecord(schema);
@@ -67,8 +59,8 @@ public class ElasticsearchWriterTest extends ElasticsearchSinkTestBase {
 
   @Before
   public void setUp() throws Exception {
-    ignoreKey = ENFORCE_KEY;
-    ignoreSchema = ENFORCE_SCHEMA;
+    ignoreKey = false;
+    ignoreSchema = false;
 
     super.setUp();
   }
@@ -85,7 +77,7 @@ public class ElasticsearchWriterTest extends ElasticsearchSinkTestBase {
 
   @Test
   public void testWriterIgnoreKey() throws Exception {
-    ignoreKey = IGNORE_KEY;
+    ignoreKey = true;
 
     Collection<SinkRecord> records = prepareData(2);
     ElasticsearchWriter writer = initWriter(client);
@@ -95,8 +87,8 @@ public class ElasticsearchWriterTest extends ElasticsearchSinkTestBase {
 
   @Test
   public void testWriterIgnoreSchema() throws Exception {
-    ignoreKey = IGNORE_KEY;
-    ignoreSchema = IGNORE_SCHEMA;
+    ignoreKey = true;
+    ignoreSchema = true;
 
     Collection<SinkRecord> records = prepareData(2);
     ElasticsearchWriter writer = initWriter(client);
@@ -106,8 +98,8 @@ public class ElasticsearchWriterTest extends ElasticsearchSinkTestBase {
 
   @Test
   public void testTopicIndexOverride() throws Exception {
-    ignoreKey = IGNORE_KEY;
-    ignoreSchema = IGNORE_SCHEMA;
+    ignoreKey = true;
+    ignoreSchema = true;
 
     String indexOverride = "index";
 
@@ -119,7 +111,7 @@ public class ElasticsearchWriterTest extends ElasticsearchSinkTestBase {
 
   @Test
   public void testIncompatible() throws Exception {
-    ignoreKey = IGNORE_KEY;
+    ignoreKey = true;
 
     Collection<SinkRecord> records = new ArrayList<>();
     SinkRecord sinkRecord = new SinkRecord(TOPIC, PARTITION, Schema.STRING_SCHEMA, key, otherSchema, otherRecord, 0);
@@ -145,7 +137,7 @@ public class ElasticsearchWriterTest extends ElasticsearchSinkTestBase {
 
   @Test
   public void testCompatible() throws Exception {
-    ignoreKey = IGNORE_KEY;
+    ignoreKey = true;
 
     Collection<SinkRecord> records = new ArrayList<>();
     Collection<SinkRecord> expected = new ArrayList<>();
@@ -198,7 +190,7 @@ public class ElasticsearchWriterTest extends ElasticsearchSinkTestBase {
 
   @Test
   public void testSafeRedeliveryOffsetInKey() throws Exception {
-    ignoreKey = IGNORE_KEY;
+    ignoreKey = true;
 
     Struct value0 = new Struct(schema);
     value0.put("user", "foo");
