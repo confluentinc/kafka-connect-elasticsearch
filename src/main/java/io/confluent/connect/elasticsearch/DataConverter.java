@@ -149,23 +149,22 @@ public class DataConverter {
       id = convertKey(record.keySchema(), record.key());
     }
 
-    final Schema schema;
-    final Object value;
-    if (!ignoreSchema) {
-      schema = preProcessSchema(record.valueSchema());
-      value = record.value() != null
-          ? preProcessValue(record.value(), record.valueSchema(), schema)
-          : null;
+    final String payload;
+    if (record.value() != null) {
+      Schema schema = ignoreSchema
+          ? record.valueSchema()
+          : preProcessSchema(record.valueSchema());
+
+      Object value = ignoreSchema
+          ? record.value()
+          : preProcessValue(record.value(), record.valueSchema(), schema);
+
+      byte[] rawJsonPayload = JSON_CONVERTER.fromConnectData(record.topic(), schema, value);
+      payload = new String(rawJsonPayload, StandardCharsets.UTF_8);
     } else {
-      schema = record.valueSchema();
-      value = record.value();
+      payload = null;
     }
 
-    final String payload = value != null
-        ? new String(
-            JSON_CONVERTER.fromConnectData(record.topic(), schema, value),
-            StandardCharsets.UTF_8)
-        : null;
     final Long version = ignoreKey ? null : record.kafkaOffset();
     return new IndexableRecord(new Key(index, type, id), payload, version);
   }
