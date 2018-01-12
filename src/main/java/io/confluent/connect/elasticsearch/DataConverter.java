@@ -39,6 +39,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 
@@ -372,7 +373,7 @@ public class DataConverter {
       @Override
       public void ensureValid(String name, Object value) {
         if (value instanceof String) {
-          value = ((String) value).toLowerCase();
+          value = ((String) value).toLowerCase(Locale.ROOT);
         }
         validator.ensureValid(name, value);
       }
@@ -390,12 +391,12 @@ public class DataConverter {
     }
 
     public static BehaviorOnNullValues forValue(String value) {
-      return valueOf(value.toUpperCase());
+      return valueOf(value.toUpperCase(Locale.ROOT));
     }
 
     @Override
     public String toString() {
-      return name().toLowerCase();
+      return name().toLowerCase(Locale.ROOT);
     }
   }
 }
