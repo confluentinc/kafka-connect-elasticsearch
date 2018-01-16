@@ -42,6 +42,8 @@ import io.searchbox.client.http.JestHttpClient;
 import io.searchbox.core.Search;
 import io.searchbox.core.SearchResult;
 
+import static io.confluent.connect.elasticsearch.DataConverter.BehaviorOnNullValues;
+
 public class ElasticsearchSinkTestBase extends ESIntegTestCase {
 
   protected static final String TYPE = "kafka-connect";
@@ -67,7 +69,9 @@ public class ElasticsearchSinkTestBase extends ESIntegTestCase {
             .multiThreaded(true).build()
     );
     client = (JestHttpClient) factory.getObject();
-    converter = new DataConverter(true);
+    // Shouldn't be told to verify any records with null values; if that happens, the test should
+    // automatically fail
+    converter = new DataConverter(true, BehaviorOnNullValues.FAIL);
   }
 
   @After

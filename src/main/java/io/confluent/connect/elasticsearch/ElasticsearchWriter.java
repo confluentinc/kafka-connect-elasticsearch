@@ -23,11 +23,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.util.Collection;
 import java.util.Collections;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 import io.confluent.connect.elasticsearch.bulk.BulkProcessor;
@@ -36,6 +37,8 @@ import io.searchbox.client.JestClient;
 import io.searchbox.client.JestResult;
 import io.searchbox.indices.CreateIndex;
 import io.searchbox.indices.IndicesExists;
+
+import static io.confluent.connect.elasticsearch.DataConverter.BehaviorOnNullValues;
 
 public class ElasticsearchWriter {
   private static final Logger log = LoggerFactory.getLogger(ElasticsearchWriter.class);
@@ -68,7 +71,8 @@ public class ElasticsearchWriter {
       int batchSize,
       long lingerMs,
       int maxRetries,
-      long retryBackoffMs
+      long retryBackoffMs,
+      BehaviorOnNullValues behaviorOnNullValues
   ) {
     this.client = client;
     this.type = type;
@@ -78,7 +82,7 @@ public class ElasticsearchWriter {
     this.ignoreSchemaTopics = ignoreSchemaTopics;
     this.topicToIndexMap = topicToIndexMap;
     this.flushTimeoutMs = flushTimeoutMs;
-    this.converter = new DataConverter(useCompactMapEntries);
+    this.converter = new DataConverter(useCompactMapEntries, behaviorOnNullValues);
 
     bulkProcessor = new BulkProcessor<>(
         new SystemTime(),
@@ -110,6 +114,7 @@ public class ElasticsearchWriter {
     private long lingerMs;
     private int maxRetry;
     private long retryBackoffMs;
+    private BehaviorOnNullValues behaviorOnNullValues = BehaviorOnNullValues.DEFAULT;
 
     public Builder(JestClient client) {
       this.client = client;
@@ -177,6 +182,18 @@ public class ElasticsearchWriter {
       return this;
     }
 
+    /**
+     * Change the behavior that the resulting {@link ElasticsearchWriter} will have when it
+     * encounters records with null values.
+     * @param behaviorOnNullValues Cannot be null. If in doubt, {@link BehaviorOnNullValues#DEFAULT}
+     *                             can be used.
+     */
+    public Builder setBehaviorOnNullValues(BehaviorOnNullValues behaviorOnNullValues) {
+      this.behaviorOnNullValues =
+          Objects.requireNonNull(behaviorOnNullValues, "behaviorOnNullValues cannot be null");
+      return this;
+    }
+
     public ElasticsearchWriter build() {
       return new ElasticsearchWriter(
           client,
@@ -193,7 +210,8 @@ public class ElasticsearchWriter {
           batchSize,
           lingerMs,
           maxRetry,
-          retryBackoffMs
+          retryBackoffMs,
+          behaviorOnNullValues
       );
     }
   }
@@ -217,10 +235,31 @@ public class ElasticsearchWriter {
         existingMappings.add(index);
       }
 
-      final IndexableRecord indexableRecord = converter.convertRecord(sinkRecord, index, type,
-                                                                      ignoreKey, ignoreSchema);
+      final IndexableRecord indexableRecord = converter.convertRecord(
+          sinkRecord,
+          index,
+          type,
+          ignoreKey,
+          ignoreSchema
+      );
 
-      bulkProcessor.add(indexableRecord, flushTimeoutMs);
+      // In the event that the sink record's value was null and the data converter has been told to
+      // ignore null values, the returned record will be null.
+      // TODO: If necessary, move the check for null-valued records to the top of the for-loop in
+      //       write() to avoid potential performance penalties. Leaving the check here since
+      //       DataConverter handles all of null-record behaviors.
+      if (indexableRecord != null) {
+        bulkProcessor.add(indexableRecord, flushTimeoutMs);
+      } else {
+        log.debug(
+            "Ignoring sink record with key of {} and null value for topic/partition/offset "
+                + "{}/{}/{}",
+            sinkRecord.key(),
+            sinkRecord.topic(),
+            sinkRecord.kafkaPartition(),
+            sinkRecord.kafkaOffset()
+        );
+      }
     }
   }
 

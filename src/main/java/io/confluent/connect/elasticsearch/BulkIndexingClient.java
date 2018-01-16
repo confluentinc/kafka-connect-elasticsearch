@@ -13,6 +13,7 @@
  * License for the specific language governing permissions and limitations under
  * the License.
  **/
+
 package io.confluent.connect.elasticsearch;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -47,7 +48,7 @@ public class BulkIndexingClient implements BulkClient<IndexableRecord, Bulk> {
   public Bulk bulkRequest(List<IndexableRecord> batch) {
     final Bulk.Builder builder = new Bulk.Builder();
     for (IndexableRecord record : batch) {
-      builder.addAction(record.toIndexRequest());
+      builder.addAction(record.toBulkableAction());
     }
     return builder.build();
   }

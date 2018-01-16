@@ -13,6 +13,7 @@
  * License for the specific language governing permissions and limitations under
  * the License.
  **/
+
 package io.confluent.connect.elasticsearch;
 
 import java.util.Objects;
@@ -38,9 +39,9 @@ public class Key {
       return false;
     }
     Key that = (Key) o;
-    return Objects.equals(index, that.index) &&
-           Objects.equals(type, that.type) &&
-           Objects.equals(id, that.id);
+    return Objects.equals(index, that.index)
+           && Objects.equals(type, that.type)
+           && Objects.equals(id, that.id);
   }
 
   @Override
