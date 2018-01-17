@@ -221,7 +221,7 @@ public class ElasticsearchWriter {
   public void write(Collection<SinkRecord> records) {
     for (SinkRecord sinkRecord : records) {
       // Preemptively skip records with null values if they're going to be ignored anyways
-      if (sinkRecord.value() == null && behaviorOnNullValues.equals(BehaviorOnNullValues.IGNORE)) {
+      if (sinkRecord.value() == null && behaviorOnNullValues == BehaviorOnNullValues.IGNORE) {
         continue;
       }
 
