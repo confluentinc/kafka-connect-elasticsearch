@@ -85,7 +85,8 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
                   group, ++order, Width.SHORT, "Max Retries")
           .define(RETRY_BACKOFF_MS_CONFIG, Type.LONG, 100L, Importance.LOW,
                   "How long to wait in milliseconds before attempting the first retry of a failed indexing request. "
-                  + "Upon a failure, this connector may wait up to twice as long as the previous wait, up to the maximum number of retries. "
+                  + "This connector uses exponential backoff with jitter, which means that upon "
+                  + "additional failures, this connector may wait up to twice as long as the previous wait, up to the maximum number of retries. "
                   + "This avoids retrying in a tight loop under failure scenarios.",
                   group, ++order, Width.SHORT, "Retry Backoff (ms)")
           .define(CONNECTION_TIMEOUT_MS_CONFIG, Type.INT, 1000, Importance.LOW, "How long to wait "
