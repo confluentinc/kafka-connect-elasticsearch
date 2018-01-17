@@ -1,7 +1,7 @@
 .. _elasticsearch-overview:
 
-Elasticsearch  Connector
-========================
+Elasticsearch Connector
+=======================
 The Elasticsearch connector allows moving data from Kafka to Elasticsearch. It writes data from
 a topic in Kafka to an `index <https://www.elastic.co/guide/en/elasticsearch/reference/current/_basic_concepts.html#_index>`_
 in Elasticsearch and all data for a topic have the same
@@ -26,44 +26,70 @@ connector provides a feature to infer mapping from the schemas of Kafka messages
 
 .. _elasticsearch-quickstart:
 
-Quick start
+Quick Start
 -----------
 This quick start uses the Elasticsearch connector to export data produced by the Avro console
 producer to Elasticsearch.
 
-First, start all the necessary services using Confluent CLI:
+**Prerequisites:**
 
-.. tip::
+- :ref:`Confluent Platform <installation>` is installed. This quick start assumes that you are using the Confluent CLI, but standalone installations are also supported. For more information, see :ref:`installation_archive`.
+- Elasticsearch 6.1 or later is installed and running.
 
-   If not already in your PATH, add Confluent's ``bin`` directory by running: ``export PATH=<path-to-confluent>/bin:$PATH``
+----------------------------
+Start the Confluent Services
+----------------------------
+
+To use Elasticsearch you will need Schema Registry, |zk|, Kafka, and Kafka Connect.
+
+#.  Start Schema Registry using the Confluent CLI. This also starts its dependencies, |zk| and Kafka.
+
+    .. sourcecode:: bash
+
+        $ confluent start schema-registry
+
+    Your output should resemble:
+
+    .. sourcecode:: bash
+
+        Starting zookeeper
+        zookeeper is [UP]
+        Starting kafka
+        kafka is [UP]
+        Starting schema-registry
+        schema-registry is [UP]
+
+
+#.  Start Kafka Connect as a standalone service. Do not use the Confluent CLI.
+
+    .. tip:: This is a long-running process and should be run in its own terminal window.
+
+    .. sourcecode:: bash
+
+    <path-to-confluent>/bin/connect-standalone etc/schema-registry/connect-avro-standalone.properties \
+    etc/kafka-connect-elasticsearch/quickstart-elasticsearch.properties
+
+    Your output should resemble:
+
+    .. sourcecode:: bash
+
+        [2018-01-17 10:37:08,097] INFO Kafka Connect standalone worker initializing ... (org.apache.kafka.connect.cli.ConnectStandalone:65)
+        [2018-01-17 10:37:08,107] INFO WorkerInfo values:
+            jvm.args = -Xmx256M, -XX:+UseG1GC, -XX:MaxGCPauseMillis=20, -XX:InitiatingHeapOccupancyPercent=35, -XX:+ExplicitGCInvokesConcurrent, -Djava.awt.headless=true, -Dcom.sun.management.jmxremote, -Dcom.sun.management.jmxremote.authenticate=false, -Dcom.sun.management.jmxremote.ssl=false, -Dkafka.logs.dir=/Users/joel/projects/confluent-4.0.0/bin/../logs, -Dlog4j.configuration=file:./bin/../etc/kafka/connect-log4j.properties
+         ...
+
+----------------------------
+Add a Record to the Consumer
+----------------------------
+
+Start the Avro console producer to import a few records to Kafka:
 
 .. sourcecode:: bash
 
-   $ confluent start
+    <path-to-confluent>/bin/kafka-avro-console-producer --broker-list localhost:9092 --topic test-elasticsearch-sink \
+    --property value.schema='{"type":"record","name":"myrecord","fields":[{"name":"f1","type":"string"}]}'
 
-Every service will start in order, printing a message with its status:
-
-.. sourcecode:: bash
-
-    Starting zookeeper
-    zookeeper is [UP]
-    Starting kafka
-    kafka is [UP]
-    Starting schema-registry
-    schema-registry is [UP]
-    Starting kafka-rest
-    kafka-rest is [UP]
-    Starting connect
-    connect is [UP]
-
-Next, start the Avro console producer to import a few records to Kafka:
-
-.. sourcecode:: bash
-
-  $ ./bin/kafka-avro-console-producer --broker-list localhost:9092 --topic test-elasticsearch-sink \
-  --property value.schema='{"type":"record","name":"myrecord","fields":[{"name":"f1","type":"string"}]}'
-
-Then in the console producer, type in:
+Then in the console producer, enter:
 
 .. sourcecode:: bash
 
@@ -73,101 +99,100 @@ Then in the console producer, type in:
 
 The three records entered are published to the Kafka topic ``test-elasticsearch`` in Avro format.
 
-Before starting the connector, please make sure that the configurations in
-``etc/kafka-connect-elasticsearch/quickstart-elasticsearch.properties`` are properly set to your
-configurations of Elasticsearch, e.g. ``connection.url`` points to the correct http address.
-Then start the Elasticsearch connector by loading its configuration with the following command:
+--------------------------------
+Load the Elasticsearch Connector
+--------------------------------
 
-.. sourcecode:: bash
+Load the predefined Elasticsearch connector.
 
-  $ ./bin/connect-standalone etc/schema-registry/connect-avro-standalone.properties \
-  etc/kafka-connect-elasticsearch/quickstart-elasticsearch.properties
+.. tip:: Before starting the connector, you can verify that the configurations in ``etc/kafka-connect-elasticsearch/quickstart-elasticsearch.properties`` are properly set (e.g. ``connection.url`` points to the correct HTTP address).
 
-.. sourcecode:: bash
+#.  Optional: View the available predefined connectors with this command:
 
-   $ confluent load elasticsearch-sink
-   {
-     "name": "elasticsearch-sink",
-     "config": {
-       "connector.class": "io.confluent.connect.elasticsearch.ElasticsearchSinkConnector",
-       "tasks.max": "1",
-       "topics": "test-elasticsearch-sink",
-       "key.ignore": "true",
-       "connection.url": "http://localhost:9200",
-       "type.name": "kafka-connect",
-       "name": "elasticsearch-sink"
-     },
-     "tasks": []
-   }
+    .. sourcecode:: bash
 
-To check that the connector started successfully view the Connect worker's log by running:
+        confluent list connectors
 
-.. sourcecode:: bash
+    Your output should resemble:
 
-  $ confluent log connect
+    .. sourcecode:: bash
 
-Towards the end of the log you should see that the connector starts, logs a few messages, and then exports
-data from Kafka to Elasticsearch.
-Once the connector finishes ingesting data to Elasticsearch, check that the data is available in Elasticsearch:
+        Bundled Predefined Connectors (edit configuration under etc/):
+          elasticsearch-sink
+          file-source
+          file-sink
+          jdbc-source
+          jdbc-sink
+          hdfs-sink
+          s3-sink
 
-.. sourcecode:: bash
+#.  Load the the ``elasticsearch-sink`` connector:
 
-  $ curl -XGET 'http://localhost:9200/test-elasticsearch-sink/_search?pretty'
-  {
-   "took" : 2,
-   "timed_out" : false,
-   "_shards" : {
-     "total" : 5,
-     "successful" : 5,
-     "failed" : 0
-   },
-   "hits" : {
-     "total" : 1,
-     "max_score" : 1.0,
-     "hits" : [ {
-       "_index" : "test-elasticsearch-sink",
-       "_type" : "kafka-connect",
-       "_id" : "test-elasticsearch-sink+0+0",
-       "_score" : 1.0,
-       "_source" : {
-         "f1" : "value1"
+    .. sourcecode:: bash
+
+        confluent load elasticsearch-sink
+
+    Your output should resemble:
+
+    .. sourcecode:: bash
+
+        {
+          "name": "elasticsearch-sink",
+          "config": {
+            "connector.class": "io.confluent.connect.elasticsearch.ElasticsearchSinkConnector",
+            "tasks.max": "1",
+            "topics": "test-elasticsearch-sink",
+            "key.ignore": "true",
+            "connection.url": "http://localhost:9200",
+            "type.name": "kafka-connect",
+            "name": "elasticsearch-sink"
+          },
+          "tasks": [],
+          "type": null
+        }
+
+    .. tip:: For non-CLI users, you can load the Elasticsearch connector with this command:
+
+        .. sourcecode:: bash
+
+            $ ./bin/connect-standalone etc/schema-registry/connect-avro-standalone.properties \
+            etc/kafka-connect-elasticsearch/quickstart-elasticsearch.properties
+
+
+#.  After the connector finishes ingesting data to Elasticsearch, check that the data is available in Elasticsearch:
+
+    .. sourcecode:: bash
+
+      $ curl -XGET 'http://localhost:9200/test-elasticsearch-sink/_search?pretty'
+
+
+    Your output should resemble:
+
+    .. sourcecode:: bash
+
+      {
+       "took" : 2,
+       "timed_out" : false,
+       "_shards" : {
+         "total" : 5,
+         "successful" : 5,
+         "failed" : 0
+       },
+       "hits" : {
+         "total" : 1,
+         "max_score" : 1.0,
+         "hits" : [ {
+           "_index" : "test-elasticsearch-sink",
+           "_type" : "kafka-connect",
+           "_id" : "test-elasticsearch-sink+0+0",
+           "_score" : 1.0,
+           "_source" : {
+             "f1" : "value1"
+           }
+         }]
        }
-     }]
-   }
-  }
+      }
 
-Finally, stop the Connect worker as well as all the rest of the Confluent services by running:
-
-.. sourcecode:: bash
-
-      $ confluent stop
-      Stopping connect
-      connect is [DOWN]
-      Stopping kafka-rest
-      kafka-rest is [DOWN]
-      Stopping schema-registry
-      schema-registry is [DOWN]
-      Stopping kafka
-      kafka is [DOWN]
-      Stopping zookeeper
-      zookeeper is [DOWN]
-
-or stop all the services and additionally wipe out any data generated during this quick start by running:
-
-.. sourcecode:: bash
-
-      $ confluent destroy
-      Stopping connect
-      connect is [DOWN]
-      Stopping kafka-rest
-      kafka-rest is [DOWN]
-      Stopping schema-registry
-      schema-registry is [DOWN]
-      Stopping kafka
-      kafka is [DOWN]
-      Stopping zookeeper
-      zookeeper is [DOWN]
-      Deleting: /tmp/confluent.w1CpYsaI
 
 Features
 --------
