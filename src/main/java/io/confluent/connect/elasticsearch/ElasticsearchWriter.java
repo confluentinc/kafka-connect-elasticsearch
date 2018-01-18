@@ -23,11 +23,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.util.Collection;
 import java.util.Collections;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 import io.confluent.connect.elasticsearch.bulk.BulkProcessor;
@@ -36,6 +37,8 @@ import io.searchbox.client.JestClient;
 import io.searchbox.client.JestResult;
 import io.searchbox.indices.CreateIndex;
 import io.searchbox.indices.IndicesExists;
+
+import static io.confluent.connect.elasticsearch.DataConverter.BehaviorOnNullValues;
 
 public class ElasticsearchWriter {
   private static final Logger log = LoggerFactory.getLogger(ElasticsearchWriter.class);
@@ -51,6 +54,7 @@ public class ElasticsearchWriter {
   private final long flushTimeoutMs;
   private final BulkProcessor<IndexableRecord, ?> bulkProcessor;
   private final boolean dropInvalidMessage;
+  private final BehaviorOnNullValues behaviorOnNullValues;
   private final DataConverter converter;
 
   private final Set<String> existingMappings;
@@ -71,7 +75,8 @@ public class ElasticsearchWriter {
       long lingerMs,
       int maxRetries,
       long retryBackoffMs,
-      boolean dropInvalidMessage
+      boolean dropInvalidMessage,
+      BehaviorOnNullValues behaviorOnNullValues
   ) {
     this.client = client;
     this.type = type;
@@ -82,7 +87,8 @@ public class ElasticsearchWriter {
     this.topicToIndexMap = topicToIndexMap;
     this.flushTimeoutMs = flushTimeoutMs;
     this.dropInvalidMessage = dropInvalidMessage;
-    this.converter = new DataConverter(useCompactMapEntries);
+    this.behaviorOnNullValues = behaviorOnNullValues;
+    this.converter = new DataConverter(useCompactMapEntries, behaviorOnNullValues);
 
     bulkProcessor = new BulkProcessor<>(
         new SystemTime(),
@@ -115,6 +121,7 @@ public class ElasticsearchWriter {
     private int maxRetry;
     private long retryBackoffMs;
     private boolean dropInvalidMessage;
+    private BehaviorOnNullValues behaviorOnNullValues = BehaviorOnNullValues.DEFAULT;
 
     public Builder(JestClient client) {
       this.client = client;
@@ -187,6 +194,18 @@ public class ElasticsearchWriter {
       return this;
     }
 
+    /**
+     * Change the behavior that the resulting {@link ElasticsearchWriter} will have when it
+     * encounters records with null values.
+     * @param behaviorOnNullValues Cannot be null. If in doubt, {@link BehaviorOnNullValues#DEFAULT}
+     *                             can be used.
+     */
+    public Builder setBehaviorOnNullValues(BehaviorOnNullValues behaviorOnNullValues) {
+      this.behaviorOnNullValues =
+          Objects.requireNonNull(behaviorOnNullValues, "behaviorOnNullValues cannot be null");
+      return this;
+    }
+
     public ElasticsearchWriter build() {
       return new ElasticsearchWriter(
           client,
@@ -204,13 +223,25 @@ public class ElasticsearchWriter {
           lingerMs,
           maxRetry,
           retryBackoffMs,
-          dropInvalidMessage
+          dropInvalidMessage,
+          behaviorOnNullValues
       );
     }
   }
 
   public void write(Collection<SinkRecord> records) {
     for (SinkRecord sinkRecord : records) {
+      // Preemptively skip records with null values if they're going to be ignored anyways
+      if (ignoreRecord(sinkRecord)) {
+        log.debug(
+            "Ignoring sink record with key {} and null value for topic/partition/offset {}/{}/{}",
+            sinkRecord.key(),
+            sinkRecord.topic(),
+            sinkRecord.kafkaPartition(),
+            sinkRecord.kafkaOffset());
+        continue;
+      }
+
       final String indexOverride = topicToIndexMap.get(sinkRecord.topic());
       final String index = indexOverride != null ? indexOverride : sinkRecord.topic();
       final boolean ignoreKey = ignoreKeyTopics.contains(sinkRecord.topic()) || this.ignoreKey;
@@ -230,47 +261,44 @@ public class ElasticsearchWriter {
         existingMappings.add(index);
       }
 
-      final IndexableRecord indexableRecord = tryGetIndexableRecord(
-              sinkRecord,
-              index,
-              ignoreKey,
-              ignoreSchema);
-
-      if (indexableRecord != null) {
-        bulkProcessor.add(indexableRecord, flushTimeoutMs);
-      }
-
+      tryWriteRecord(sinkRecord, index, ignoreKey, ignoreSchema);
     }
   }
 
-  private IndexableRecord tryGetIndexableRecord(
+  private boolean ignoreRecord(SinkRecord record) {
+    return record.value() == null && behaviorOnNullValues == BehaviorOnNullValues.IGNORE;
+  }
+
+  private void tryWriteRecord(
           SinkRecord sinkRecord,
           String index,
           boolean ignoreKey,
           boolean ignoreSchema) {
 
-    IndexableRecord indexableRecord = null;
-
     try {
-      indexableRecord = converter.convertRecord(
+      IndexableRecord record = converter.convertRecord(
               sinkRecord,
               index,
               type,
               ignoreKey,
               ignoreSchema);
+      if (record != null) {
+        bulkProcessor.add(record, flushTimeoutMs);
+      }
     } catch (ConnectException convertException) {
       if (dropInvalidMessage) {
-        log.error("Can't convert record from topic {} with partition {} and offset {}."
-                   + " Error message: {}",
-                  sinkRecord.topic(),
-                  sinkRecord.kafkaPartition(),
-                  sinkRecord.kafkaOffset(),
-                  convertException.getMessage());
+        log.error(
+            "Can't convert record from topic {} with partition {} and offset {}. "
+                + "Error message: {}",
+            sinkRecord.topic(),
+            sinkRecord.kafkaPartition(),
+            sinkRecord.kafkaOffset(),
+            convertException.getMessage()
+        );
       } else {
         throw convertException;
       }
     }
-    return indexableRecord;
   }
 
   public void flush() {

@@ -24,8 +24,10 @@ import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.errors.ConnectException;
+import org.apache.kafka.connect.errors.DataException;
 import org.apache.kafka.connect.sink.SinkRecord;
 import org.junit.Rule;
+import org.junit.Before;
 import org.junit.Test;
 
 import java.math.BigDecimal;
@@ -43,6 +45,8 @@ import java.util.Set;
 import io.searchbox.client.JestClient;
 import org.junit.rules.ExpectedException;
 
+import static io.confluent.connect.elasticsearch.DataConverter.BehaviorOnNullValues;
+
 @ThreadLeakScope(ThreadLeakScope.Scope.NONE)
 public class ElasticsearchWriterTest extends ElasticsearchSinkTestBase {
 
@@ -55,67 +59,86 @@ public class ElasticsearchWriterTest extends ElasticsearchSinkTestBase {
   @Rule
   public ExpectedException thrown = ExpectedException.none();
 
+  private boolean ignoreKey;
+  private boolean ignoreSchema;
+
+  @Before
+  public void setUp() throws Exception {
+    ignoreKey = false;
+    ignoreSchema = false;
+
+    super.setUp();
+  }
+
   @Test
   public void testWriter() throws Exception {
-    final boolean ignoreKey = false;
-    final boolean ignoreSchema = false;
-
     Collection<SinkRecord> records = prepareData(2);
-    ElasticsearchWriter writer = initWriter(client, ignoreKey, ignoreSchema);
+    ElasticsearchWriter writer = initWriter(client);
     writeDataAndRefresh(writer, records);
 
-    Collection<SinkRecord> expected = Collections.singletonList(new SinkRecord(TOPIC, PARTITION, Schema.STRING_SCHEMA, key, schema, record, 1));
-    verifySearchResults(expected, ignoreKey, ignoreSchema);
+    Collection<SinkRecord> expected = Collections.singletonList(
+        new SinkRecord(TOPIC, PARTITION, Schema.STRING_SCHEMA, key, schema, record, 1)
+    );
+    verifySearchResults(expected);
   }
 
   @Test
   public void testWriterIgnoreKey() throws Exception {
-    final boolean ignoreKey = true;
-    final boolean ignoreSchema = false;
+    ignoreKey = true;
 
     Collection<SinkRecord> records = prepareData(2);
-    ElasticsearchWriter writer = initWriter(client, ignoreKey, ignoreSchema);
+    ElasticsearchWriter writer = initWriter(client);
     writeDataAndRefresh(writer, records);
-    verifySearchResults(records, ignoreKey, ignoreSchema);
+    verifySearchResults(records);
   }
 
   @Test
   public void testWriterIgnoreSchema() throws Exception {
-    final boolean ignoreKey = true;
-    final boolean ignoreSchema = true;
+    ignoreKey = true;
+    ignoreSchema = true;
 
     Collection<SinkRecord> records = prepareData(2);
-    ElasticsearchWriter writer = initWriter(client, ignoreKey, ignoreSchema);
+    ElasticsearchWriter writer = initWriter(client);
     writeDataAndRefresh(writer, records);
-    verifySearchResults(records, ignoreKey, ignoreSchema);
+    verifySearchResults(records);
   }
 
   @Test
   public void testTopicIndexOverride() throws Exception {
-    final boolean ignoreKey = true;
-    final boolean ignoreSchema = true;
+    ignoreKey = true;
+    ignoreSchema = true;
 
-    final String indexOverride = "index";
+    String indexOverride = "index";
 
     Collection<SinkRecord> records = prepareData(2);
-    ElasticsearchWriter writer = initWriter(client, ignoreKey, Collections.<String>emptySet(), ignoreSchema, Collections.<String>emptySet(), Collections.singletonMap(TOPIC, indexOverride), false);
+    ElasticsearchWriter writer = initWriter(
+        client,
+        Collections.<String>emptySet(),
+        Collections.<String>emptySet(),
+        Collections.singletonMap(TOPIC, indexOverride),
+        false,
+        BehaviorOnNullValues.IGNORE);
     writeDataAndRefresh(writer, records);
-    verifySearchResults(records, indexOverride, ignoreKey, ignoreSchema);
+    verifySearchResults(records, indexOverride);
   }
 
   @Test
   public void testIncompatible() throws Exception {
+    ignoreKey = true;
+
     Collection<SinkRecord> records = new ArrayList<>();
-    SinkRecord sinkRecord = new SinkRecord(TOPIC, PARTITION, Schema.STRING_SCHEMA, key, otherSchema, otherRecord, 0);
+    SinkRecord sinkRecord =
+        new SinkRecord(TOPIC, PARTITION, Schema.STRING_SCHEMA, key, otherSchema, otherRecord, 0);
     records.add(sinkRecord);
 
-    ElasticsearchWriter writer = initWriter(client, true, false);
+    ElasticsearchWriter writer = initWriter(client);
 
     writer.write(records);
     Thread.sleep(5000);
     records.clear();
 
-    sinkRecord = new SinkRecord(TOPIC, PARTITION, Schema.STRING_SCHEMA, key, schema, record, 1);
+    sinkRecord =
+        new SinkRecord(TOPIC, PARTITION, Schema.STRING_SCHEMA, key, schema, record, 1);
     records.add(sinkRecord);
     writer.write(records);
 
@@ -129,51 +152,53 @@ public class ElasticsearchWriterTest extends ElasticsearchSinkTestBase {
 
   @Test
   public void testCompatible() throws Exception {
-    final boolean ignoreKey = true;
-    final boolean ignoreSchema = false;
+    ignoreKey = true;
 
     Collection<SinkRecord> records = new ArrayList<>();
     Collection<SinkRecord> expected = new ArrayList<>();
-    SinkRecord sinkRecord = new SinkRecord(TOPIC, PARTITION, Schema.STRING_SCHEMA, key, schema, record, 0);
+    SinkRecord sinkRecord =
+        new SinkRecord(TOPIC, PARTITION, Schema.STRING_SCHEMA, key, schema, record, 0);
     records.add(sinkRecord);
     expected.add(sinkRecord);
-    sinkRecord = new SinkRecord(TOPIC, PARTITION, Schema.STRING_SCHEMA, key, schema, record, 1);
+    sinkRecord =
+        new SinkRecord(TOPIC, PARTITION, Schema.STRING_SCHEMA, key, schema, record, 1);
     records.add(sinkRecord);
     expected.add(sinkRecord);
 
-    ElasticsearchWriter writer = initWriter(client, ignoreKey, ignoreSchema);
+    ElasticsearchWriter writer = initWriter(client);
 
     writer.write(records);
     records.clear();
 
-    sinkRecord = new SinkRecord(TOPIC, PARTITION, Schema.STRING_SCHEMA, key, otherSchema, otherRecord, 2);
+    sinkRecord =
+        new SinkRecord(TOPIC, PARTITION, Schema.STRING_SCHEMA, key, otherSchema, otherRecord, 2);
     records.add(sinkRecord);
     expected.add(sinkRecord);
 
-    sinkRecord = new SinkRecord(TOPIC, PARTITION, Schema.STRING_SCHEMA, key, otherSchema, otherRecord, 3);
+    sinkRecord =
+        new SinkRecord(TOPIC, PARTITION, Schema.STRING_SCHEMA, key, otherSchema, otherRecord, 3);
     records.add(sinkRecord);
     expected.add(sinkRecord);
 
     writeDataAndRefresh(writer, records);
-    verifySearchResults(expected, ignoreKey, ignoreSchema);
+    verifySearchResults(expected);
   }
 
   @Test
   public void testSafeRedeliveryRegularKey() throws Exception {
-    final boolean ignoreKey = false;
-    final boolean ignoreSchema = false;
-
-    final Struct value0 = new Struct(schema);
+    Struct value0 = new Struct(schema);
     value0.put("user", "foo");
     value0.put("message", "hi");
-    final SinkRecord sinkRecord0 = new SinkRecord(TOPIC, PARTITION, Schema.STRING_SCHEMA, key, schema, value0, 0);
+    SinkRecord sinkRecord0 =
+        new SinkRecord(TOPIC, PARTITION, Schema.STRING_SCHEMA, key, schema, value0, 0);
 
-    final Struct value1 = new Struct(schema);
+    Struct value1 = new Struct(schema);
     value1.put("user", "foo");
     value1.put("message", "bye");
-    final SinkRecord sinkRecord1 = new SinkRecord(TOPIC, PARTITION, Schema.STRING_SCHEMA, key, schema, value1, 1);
+    SinkRecord sinkRecord1 =
+        new SinkRecord(TOPIC, PARTITION, Schema.STRING_SCHEMA, key, schema, value1, 1);
 
-    final ElasticsearchWriter writer = initWriter(client, ignoreKey, ignoreSchema);
+    ElasticsearchWriter writer = initWriter(client);
     writer.write(Arrays.asList(sinkRecord0, sinkRecord1));
     writer.flush();
 
@@ -181,27 +206,28 @@ public class ElasticsearchWriterTest extends ElasticsearchSinkTestBase {
     writeDataAndRefresh(writer, Collections.singleton(sinkRecord0));
 
     // last write should have been ignored due to version conflict
-    verifySearchResults(Collections.singleton(sinkRecord1), ignoreKey, ignoreSchema);
+    verifySearchResults(Collections.singleton(sinkRecord1));
   }
 
   @Test
   public void testSafeRedeliveryOffsetInKey() throws Exception {
-    final boolean ignoreKey = true;
-    final boolean ignoreSchema = false;
+    ignoreKey = true;
 
-    final Struct value0 = new Struct(schema);
+    Struct value0 = new Struct(schema);
     value0.put("user", "foo");
     value0.put("message", "hi");
-    final SinkRecord sinkRecord0 = new SinkRecord(TOPIC, PARTITION, Schema.STRING_SCHEMA, key, schema, value0, 0);
+    SinkRecord sinkRecord0 =
+        new SinkRecord(TOPIC, PARTITION, Schema.STRING_SCHEMA, key, schema, value0, 0);
 
-    final Struct value1 = new Struct(schema);
+    Struct value1 = new Struct(schema);
     value1.put("user", "foo");
     value1.put("message", "bye");
-    final SinkRecord sinkRecord1 = new SinkRecord(TOPIC, PARTITION, Schema.STRING_SCHEMA, key, schema, value1, 1);
+    SinkRecord sinkRecord1 =
+        new SinkRecord(TOPIC, PARTITION, Schema.STRING_SCHEMA, key, schema, value1, 1);
 
-    final List<SinkRecord> records = Arrays.asList(sinkRecord0, sinkRecord1);
+    List<SinkRecord> records = Arrays.asList(sinkRecord0, sinkRecord1);
 
-    final ElasticsearchWriter writer = initWriter(client, ignoreKey, ignoreSchema);
+    ElasticsearchWriter writer = initWriter(client);
     writer.write(records);
     writer.flush();
 
@@ -209,14 +235,11 @@ public class ElasticsearchWriterTest extends ElasticsearchSinkTestBase {
     writeDataAndRefresh(writer, records);
 
     // last write should have been ignored due to version conflict
-    verifySearchResults(records, ignoreKey, ignoreSchema);
+    verifySearchResults(records);
   }
 
   @Test
   public void testMap() throws Exception {
-    final boolean ignoreKey = false;
-    final boolean ignoreSchema = false;
-
     Schema structSchema = SchemaBuilder.struct().name("struct")
         .field("map", SchemaBuilder.map(Schema.INT32_SCHEMA, Schema.STRING_SCHEMA).build())
         .build();
@@ -229,39 +252,36 @@ public class ElasticsearchWriterTest extends ElasticsearchSinkTestBase {
     struct.put("map", map);
 
     Collection<SinkRecord> records = new ArrayList<>();
-    SinkRecord sinkRecord = new SinkRecord(TOPIC, PARTITION, Schema.STRING_SCHEMA, key, structSchema, struct, 0);
+    SinkRecord sinkRecord =
+        new SinkRecord(TOPIC, PARTITION, Schema.STRING_SCHEMA, key, structSchema, struct, 0);
     records.add(sinkRecord);
 
-    ElasticsearchWriter writer = initWriter(client, ignoreKey, ignoreSchema);
+    ElasticsearchWriter writer = initWriter(client);
     writeDataAndRefresh(writer, records);
-    verifySearchResults(records, ignoreKey, ignoreSchema);
+    verifySearchResults(records);
   }
 
   @Test
   public void testStringKeyedMap() throws Exception {
-    boolean ignoreKey = false;
-    boolean ignoreSchema = false;
-
     Schema mapSchema = SchemaBuilder.map(Schema.STRING_SCHEMA, Schema.INT32_SCHEMA).build();
 
     Map<String, Integer> map = new HashMap<>();
     map.put("One", 1);
     map.put("Two", 2);
 
-    SinkRecord sinkRecord = new SinkRecord(TOPIC, PARTITION, Schema.STRING_SCHEMA, key, mapSchema, map, 0);
+    SinkRecord sinkRecord =
+        new SinkRecord(TOPIC, PARTITION, Schema.STRING_SCHEMA, key, mapSchema, map, 0);
 
-    ElasticsearchWriter writer = initWriter(client, ignoreKey, ignoreSchema);
+    ElasticsearchWriter writer = initWriter(client);
     writeDataAndRefresh(writer, Collections.singletonList(sinkRecord));
 
-    Collection<?> expectedRecords = Collections.singletonList(new ObjectMapper().writeValueAsString(map));
-    verifySearchResults(expectedRecords, TOPIC, ignoreKey, ignoreSchema);
+    Collection<?> expectedRecords =
+        Collections.singletonList(new ObjectMapper().writeValueAsString(map));
+    verifySearchResults(expectedRecords, TOPIC);
   }
 
   @Test
   public void testDecimal() throws Exception {
-    final boolean ignoreKey = false;
-    final boolean ignoreSchema = false;
-
     int scale = 2;
     byte[] bytes = ByteBuffer.allocate(4).putInt(2).array();
     BigDecimal decimal = new BigDecimal(new BigInteger(bytes), scale);
@@ -274,19 +294,17 @@ public class ElasticsearchWriterTest extends ElasticsearchSinkTestBase {
     struct.put("decimal", decimal);
 
     Collection<SinkRecord> records = new ArrayList<>();
-    SinkRecord sinkRecord = new SinkRecord(TOPIC, PARTITION, Schema.STRING_SCHEMA, key, structSchema, struct, 0);
+    SinkRecord sinkRecord =
+        new SinkRecord(TOPIC, PARTITION, Schema.STRING_SCHEMA, key, structSchema, struct, 0);
     records.add(sinkRecord);
 
-    ElasticsearchWriter writer = initWriter(client, ignoreKey, ignoreSchema);
+    ElasticsearchWriter writer = initWriter(client);
     writeDataAndRefresh(writer, records);
-    verifySearchResults(records, ignoreKey, ignoreSchema);
+    verifySearchResults(records);
   }
 
   @Test
   public void testBytes() throws Exception {
-    final boolean ignoreKey = false;
-    final boolean ignoreSchema = false;
-
     Schema structSchema = SchemaBuilder.struct().name("struct")
         .field("bytes", SchemaBuilder.BYTES_SCHEMA)
         .build();
@@ -295,25 +313,121 @@ public class ElasticsearchWriterTest extends ElasticsearchSinkTestBase {
     struct.put("bytes", new byte[]{42});
 
     Collection<SinkRecord> records = new ArrayList<>();
-    SinkRecord sinkRecord = new SinkRecord(TOPIC, PARTITION, Schema.STRING_SCHEMA, key, structSchema, struct, 0);
+    SinkRecord sinkRecord =
+        new SinkRecord(TOPIC, PARTITION, Schema.STRING_SCHEMA, key, structSchema, struct, 0);
     records.add(sinkRecord);
 
-    ElasticsearchWriter writer = initWriter(client, ignoreKey, ignoreSchema);
+    ElasticsearchWriter writer = initWriter(client);
     writeDataAndRefresh(writer, records);
-    verifySearchResults(records, ignoreKey, ignoreSchema);
+    verifySearchResults(records);
+  }
+
+  @Test
+  public void testIgnoreNullValue() throws Exception {
+    Collection<SinkRecord> records = new ArrayList<>();
+    SinkRecord sinkRecord =
+        new SinkRecord(TOPIC, PARTITION, Schema.STRING_SCHEMA, key, schema, null, 0);
+    records.add(sinkRecord);
+
+    ElasticsearchWriter writer = initWriter(client, BehaviorOnNullValues.IGNORE);
+    writeDataAndRefresh(writer, records);
+    // Send an empty list of records to the verify method, since the empty record should have been
+    // skipped
+    verifySearchResults(new ArrayList<SinkRecord>());
+  }
+
+  @Test
+  public void testDeleteOnNullValue() throws Exception {
+    String key1 = "key1";
+    String key2 = "key2";
+
+    ElasticsearchWriter writer = initWriter(client, BehaviorOnNullValues.DELETE);
+
+    Collection<SinkRecord> records = new ArrayList<>();
+
+    // First, write a couple of actual (non-null-valued) records
+    SinkRecord insertRecord1 =
+        new SinkRecord(TOPIC, PARTITION, Schema.STRING_SCHEMA, key1, schema, record, 0);
+    records.add(insertRecord1);
+    SinkRecord insertRecord2 =
+        new SinkRecord(TOPIC, PARTITION, Schema.STRING_SCHEMA, key2, otherSchema, otherRecord, 1);
+    records.add(insertRecord2);
+    // Can't call writeDataAndRefresh(writer, records) since it stops the writer
+    writer.write(records);
+    writer.flush();
+    refresh();
+    // Make sure the record made it there successfully
+    verifySearchResults(records);
+
+    // Then, write a record with the same key as the first inserted record but a null value
+    SinkRecord deleteRecord =
+        new SinkRecord(TOPIC, PARTITION, Schema.STRING_SCHEMA, key1, schema, null, 2);
+
+    // Don't want to resend the first couple of records
+    records.clear();
+    records.add(deleteRecord);
+    writeDataAndRefresh(writer, records);
+
+    // The only remaining record should be the second inserted record
+    records.clear();
+    records.add(insertRecord2);
+    verifySearchResults(records);
+  }
+
+  @Test
+  public void testIneffectiveDelete() throws Exception {
+    // Just a sanity check to make sure things don't blow up if an attempt is made to delete a
+    // record that doesn't exist in the first place
+
+    Collection<SinkRecord> records = new ArrayList<>();
+    SinkRecord sinkRecord =
+        new SinkRecord(TOPIC, PARTITION, Schema.STRING_SCHEMA, key, schema, null, 0);
+    records.add(sinkRecord);
+
+    ElasticsearchWriter writer = initWriter(client, BehaviorOnNullValues.DELETE);
+    writeDataAndRefresh(writer, records);
+    verifySearchResults(new ArrayList<SinkRecord>());
+  }
+
+  @Test
+  public void testDeleteWithNullKey() throws Exception {
+    Collection<SinkRecord> records = new ArrayList<>();
+    SinkRecord sinkRecord =
+        new SinkRecord(TOPIC, PARTITION, Schema.STRING_SCHEMA, null, schema, null, 0);
+    records.add(sinkRecord);
+
+    ElasticsearchWriter writer = initWriter(client, BehaviorOnNullValues.DELETE);
+    writeDataAndRefresh(writer, records);
+    verifySearchResults(new ArrayList<SinkRecord>());
+  }
+
+  @Test
+  public void testFailOnNullValue() throws Exception {
+    Collection<SinkRecord> records = new ArrayList<>();
+    SinkRecord sinkRecord =
+        new SinkRecord(TOPIC, PARTITION, Schema.STRING_SCHEMA, key, schema, null, 0);
+    records.add(sinkRecord);
+
+    ElasticsearchWriter writer = initWriter(client, BehaviorOnNullValues.FAIL);
+    try {
+      writeDataAndRefresh(writer, records);
+      fail("should fail because of behavior.on.null.values=fail");
+    } catch (DataException e) {
+      // expected
+    }
   }
 
   @Test
   public void testInvalidRecordException() throws Exception {
-    final boolean ignoreKey = false;
-    final boolean ignoreSchema = true;
+    ignoreSchema = true;
 
     Collection<SinkRecord> records = new ArrayList<>();
 
-    SinkRecord sinkRecord = new SinkRecord(TOPIC, PARTITION, Schema.STRING_SCHEMA, null, null, new byte[]{42}, 0);
+    SinkRecord sinkRecord =
+        new SinkRecord(TOPIC, PARTITION, Schema.STRING_SCHEMA, null, null, new byte[]{42}, 0);
     records.add(sinkRecord);
 
-    final ElasticsearchWriter strictWriter = initWriter(client, ignoreKey, ignoreSchema, false);
+    final ElasticsearchWriter strictWriter = initWriter(client);
 
     thrown.expect(ConnectException.class);
     thrown.expectMessage("Key is used as document id and can not be null");
@@ -322,8 +436,7 @@ public class ElasticsearchWriterTest extends ElasticsearchSinkTestBase {
 
   @Test
   public void testDropInvalidRecord() throws Exception {
-    final boolean ignoreKey = false;
-    final boolean ignoreSchema = true;
+    ignoreSchema = true;
     Collection<SinkRecord> inputRecords = new ArrayList<>();
     Collection<SinkRecord> outputRecords = new ArrayList<>();
 
@@ -343,7 +456,7 @@ public class ElasticsearchWriterTest extends ElasticsearchSinkTestBase {
 
     outputRecords.add(validRecord);
 
-    final ElasticsearchWriter nonStrictWriter = initWriter(client, ignoreKey, ignoreSchema, true);
+    final ElasticsearchWriter nonStrictWriter = initWriter(client, true);
 
     writeDataAndRefresh(nonStrictWriter, inputRecords);
     verifySearchResults(outputRecords, ignoreKey, ignoreSchema);
@@ -352,21 +465,47 @@ public class ElasticsearchWriterTest extends ElasticsearchSinkTestBase {
   private Collection<SinkRecord> prepareData(int numRecords) {
     Collection<SinkRecord> records = new ArrayList<>();
     for (int i = 0; i < numRecords; ++i) {
-      SinkRecord sinkRecord = new SinkRecord(TOPIC, PARTITION, Schema.STRING_SCHEMA, key, schema, record, i);
+      SinkRecord sinkRecord =
+          new SinkRecord(TOPIC, PARTITION, Schema.STRING_SCHEMA, key, schema, record, i);
       records.add(sinkRecord);
     }
     return records;
   }
 
-  private ElasticsearchWriter initWriter(JestClient client, boolean ignoreKey, boolean ignoreSchema) {
-    return initWriter(client, ignoreKey, Collections.<String>emptySet(), ignoreSchema, Collections.<String>emptySet(), Collections.<String, String>emptyMap(), false);
+  private ElasticsearchWriter initWriter(JestClient client) {
+    return initWriter(client, false, BehaviorOnNullValues.IGNORE);
   }
 
-  private ElasticsearchWriter initWriter(JestClient client, boolean ignoreKey, boolean ignoreSchema, boolean dropInvalidMessage) {
-    return initWriter(client, ignoreKey, Collections.<String>emptySet(), ignoreSchema, Collections.<String>emptySet(), Collections.<String, String>emptyMap(), dropInvalidMessage);
+  private ElasticsearchWriter initWriter(JestClient client, boolean dropInvalidMessage) {
+    return initWriter(client, dropInvalidMessage, BehaviorOnNullValues.IGNORE);
   }
 
-  private ElasticsearchWriter initWriter(JestClient client, boolean ignoreKey, Set<String> ignoreKeyTopics, boolean ignoreSchema, Set<String> ignoreSchemaTopics, Map<String, String> topicToIndexMap, boolean dropInvalidMessage) {
+  private ElasticsearchWriter initWriter(JestClient client, BehaviorOnNullValues behavior) {
+    return initWriter(client, false, behavior);
+  }
+
+  private ElasticsearchWriter initWriter(
+      JestClient client,
+      boolean dropInvalidMessage,
+      BehaviorOnNullValues behavior) {
+    return initWriter(
+        client,
+        Collections.<String>emptySet(),
+        Collections.<String>emptySet(),
+        Collections.<String, String>emptyMap(),
+        dropInvalidMessage,
+        behavior
+    );
+  }
+
+  private ElasticsearchWriter initWriter(
+      JestClient client,
+      Set<String> ignoreKeyTopics,
+      Set<String> ignoreSchemaTopics,
+      Map<String, String> topicToIndexMap,
+      boolean dropInvalidMessage,
+      BehaviorOnNullValues behavior
+  ) {
     ElasticsearchWriter writer = new ElasticsearchWriter.Builder(client)
         .setType(TYPE)
         .setIgnoreKey(ignoreKey, ignoreKeyTopics)
@@ -380,16 +519,26 @@ public class ElasticsearchWriterTest extends ElasticsearchSinkTestBase {
         .setRetryBackoffMs(1000)
         .setMaxRetry(3)
         .setDropInvalidMessage(dropInvalidMessage)
+        .setBehaviorOnNullValues(behavior)
         .build();
     writer.start();
     writer.createIndicesForTopics(Collections.singleton(TOPIC));
     return writer;
   }
 
-  private void writeDataAndRefresh(ElasticsearchWriter writer, Collection<SinkRecord> records) throws Exception {
+  private void writeDataAndRefresh(ElasticsearchWriter writer, Collection<SinkRecord> records)
+      throws Exception {
     writer.write(records);
     writer.flush();
     writer.stop();
     refresh();
+  }
+
+  private void verifySearchResults(Collection<SinkRecord> records) throws Exception {
+    verifySearchResults(records, ignoreKey, ignoreSchema);
+  }
+
+  private void verifySearchResults(Collection<?> records, String index) throws Exception {
+    verifySearchResults(records, index, ignoreKey, ignoreSchema);
   }
 }

@@ -24,6 +24,8 @@ import org.apache.kafka.common.config.ConfigDef.Width;
 
 import java.util.Map;
 
+import static io.confluent.connect.elasticsearch.DataConverter.BehaviorOnNullValues;
+
 public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
 
   public static final String CONNECTION_URL_CONFIG = "connection.url";
@@ -117,13 +119,19 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   public static final String CONNECTION_TIMEOUT_MS_CONFIG = "connection.timeout.ms";
   public static final String READ_TIMEOUT_MS_CONFIG = "read.timeout.ms";
   private static final String CONNECTION_TIMEOUT_MS_CONFIG_DOC = "How long to wait "
-                  + "in milliseconds when establishing a connection to the Elasticsearch server. "
-                  + "The task fails if the client fails to connect to the server in this "
-                  + "interval, and will need to be restarted.";
+      + "in milliseconds when establishing a connection to the Elasticsearch server. "
+      + "The task fails if the client fails to connect to the server in this "
+      + "interval, and will need to be restarted.";
   private static final String READ_TIMEOUT_MS_CONFIG_DOC = "How long to wait in "
-                  + "milliseconds for the Elasticsearch server to send a response. The task fails "
-                  + "if any read operation times out, and will need to be restarted to resume "
-                  + "further operations.";
+      + "milliseconds for the Elasticsearch server to send a response. The task fails "
+      + "if any read operation times out, and will need to be restarted to resume "
+      + "further operations.";
+
+  public static final String BEHAVIOR_ON_NULL_VALUES_CONFIG = "behavior.on.null.values";
+  private static final String BEHAVIOR_ON_NULL_VALUES_DOC = "How to handle records with a "
+      + "non-null key and a null value (i.e. Kafka tombstone records). Valid options are "
+      + "'ignore', 'delete', and 'fail'.";
+
 
   protected static ConfigDef baseConfigDef() {
     final ConfigDef configDef = new ConfigDef();
@@ -317,7 +325,18 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
         group,
         ++order,
         Width.LONG,
-        "Drop invalid messages");
+        "Drop invalid messages"
+    ).define(
+        BEHAVIOR_ON_NULL_VALUES_CONFIG,
+        Type.STRING,
+        BehaviorOnNullValues.DEFAULT.toString(),
+        BehaviorOnNullValues.VALIDATOR,
+        Importance.LOW,
+        BEHAVIOR_ON_NULL_VALUES_DOC,
+        group,
+        ++order,
+        Width.SHORT,
+        "Behavior for null-valued records");
   }
 
   public static final ConfigDef CONFIG = baseConfigDef();
