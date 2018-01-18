@@ -23,11 +23,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.util.Collection;
 import java.util.Collections;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 import io.confluent.connect.elasticsearch.bulk.BulkProcessor;
@@ -36,6 +37,8 @@ import io.searchbox.client.JestClient;
 import io.searchbox.client.JestResult;
 import io.searchbox.indices.CreateIndex;
 import io.searchbox.indices.IndicesExists;
+
+import static io.confluent.connect.elasticsearch.DataConverter.BehaviorOnNullValues;
 
 public class ElasticsearchWriter {
   private static final Logger log = LoggerFactory.getLogger(ElasticsearchWriter.class);
@@ -50,6 +53,7 @@ public class ElasticsearchWriter {
   private final long flushTimeoutMs;
   private final BulkProcessor<IndexableRecord, ?> bulkProcessor;
   private final DataConverter converter;
+  private final BehaviorOnNullValues behaviorOnNullValues;
 
   private final Set<String> existingMappings;
 
@@ -68,7 +72,8 @@ public class ElasticsearchWriter {
       int batchSize,
       long lingerMs,
       int maxRetries,
-      long retryBackoffMs
+      long retryBackoffMs,
+      BehaviorOnNullValues behaviorOnNullValues
   ) {
     this.client = client;
     this.type = type;
@@ -78,7 +83,8 @@ public class ElasticsearchWriter {
     this.ignoreSchemaTopics = ignoreSchemaTopics;
     this.topicToIndexMap = topicToIndexMap;
     this.flushTimeoutMs = flushTimeoutMs;
-    this.converter = new DataConverter(useCompactMapEntries);
+    this.behaviorOnNullValues = behaviorOnNullValues;
+    this.converter = new DataConverter(useCompactMapEntries, behaviorOnNullValues);
 
     bulkProcessor = new BulkProcessor<>(
         new SystemTime(),
@@ -110,6 +116,7 @@ public class ElasticsearchWriter {
     private long lingerMs;
     private int maxRetry;
     private long retryBackoffMs;
+    private BehaviorOnNullValues behaviorOnNullValues = BehaviorOnNullValues.DEFAULT;
 
     public Builder(JestClient client) {
       this.client = client;
@@ -177,6 +184,18 @@ public class ElasticsearchWriter {
       return this;
     }
 
+    /**
+     * Change the behavior that the resulting {@link ElasticsearchWriter} will have when it
+     * encounters records with null values.
+     * @param behaviorOnNullValues Cannot be null. If in doubt, {@link BehaviorOnNullValues#DEFAULT}
+     *                             can be used.
+     */
+    public Builder setBehaviorOnNullValues(BehaviorOnNullValues behaviorOnNullValues) {
+      this.behaviorOnNullValues =
+          Objects.requireNonNull(behaviorOnNullValues, "behaviorOnNullValues cannot be null");
+      return this;
+    }
+
     public ElasticsearchWriter build() {
       return new ElasticsearchWriter(
           client,
@@ -193,13 +212,19 @@ public class ElasticsearchWriter {
           batchSize,
           lingerMs,
           maxRetry,
-          retryBackoffMs
+          retryBackoffMs,
+          behaviorOnNullValues
       );
     }
   }
 
   public void write(Collection<SinkRecord> records) {
     for (SinkRecord sinkRecord : records) {
+      // Preemptively skip records with null values if they're going to be ignored anyways
+      if (sinkRecord.value() == null && behaviorOnNullValues == BehaviorOnNullValues.IGNORE) {
+        continue;
+      }
+
       final String indexOverride = topicToIndexMap.get(sinkRecord.topic());
       final String index = indexOverride != null ? indexOverride : sinkRecord.topic();
       final boolean ignoreKey = ignoreKeyTopics.contains(sinkRecord.topic()) || this.ignoreKey;
@@ -220,7 +245,19 @@ public class ElasticsearchWriter {
       final IndexableRecord indexableRecord = converter.convertRecord(sinkRecord, index, type,
                                                                       ignoreKey, ignoreSchema);
 
-      bulkProcessor.add(indexableRecord, flushTimeoutMs);
+      // In the event that the sink record's value was null and the data converter has been told to
+      // ignore null values, the returned record will be null.
+      if (indexableRecord != null) {
+        bulkProcessor.add(indexableRecord, flushTimeoutMs);
+      } else {
+        log.debug(
+            "Ignoring sink record with key {} and null value for topic/partition/offset {}/{}/{}",
+            sinkRecord.key(),
+            sinkRecord.topic(),
+            sinkRecord.kafkaPartition(),
+            sinkRecord.kafkaOffset()
+        );
+      }
     }
   }
 

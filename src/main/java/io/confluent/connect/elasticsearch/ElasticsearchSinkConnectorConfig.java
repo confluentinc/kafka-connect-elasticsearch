@@ -24,6 +24,8 @@ import org.apache.kafka.common.config.ConfigDef.Width;
 
 import java.util.Map;
 
+import static io.confluent.connect.elasticsearch.DataConverter.BehaviorOnNullValues;
+
 public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
 
   public static final String CONNECTION_URL_CONFIG = "connection.url";
@@ -43,6 +45,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   public static final String COMPACT_MAP_ENTRIES_CONFIG = "compact.map.entries";
   public static final String CONNECTION_TIMEOUT_MS_CONFIG = "connection.timeout.ms";
   public static final String READ_TIMEOUT_MS_CONFIG = "read.timeout.ms";
+  public static final String BEHAVIOR_ON_NULL_VALUES_CONFIG = "behavior.on.null.values";
 
   protected static ConfigDef baseConfigDef() {
     final ConfigDef configDef = new ConfigDef();
@@ -82,7 +85,8 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
                   group, ++order, Width.SHORT, "Max Retries")
           .define(RETRY_BACKOFF_MS_CONFIG, Type.LONG, 100L, Importance.LOW,
                   "How long to wait in milliseconds before attempting the first retry of a failed indexing request. "
-                  + "Upon a failure, this connector may wait up to twice as long as the previous wait, up to the maximum number of retries. "
+                  + "This connector uses exponential backoff with jitter, which means that upon "
+                  + "additional failures, this connector may wait up to twice as long as the previous wait, up to the maximum number of retries. "
                   + "This avoids retrying in a tight loop under failure scenarios.",
                   group, ++order, Width.SHORT, "Retry Backoff (ms)")
           .define(CONNECTION_TIMEOUT_MS_CONFIG, Type.INT, 1000, Importance.LOW, "How long to wait "
@@ -132,7 +136,13 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
                   group, ++order, Width.LONG, "Topics for 'Ignore Key' mode")
           .define(TOPIC_SCHEMA_IGNORE_CONFIG, Type.LIST, "", Importance.LOW,
                   "List of topics for which ``" + SCHEMA_IGNORE_CONFIG + "`` should be ``true``.",
-                  group, ++order, Width.LONG, "Topics for 'Ignore Schema' mode");
+                  group, ++order, Width.LONG, "Topics for 'Ignore Schema' mode")
+          .define(BEHAVIOR_ON_NULL_VALUES_CONFIG, Type.STRING,
+                  BehaviorOnNullValues.DEFAULT.toString(), BehaviorOnNullValues.VALIDATOR,
+                  Importance.LOW,
+                  "How to handle records with a non-null key and a null value (i.e. Kafka tombstone "
+                  + "records). Valid options are 'ignore', 'delete', and 'fail'.",
+                  group, ++order, Width.SHORT, "Behavior for null-valued records");
     }
 
     return configDef;

@@ -129,3 +129,11 @@ Data Conversion
   * Type: list
   * Default: ""
   * Importance: low
+
+``behavior.on.null.values``
+  How to handle records with a non-null key and a null value (i.e. Kafka tombstone records). Valid options are 'ignore', 'delete', and 'fail'.
+
+  * Type: string
+  * Default: ignore
+  * Valid Values: [ignore, delete, fail]
+  * Importance: low
