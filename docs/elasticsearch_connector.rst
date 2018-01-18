@@ -66,8 +66,9 @@ To use Elasticsearch you will need Schema Registry, |zk|, Kafka, and Kafka Conne
 
     .. sourcecode:: bash
 
-    <path-to-confluent>/bin/connect-standalone etc/schema-registry/connect-avro-standalone.properties \
-    etc/kafka-connect-elasticsearch/quickstart-elasticsearch.properties
+        <path-to-confluent>/bin/connect-standalone \
+        etc/schema-registry/connect-avro-standalone.properties \
+        etc/kafka-connect-elasticsearch/quickstart-elasticsearch.properties
 
     Your output should resemble:
 
