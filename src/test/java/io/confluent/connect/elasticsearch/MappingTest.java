@@ -111,7 +111,7 @@ public class MappingTest extends ElasticsearchSinkTestBase {
       }
     }
 
-    DataConverter converter = new DataConverter(true, BehaviorOnNullValues.FAIL);
+    DataConverter converter = new DataConverter(true, BehaviorOnNullValues.IGNORE);
     Schema.Type schemaType = schema.type();
     switch (schemaType) {
       case ARRAY:

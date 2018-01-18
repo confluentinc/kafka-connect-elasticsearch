@@ -111,7 +111,7 @@ public class ElasticsearchWriterTest extends ElasticsearchSinkTestBase {
         Collections.<String>emptySet(),
         Collections.<String>emptySet(),
         Collections.singletonMap(TOPIC, indexOverride),
-        BehaviorOnNullValues.FAIL
+        BehaviorOnNullValues.IGNORE
     );
     writeDataAndRefresh(writer, records);
     verifySearchResults(records, indexOverride);
@@ -423,7 +423,7 @@ public class ElasticsearchWriterTest extends ElasticsearchSinkTestBase {
   }
 
   private ElasticsearchWriter initWriter(JestClient client) {
-    return initWriter(client, BehaviorOnNullValues.FAIL);
+    return initWriter(client, BehaviorOnNullValues.IGNORE);
   }
 
   private ElasticsearchWriter initWriter(JestClient client, BehaviorOnNullValues behavior) {
