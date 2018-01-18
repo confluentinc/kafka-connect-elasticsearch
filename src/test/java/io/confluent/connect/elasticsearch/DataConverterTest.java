@@ -20,6 +20,8 @@ import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Struct;
+import org.apache.kafka.connect.errors.DataException;
+import org.apache.kafka.connect.sink.SinkRecord;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -31,15 +33,37 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 
+import static io.confluent.connect.elasticsearch.DataConverter.BehaviorOnNullValues;
+
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.fail;
 
 public class DataConverterTest {
   
   private DataConverter converter;
-  
+  private String key;
+  private String topic;
+  private int partition;
+  private long offset;
+  private String index;
+  private String type;
+  private Schema schema;
+
   @Before
   public void setUp() {
-    converter = new DataConverter(true);
+    converter = new DataConverter(true, BehaviorOnNullValues.DEFAULT);
+    key = "key";
+    topic = "topic";
+    partition = 0;
+    offset = 0;
+    index = "index";
+    type = "type";
+    schema = SchemaBuilder
+        .struct()
+        .name("struct")
+        .field("string", Schema.STRING_SCHEMA)
+        .build();
   }
 
   @Test
@@ -174,7 +198,7 @@ public class DataConverterTest {
     origValue.put("field2", 2);
 
     // Use the older non-compact format for map entries with string keys
-    converter = new DataConverter(false);
+    converter = new DataConverter(false, BehaviorOnNullValues.DEFAULT);
 
     Schema preProcessedSchema = converter.preProcessSchema(origSchema);
     assertEquals(
@@ -208,7 +232,7 @@ public class DataConverterTest {
     origValue.put("field2", 2);
 
     // Use the newer compact format for map entries with string keys
-    converter = new DataConverter(true);
+    converter = new DataConverter(true, BehaviorOnNullValues.DEFAULT);
     Schema preProcessedSchema = converter.preProcessSchema(origSchema);
     assertEquals(
         SchemaBuilder.map(Schema.STRING_SCHEMA, Schema.INT32_SCHEMA).build(),
@@ -237,6 +261,55 @@ public class DataConverterTest {
         SchemaBuilder.struct().name("struct").field("decimal", Schema.FLOAT64_SCHEMA).optional().build(),
         converter.preProcessSchema(SchemaBuilder.struct().name("struct").field("decimal", Decimal.schema(2)).optional().build())
     );
+  }
+
+  @Test
+  public void ignoreOnNullValue() {
+    converter = new DataConverter(true, BehaviorOnNullValues.IGNORE);
+
+    SinkRecord sinkRecord = createSinkRecordWithValue(null);
+    assertNull(converter.convertRecord(sinkRecord, index, type, false, false));
+  }
+
+  @Test
+  public void deleteOnNullValue() {
+    converter = new DataConverter(true, BehaviorOnNullValues.DELETE);
+
+    SinkRecord sinkRecord = createSinkRecordWithValue(null);
+    IndexableRecord expectedRecord = createIndexableRecordWithPayload(null);
+    IndexableRecord actualRecord = converter.convertRecord(sinkRecord, index, type, false, false);
+
+    assertEquals(expectedRecord, actualRecord);
+  }
+
+  @Test
+  public void ignoreDeleteOnNullValueWithNullKey() {
+    converter = new DataConverter(true, BehaviorOnNullValues.DELETE);
+    key = null;
+
+    SinkRecord sinkRecord = createSinkRecordWithValue(null);
+    assertNull(converter.convertRecord(sinkRecord, index, type, false, false));
+  }
+
+  @Test
+  public void failOnNullValue() {
+    converter = new DataConverter(true, BehaviorOnNullValues.FAIL);
+
+    SinkRecord sinkRecord = createSinkRecordWithValue(null);
+    try {
+      converter.convertRecord(sinkRecord, index, type, false, false);
+      fail("should fail on null-valued record with behaviorOnNullValues = FAIL");
+    } catch (DataException e) {
+      // expected
+    }
+  }
+
+  public SinkRecord createSinkRecordWithValue(Object value) {
+    return new SinkRecord(topic, partition, Schema.STRING_SCHEMA, key, schema, value, offset);
+  }
+
+  public IndexableRecord createIndexableRecordWithPayload(String payload) {
+    return new IndexableRecord(new Key(index, type, key), payload, offset);
   }
 
 }

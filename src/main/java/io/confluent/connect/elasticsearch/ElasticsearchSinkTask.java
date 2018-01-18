@@ -37,6 +37,8 @@ import io.searchbox.client.JestClient;
 import io.searchbox.client.JestClientFactory;
 import io.searchbox.client.config.HttpClientConfig;
 
+import static io.confluent.connect.elasticsearch.DataConverter.BehaviorOnNullValues;
+
 public class ElasticsearchSinkTask extends SinkTask {
 
   private static final Logger log = LoggerFactory.getLogger(ElasticsearchSinkTask.class);
@@ -93,6 +95,11 @@ public class ElasticsearchSinkTask extends SinkTask {
       boolean dropInvalidMessage =
           config.getBoolean(ElasticsearchSinkConnectorConfig.DROP_INVALID_MESSAGE_CONFIG);
 
+      BehaviorOnNullValues behaviorOnNullValues =
+          BehaviorOnNullValues.forValue(
+              config.getString(ElasticsearchSinkConnectorConfig.BEHAVIOR_ON_NULL_VALUES_CONFIG)
+          );
+
       // Calculate the maximum possible backoff time ...
       long maxRetryBackoffMs = RetryUtil.computeRetryWaitTimeInMillis(maxRetry, retryBackoffMs);
       if (maxRetryBackoffMs > RetryUtil.MAX_RETRY_TIME_MS) {
@@ -137,7 +144,8 @@ public class ElasticsearchSinkTask extends SinkTask {
           .setLingerMs(lingerMs)
           .setRetryBackoffMs(retryBackoffMs)
           .setMaxRetry(maxRetry)
-          .setDropInvalidMessage(dropInvalidMessage);
+          .setDropInvalidMessage(dropInvalidMessage)
+          .setBehaviorOnNullValues(behaviorOnNullValues);
 
       writer = builder.build();
       writer.start();

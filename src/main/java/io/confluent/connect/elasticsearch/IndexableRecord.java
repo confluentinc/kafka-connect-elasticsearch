@@ -16,7 +16,11 @@
 
 package io.confluent.connect.elasticsearch;
 
+import io.searchbox.action.BulkableAction;
+import io.searchbox.core.Delete;
 import io.searchbox.core.Index;
+
+import java.util.Objects;
 
 public class IndexableRecord {
 
@@ -30,6 +34,20 @@ public class IndexableRecord {
     this.payload = payload;
   }
 
+  public BulkableAction toBulkableAction() {
+    // If payload is null, the record was a tombstone and we should delete from the index.
+    return payload != null ? toIndexRequest() : toDeleteRequest();
+  }
+
+  public Delete toDeleteRequest() {
+    Delete.Builder req = new Delete.Builder(key.id)
+        .index(key.index)
+        .type(key.type);
+
+    // TODO: Should version information be set here?
+    return req.build();
+  }
+
   public Index toIndexRequest() {
     Index.Builder req = new Index.Builder(payload)
         .index(key.index)
@@ -41,4 +59,22 @@ public class IndexableRecord {
     return req.build();
   }
 
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
+    IndexableRecord that = (IndexableRecord) o;
+    return Objects.equals(key, that.key)
+           && Objects.equals(payload, that.payload)
+           && Objects.equals(version, that.version);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(key, version, payload);
+  }
 }
