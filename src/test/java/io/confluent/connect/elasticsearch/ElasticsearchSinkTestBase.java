@@ -25,12 +25,10 @@ import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.sink.SinkRecord;
-import org.elasticsearch.common.network.NetworkModule;
+import org.elasticsearch.cluster.metadata.IndexMetaData;
 import org.elasticsearch.common.settings.Settings;
-import org.elasticsearch.http.HttpTransportSettings;
-import org.elasticsearch.plugins.Plugin;
+import org.elasticsearch.node.Node;
 import org.elasticsearch.test.ESIntegTestCase;
-import org.elasticsearch.transport.Netty4Plugin;
 import org.junit.After;
 import org.junit.Before;
 
@@ -134,6 +132,19 @@ public class ElasticsearchSinkTestBase extends ESIntegTestCase {
     }
   }
 
+  /* For ES 2.x */
+  @Override
+  protected Settings nodeSettings(int nodeOrdinal) {
+    return Settings.settingsBuilder()
+        .put(super.nodeSettings(nodeOrdinal))
+        .put(IndexMetaData.SETTING_NUMBER_OF_SHARDS, 1)
+        .put(IndexMetaData.SETTING_NUMBER_OF_REPLICAS, 1)
+        .put(Node.HTTP_ENABLED, true)
+        .build();
+  }
+
+  /* For ES 5.x (requires Java 8) */
+  /*
   @Override
   protected Settings nodeSettings(int nodeOrdinal) {
     int randomPort = randomIntBetween(49152, 65525);
@@ -152,5 +163,6 @@ public class ElasticsearchSinkTestBase extends ESIntegTestCase {
     al.add(Netty4Plugin.class);
     return al;
   }
+  */
 
 }

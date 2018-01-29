@@ -308,10 +308,6 @@ public class JestElasticsearchClient implements ElasticsearchClient {
   }
 
   public void shutdown() {
-    try {
-      client.close();
-    } catch (IOException e) {
-      LOG.warn("Could not close client");
-    }
+    client.shutdownClient();
   }
 }
