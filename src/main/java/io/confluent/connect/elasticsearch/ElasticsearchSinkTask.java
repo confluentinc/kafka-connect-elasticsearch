@@ -16,6 +16,7 @@
 
 package io.confluent.connect.elasticsearch;
 
+import io.confluent.connect.elasticsearch.jest.JestElasticsearchClient;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.config.ConfigException;
@@ -33,17 +34,11 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
-import io.searchbox.client.JestClient;
-import io.searchbox.client.JestClientFactory;
-import io.searchbox.client.config.HttpClientConfig;
-
-import static io.confluent.connect.elasticsearch.DataConverter.BehaviorOnNullValues;
-
 public class ElasticsearchSinkTask extends SinkTask {
 
   private static final Logger log = LoggerFactory.getLogger(ElasticsearchSinkTask.class);
   private ElasticsearchWriter writer;
-  private JestClient client;
+  private ElasticsearchClient client;
 
   @Override
   public String version() {
@@ -56,52 +51,53 @@ public class ElasticsearchSinkTask extends SinkTask {
   }
 
   // public for testing
-  public void start(Map<String, String> props, JestClient client) {
+  public void start(Map<String, String> props, ElasticsearchClient client) {
     try {
       log.info("Starting ElasticsearchSinkTask.");
 
       ElasticsearchSinkConnectorConfig config = new ElasticsearchSinkConnectorConfig(props);
-      String type = config.getString(ElasticsearchSinkConnectorConfig.TYPE_NAME_CONFIG);
-      boolean ignoreKey =
+      final String type = config.getString(ElasticsearchSinkConnectorConfig.TYPE_NAME_CONFIG);
+      final boolean ignoreKey =
           config.getBoolean(ElasticsearchSinkConnectorConfig.KEY_IGNORE_CONFIG);
-      boolean ignoreSchema =
+      final boolean ignoreSchema =
           config.getBoolean(ElasticsearchSinkConnectorConfig.SCHEMA_IGNORE_CONFIG);
-      boolean useCompactMapEntries =
+      final boolean useCompactMapEntries =
           config.getBoolean(ElasticsearchSinkConnectorConfig.COMPACT_MAP_ENTRIES_CONFIG);
 
 
-      Map<String, String> topicToIndexMap =
+      final Map<String, String> topicToIndexMap =
           parseMapConfig(config.getList(ElasticsearchSinkConnectorConfig.TOPIC_INDEX_MAP_CONFIG));
-      Set<String> topicIgnoreKey =
+      final Set<String> topicIgnoreKey =
           new HashSet<>(config.getList(ElasticsearchSinkConnectorConfig.TOPIC_KEY_IGNORE_CONFIG));
-      Set<String> topicIgnoreSchema = new HashSet<>(
+      final Set<String> topicIgnoreSchema = new HashSet<>(
           config.getList(ElasticsearchSinkConnectorConfig.TOPIC_SCHEMA_IGNORE_CONFIG)
       );
 
-      long flushTimeoutMs =
+      final long flushTimeoutMs =
           config.getLong(ElasticsearchSinkConnectorConfig.FLUSH_TIMEOUT_MS_CONFIG);
-      int maxBufferedRecords =
+      final int maxBufferedRecords =
           config.getInt(ElasticsearchSinkConnectorConfig.MAX_BUFFERED_RECORDS_CONFIG);
-      int batchSize =
+      final int batchSize =
           config.getInt(ElasticsearchSinkConnectorConfig.BATCH_SIZE_CONFIG);
-      long lingerMs =
+      final long lingerMs =
           config.getLong(ElasticsearchSinkConnectorConfig.LINGER_MS_CONFIG);
-      int maxInFlightRequests =
+      final int maxInFlightRequests =
           config.getInt(ElasticsearchSinkConnectorConfig.MAX_IN_FLIGHT_REQUESTS_CONFIG);
-      long retryBackoffMs =
+      final long retryBackoffMs =
           config.getLong(ElasticsearchSinkConnectorConfig.RETRY_BACKOFF_MS_CONFIG);
-      int maxRetry =
+      final int maxRetry =
           config.getInt(ElasticsearchSinkConnectorConfig.MAX_RETRIES_CONFIG);
-      boolean dropInvalidMessage =
+      final boolean dropInvalidMessage =
           config.getBoolean(ElasticsearchSinkConnectorConfig.DROP_INVALID_MESSAGE_CONFIG);
 
-      BehaviorOnNullValues behaviorOnNullValues =
-          BehaviorOnNullValues.forValue(
+      final DataConverter.BehaviorOnNullValues behaviorOnNullValues =
+          DataConverter.BehaviorOnNullValues.forValue(
               config.getString(ElasticsearchSinkConnectorConfig.BEHAVIOR_ON_NULL_VALUES_CONFIG)
           );
 
       // Calculate the maximum possible backoff time ...
-      long maxRetryBackoffMs = RetryUtil.computeRetryWaitTimeInMillis(maxRetry, retryBackoffMs);
+      final long maxRetryBackoffMs =
+          RetryUtil.computeRetryWaitTimeInMillis(maxRetry, retryBackoffMs);
       if (maxRetryBackoffMs > RetryUtil.MAX_RETRY_TIME_MS) {
         log.warn("This connector uses exponential backoff with jitter for retries, "
                 + "and using '{}={}' and '{}={}' results in an impractical but possible maximum "
@@ -111,24 +107,10 @@ public class ElasticsearchSinkTask extends SinkTask {
                 TimeUnit.MILLISECONDS.toHours(maxRetryBackoffMs));
       }
 
-      int connTimeout = config.getInt(
-          ElasticsearchSinkConnectorConfig.CONNECTION_TIMEOUT_MS_CONFIG);
-      int readTimeout = config.getInt(
-          ElasticsearchSinkConnectorConfig.READ_TIMEOUT_MS_CONFIG);
-
       if (client != null) {
         this.client = client;
       } else {
-        List<String> address =
-            config.getList(ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG);
-        JestClientFactory factory = new JestClientFactory();
-        factory.setHttpClientConfig(new HttpClientConfig.Builder(address)
-            .connTimeout(connTimeout)
-            .readTimeout(readTimeout)
-            .multiThreaded(true)
-            .build()
-        );
-        this.client = factory.getObject();
+        this.client = new JestElasticsearchClient(props);
       }
 
       ElasticsearchWriter.Builder builder = new ElasticsearchWriter.Builder(this.client)
@@ -191,7 +173,7 @@ public class ElasticsearchSinkTask extends SinkTask {
       writer.stop();
     }
     if (client != null) {
-      client.shutdownClient();
+      client.shutdown();
     }
   }
 
