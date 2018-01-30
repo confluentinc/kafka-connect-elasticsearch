@@ -25,23 +25,23 @@ import java.io.IOException;
 import java.util.List;
 import java.util.Set;
 
-public interface ElasticsearchClient {
+public interface ElasticsearchClient extends AutoCloseable {
 
   enum Version {
-    ONE, TWO, FIVE, SIX
+    ES_V1, ES_V2, ES_V5, ES_V6
   }
 
   /**
    * Gets the Elasticsearch version.
    *
-   * @return the version
+   * @return the version, not null
    */
   Version getVersion();
 
   /**
    * Creates indices.
    *
-   * @param indices the set of index names to create
+   * @param indices the set of index names to create, not null
    */
   void createIndices(Set<String> indices);
 
@@ -51,7 +51,7 @@ public interface ElasticsearchClient {
    * @param index the index to write
    * @param type the type for which to create the mapping
    * @param schema the schema used to infer the mapping
-   * @throws IOException from underlying client
+   * @throws IOException if the client cannot execute the request
    */
   void createMapping(String index, String type, Schema schema) throws IOException;
 
@@ -60,7 +60,7 @@ public interface ElasticsearchClient {
    *
    * @param index the index
    * @param type the type
-   * @throws IOException from underlying client
+   * @throws IOException if the client cannot execute the request
    */
   JsonObject getMapping(String index, String type) throws IOException;
 
@@ -77,6 +77,7 @@ public interface ElasticsearchClient {
    *
    * @param bulk the bulk request
    * @return the bulk response
+   * @throws IOException if the client cannot execute the request
    */
   BulkResponse executeBulk(BulkRequest bulk) throws IOException;
 
@@ -87,11 +88,12 @@ public interface ElasticsearchClient {
    * @param index the index to search
    * @param type the type to search
    * @return the search result
+   * @throws IOException if the client cannot execute the request
    */
   JsonObject search(String query, String index, String type) throws IOException;
 
   /**
    * Shuts down the client.
    */
-  void shutdown();
+  void close();
 }

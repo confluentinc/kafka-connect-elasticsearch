@@ -1,12 +1,12 @@
 /**
  * Copyright 2016 Confluent Inc.
- *
+ * <p>
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not
  * use this file except in compliance with the License. You may obtain a copy of
  * the License at
- *
+ * <p>
  * http://www.apache.org/licenses/LICENSE-2.0
- *
+ * <p>
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
  * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
@@ -19,7 +19,6 @@ package io.confluent.connect.elasticsearch;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.google.common.annotations.VisibleForTesting;
 import com.google.gson.JsonObject;
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
@@ -110,8 +109,8 @@ public class Mapping {
     }
   }
 
-  @VisibleForTesting
-  public static String getElasticsearchType(ElasticsearchClient client, Schema.Type schemaType) {
+  // visible for testing
+  protected static String getElasticsearchType(ElasticsearchClient client, Schema.Type schemaType) {
     switch (schemaType) {
       case BOOLEAN:
         return BOOLEAN_TYPE;
@@ -129,11 +128,11 @@ public class Mapping {
         return DOUBLE_TYPE;
       case STRING:
         switch (client.getVersion()) {
-          case ONE:
-          case TWO:
+          case ES_V1:
+          case ES_V2:
             return STRING_TYPE;
-          case FIVE:
-          case SIX:
+          case ES_V5:
+          case ES_V6:
           default:
             return TEXT_TYPE;
         }

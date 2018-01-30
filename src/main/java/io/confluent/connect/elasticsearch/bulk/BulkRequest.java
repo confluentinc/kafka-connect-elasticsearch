@@ -16,5 +16,15 @@
 
 package io.confluent.connect.elasticsearch.bulk;
 
+
+import java.util.List;
+
+/**
+ * BulkRequest is a marker interface for use with
+ * {@link io.confluent.connect.elasticsearch.ElasticsearchClient#createBulkRequest(List)} and
+ * {@link io.confluent.connect.elasticsearch.ElasticsearchClient#executeBulk(BulkRequest)}.
+ * Implementations will typically hold state comprised of instances of classes that are
+ * specific to the client library.
+ */
 public interface BulkRequest {
 }

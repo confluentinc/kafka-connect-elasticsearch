@@ -314,6 +314,9 @@ public class ElasticsearchWriter {
   }
 
   public void createIndicesForTopics(Set<String> assignedTopics) {
+    if (assignedTopics == null) {
+      throw new NullPointerException();
+    }
     client.createIndices(indicesForTopics(assignedTopics));
   }
 

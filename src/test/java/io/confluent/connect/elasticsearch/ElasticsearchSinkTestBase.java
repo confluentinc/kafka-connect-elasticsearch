@@ -66,7 +66,7 @@ public class ElasticsearchSinkTestBase extends ESIntegTestCase {
   public void tearDown() throws Exception {
     super.tearDown();
     if (client != null) {
-      client.shutdown();
+      client.close();
     }
     client = null;
   }

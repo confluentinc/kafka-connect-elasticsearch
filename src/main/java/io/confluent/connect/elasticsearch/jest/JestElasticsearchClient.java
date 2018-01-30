@@ -19,7 +19,6 @@ package io.confluent.connect.elasticsearch.jest;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.google.common.annotations.VisibleForTesting;
 import com.google.gson.JsonObject;
 import io.confluent.connect.elasticsearch.bulk.BulkRequest;
 import io.confluent.connect.elasticsearch.ElasticsearchClient;
@@ -65,7 +64,7 @@ public class JestElasticsearchClient implements ElasticsearchClient {
   private final JestClient client;
   private final Version version;
 
-  @VisibleForTesting
+  // visible for testing
   public JestElasticsearchClient(String address) {
     try {
       JestClientFactory factory = new JestClientFactory();
@@ -120,41 +119,45 @@ public class JestElasticsearchClient implements ElasticsearchClient {
     }
   }
 
+  /*
+   * This method uses the NodesInfo request to get the server version, which is expected to work
+   * with all versions of Elasticsearch.
+   */
   private Version getServerVersion() throws IOException {
     // Default to newest version for forward compatibility
-    Version defaultVersion = Version.SIX;
+    Version defaultVersion = Version.ES_V6;
 
     NodesInfo info = new NodesInfo.Builder().addCleanApiParameter("version").build();
-    JsonObject result = this.client.execute(info).getJsonObject();
+    JsonObject result = client.execute(info).getJsonObject();
     if (result == null) {
-      LOG.warn("Couldn't get Elasticsearch version");
+      LOG.warn("Couldn't get Elasticsearch version, result is null");
       return defaultVersion;
     }
 
     JsonObject nodesRoot = result.get("nodes").getAsJsonObject();
     if (nodesRoot == null || nodesRoot.entrySet().size() == 0) {
-      LOG.warn("Couldn't get Elasticsearch version");
+      LOG.warn("Couldn't get Elasticsearch version, nodesRoot is null or empty");
       return defaultVersion;
     }
 
     JsonObject nodeRoot = nodesRoot.entrySet().iterator().next().getValue().getAsJsonObject();
     if (nodeRoot == null) {
-      LOG.warn("Couldn't get Elasticsearch version");
+      LOG.warn("Couldn't get Elasticsearch version, nodeRoot is null");
       return defaultVersion;
     }
 
     String esVersion = nodeRoot.get("version").getAsString();
     if (esVersion == null) {
-      LOG.warn("Couldn't get Elasticsearch version");
+      LOG.warn("Couldn't get Elasticsearch version, version is null");
       return defaultVersion;
     } else if (esVersion.startsWith("1.")) {
-      return Version.ONE;
+      return Version.ES_V1;
     } else if (esVersion.startsWith("2.")) {
-      return Version.TWO;
+      return Version.ES_V2;
     } else if (esVersion.startsWith("5.")) {
-      return Version.FIVE;
+      return Version.ES_V5;
     } else if (esVersion.startsWith("6.")) {
-      return Version.SIX;
+      return Version.ES_V6;
     }
     return defaultVersion;
   }
@@ -180,8 +183,11 @@ public class JestElasticsearchClient implements ElasticsearchClient {
         try {
           JestResult result = client.execute(createIndex);
           if (!result.isSucceeded()) {
-            String msg = result.getErrorMessage() != null ? ": " + result.getErrorMessage() : "";
-            throw new ConnectException("Could not create index '" + index + "'" + msg);
+            // Check if index was created by another client
+            if (!indexExists(index)) {
+              String msg = result.getErrorMessage() != null ? ": " + result.getErrorMessage() : "";
+              throw new ConnectException("Could not create index '" + index + "'" + msg);
+            }
           }
         } catch (IOException e) {
           throw new ConnectException(e);
@@ -307,7 +313,7 @@ public class JestElasticsearchClient implements ElasticsearchClient {
     return result.getJsonObject();
   }
 
-  public void shutdown() {
+  public void close() {
     client.shutdownClient();
   }
 }

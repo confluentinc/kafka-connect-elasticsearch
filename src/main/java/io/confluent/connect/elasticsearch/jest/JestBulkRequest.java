@@ -21,7 +21,7 @@ import io.searchbox.core.Bulk;
 
 public class JestBulkRequest implements BulkRequest {
 
-  private Bulk bulk;
+  private final Bulk bulk;
 
   public JestBulkRequest(Bulk bulk) {
     this.bulk = bulk;
