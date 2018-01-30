@@ -102,9 +102,9 @@ public class ElasticsearchSinkTask extends SinkTask {
         log.warn("This connector uses exponential backoff with jitter for retries, "
                 + "and using '{}={}' and '{}={}' results in an impractical but possible maximum "
                 + "backoff time greater than {} hours.",
-                ElasticsearchSinkConnectorConfig.MAX_RETRIES_CONFIG, maxRetry,
-                ElasticsearchSinkConnectorConfig.RETRY_BACKOFF_MS_CONFIG, retryBackoffMs,
-                TimeUnit.MILLISECONDS.toHours(maxRetryBackoffMs));
+            ElasticsearchSinkConnectorConfig.MAX_RETRIES_CONFIG, maxRetry,
+            ElasticsearchSinkConnectorConfig.RETRY_BACKOFF_MS_CONFIG, retryBackoffMs,
+            TimeUnit.MILLISECONDS.toHours(maxRetryBackoffMs));
       }
 
       if (client != null) {
@@ -179,7 +179,7 @@ public class ElasticsearchSinkTask extends SinkTask {
 
   private Map<String, String> parseMapConfig(List<String> values) {
     Map<String, String> map = new HashMap<>();
-    for (String value: values) {
+    for (String value : values) {
       String[] parts = value.split(":");
       String topic = parts[0];
       String type = parts[1];

@@ -264,18 +264,18 @@ public class ElasticsearchWriter {
   }
 
   private void tryWriteRecord(
-          SinkRecord sinkRecord,
-          String index,
-          boolean ignoreKey,
-          boolean ignoreSchema) {
+      SinkRecord sinkRecord,
+      String index,
+      boolean ignoreKey,
+      boolean ignoreSchema) {
 
     try {
       IndexableRecord record = converter.convertRecord(
-              sinkRecord,
-              index,
-              type,
-              ignoreKey,
-              ignoreSchema);
+          sinkRecord,
+          index,
+          type,
+          ignoreKey,
+          ignoreSchema);
       if (record != null) {
         bulkProcessor.add(record, flushTimeoutMs);
       }

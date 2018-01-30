@@ -92,30 +92,30 @@ public class JestElasticsearchClient implements ElasticsearchClient {
     try {
       ElasticsearchSinkConnectorConfig config = new ElasticsearchSinkConnectorConfig(props);
       final int connTimeout = config.getInt(
-              ElasticsearchSinkConnectorConfig.CONNECTION_TIMEOUT_MS_CONFIG);
+          ElasticsearchSinkConnectorConfig.CONNECTION_TIMEOUT_MS_CONFIG);
       final int readTimeout = config.getInt(
-              ElasticsearchSinkConnectorConfig.READ_TIMEOUT_MS_CONFIG);
+          ElasticsearchSinkConnectorConfig.READ_TIMEOUT_MS_CONFIG);
 
       List<String> address =
-              config.getList(ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG);
+          config.getList(ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG);
       JestClientFactory factory = new JestClientFactory();
       factory.setHttpClientConfig(new HttpClientConfig.Builder(address)
-              .connTimeout(connTimeout)
-              .readTimeout(readTimeout)
-              .multiThreaded(true)
-              .build()
+          .connTimeout(connTimeout)
+          .readTimeout(readTimeout)
+          .multiThreaded(true)
+          .build()
       );
       this.client = factory.getObject();
       this.version = getServerVersion();
     } catch (IOException e) {
       throw new ConnectException(
-              "Couldn't start ElasticsearchSinkTask due to connection error:",
-              e
+          "Couldn't start ElasticsearchSinkTask due to connection error:",
+          e
       );
     } catch (ConfigException e) {
       throw new ConnectException(
-              "Couldn't start ElasticsearchSinkTask due to configuration error:",
-              e
+          "Couldn't start ElasticsearchSinkTask due to configuration error:",
+          e
       );
     }
   }
@@ -197,7 +197,7 @@ public class JestElasticsearchClient implements ElasticsearchClient {
     JestResult result = client.execute(putMapping);
     if (!result.isSucceeded()) {
       throw new ConnectException(
-              "Cannot create mapping " + obj + " -- " + result.getErrorMessage()
+          "Cannot create mapping " + obj + " -- " + result.getErrorMessage()
       );
     }
   }
@@ -207,7 +207,7 @@ public class JestElasticsearchClient implements ElasticsearchClient {
    */
   public JsonObject getMapping(String index, String type) throws IOException {
     final JestResult result = client.execute(
-            new GetMapping.Builder().addIndex(index).addType(type).build()
+        new GetMapping.Builder().addIndex(index).addType(type).build()
     );
     final JsonObject indexRoot = result.getJsonObject().getAsJsonObject(index);
     if (indexRoot == null) {
@@ -215,7 +215,7 @@ public class JestElasticsearchClient implements ElasticsearchClient {
     }
     final JsonObject mappingsJson = indexRoot.getAsJsonObject("mappings");
     if (mappingsJson == null) {
-      return  null;
+      return null;
     }
     return mappingsJson.getAsJsonObject(type);
   }
