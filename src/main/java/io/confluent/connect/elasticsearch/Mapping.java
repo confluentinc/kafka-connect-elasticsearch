@@ -49,16 +49,19 @@ public class Mapping {
 
   /**
    * Create an explicit mapping.
+   *
    * @param client The client to connect to Elasticsearch.
-   * @param index The index to write to Elasticsearch.
-   * @param type The type to create mapping for.
+   * @param index  The index to write to Elasticsearch.
+   * @param type   The type to create mapping for.
    * @param schema The schema used to infer mapping.
    * @throws IOException from underlying JestClient
    */
-  public static void createMapping(ElasticsearchClient client,
-                                   String index,
-                                   String type,
-                                   Schema schema)
+  public static void createMapping(
+      ElasticsearchClient client,
+      String index,
+      String type,
+      Schema schema
+  )
       throws IOException {
     client.createMapping(index, type, schema);
   }
@@ -73,6 +76,7 @@ public class Mapping {
 
   /**
    * Infer mapping from the provided schema.
+   *
    * @param schema The schema used to infer mapping.
    */
   public static JsonNode inferMapping(ElasticsearchClient client, Schema schema) {

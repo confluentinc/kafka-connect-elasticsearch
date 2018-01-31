@@ -24,7 +24,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-
 import java.util.Collections;
 import java.util.Collection;
 import java.util.HashMap;
@@ -314,9 +313,7 @@ public class ElasticsearchWriter {
   }
 
   public void createIndicesForTopics(Set<String> assignedTopics) {
-    if (assignedTopics == null) {
-      throw new NullPointerException();
-    }
+    Objects.requireNonNull(assignedTopics);
     client.createIndices(indicesForTopics(assignedTopics));
   }
 

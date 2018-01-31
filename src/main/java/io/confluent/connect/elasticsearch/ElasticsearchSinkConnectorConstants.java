@@ -30,5 +30,6 @@ public class ElasticsearchSinkConnectorConstants {
   public static final String DOUBLE_TYPE = "double";
   public static final String STRING_TYPE = "string";
   public static final String TEXT_TYPE = "text";
+  public static final String KEYWORD_TYPE = "keyword";
   public static final String DATE_TYPE = "date";
 }

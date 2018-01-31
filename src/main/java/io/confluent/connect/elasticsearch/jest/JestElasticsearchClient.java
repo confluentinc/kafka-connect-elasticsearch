@@ -57,12 +57,32 @@ import java.util.Map;
 import java.util.Set;
 
 public class JestElasticsearchClient implements ElasticsearchClient {
+
+  // visible for testing
+  protected static final String MAPPER_PARSE_EXCEPTION
+      = "mapper_parse_exception";
+  protected static final String VERSION_CONFLICT_ENGINE_EXCEPTION
+      = "version_conflict_engine_exception";
+
   private static final Logger LOG = LoggerFactory.getLogger(JestElasticsearchClient.class);
 
   private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
   private final JestClient client;
   private final Version version;
+
+  // visible for testing
+  public JestElasticsearchClient(JestClient client) {
+    try {
+      this.client = client;
+      this.version = getServerVersion();
+    } catch (IOException e) {
+      throw new ConnectException(
+          "Couldn't start ElasticsearchSinkTask due to connection error:",
+          e
+      );
+    }
+  }
 
   // visible for testing
   public JestElasticsearchClient(String address) {
@@ -234,7 +254,8 @@ public class JestElasticsearchClient implements ElasticsearchClient {
     return new JestBulkRequest(builder.build());
   }
 
-  private BulkableAction toBulkableAction(IndexableRecord record) {
+  // visible for testing
+  protected BulkableAction toBulkableAction(IndexableRecord record) {
     // If payload is null, the record was a tombstone and we should delete from the index.
     return record.payload != null ? toIndexRequest(record) : toDeleteRequest(record);
   }
