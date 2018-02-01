@@ -33,51 +33,10 @@ producer to Elasticsearch.
 
 **Prerequisites:**
 
-- :ref:`Confluent Platform <installation>` is installed. This quick start assumes that you are using the Confluent CLI, but standalone installations are also supported. For more information, see :ref:`installation_archive`.
-- Elasticsearch 6.1 or later is installed and running.
+- :ref:`Confluent Platform <installation>` is installed and services are running by using the Confluent CLI. This quick start assumes that you are using the Confluent CLI, but standalone installations are also supported. By default ZooKeeper, Kafka, Schema Registry, Kafka Connect REST API, and Kafka Connect are started with the ``confluent start`` command. For more information, see :ref:`installation_archive`.
+- Elasticsearch 5.x is installed and running.
 
-----------------------------
-Start the Confluent Services
-----------------------------
-
-To use Elasticsearch you will need Schema Registry, |zk|, Kafka, and Kafka Connect.
-
-#.  Start Schema Registry using the Confluent CLI. This also starts its dependencies, |zk| and Kafka.
-
-    .. sourcecode:: bash
-
-        $ confluent start schema-registry
-
-    Your output should resemble:
-
-    .. sourcecode:: bash
-
-        Starting zookeeper
-        zookeeper is [UP]
-        Starting kafka
-        kafka is [UP]
-        Starting schema-registry
-        schema-registry is [UP]
-
-
-#.  Start Kafka Connect as a standalone service. Do not use the Confluent CLI.
-
-    .. tip:: This is a long-running process and should be run in its own terminal window.
-
-    .. sourcecode:: bash
-
-        <path-to-confluent>/bin/connect-standalone \
-        etc/schema-registry/connect-avro-standalone.properties \
-        etc/kafka-connect-elasticsearch/quickstart-elasticsearch.properties
-
-    Your output should resemble:
-
-    .. sourcecode:: bash
-
-        [2018-01-17 10:37:08,097] INFO Kafka Connect standalone worker initializing ... (org.apache.kafka.connect.cli.ConnectStandalone:65)
-        [2018-01-17 10:37:08,107] INFO WorkerInfo values:
-            jvm.args = -Xmx256M, -XX:+UseG1GC, -XX:MaxGCPauseMillis=20, -XX:InitiatingHeapOccupancyPercent=35, -XX:+ExplicitGCInvokesConcurrent, -Djava.awt.headless=true, -Dcom.sun.management.jmxremote, -Dcom.sun.management.jmxremote.authenticate=false, -Dcom.sun.management.jmxremote.ssl=false, -Dkafka.logs.dir=/Users/joel/projects/confluent-4.0.0/bin/../logs, -Dlog4j.configuration=file:./bin/../etc/kafka/connect-log4j.properties
-         ...
+  .. important:: Elasticsearch 6.x is not supported at this time due to a known issue.
 
 ----------------------------
 Add a Record to the Consumer
@@ -152,7 +111,7 @@ Load the predefined Elasticsearch connector.
           "type": null
         }
 
-    .. tip:: For non-CLI users, you can load the Elasticsearch connector with this command:
+    .. tip:: For non-CLI users, you can load the Elasticsearch connector by running Connect in standalone mode with this command:
 
         .. sourcecode:: bash
 
@@ -171,28 +130,49 @@ Load the predefined Elasticsearch connector.
 
     .. sourcecode:: bash
 
-      {
-       "took" : 2,
-       "timed_out" : false,
-       "_shards" : {
-         "total" : 5,
-         "successful" : 5,
-         "failed" : 0
-       },
-       "hits" : {
-         "total" : 1,
-         "max_score" : 1.0,
-         "hits" : [ {
-           "_index" : "test-elasticsearch-sink",
-           "_type" : "kafka-connect",
-           "_id" : "test-elasticsearch-sink+0+0",
-           "_score" : 1.0,
-           "_source" : {
-             "f1" : "value1"
-           }
-         }]
-       }
-      }
+        {
+          "took" : 39,
+          "timed_out" : false,
+          "_shards" : {
+            "total" : 5,
+            "successful" : 5,
+            "skipped" : 0,
+            "failed" : 0
+          },
+          "hits" : {
+            "total" : 3,
+            "max_score" : 1.0,
+            "hits" : [
+              {
+                "_index" : "test-elasticsearch-sink",
+                "_type" : "kafka-connect",
+                "_id" : "test-elasticsearch-sink+0+0",
+                "_score" : 1.0,
+                "_source" : {
+                  "f1" : "value1"
+                }
+              },
+              {
+                "_index" : "test-elasticsearch-sink",
+                "_type" : "kafka-connect",
+                "_id" : "test-elasticsearch-sink+0+2",
+                "_score" : 1.0,
+                "_source" : {
+                  "f1" : "value3"
+                }
+              },
+              {
+                "_index" : "test-elasticsearch-sink",
+                "_type" : "kafka-connect",
+                "_id" : "test-elasticsearch-sink+0+1",
+                "_score" : 1.0,
+                "_source" : {
+                  "f1" : "value2"
+                }
+              }
+            ]
+          }
+        }
 
 
 Features
