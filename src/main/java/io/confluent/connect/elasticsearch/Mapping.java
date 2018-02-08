@@ -1,12 +1,12 @@
 /**
  * Copyright 2016 Confluent Inc.
- *
+ * <p>
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not
  * use this file except in compliance with the License. You may obtain a copy of
  * the License at
- *
+ * <p>
  * http://www.apache.org/licenses/LICENSE-2.0
- *
+ * <p>
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
  * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
@@ -16,12 +16,10 @@
 
 package io.confluent.connect.elasticsearch;
 
-import com.google.gson.JsonObject;
-
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-
+import com.google.gson.JsonObject;
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Field;
@@ -30,69 +28,58 @@ import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.errors.DataException;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
 
-import io.searchbox.client.JestClient;
-import io.searchbox.client.JestResult;
-import io.searchbox.indices.mapping.GetMapping;
-import io.searchbox.indices.mapping.PutMapping;
-
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConstants.BINARY_TYPE;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConstants.BOOLEAN_TYPE;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConstants.BYTE_TYPE;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConstants.DOUBLE_TYPE;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConstants.FLOAT_TYPE;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConstants.INTEGER_TYPE;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConstants.LONG_TYPE;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConstants.MAP_KEY;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConstants.MAP_VALUE;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConstants.SHORT_TYPE;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConstants.STRING_TYPE;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConstants.TEXT_TYPE;
 
 public class Mapping {
 
-  private static final Logger log = LoggerFactory.getLogger(Mapping.class);
-
   /**
    * Create an explicit mapping.
+   *
    * @param client The client to connect to Elasticsearch.
-   * @param index The index to write to Elasticsearch.
-   * @param type The type to create mapping for.
+   * @param index  The index to write to Elasticsearch.
+   * @param type   The type to create mapping for.
    * @param schema The schema used to infer mapping.
    * @throws IOException from underlying JestClient
    */
-  public static void createMapping(JestClient client, String index, String type, Schema schema)
+  public static void createMapping(
+      ElasticsearchClient client,
+      String index,
+      String type,
+      Schema schema
+  )
       throws IOException {
-    ObjectNode obj = JsonNodeFactory.instance.objectNode();
-    obj.set(type, inferMapping(schema));
-    PutMapping putMapping = new PutMapping.Builder(index, type, obj.toString()).build();
-    JestResult result = client.execute(putMapping);
-    if (!result.isSucceeded()) {
-      throw new ConnectException(
-          "Cannot create mapping " + obj + " -- " + result.getErrorMessage()
-      );
-    }
+    client.createMapping(index, type, schema);
   }
 
   /**
    * Get the JSON mapping for given index and type. Returns {@code null} if it does not exist.
    */
-  public static JsonObject getMapping(JestClient client, String index, String type)
+  public static JsonObject getMapping(ElasticsearchClient client, String index, String type)
       throws IOException {
-    final JestResult result = client.execute(
-        new GetMapping.Builder().addIndex(index).addType(type).build()
-    );
-    final JsonObject indexRoot = result.getJsonObject().getAsJsonObject(index);
-    if (indexRoot == null) {
-      return null;
-    }
-    final JsonObject mappingsJson = indexRoot.getAsJsonObject("mappings");
-    if (mappingsJson == null) {
-      return  null;
-    }
-    return mappingsJson.getAsJsonObject(type);
+    return client.getMapping(index, type);
   }
 
   /**
    * Infer mapping from the provided schema.
+   *
    * @param schema The schema used to infer mapping.
    */
-  public static JsonNode inferMapping(Schema schema) {
+  public static JsonNode inferMapping(ElasticsearchClient client, Schema schema) {
     if (schema == null) {
       throw new DataException("Cannot infer mapping without schema.");
     }
@@ -108,21 +95,55 @@ public class Mapping {
     ObjectNode fields = JsonNodeFactory.instance.objectNode();
     switch (schemaType) {
       case ARRAY:
-        return inferMapping(schema.valueSchema());
+        return inferMapping(client, schema.valueSchema());
       case MAP:
         properties.set("properties", fields);
-        fields.set(MAP_KEY, inferMapping(schema.keySchema()));
-        fields.set(MAP_VALUE, inferMapping(schema.valueSchema()));
+        fields.set(MAP_KEY, inferMapping(client, schema.keySchema()));
+        fields.set(MAP_VALUE, inferMapping(client, schema.valueSchema()));
         return properties;
       case STRUCT:
         properties.set("properties", fields);
         for (Field field : schema.fields()) {
-          fields.set(field.name(), inferMapping(field.schema()));
+          fields.set(field.name(), inferMapping(client, field.schema()));
         }
         return properties;
       default:
-        String esType = ElasticsearchSinkConnectorConstants.TYPES.get(schemaType);
+        String esType = getElasticsearchType(client, schemaType);
         return inferPrimitive(esType, schema.defaultValue());
+    }
+  }
+
+  // visible for testing
+  protected static String getElasticsearchType(ElasticsearchClient client, Schema.Type schemaType) {
+    switch (schemaType) {
+      case BOOLEAN:
+        return BOOLEAN_TYPE;
+      case INT8:
+        return BYTE_TYPE;
+      case INT16:
+        return SHORT_TYPE;
+      case INT32:
+        return INTEGER_TYPE;
+      case INT64:
+        return LONG_TYPE;
+      case FLOAT32:
+        return FLOAT_TYPE;
+      case FLOAT64:
+        return DOUBLE_TYPE;
+      case STRING:
+        switch (client.getVersion()) {
+          case ES_V1:
+          case ES_V2:
+            return STRING_TYPE;
+          case ES_V5:
+          case ES_V6:
+          default:
+            return TEXT_TYPE;
+        }
+      case BYTES:
+        return BINARY_TYPE;
+      default:
+        return null;
     }
   }
 
@@ -175,6 +196,7 @@ public class Mapping {
           defaultValueNode = JsonNodeFactory.instance.numberNode((double) defaultValue);
           break;
         case ElasticsearchSinkConnectorConstants.STRING_TYPE:
+        case ElasticsearchSinkConnectorConstants.TEXT_TYPE:
           defaultValueNode = JsonNodeFactory.instance.textNode((String) defaultValue);
           break;
         case ElasticsearchSinkConnectorConstants.BINARY_TYPE:

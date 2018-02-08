@@ -42,7 +42,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import io.searchbox.client.JestClient;
 import org.junit.rules.ExpectedException;
 
 import static io.confluent.connect.elasticsearch.DataConverter.BehaviorOnNullValues;
@@ -472,20 +471,20 @@ public class ElasticsearchWriterTest extends ElasticsearchSinkTestBase {
     return records;
   }
 
-  private ElasticsearchWriter initWriter(JestClient client) {
+  private ElasticsearchWriter initWriter(ElasticsearchClient client) {
     return initWriter(client, false, BehaviorOnNullValues.IGNORE);
   }
 
-  private ElasticsearchWriter initWriter(JestClient client, boolean dropInvalidMessage) {
+  private ElasticsearchWriter initWriter(ElasticsearchClient client, boolean dropInvalidMessage) {
     return initWriter(client, dropInvalidMessage, BehaviorOnNullValues.IGNORE);
   }
 
-  private ElasticsearchWriter initWriter(JestClient client, BehaviorOnNullValues behavior) {
+  private ElasticsearchWriter initWriter(ElasticsearchClient client, BehaviorOnNullValues behavior) {
     return initWriter(client, false, behavior);
   }
 
   private ElasticsearchWriter initWriter(
-      JestClient client,
+      ElasticsearchClient client,
       boolean dropInvalidMessage,
       BehaviorOnNullValues behavior) {
     return initWriter(
@@ -499,7 +498,7 @@ public class ElasticsearchWriterTest extends ElasticsearchSinkTestBase {
   }
 
   private ElasticsearchWriter initWriter(
-      JestClient client,
+      ElasticsearchClient client,
       Set<String> ignoreKeyTopics,
       Set<String> ignoreSchemaTopics,
       Map<String, String> topicToIndexMap,

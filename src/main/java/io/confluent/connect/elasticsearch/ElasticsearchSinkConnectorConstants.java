@@ -16,11 +16,6 @@
 
 package io.confluent.connect.elasticsearch;
 
-import org.apache.kafka.connect.data.Schema.Type;
-
-import java.util.HashMap;
-import java.util.Map;
-
 public class ElasticsearchSinkConnectorConstants {
   public static final String MAP_KEY = "key";
   public static final String MAP_VALUE = "value";
@@ -34,19 +29,7 @@ public class ElasticsearchSinkConnectorConstants {
   public static final String FLOAT_TYPE = "float";
   public static final String DOUBLE_TYPE = "double";
   public static final String STRING_TYPE = "string";
+  public static final String TEXT_TYPE = "text";
+  public static final String KEYWORD_TYPE = "keyword";
   public static final String DATE_TYPE = "date";
-
-  static final Map<Type, String> TYPES = new HashMap<>();
-
-  static {
-    TYPES.put(Type.BOOLEAN, BOOLEAN_TYPE);
-    TYPES.put(Type.INT8, BYTE_TYPE);
-    TYPES.put(Type.INT16, SHORT_TYPE);
-    TYPES.put(Type.INT32, INTEGER_TYPE);
-    TYPES.put(Type.INT64, LONG_TYPE);
-    TYPES.put(Type.FLOAT32, FLOAT_TYPE);
-    TYPES.put(Type.FLOAT64, DOUBLE_TYPE);
-    TYPES.put(Type.STRING, STRING_TYPE);
-    TYPES.put(Type.BYTES, BINARY_TYPE);
-  }
 }
