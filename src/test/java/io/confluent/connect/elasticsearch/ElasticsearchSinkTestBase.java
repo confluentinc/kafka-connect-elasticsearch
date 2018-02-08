@@ -19,6 +19,7 @@ package io.confluent.connect.elasticsearch;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 
+import io.confluent.connect.elasticsearch.jest.JestElasticsearchClient;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaBuilder;
@@ -36,12 +37,6 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
 
-import io.searchbox.client.JestClientFactory;
-import io.searchbox.client.config.HttpClientConfig;
-import io.searchbox.client.http.JestHttpClient;
-import io.searchbox.core.Search;
-import io.searchbox.core.SearchResult;
-
 import static io.confluent.connect.elasticsearch.DataConverter.BehaviorOnNullValues;
 
 public class ElasticsearchSinkTestBase extends ESIntegTestCase {
@@ -56,19 +51,13 @@ public class ElasticsearchSinkTestBase extends ESIntegTestCase {
   protected static final TopicPartition TOPIC_PARTITION2 = new TopicPartition(TOPIC, PARTITION2);
   protected static final TopicPartition TOPIC_PARTITION3 = new TopicPartition(TOPIC, PARTITION3);
 
-  protected JestHttpClient client;
+  protected ElasticsearchClient client;
   private DataConverter converter;
 
   @Before
   public void setUp() throws Exception {
     super.setUp();
-    final JestClientFactory factory = new JestClientFactory();
-    factory.setHttpClientConfig(
-        new HttpClientConfig
-            .Builder("http://localhost:" + getPort())
-            .multiThreaded(true).build()
-    );
-    client = (JestHttpClient) factory.getObject();
+    client = new JestElasticsearchClient("http://localhost:" + getPort());
     converter = new DataConverter(true, BehaviorOnNullValues.IGNORE);
   }
 
@@ -76,7 +65,7 @@ public class ElasticsearchSinkTestBase extends ESIntegTestCase {
   public void tearDown() throws Exception {
     super.tearDown();
     if (client != null) {
-      client.shutdownClient();
+      client.close();
     }
     client = null;
   }
@@ -118,9 +107,9 @@ public class ElasticsearchSinkTestBase extends ESIntegTestCase {
   }
 
   protected void verifySearchResults(Collection<?> records, String index, boolean ignoreKey, boolean ignoreSchema) throws IOException {
-    final SearchResult result = client.execute(new Search.Builder("").addIndex(index).build());
+    final JsonObject result = client.search("", index, null);
 
-    final JsonArray rawHits = result.getJsonObject().getAsJsonObject("hits").getAsJsonArray("hits");
+    final JsonArray rawHits = result.getAsJsonObject("hits").getAsJsonArray("hits");
 
     assertEquals(records.size(), rawHits.size());
 
@@ -142,6 +131,7 @@ public class ElasticsearchSinkTestBase extends ESIntegTestCase {
     }
   }
 
+  /* For ES 2.x */
   @Override
   protected Settings nodeSettings(int nodeOrdinal) {
     return Settings.settingsBuilder()
@@ -151,5 +141,27 @@ public class ElasticsearchSinkTestBase extends ESIntegTestCase {
         .put(Node.HTTP_ENABLED, true)
         .build();
   }
+
+  /* For ES 5.x (requires Java 8) */
+  /*
+  @Override
+  protected Settings nodeSettings(int nodeOrdinal) {
+    int randomPort = randomIntBetween(49152, 65525);
+    return Settings.builder()
+        .put(super.nodeSettings(nodeOrdinal))
+        .put(NetworkModule.HTTP_ENABLED.getKey(), true)
+        .put(HttpTransportSettings.SETTING_HTTP_PORT.getKey(), randomPort)
+        .put("network.host", "127.0.0.1")
+        .build();
+  }
+
+  @Override
+  protected Collection<Class<? extends Plugin>> nodePlugins() {
+    System.setProperty("es.set.netty.runtime.available.processors", "false");
+    Collection<Class<? extends Plugin>> al = new ArrayList<Class<? extends Plugin>>();
+    al.add(Netty4Plugin.class);
+    return al;
+  }
+  */
 
 }

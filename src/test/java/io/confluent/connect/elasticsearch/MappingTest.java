@@ -130,7 +130,7 @@ public class MappingTest extends ElasticsearchSinkTestBase {
         }
         break;
       default:
-        assertEquals("\"" + ElasticsearchSinkConnectorConstants.TYPES.get(schemaType) + "\"", type.toString());
+        assertEquals("\"" + Mapping.getElasticsearchType(client, schemaType) + "\"", type.toString());
     }
   }
 }

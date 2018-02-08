@@ -15,7 +15,7 @@
     <!-- TODO: Undecided if this is too much -->
     <suppress
             checks="(ClassDataAbstractionCoupling)"
-            files="(BulkProcessor).java"
+            files="(BulkProcessor|JestElasticsearchClient).java"
     />
 
     <!-- TODO: Pass some parameters in common config object? -->

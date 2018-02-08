@@ -16,6 +16,7 @@
 
 package io.confluent.connect.elasticsearch;
 
+import io.confluent.connect.elasticsearch.bulk.BulkProcessor;
 import org.apache.kafka.common.utils.SystemTime;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.sink.SinkRecord;
@@ -31,19 +32,12 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
-import io.confluent.connect.elasticsearch.bulk.BulkProcessor;
-import io.searchbox.action.Action;
-import io.searchbox.client.JestClient;
-import io.searchbox.client.JestResult;
-import io.searchbox.indices.CreateIndex;
-import io.searchbox.indices.IndicesExists;
-
 import static io.confluent.connect.elasticsearch.DataConverter.BehaviorOnNullValues;
 
 public class ElasticsearchWriter {
   private static final Logger log = LoggerFactory.getLogger(ElasticsearchWriter.class);
 
-  private final JestClient client;
+  private final ElasticsearchClient client;
   private final String type;
   private final boolean ignoreKey;
   private final Set<String> ignoreKeyTopics;
@@ -59,7 +53,7 @@ public class ElasticsearchWriter {
   private final Set<String> existingMappings;
 
   ElasticsearchWriter(
-      JestClient client,
+      ElasticsearchClient client,
       String type,
       boolean useCompactMapEntries,
       boolean ignoreKey,
@@ -104,7 +98,7 @@ public class ElasticsearchWriter {
   }
 
   public static class Builder {
-    private final JestClient client;
+    private final ElasticsearchClient client;
     private String type;
     private boolean useCompactMapEntries = true;
     private boolean ignoreKey = false;
@@ -122,7 +116,7 @@ public class ElasticsearchWriter {
     private boolean dropInvalidMessage;
     private BehaviorOnNullValues behaviorOnNullValues = BehaviorOnNullValues.DEFAULT;
 
-    public Builder(JestClient client) {
+    public Builder(ElasticsearchClient client) {
       this.client = client;
     }
 
@@ -269,18 +263,18 @@ public class ElasticsearchWriter {
   }
 
   private void tryWriteRecord(
-          SinkRecord sinkRecord,
-          String index,
-          boolean ignoreKey,
-          boolean ignoreSchema) {
+      SinkRecord sinkRecord,
+      String index,
+      boolean ignoreKey,
+      boolean ignoreSchema) {
 
     try {
       IndexableRecord record = converter.convertRecord(
-              sinkRecord,
-              index,
-              type,
-              ignoreKey,
-              ignoreSchema);
+          sinkRecord,
+          index,
+          type,
+          ignoreKey,
+          ignoreSchema);
       if (record != null) {
         bulkProcessor.add(record, flushTimeoutMs);
       }
@@ -318,31 +312,9 @@ public class ElasticsearchWriter {
     bulkProcessor.awaitStop(flushTimeoutMs);
   }
 
-  private boolean indexExists(String index) {
-    Action action = new IndicesExists.Builder(index).build();
-    try {
-      JestResult result = client.execute(action);
-      return result.isSucceeded();
-    } catch (IOException e) {
-      throw new ConnectException(e);
-    }
-  }
-
   public void createIndicesForTopics(Set<String> assignedTopics) {
-    for (String index : indicesForTopics(assignedTopics)) {
-      if (!indexExists(index)) {
-        CreateIndex createIndex = new CreateIndex.Builder(index).build();
-        try {
-          JestResult result = client.execute(createIndex);
-          if (!result.isSucceeded()) {
-            String msg = result.getErrorMessage() != null ? ": " + result.getErrorMessage() : "";
-            throw new ConnectException("Could not create index '" + index + "'" + msg);
-          }
-        } catch (IOException e) {
-          throw new ConnectException(e);
-        }
-      }
-    }
+    Objects.requireNonNull(assignedTopics);
+    client.createIndices(indicesForTopics(assignedTopics));
   }
 
   private Set<String> indicesForTopics(Set<String> assignedTopics) {
