@@ -36,8 +36,6 @@ producer to Elasticsearch.
 - :ref:`Confluent Platform <installation>` is installed and services are running by using the Confluent CLI. This quick start assumes that you are using the Confluent CLI, but standalone installations are also supported. By default ZooKeeper, Kafka, Schema Registry, Kafka Connect REST API, and Kafka Connect are started with the ``confluent start`` command. For more information, see :ref:`installation_archive`.
 - Elasticsearch 5.x is installed and running.
 
-  .. important:: Elasticsearch 6.x is not supported at this time due to a known issue.
-
 ----------------------------
 Add a Record to the Consumer
 ----------------------------
