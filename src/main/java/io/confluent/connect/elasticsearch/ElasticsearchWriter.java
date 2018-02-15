@@ -33,6 +33,7 @@ import java.util.Objects;
 import java.util.Set;
 
 import static io.confluent.connect.elasticsearch.DataConverter.BehaviorOnNullValues;
+import static io.confluent.connect.elasticsearch.bulk.BulkProcessor.BehaviorOnMalformedDoc;
 
 public class ElasticsearchWriter {
   private static final Logger log = LoggerFactory.getLogger(ElasticsearchWriter.class);
@@ -52,7 +53,7 @@ public class ElasticsearchWriter {
   private final DataConverter converter;
 
   private final Set<String> existingMappings;
-  private final boolean ignoreMappingErrors;
+  private final BehaviorOnMalformedDoc behaviorOnMalformedDoc;
 
   ElasticsearchWriter(
       ElasticsearchClient client,
@@ -72,7 +73,7 @@ public class ElasticsearchWriter {
       long retryBackoffMs,
       boolean dropInvalidMessage,
       BehaviorOnNullValues behaviorOnNullValues,
-      boolean ignoreMappingErrors
+      BehaviorOnMalformedDoc behaviorOnMalformedDoc
   ) {
     this.client = client;
     this.type = type;
@@ -85,7 +86,7 @@ public class ElasticsearchWriter {
     this.dropInvalidMessage = dropInvalidMessage;
     this.behaviorOnNullValues = behaviorOnNullValues;
     this.converter = new DataConverter(useCompactMapEntries, behaviorOnNullValues);
-    this.ignoreMappingErrors = ignoreMappingErrors;
+    this.behaviorOnMalformedDoc = behaviorOnMalformedDoc;
 
     bulkProcessor = new BulkProcessor<>(
         new SystemTime(),
@@ -96,7 +97,7 @@ public class ElasticsearchWriter {
         lingerMs,
         maxRetries,
         retryBackoffMs,
-        ignoreMappingErrors
+        behaviorOnMalformedDoc
     );
 
     existingMappings = new HashSet<>();
@@ -120,7 +121,7 @@ public class ElasticsearchWriter {
     private long retryBackoffMs;
     private boolean dropInvalidMessage;
     private BehaviorOnNullValues behaviorOnNullValues = BehaviorOnNullValues.DEFAULT;
-    private boolean ignoreMappingErrors;
+    private BehaviorOnMalformedDoc behaviorOnMalformedDoc;
 
     public Builder(ElasticsearchClient client) {
       this.client = client;
@@ -205,8 +206,8 @@ public class ElasticsearchWriter {
       return this;
     }
 
-    public Builder setIgnoreMappingErrors(boolean ignoreMappingErrors) {
-      this.ignoreMappingErrors = ignoreMappingErrors;
+    public Builder setBehaviorOnMalformedDoc(BehaviorOnMalformedDoc behaviorOnMalformedDoc) {
+      this.behaviorOnMalformedDoc = behaviorOnMalformedDoc;
       return this;
     }
 
@@ -229,7 +230,7 @@ public class ElasticsearchWriter {
           retryBackoffMs,
           dropInvalidMessage,
           behaviorOnNullValues,
-          ignoreMappingErrors
+          behaviorOnMalformedDoc
       );
     }
   }

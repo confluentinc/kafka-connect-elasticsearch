@@ -34,6 +34,8 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+import static io.confluent.connect.elasticsearch.bulk.BulkProcessor.BehaviorOnMalformedDoc;
+
 public class BulkProcessorTest {
 
   private static class Expectation {
@@ -102,7 +104,7 @@ public class BulkProcessorTest {
     final int lingerMs = 5;
     final int maxRetries = 0;
     final int retryBackoffMs = 0;
-    final boolean ignoreMappingErrors = false;
+    final BehaviorOnMalformedDoc behaviorOnMalformedDoc = BehaviorOnMalformedDoc.DEFAULT;
 
     final BulkProcessor<Integer, ?> bulkProcessor = new BulkProcessor<>(
         new SystemTime(),
@@ -113,7 +115,7 @@ public class BulkProcessorTest {
         lingerMs,
         maxRetries,
         retryBackoffMs,
-        ignoreMappingErrors
+        behaviorOnMalformedDoc
     );
 
     final int addTimeoutMs = 10;
@@ -146,7 +148,7 @@ public class BulkProcessorTest {
     final int lingerMs = 100000; // super high on purpose to make sure flush is what's causing the request
     final int maxRetries = 0;
     final int retryBackoffMs = 0;
-    final boolean ignoreMappingErrors = false;
+    final BehaviorOnMalformedDoc behaviorOnMalformedDoc = BehaviorOnMalformedDoc.DEFAULT;
 
     final BulkProcessor<Integer, ?> bulkProcessor = new BulkProcessor<>(
         new SystemTime(),
@@ -157,7 +159,7 @@ public class BulkProcessorTest {
         lingerMs,
         maxRetries,
         retryBackoffMs,
-        ignoreMappingErrors
+        behaviorOnMalformedDoc
     );
 
     client.expect(Arrays.asList(1, 2, 3), BulkResponse.success());
@@ -183,7 +185,7 @@ public class BulkProcessorTest {
     final int lingerMs = 10;
     final int maxRetries = 0;
     final int retryBackoffMs = 0;
-    final boolean ignoreMappingErrors = false;
+    final BehaviorOnMalformedDoc behaviorOnMalformedDoc = BehaviorOnMalformedDoc.DEFAULT;
 
     final BulkProcessor<Integer, ?> bulkProcessor = new BulkProcessor<>(
         new SystemTime(),
@@ -194,7 +196,7 @@ public class BulkProcessorTest {
         lingerMs,
         maxRetries,
         retryBackoffMs,
-        ignoreMappingErrors
+        behaviorOnMalformedDoc
     );
 
     final int addTimeoutMs = 10;
@@ -216,7 +218,7 @@ public class BulkProcessorTest {
     final int lingerMs = 5;
     final int maxRetries = 3;
     final int retryBackoffMs = 1;
-    final boolean ignoreMappingErrors = false;
+    final BehaviorOnMalformedDoc behaviorOnMalformedDoc = BehaviorOnMalformedDoc.DEFAULT;
 
     client.expect(Arrays.asList(42, 43), BulkResponse.failure(true, "a retiable error"));
     client.expect(Arrays.asList(42, 43), BulkResponse.failure(true, "a retriable error again"));
@@ -231,7 +233,7 @@ public class BulkProcessorTest {
         lingerMs,
         maxRetries,
         retryBackoffMs,
-        ignoreMappingErrors
+        behaviorOnMalformedDoc
     );
 
     final int addTimeoutMs = 10;
@@ -250,6 +252,7 @@ public class BulkProcessorTest {
     final int maxRetries = 2;
     final int retryBackoffMs = 1;
     final String errorInfo = "a final retriable error again";
+    final BehaviorOnMalformedDoc behaviorOnMalformedDoc = BehaviorOnMalformedDoc.DEFAULT;
 
     client.expect(Arrays.asList(42, 43), BulkResponse.failure(true, "a retiable error"));
     client.expect(Arrays.asList(42, 43), BulkResponse.failure(true, "a retriable error again"));
@@ -264,7 +267,7 @@ public class BulkProcessorTest {
         lingerMs,
         maxRetries,
         retryBackoffMs,
-        false
+        behaviorOnMalformedDoc
     );
 
     final int addTimeoutMs = 10;
@@ -287,7 +290,7 @@ public class BulkProcessorTest {
     final int lingerMs = 5;
     final int maxRetries = 3;
     final int retryBackoffMs = 1;
-    final boolean ignoreMappingErrors = false;
+    final BehaviorOnMalformedDoc behaviorOnMalformedDoc = BehaviorOnMalformedDoc.DEFAULT;
 
     final String errorInfo = "an unretriable error";
     client.expect(Arrays.asList(42, 43), BulkResponse.failure(false, errorInfo));
@@ -301,7 +304,7 @@ public class BulkProcessorTest {
         lingerMs,
         maxRetries,
         retryBackoffMs,
-        ignoreMappingErrors
+        behaviorOnMalformedDoc
     );
 
     final int addTimeoutMs = 10;
@@ -317,14 +320,14 @@ public class BulkProcessorTest {
   }
 
   @Test
-  public void ignoreMappingFalse() throws InterruptedException {
+  public void failOnMalformedDoc() throws InterruptedException {
     final int maxBufferedRecords = 100;
     final int maxInFlightBatches = 5;
     final int batchSize = 2;
     final int lingerMs = 5;
     final int maxRetries = 3;
     final int retryBackoffMs = 1;
-    final boolean ignoreMappingErrors = false;
+    final BehaviorOnMalformedDoc behaviorOnMalformedDoc = BehaviorOnMalformedDoc.FAIL;
 
     final String errorInfo = " [{\"type\":\"mapper_parsing_exception\",\"reason\":\"failed to parse\"," +
         "\"caused_by\":{\"type\":\"illegal_argument_exception\",\"reason\":\"object\n" +
@@ -340,7 +343,7 @@ public class BulkProcessorTest {
         lingerMs,
         maxRetries,
         retryBackoffMs,
-        ignoreMappingErrors
+        behaviorOnMalformedDoc
     );
 
     bulkProcessor.start();
@@ -358,14 +361,14 @@ public class BulkProcessorTest {
   }
 
   @Test
-  public void ignoreMappingTrue() throws InterruptedException {
+  public void ignoreOnMalformedDoc() throws InterruptedException {
     final int maxBufferedRecords = 100;
     final int maxInFlightBatches = 5;
     final int batchSize = 2;
     final int lingerMs = 5;
     final int maxRetries = 3;
     final int retryBackoffMs = 1;
-    final boolean ignoreMappingErrors = true;
+    final BehaviorOnMalformedDoc behaviorOnMalformedDoc = BehaviorOnMalformedDoc.IGNORE;
 
     final String errorInfo = " [{\"type\":\"mapper_parsing_exception\",\"reason\":\"failed to parse\"," +
         "\"caused_by\":{\"type\":\"illegal_argument_exception\",\"reason\":\"object\n" +
@@ -381,7 +384,7 @@ public class BulkProcessorTest {
         lingerMs,
         maxRetries,
         retryBackoffMs,
-        ignoreMappingErrors
+        behaviorOnMalformedDoc
     );
 
     bulkProcessor.start();

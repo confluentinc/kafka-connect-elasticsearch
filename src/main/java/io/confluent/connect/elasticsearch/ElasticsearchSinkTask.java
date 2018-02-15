@@ -16,6 +16,7 @@
 
 package io.confluent.connect.elasticsearch;
 
+import io.confluent.connect.elasticsearch.bulk.BulkProcessor;
 import io.confluent.connect.elasticsearch.jest.JestElasticsearchClient;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
@@ -95,8 +96,10 @@ public class ElasticsearchSinkTask extends SinkTask {
               config.getString(ElasticsearchSinkConnectorConfig.BEHAVIOR_ON_NULL_VALUES_CONFIG)
           );
 
-      boolean ignoreMappingErrors = config.getBoolean(
-          ElasticsearchSinkConnectorConfig.IGNORE_MAPPING_ERRORS_CONFIG);
+      BulkProcessor.BehaviorOnMalformedDoc behaviorOnMalformedDoc =
+          BulkProcessor.BehaviorOnMalformedDoc.forValue(
+              config.getString(ElasticsearchSinkConnectorConfig.BEHAVIOR_ON_MALFORMED_DOCS_CONFIG)
+          );
 
       // Calculate the maximum possible backoff time ...
       long maxRetryBackoffMs =
@@ -131,7 +134,7 @@ public class ElasticsearchSinkTask extends SinkTask {
           .setMaxRetry(maxRetry)
           .setDropInvalidMessage(dropInvalidMessage)
           .setBehaviorOnNullValues(behaviorOnNullValues)
-          .setIgnoreMappingErrors(ignoreMappingErrors);
+          .setBehaviorOnMalformedDoc(behaviorOnMalformedDoc);
 
       writer = builder.build();
       writer.start();

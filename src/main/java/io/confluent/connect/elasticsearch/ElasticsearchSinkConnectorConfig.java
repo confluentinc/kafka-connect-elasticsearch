@@ -25,6 +25,7 @@ import org.apache.kafka.common.config.ConfigDef.Width;
 import java.util.Map;
 
 import static io.confluent.connect.elasticsearch.DataConverter.BehaviorOnNullValues;
+import static io.confluent.connect.elasticsearch.bulk.BulkProcessor.BehaviorOnMalformedDoc;
 
 public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
 
@@ -132,9 +133,11 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
       + "non-null key and a null value (i.e. Kafka tombstone records). Valid options are "
       + "'ignore', 'delete', and 'fail'.";
 
-  public static final String IGNORE_MAPPING_ERRORS_CONFIG = "ignore.mapping.errors";
-  private static final String IGNORE_MAPPING_ERRORS_DOC = "Whether to ignore "
-      + "mapper_parsing_exceptions thrown by Elasticsearch upon indexing malformed documents.";
+  public static final String BEHAVIOR_ON_MALFORMED_DOCS_CONFIG = "behavior.on.malformed.documents";
+  private static final String BEHAVIOR_ON_MALFORMED_DOCS_DOC = "How to handle records that "
+      + "Elasticsearch rejects due to some malformation of the document itself, such as an index"
+      + " mapping conflict or a field name containing illegal characters. Valid options are "
+      + "'ignore', 'warn', and 'fail'.";
 
   protected static ConfigDef baseConfigDef() {
     final ConfigDef configDef = new ConfigDef();
@@ -341,15 +344,16 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
         Width.SHORT,
         "Behavior for null-valued records"
     ).define(
-        IGNORE_MAPPING_ERRORS_CONFIG,
-        Type.BOOLEAN,
-        false,
+        BEHAVIOR_ON_MALFORMED_DOCS_CONFIG,
+        Type.STRING,
+        BehaviorOnMalformedDoc.DEFAULT.toString(),
+        BehaviorOnMalformedDoc.VALIDATOR,
         Importance.LOW,
-        IGNORE_MAPPING_ERRORS_DOC,
+        BEHAVIOR_ON_MALFORMED_DOCS_DOC,
         group,
         ++order,
         Width.SHORT,
-        "Ignore Mapping Errors mode");
+        "Behavior on malformed documents");
   }
 
   public static final ConfigDef CONFIG = baseConfigDef();

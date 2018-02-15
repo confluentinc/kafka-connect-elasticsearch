@@ -17,6 +17,7 @@
 package io.confluent.connect.elasticsearch.bulk;
 
 import io.confluent.connect.elasticsearch.RetryUtil;
+import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.slf4j.Logger;
@@ -26,6 +27,7 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -53,7 +55,7 @@ public class BulkProcessor<R, B> {
   private final long lingerMs;
   private final int maxRetries;
   private final long retryBackoffMs;
-  private final boolean ignoreMappingErrors;
+  private final BehaviorOnMalformedDoc behaviorOnMalformedDoc;
 
   private final Thread farmer;
   private final ExecutorService executor;
@@ -78,7 +80,7 @@ public class BulkProcessor<R, B> {
       long lingerMs,
       int maxRetries,
       long retryBackoffMs,
-      boolean ignoreMappingErrors
+      BehaviorOnMalformedDoc behaviorOnMalformedDoc
   ) {
     this.time = time;
     this.bulkClient = bulkClient;
@@ -87,7 +89,7 @@ public class BulkProcessor<R, B> {
     this.lingerMs = lingerMs;
     this.maxRetries = maxRetries;
     this.retryBackoffMs = retryBackoffMs;
-    this.ignoreMappingErrors = ignoreMappingErrors;
+    this.behaviorOnMalformedDoc = behaviorOnMalformedDoc;
 
     unsentRecords = new ArrayDeque<>(maxBufferedRecords);
 
@@ -375,17 +377,17 @@ public class BulkProcessor<R, B> {
                       batchId, batch.size(), attempts, maxAttempts);
             }
             return bulkRsp;
-          }
-          if (ignoreMappingErrors) {
-            if (responseContainsMappingError(bulkRsp)) {
-              log.info("Encountered mapper_parsing_exception when executing batch {} of {} records."
-                      + " Ignoring. Error was {}",
-                  batchId, batch.size(), bulkRsp.getErrorInfo());
+          } else {
+            if (responseContainsMalformedDocError(bulkRsp)) {
+              retriable = bulkRsp.isRetriable();
+              handleMalformedDoc(bulkRsp);
               return bulkRsp;
+            } else {
+              // for all other errors, throw the error up
+              retriable = bulkRsp.isRetriable();
+              throw new ConnectException("Bulk request failed: " + bulkRsp.getErrorInfo());
             }
           }
-          retriable = bulkRsp.isRetriable();
-          throw new ConnectException("Bulk request failed: " + bulkRsp.getErrorInfo());
         } catch (Exception e) {
           if (retriable && attempts < maxAttempts) {
             long sleepTimeMs = RetryUtil.computeRandomRetryWaitTimeInMillis(retryAttempts,
@@ -402,9 +404,36 @@ public class BulkProcessor<R, B> {
         }
       }
     }
+
+    private void handleMalformedDoc(BulkResponse bulkRsp) {
+      // if the elasticsearch request failed because of a malformed document,
+      // the behavior is configurable.
+      switch (behaviorOnMalformedDoc) {
+        case WARN:
+          log.warn("Encountered mapper_parsing_exception when executing batch {} of {}"
+                  + " records. Ignoring. Error was {}",
+              batchId, batch.size(), bulkRsp.getErrorInfo());
+          return;
+        case IGNORE:
+          if (log.isDebugEnabled()) {
+            log.debug("Encountered mapper_parsing_exception when executing batch {} of {}"
+                    + " records. Ignoring. Error was {}",
+                batchId, batch.size(), bulkRsp.getErrorInfo());
+          }
+          return;
+        case FAIL:
+          throw new ConnectException("Bulk request failed: " + bulkRsp.getErrorInfo());
+        default:
+          throw new RuntimeException(String.format(
+              "Unknown value for %s enum: %s",
+              BehaviorOnMalformedDoc.class.getSimpleName(),
+              behaviorOnMalformedDoc
+          ));
+      }
+    }
   }
 
-  private boolean responseContainsMappingError(BulkResponse bulkRsp) {
+  private boolean responseContainsMalformedDocError(BulkResponse bulkRsp) {
     return bulkRsp.getErrorInfo().contains("mapper_parsing_exception")
         || bulkRsp.getErrorInfo().contains("illegal_argument_exception");
   }
@@ -435,4 +464,51 @@ public class BulkProcessor<R, B> {
     }
   }
 
+  public enum BehaviorOnMalformedDoc {
+    IGNORE,
+    WARN,
+    FAIL;
+
+    public static final BehaviorOnMalformedDoc DEFAULT = FAIL;
+
+    // Want values for "behavior.on.null.values" property to be case-insensitive
+    public static final ConfigDef.Validator VALIDATOR = new ConfigDef.Validator() {
+      private final ConfigDef.ValidString validator = ConfigDef.ValidString.in(names());
+
+      @Override
+      public void ensureValid(String name, Object value) {
+        if (value instanceof String) {
+          value = ((String) value).toLowerCase(Locale.ROOT);
+        }
+        validator.ensureValid(name, value);
+      }
+
+      // Overridden here so that ConfigDef.toEnrichedRst shows possible values correctly
+      @Override
+      public String toString() {
+        return validator.toString();
+      }
+
+    };
+
+    public static String[] names() {
+      BehaviorOnMalformedDoc[] behaviors = values();
+      String[] result = new String[behaviors.length];
+
+      for (int i = 0; i < behaviors.length; i++) {
+        result[i] = behaviors[i].toString();
+      }
+
+      return result;
+    }
+
+    public static BehaviorOnMalformedDoc forValue(String value) {
+      return valueOf(value.toUpperCase(Locale.ROOT));
+    }
+
+    @Override
+    public String toString() {
+      return name().toLowerCase(Locale.ROOT);
+    }
+  }
 }
