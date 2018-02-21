@@ -378,16 +378,14 @@ public class BulkProcessor<R, B> {
                       batchId, batch.size(), attempts, maxAttempts);
             }
             return bulkRsp;
+          } else if (responseContainsMalformedDocError(bulkRsp)) {
+            retriable = bulkRsp.isRetriable();
+            handleMalformedDoc(bulkRsp);
+            return bulkRsp;
           } else {
-            if (responseContainsMalformedDocError(bulkRsp)) {
-              retriable = bulkRsp.isRetriable();
-              handleMalformedDoc(bulkRsp);
-              return bulkRsp;
-            } else {
-              // for all other errors, throw the error up
-              retriable = bulkRsp.isRetriable();
-              throw new ConnectException("Bulk request failed: " + bulkRsp.getErrorInfo());
-            }
+            // for all other errors, throw the error up
+            retriable = bulkRsp.isRetriable();
+            throw new ConnectException("Bulk request failed: " + bulkRsp.getErrorInfo());
           }
         } catch (Exception e) {
           if (retriable && attempts < maxAttempts) {
@@ -410,17 +408,15 @@ public class BulkProcessor<R, B> {
       // if the elasticsearch request failed because of a malformed document,
       // the behavior is configurable.
       switch (behaviorOnMalformedDoc) {
-        case WARN:
-          log.warn("Encountered an illegal document error when executing batch {} of {}"
-                  + " records. Error was {}. Will not index record.",
+        case IGNORE:
+          log.debug("Encountered an illegal document error when executing batch {} of {}"
+                  + " records. Ignoring and will not index record. Error was {}",
               batchId, batch.size(), bulkRsp.getErrorInfo());
           return;
-        case IGNORE:
-          if (log.isDebugEnabled()) {
-            log.debug("Encountered an illegal document error when executing batch {} of {}"
-                    + " records. Ignoring. Error was {}",
-                batchId, batch.size(), bulkRsp.getErrorInfo());
-          }
+        case WARN:
+          log.warn("Encountered an illegal document error when executing batch {} of {}"
+                  + " records. Ignoring and will not index record. Error was {}",
+              batchId, batch.size(), bulkRsp.getErrorInfo());
           return;
         case FAIL:
           log.error("Encountered an illegal document error when executing batch {} of {}"
@@ -479,7 +475,7 @@ public class BulkProcessor<R, B> {
 
     public static final BehaviorOnMalformedDoc DEFAULT = FAIL;
 
-    // Want values for "behavior.on.null.values" property to be case-insensitive
+    // Want values for "behavior.on.malformed.doc" property to be case-insensitive
     public static final ConfigDef.Validator VALIDATOR = new ConfigDef.Validator() {
       private final ConfigDef.ValidString validator = ConfigDef.ValidString.in(names());
 

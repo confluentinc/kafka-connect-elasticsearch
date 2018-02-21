@@ -16,6 +16,7 @@
 package io.confluent.connect.elasticsearch.bulk;
 
 import org.apache.kafka.common.utils.SystemTime;
+import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.junit.After;
 import org.junit.Before;
@@ -24,6 +25,7 @@ import org.junit.Test;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Queue;
@@ -107,7 +109,7 @@ public class BulkProcessorTest {
     final BehaviorOnMalformedDoc behaviorOnMalformedDoc = BehaviorOnMalformedDoc.DEFAULT;
 
     final BulkProcessor<Integer, ?> bulkProcessor = new BulkProcessor<>(
-        new SystemTime(),
+        Time.SYSTEM,
         client,
         maxBufferedRecords,
         maxInFlightBatches,
@@ -151,7 +153,7 @@ public class BulkProcessorTest {
     final BehaviorOnMalformedDoc behaviorOnMalformedDoc = BehaviorOnMalformedDoc.DEFAULT;
 
     final BulkProcessor<Integer, ?> bulkProcessor = new BulkProcessor<>(
-        new SystemTime(),
+        Time.SYSTEM,
         client,
         maxBufferedRecords,
         maxInFlightBatches,
@@ -188,7 +190,7 @@ public class BulkProcessorTest {
     final BehaviorOnMalformedDoc behaviorOnMalformedDoc = BehaviorOnMalformedDoc.DEFAULT;
 
     final BulkProcessor<Integer, ?> bulkProcessor = new BulkProcessor<>(
-        new SystemTime(),
+        Time.SYSTEM,
         client,
         maxBufferedRecords,
         maxInFlightBatches,
@@ -225,7 +227,7 @@ public class BulkProcessorTest {
     client.expect(Arrays.asList(42, 43), BulkResponse.success());
 
     final BulkProcessor<Integer, ?> bulkProcessor = new BulkProcessor<>(
-        new SystemTime(),
+        Time.SYSTEM,
         client,
         maxBufferedRecords,
         maxInFlightBatches,
@@ -259,7 +261,7 @@ public class BulkProcessorTest {
     client.expect(Arrays.asList(42, 43), BulkResponse.failure(true, errorInfo));
 
     final BulkProcessor<Integer, ?> bulkProcessor = new BulkProcessor<>(
-        new SystemTime(),
+        Time.SYSTEM,
         client,
         maxBufferedRecords,
         maxInFlightBatches,
@@ -296,7 +298,7 @@ public class BulkProcessorTest {
     client.expect(Arrays.asList(42, 43), BulkResponse.failure(false, errorInfo));
 
     final BulkProcessor<Integer, ?> bulkProcessor = new BulkProcessor<>(
-        new SystemTime(),
+        Time.SYSTEM,
         client,
         maxBufferedRecords,
         maxInFlightBatches,
@@ -335,7 +337,7 @@ public class BulkProcessorTest {
     client.expect(Arrays.asList(42, 43), BulkResponse.failure(false, errorInfo));
 
     final BulkProcessor<Integer, ?> bulkProcessor = new BulkProcessor<>(
-        new SystemTime(),
+        Time.SYSTEM,
         client,
         maxBufferedRecords,
         maxInFlightBatches,
@@ -361,42 +363,51 @@ public class BulkProcessorTest {
   }
 
   @Test
-  public void ignoreOnMalformedDoc() throws InterruptedException {
+  public void ignoreOrWarnOnMalformedDoc() throws InterruptedException {
     final int maxBufferedRecords = 100;
     final int maxInFlightBatches = 5;
     final int batchSize = 2;
     final int lingerMs = 5;
     final int maxRetries = 3;
     final int retryBackoffMs = 1;
-    final BehaviorOnMalformedDoc behaviorOnMalformedDoc = BehaviorOnMalformedDoc.IGNORE;
 
-    final String errorInfo = " [{\"type\":\"mapper_parsing_exception\",\"reason\":\"failed to parse\"," +
-        "\"caused_by\":{\"type\":\"illegal_argument_exception\",\"reason\":\"object\n" +
-        " field starting or ending with a [.] makes object resolution ambiguous: [avjpz{{.}}wjzse{{..}}gal9d]\"}}]";
-    client.expect(Arrays.asList(42, 43), BulkResponse.failure(false, errorInfo));
+    // Test both IGNORE and WARN options
+    // There is no difference in logic between IGNORE and WARN, except for the logging.
+    // Test to ensure they both work the same logically
+    final List<BehaviorOnMalformedDoc> behaviorsToTest = new ArrayList<BehaviorOnMalformedDoc>() {{
+      add(BehaviorOnMalformedDoc.WARN);
+      add(BehaviorOnMalformedDoc.IGNORE);
+    }};
 
-    final BulkProcessor<Integer, ?> bulkProcessor = new BulkProcessor<>(
-        new SystemTime(),
-        client,
-        maxBufferedRecords,
-        maxInFlightBatches,
-        batchSize,
-        lingerMs,
-        maxRetries,
-        retryBackoffMs,
-        behaviorOnMalformedDoc
-    );
+    for(BehaviorOnMalformedDoc behaviorOnMalformedDoc : behaviorsToTest)
+    {
+      final String errorInfo = " [{\"type\":\"mapper_parsing_exception\",\"reason\":\"failed to parse\"," +
+          "\"caused_by\":{\"type\":\"illegal_argument_exception\",\"reason\":\"object\n" +
+          " field starting or ending with a [.] makes object resolution ambiguous: [avjpz{{.}}wjzse{{..}}gal9d]\"}}]";
+      client.expect(Arrays.asList(42, 43), BulkResponse.failure(false, errorInfo));
 
-    bulkProcessor.start();
+      final BulkProcessor<Integer, ?> bulkProcessor = new BulkProcessor<>(
+          Time.SYSTEM,
+          client,
+          maxBufferedRecords,
+          maxInFlightBatches,
+          batchSize,
+          lingerMs,
+          maxRetries,
+          retryBackoffMs,
+          behaviorOnMalformedDoc
+      );
 
-    bulkProcessor.add(42, 1);
-    bulkProcessor.add(43, 1);
+      bulkProcessor.start();
 
+      bulkProcessor.add(42, 1);
+      bulkProcessor.add(43, 1);
 
-    try {
-      bulkProcessor.flush(10);
-    } catch(ConnectException e) {
-      fail(e.getMessage());
+      try {
+        bulkProcessor.flush(10);
+      } catch (ConnectException e) {
+        fail(e.getMessage());
+      }
     }
   }
 }
