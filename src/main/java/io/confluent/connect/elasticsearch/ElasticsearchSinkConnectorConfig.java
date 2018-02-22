@@ -25,6 +25,7 @@ import org.apache.kafka.common.config.ConfigDef.Width;
 import java.util.Map;
 
 import static io.confluent.connect.elasticsearch.DataConverter.BehaviorOnNullValues;
+import static io.confluent.connect.elasticsearch.bulk.BulkProcessor.BehaviorOnMalformedDoc;
 
 public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
 
@@ -132,6 +133,11 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
       + "non-null key and a null value (i.e. Kafka tombstone records). Valid options are "
       + "'ignore', 'delete', and 'fail'.";
 
+  public static final String BEHAVIOR_ON_MALFORMED_DOCS_CONFIG = "behavior.on.malformed.documents";
+  private static final String BEHAVIOR_ON_MALFORMED_DOCS_DOC = "How to handle records that "
+      + "Elasticsearch rejects due to some malformation of the document itself, such as an index"
+      + " mapping conflict or a field name containing illegal characters. Valid options are "
+      + "'ignore', 'warn', and 'fail'.";
 
   protected static ConfigDef baseConfigDef() {
     final ConfigDef configDef = new ConfigDef();
@@ -336,7 +342,18 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
         group,
         ++order,
         Width.SHORT,
-        "Behavior for null-valued records");
+        "Behavior for null-valued records"
+    ).define(
+        BEHAVIOR_ON_MALFORMED_DOCS_CONFIG,
+        Type.STRING,
+        BehaviorOnMalformedDoc.DEFAULT.toString(),
+        BehaviorOnMalformedDoc.VALIDATOR,
+        Importance.LOW,
+        BEHAVIOR_ON_MALFORMED_DOCS_DOC,
+        group,
+        ++order,
+        Width.SHORT,
+        "Behavior on malformed documents");
   }
 
   public static final ConfigDef CONFIG = baseConfigDef();

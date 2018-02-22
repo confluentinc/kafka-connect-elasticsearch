@@ -143,3 +143,11 @@ Data Conversion
   * Default: ignore
   * Valid Values: [ignore, delete, fail]
   * Importance: low
+
+``behavior.on.malformed.documents``
+  How to handle records that Elasticsearch rejects due to some malformation of the document itself, such as an index mapping conflict or a field name containing illegal characters. Valid options are 'ignore', 'warn', and 'fail'.
+
+  * Type: string
+  * Default: fail
+  * Valid Values: [ignore, warn, fail]
+  * Importance: low
