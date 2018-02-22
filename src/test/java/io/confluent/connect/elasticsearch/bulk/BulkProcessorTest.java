@@ -15,7 +15,6 @@
  **/
 package io.confluent.connect.elasticsearch.bulk;
 
-import org.apache.kafka.common.utils.SystemTime;
 import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.junit.After;
@@ -25,7 +24,6 @@ import org.junit.Test;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Queue;
@@ -354,7 +352,8 @@ public class BulkProcessorTest {
     bulkProcessor.add(43, 1);
 
     try {
-      bulkProcessor.flush(10);
+      final int flushTimeoutMs = 1000;
+      bulkProcessor.flush(flushTimeoutMs);
       fail();
     } catch(ConnectException e) {
       // expected
@@ -404,7 +403,8 @@ public class BulkProcessorTest {
       bulkProcessor.add(43, 1);
 
       try {
-        bulkProcessor.flush(10);
+        final int flushTimeoutMs = 1000;
+        bulkProcessor.flush(flushTimeoutMs);
       } catch (ConnectException e) {
         fail(e.getMessage());
       }
