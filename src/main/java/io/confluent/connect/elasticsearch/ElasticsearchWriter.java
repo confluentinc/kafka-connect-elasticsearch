@@ -33,6 +33,7 @@ import java.util.Objects;
 import java.util.Set;
 
 import static io.confluent.connect.elasticsearch.DataConverter.BehaviorOnNullValues;
+import static io.confluent.connect.elasticsearch.bulk.BulkProcessor.BehaviorOnMalformedDoc;
 
 public class ElasticsearchWriter {
   private static final Logger log = LoggerFactory.getLogger(ElasticsearchWriter.class);
@@ -52,6 +53,7 @@ public class ElasticsearchWriter {
   private final DataConverter converter;
 
   private final Set<String> existingMappings;
+  private final BehaviorOnMalformedDoc behaviorOnMalformedDoc;
 
   ElasticsearchWriter(
       ElasticsearchClient client,
@@ -70,7 +72,8 @@ public class ElasticsearchWriter {
       int maxRetries,
       long retryBackoffMs,
       boolean dropInvalidMessage,
-      BehaviorOnNullValues behaviorOnNullValues
+      BehaviorOnNullValues behaviorOnNullValues,
+      BehaviorOnMalformedDoc behaviorOnMalformedDoc
   ) {
     this.client = client;
     this.type = type;
@@ -83,6 +86,7 @@ public class ElasticsearchWriter {
     this.dropInvalidMessage = dropInvalidMessage;
     this.behaviorOnNullValues = behaviorOnNullValues;
     this.converter = new DataConverter(useCompactMapEntries, behaviorOnNullValues);
+    this.behaviorOnMalformedDoc = behaviorOnMalformedDoc;
 
     bulkProcessor = new BulkProcessor<>(
         new SystemTime(),
@@ -92,7 +96,8 @@ public class ElasticsearchWriter {
         batchSize,
         lingerMs,
         maxRetries,
-        retryBackoffMs
+        retryBackoffMs,
+        behaviorOnMalformedDoc
     );
 
     existingMappings = new HashSet<>();
@@ -116,6 +121,7 @@ public class ElasticsearchWriter {
     private long retryBackoffMs;
     private boolean dropInvalidMessage;
     private BehaviorOnNullValues behaviorOnNullValues = BehaviorOnNullValues.DEFAULT;
+    private BehaviorOnMalformedDoc behaviorOnMalformedDoc;
 
     public Builder(ElasticsearchClient client) {
       this.client = client;
@@ -200,6 +206,11 @@ public class ElasticsearchWriter {
       return this;
     }
 
+    public Builder setBehaviorOnMalformedDoc(BehaviorOnMalformedDoc behaviorOnMalformedDoc) {
+      this.behaviorOnMalformedDoc = behaviorOnMalformedDoc;
+      return this;
+    }
+
     public ElasticsearchWriter build() {
       return new ElasticsearchWriter(
           client,
@@ -218,7 +229,8 @@ public class ElasticsearchWriter {
           maxRetry,
           retryBackoffMs,
           dropInvalidMessage,
-          behaviorOnNullValues
+          behaviorOnNullValues,
+          behaviorOnMalformedDoc
       );
     }
   }
