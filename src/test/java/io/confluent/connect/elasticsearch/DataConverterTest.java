@@ -148,6 +148,18 @@ public class DataConverterTest {
   }
 
   @Test
+  public void nullArray() {
+    // Create optional schema with no default value
+    Schema origSchema = SchemaBuilder.array(Decimal.schema(2)).optional().schema();
+    Schema preProcessedSchema = converter.preProcessSchema(origSchema);
+
+    assertEquals(
+        null,
+        converter.preProcessValue(null, origSchema, preProcessedSchema)
+    );
+  }
+
+  @Test
   public void map() {
     Schema origSchema = SchemaBuilder.map(Schema.INT32_SCHEMA, Decimal.schema(2)).build();
     Schema preProcessedSchema = converter.preProcessSchema(origSchema);
@@ -186,6 +198,18 @@ public class DataConverterTest {
     assertEquals(
         SchemaBuilder.array(preProcessedSchema.valueSchema()).defaultValue(Collections.emptyList()).build(),
         converter.preProcessSchema(SchemaBuilder.map(Schema.INT32_SCHEMA, Decimal.schema(2)).defaultValue(Collections.emptyMap()).build())
+    );
+  }
+
+  @Test
+  public void nullMap() {
+    // Create optional schema with no default value
+    Schema origSchema = SchemaBuilder.map(Schema.INT32_SCHEMA, Decimal.schema(2)).optional().build();
+    Schema preProcessedSchema = converter.preProcessSchema(origSchema);
+
+    assertEquals(
+        null,
+        converter.preProcessValue(null, origSchema, preProcessedSchema)
     );
   }
 
@@ -260,6 +284,18 @@ public class DataConverterTest {
     assertEquals(
         SchemaBuilder.struct().name("struct").field("decimal", Schema.FLOAT64_SCHEMA).optional().build(),
         converter.preProcessSchema(SchemaBuilder.struct().name("struct").field("decimal", Decimal.schema(2)).optional().build())
+    );
+  }
+
+  @Test
+  public void nullStruct() {
+    // Create optional schema with no default value
+    Schema origSchema = SchemaBuilder.struct().name("struct").field("decimal", Decimal.schema(2)).optional().build();
+    Schema preProcessedSchema = converter.preProcessSchema(origSchema);
+
+    assertEquals(
+        null,
+        converter.preProcessValue(null, origSchema, preProcessedSchema)
     );
   }
 
