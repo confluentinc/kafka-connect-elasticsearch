@@ -116,6 +116,18 @@ public class DataConverterTest {
   }
 
   @Test
+  public void nullArray() {
+    // Create optional schema with no default value
+    Schema origSchema = SchemaBuilder.array(Decimal.schema(2)).optional().schema();
+    Schema preProcessedSchema = DataConverter.preProcessSchema(origSchema);
+
+    assertEquals(
+        null,
+        DataConverter.preProcessValue(null, origSchema, preProcessedSchema)
+    );
+  }
+
+  @Test
   public void map() {
     Schema origSchema = SchemaBuilder.map(Schema.STRING_SCHEMA, Decimal.schema(2)).build();
     Schema preProcessedSchema = DataConverter.preProcessSchema(origSchema);
@@ -158,6 +170,18 @@ public class DataConverterTest {
   }
 
   @Test
+  public void nullMap() {
+    // Create optional schema with no default value
+    Schema origSchema = SchemaBuilder.map(Schema.INT32_SCHEMA, Decimal.schema(2)).optional().build();
+    Schema preProcessedSchema = DataConverter.preProcessSchema(origSchema);
+
+    assertEquals(
+        null,
+        DataConverter.preProcessValue(null, origSchema, preProcessedSchema)
+    );
+  }
+
+  @Test
   public void struct() {
     Schema origSchema = SchemaBuilder.struct().name("struct").field("decimal", Decimal.schema(2)).build();
     Schema preProcessedSchema = DataConverter.preProcessSchema(origSchema);
@@ -177,5 +201,17 @@ public class DataConverterTest {
         DataConverter.preProcessSchema(SchemaBuilder.struct().name("struct").field("decimal", Decimal.schema(2)).optional().build())
     );
   }
+
+  @Test
+  public void nullStruct() {
+    // Create optional schema with no default value
+    Schema origSchema = SchemaBuilder.struct().name("struct").field("decimal", Decimal.schema(2)).optional().build();
+    Schema preProcessedSchema = DataConverter.preProcessSchema(origSchema);
+
+    assertEquals(
+        null,
+        DataConverter.preProcessValue(null, origSchema, preProcessedSchema)
+    );
+  }n
 
 }
