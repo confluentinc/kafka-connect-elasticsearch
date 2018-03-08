@@ -188,39 +188,58 @@ public class DataConverter {
     }
 
     Schema.Type schemaType = schema.type();
-    Schema keySchema;
-    Schema valueSchema;
     switch (schemaType) {
       case ARRAY:
-        Collection collection = (Collection) value;
-        ArrayList<Object> result = new ArrayList<>();
-        for (Object element: collection) {
-          result.add(preProcessValue(element, schema.valueSchema(), newSchema.valueSchema()));
-        }
-        return result;
+        return preProcessArrayValue(value, schema, newSchema);
       case MAP:
-        keySchema = schema.keySchema();
-        valueSchema = schema.valueSchema();
-        ArrayList<Struct> mapStructs = new ArrayList<>();
-        Map<?, ?> map = (Map<?, ?>) value;
-        Schema newValueSchema = newSchema.valueSchema();
-        for (Map.Entry<?, ?> entry: map.entrySet()) {
-          Struct mapStruct = new Struct(newValueSchema);
-          mapStruct.put(MAP_KEY, preProcessValue(entry.getKey(), keySchema, newValueSchema.field(MAP_KEY).schema()));
-          mapStruct.put(MAP_VALUE, preProcessValue(entry.getValue(), valueSchema, newValueSchema.field(MAP_VALUE).schema()));
-          mapStructs.add(mapStruct);
-        }
-        return mapStructs;
+        return preProcessMapValue(value, schema, newSchema);
       case STRUCT:
-        Struct struct = (Struct) value;
-        Struct newStruct = new Struct(newSchema);
-        for (Field field : schema.fields()) {
-          Object converted =  preProcessValue(struct.get(field), field.schema(), newSchema.field(field.name()).schema());
-          newStruct.put(field.name(), converted);
-        }
-        return newStruct;
+        return preProcessStructValue(value, schema, newSchema);
       default:
         return value;
     }
+  }
+
+  private static Object preProcessArrayValue(Object value, Schema schema, Schema newSchema) {
+    if (value == null) {
+      return null;
+    }
+    Collection collection = (Collection) value;
+    ArrayList<Object> result = new ArrayList<>();
+    for (Object element: collection) {
+      result.add(preProcessValue(element, schema.valueSchema(), newSchema.valueSchema()));
+    }
+    return result;
+  }
+
+  private static Object preProcessMapValue(Object value, Schema schema, Schema newSchema) {
+    if (value == null) {
+      return null;
+    }
+    Schema keySchema = schema.keySchema();
+    Schema valueSchema = schema.valueSchema();
+    ArrayList<Struct> mapStructs = new ArrayList<>();
+    Map<?, ?> map = (Map<?, ?>) value;
+    Schema newValueSchema = newSchema.valueSchema();
+    for (Map.Entry<?, ?> entry: map.entrySet()) {
+      Struct mapStruct = new Struct(newValueSchema);
+      mapStruct.put(MAP_KEY, preProcessValue(entry.getKey(), keySchema, newValueSchema.field(MAP_KEY).schema()));
+      mapStruct.put(MAP_VALUE, preProcessValue(entry.getValue(), valueSchema, newValueSchema.field(MAP_VALUE).schema()));
+      mapStructs.add(mapStruct);
+    }
+    return mapStructs;
+  }
+
+  private static Object preProcessStructValue(Object value, Schema schema, Schema newSchema) {
+    if (value == null) {
+      return null;
+    }
+    Struct struct = (Struct) value;
+    Struct newStruct = new Struct(newSchema);
+    for (Field field : schema.fields()) {
+      Object converted =  preProcessValue(struct.get(field), field.schema(), newSchema.field(field.name()).schema());
+      newStruct.put(field.name(), converted);
+    }
+    return newStruct;
   }
 }
