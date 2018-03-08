@@ -15,7 +15,7 @@
  **/
 package io.confluent.connect.elasticsearch.bulk;
 
-import org.apache.kafka.common.utils.SystemTime;
+import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.junit.After;
 import org.junit.Before;
@@ -33,6 +33,8 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+
+import static io.confluent.connect.elasticsearch.bulk.BulkProcessor.BehaviorOnMalformedDoc;
 
 public class BulkProcessorTest {
 
@@ -102,16 +104,18 @@ public class BulkProcessorTest {
     final int lingerMs = 5;
     final int maxRetries = 0;
     final int retryBackoffMs = 0;
+    final BehaviorOnMalformedDoc behaviorOnMalformedDoc = BehaviorOnMalformedDoc.DEFAULT;
 
     final BulkProcessor<Integer, ?> bulkProcessor = new BulkProcessor<>(
-        new SystemTime(),
+        Time.SYSTEM,
         client,
         maxBufferedRecords,
         maxInFlightBatches,
         batchSize,
         lingerMs,
         maxRetries,
-        retryBackoffMs
+        retryBackoffMs,
+        behaviorOnMalformedDoc
     );
 
     final int addTimeoutMs = 10;
@@ -144,16 +148,18 @@ public class BulkProcessorTest {
     final int lingerMs = 100000; // super high on purpose to make sure flush is what's causing the request
     final int maxRetries = 0;
     final int retryBackoffMs = 0;
+    final BehaviorOnMalformedDoc behaviorOnMalformedDoc = BehaviorOnMalformedDoc.DEFAULT;
 
     final BulkProcessor<Integer, ?> bulkProcessor = new BulkProcessor<>(
-        new SystemTime(),
+        Time.SYSTEM,
         client,
         maxBufferedRecords,
         maxInFlightBatches,
         batchSize,
         lingerMs,
         maxRetries,
-        retryBackoffMs
+        retryBackoffMs,
+        behaviorOnMalformedDoc
     );
 
     client.expect(Arrays.asList(1, 2, 3), BulkResponse.success());
@@ -179,16 +185,18 @@ public class BulkProcessorTest {
     final int lingerMs = 10;
     final int maxRetries = 0;
     final int retryBackoffMs = 0;
+    final BehaviorOnMalformedDoc behaviorOnMalformedDoc = BehaviorOnMalformedDoc.DEFAULT;
 
     final BulkProcessor<Integer, ?> bulkProcessor = new BulkProcessor<>(
-        new SystemTime(),
+        Time.SYSTEM,
         client,
         maxBufferedRecords,
         maxInFlightBatches,
         batchSize,
         lingerMs,
         maxRetries,
-        retryBackoffMs
+        retryBackoffMs,
+        behaviorOnMalformedDoc
     );
 
     final int addTimeoutMs = 10;
@@ -210,20 +218,22 @@ public class BulkProcessorTest {
     final int lingerMs = 5;
     final int maxRetries = 3;
     final int retryBackoffMs = 1;
+    final BehaviorOnMalformedDoc behaviorOnMalformedDoc = BehaviorOnMalformedDoc.DEFAULT;
 
     client.expect(Arrays.asList(42, 43), BulkResponse.failure(true, "a retiable error"));
     client.expect(Arrays.asList(42, 43), BulkResponse.failure(true, "a retriable error again"));
     client.expect(Arrays.asList(42, 43), BulkResponse.success());
 
     final BulkProcessor<Integer, ?> bulkProcessor = new BulkProcessor<>(
-        new SystemTime(),
+        Time.SYSTEM,
         client,
         maxBufferedRecords,
         maxInFlightBatches,
         batchSize,
         lingerMs,
         maxRetries,
-        retryBackoffMs
+        retryBackoffMs,
+        behaviorOnMalformedDoc
     );
 
     final int addTimeoutMs = 10;
@@ -242,20 +252,22 @@ public class BulkProcessorTest {
     final int maxRetries = 2;
     final int retryBackoffMs = 1;
     final String errorInfo = "a final retriable error again";
+    final BehaviorOnMalformedDoc behaviorOnMalformedDoc = BehaviorOnMalformedDoc.DEFAULT;
 
     client.expect(Arrays.asList(42, 43), BulkResponse.failure(true, "a retiable error"));
     client.expect(Arrays.asList(42, 43), BulkResponse.failure(true, "a retriable error again"));
     client.expect(Arrays.asList(42, 43), BulkResponse.failure(true, errorInfo));
 
     final BulkProcessor<Integer, ?> bulkProcessor = new BulkProcessor<>(
-        new SystemTime(),
+        Time.SYSTEM,
         client,
         maxBufferedRecords,
         maxInFlightBatches,
         batchSize,
         lingerMs,
         maxRetries,
-        retryBackoffMs
+        retryBackoffMs,
+        behaviorOnMalformedDoc
     );
 
     final int addTimeoutMs = 10;
@@ -278,19 +290,21 @@ public class BulkProcessorTest {
     final int lingerMs = 5;
     final int maxRetries = 3;
     final int retryBackoffMs = 1;
+    final BehaviorOnMalformedDoc behaviorOnMalformedDoc = BehaviorOnMalformedDoc.DEFAULT;
 
     final String errorInfo = "an unretriable error";
     client.expect(Arrays.asList(42, 43), BulkResponse.failure(false, errorInfo));
 
     final BulkProcessor<Integer, ?> bulkProcessor = new BulkProcessor<>(
-        new SystemTime(),
+        Time.SYSTEM,
         client,
         maxBufferedRecords,
         maxInFlightBatches,
         batchSize,
         lingerMs,
         maxRetries,
-        retryBackoffMs
+        retryBackoffMs,
+        behaviorOnMalformedDoc
     );
 
     final int addTimeoutMs = 10;
@@ -305,4 +319,95 @@ public class BulkProcessorTest {
     }
   }
 
+  @Test
+  public void failOnMalformedDoc() throws InterruptedException {
+    final int maxBufferedRecords = 100;
+    final int maxInFlightBatches = 5;
+    final int batchSize = 2;
+    final int lingerMs = 5;
+    final int maxRetries = 3;
+    final int retryBackoffMs = 1;
+    final BehaviorOnMalformedDoc behaviorOnMalformedDoc = BehaviorOnMalformedDoc.FAIL;
+
+    final String errorInfo = " [{\"type\":\"mapper_parsing_exception\",\"reason\":\"failed to parse\"," +
+        "\"caused_by\":{\"type\":\"illegal_argument_exception\",\"reason\":\"object\n" +
+        " field starting or ending with a [.] makes object resolution ambiguous: [avjpz{{.}}wjzse{{..}}gal9d]\"}}]";
+    client.expect(Arrays.asList(42, 43), BulkResponse.failure(false, errorInfo));
+
+    final BulkProcessor<Integer, ?> bulkProcessor = new BulkProcessor<>(
+        Time.SYSTEM,
+        client,
+        maxBufferedRecords,
+        maxInFlightBatches,
+        batchSize,
+        lingerMs,
+        maxRetries,
+        retryBackoffMs,
+        behaviorOnMalformedDoc
+    );
+
+    bulkProcessor.start();
+
+    bulkProcessor.add(42, 1);
+    bulkProcessor.add(43, 1);
+
+    try {
+      final int flushTimeoutMs = 1000;
+      bulkProcessor.flush(flushTimeoutMs);
+      fail();
+    } catch(ConnectException e) {
+      // expected
+      assertTrue(e.getMessage().contains("mapper_parsing_exception"));
+    }
+  }
+
+  @Test
+  public void ignoreOrWarnOnMalformedDoc() throws InterruptedException {
+    final int maxBufferedRecords = 100;
+    final int maxInFlightBatches = 5;
+    final int batchSize = 2;
+    final int lingerMs = 5;
+    final int maxRetries = 3;
+    final int retryBackoffMs = 1;
+
+    // Test both IGNORE and WARN options
+    // There is no difference in logic between IGNORE and WARN, except for the logging.
+    // Test to ensure they both work the same logically
+    final List<BehaviorOnMalformedDoc> behaviorsToTest = new ArrayList<BehaviorOnMalformedDoc>() {{
+      add(BehaviorOnMalformedDoc.WARN);
+      add(BehaviorOnMalformedDoc.IGNORE);
+    }};
+
+    for(BehaviorOnMalformedDoc behaviorOnMalformedDoc : behaviorsToTest)
+    {
+      final String errorInfo = " [{\"type\":\"mapper_parsing_exception\",\"reason\":\"failed to parse\"," +
+          "\"caused_by\":{\"type\":\"illegal_argument_exception\",\"reason\":\"object\n" +
+          " field starting or ending with a [.] makes object resolution ambiguous: [avjpz{{.}}wjzse{{..}}gal9d]\"}}]";
+      client.expect(Arrays.asList(42, 43), BulkResponse.failure(false, errorInfo));
+
+      final BulkProcessor<Integer, ?> bulkProcessor = new BulkProcessor<>(
+          Time.SYSTEM,
+          client,
+          maxBufferedRecords,
+          maxInFlightBatches,
+          batchSize,
+          lingerMs,
+          maxRetries,
+          retryBackoffMs,
+          behaviorOnMalformedDoc
+      );
+
+      bulkProcessor.start();
+
+      bulkProcessor.add(42, 1);
+      bulkProcessor.add(43, 1);
+
+      try {
+        final int flushTimeoutMs = 1000;
+        bulkProcessor.flush(flushTimeoutMs);
+      } catch (ConnectException e) {
+        fail(e.getMessage());
+      }
+    }
+  }
 }

@@ -107,6 +107,8 @@ Data Conversion
   * Importance: low
 
 ``topic.index.map``
+  This option is now deprecated. A future version may remove it completely. Please use single message transforms, such as RegexRouter, to map topic names to index names.
+
   A map from Kafka topic name to the destination Elasticsearch index, represented as a list of ``topic:index`` pairs.
 
   * Type: list
@@ -140,4 +142,12 @@ Data Conversion
   * Type: string
   * Default: ignore
   * Valid Values: [ignore, delete, fail]
+  * Importance: low
+
+``behavior.on.malformed.documents``
+  How to handle records that Elasticsearch rejects due to some malformation of the document itself, such as an index mapping conflict or a field name containing illegal characters. Valid options are 'ignore', 'warn', and 'fail'.
+
+  * Type: string
+  * Default: fail
+  * Valid Values: [ignore, warn, fail]
   * Importance: low
