@@ -324,6 +324,9 @@ public class DataConverter {
   }
 
   private Object preProcessArrayValue(Object value, Schema schema, Schema newSchema) {
+    if (value == null) {
+      return null;
+    }
     Collection collection = (Collection) value;
     List<Object> result = new ArrayList<>();
     for (Object element: collection) {
@@ -333,6 +336,9 @@ public class DataConverter {
   }
 
   private Object preProcessMapValue(Object value, Schema schema, Schema newSchema) {
+    if (value == null) {
+      return null;
+    }
     Schema keySchema = schema.keySchema();
     Schema valueSchema = schema.valueSchema();
     Schema newValueSchema = newSchema.valueSchema();
@@ -360,6 +366,9 @@ public class DataConverter {
   }
 
   private Object preProcessStructValue(Object value, Schema schema, Schema newSchema) {
+    if (value == null) {
+      return null;
+    }
     Struct struct = (Struct) value;
     Struct newStruct = new Struct(newSchema);
     for (Field field : schema.fields()) {
