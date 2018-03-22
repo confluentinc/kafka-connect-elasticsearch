@@ -340,4 +340,5 @@ connector jobs to achieve double writes:
       
 Security
 --------
-The Elasticsearch connector can read data from secure Kafka by following the instructions in the :ref:`Connect security documentation <connect_security>`. The functionality to write data to a secured Elasticsearch instance is not yet implemented.
+The Elasticsearch connector can read data from secure Kafka by following the instructions in the :ref:`Connect security documentation <connect_security>`.
+For now, the connector can write only to a secure Elasticsearch with basic authentication by setting ``connection.username`` & ``connection.password``.

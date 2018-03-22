@@ -30,6 +30,12 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   private static final String CONNECTION_URL_DOC =
       "List of Elasticsearch HTTP connection URLs e.g. ``http://eshost1:9200,"
       + "http://eshost2:9200``.";
+  public static final String CONNECTION_USERNAME_CONFIG = "connection.username";
+  private static final String CONNECTION_USERNAME_DOC =
+        "Default username used to connect to a secure Elastic instance";
+  public static final String CONNECTION_PASSWORD_CONFIG = "connection.password";
+  private static final String CONNECTION_PASSWORD_DOC =
+        "Default password used to connect to a secure Elastic instance";
   public static final String BATCH_SIZE_CONFIG = "batch.size";
   private static final String BATCH_SIZE_DOC =
       "The number of records to process as a batch when writing to Elasticsearch.";
@@ -85,7 +91,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
       + " When this is set to ``true``, document IDs will be generated as the record's "
       + "``topic+partition+offset``.\n Note that this is a global config that applies to all "
       + "topics, use ``" + TOPIC_KEY_IGNORE_CONFIG + "`` to override as ``true`` for specific "
-      + "topics." ;
+      + "topics.";
   private static final String TOPIC_KEY_IGNORE_DOC =
       "List of topics for which ``" + KEY_IGNORE_CONFIG + "`` should be ``true``.";
   private static final String SCHEMA_IGNORE_CONFIG_DOC =
@@ -129,6 +135,26 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
         ++order,
         Width.LONG,
         "Connection URLs"
+    ).define(
+        CONNECTION_USERNAME_CONFIG,
+        Type.STRING,
+        "",
+        Importance.MEDIUM,
+        CONNECTION_USERNAME_DOC,
+        group,
+        ++order,
+        Width.SHORT,
+        "Connection Username"
+    ).define(
+        CONNECTION_PASSWORD_CONFIG,
+        Type.STRING,
+        "",
+        Importance.MEDIUM,
+        CONNECTION_PASSWORD_DOC,
+        group,
+        ++order,
+        Width.SHORT,
+        "Connection Password"
     ).define(
         BATCH_SIZE_CONFIG,
         Type.INT,
