@@ -115,12 +115,18 @@ public class JestElasticsearchClient implements ElasticsearchClient {
       final int readTimeout = config.getInt(
           ElasticsearchSinkConnectorConfig.READ_TIMEOUT_MS_CONFIG);
 
+      String username =
+              config.getString(ElasticsearchSinkConnectorConfig.CONNECTION_USERNAME_CONFIG);
+      String password =
+              config.getString(ElasticsearchSinkConnectorConfig.CONNECTION_PASSWORD_CONFIG);
+
       List<String> address =
           config.getList(ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG);
       JestClientFactory factory = new JestClientFactory();
       factory.setHttpClientConfig(new HttpClientConfig.Builder(address)
           .connTimeout(connTimeout)
           .readTimeout(readTimeout)
+          .defaultCredentials(username, password)
           .multiThreaded(true)
           .build()
       );
