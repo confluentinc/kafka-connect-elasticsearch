@@ -125,6 +125,61 @@
     <build>
         <plugins>
             <plugin>
+                <groupId>io.confluent</groupId>
+                <version>0.9.0-SNAPSHOT</version>
+                <artifactId>kafka-connect-maven-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>kafka-connect</goal>
+                        </goals>
+                        <configuration>
+                            <title>Kafka Connect Elasticsearch</title>
+                            <logo>logos/elasticsearch.png</logo>
+                            <sourceUrl>https://github.com/confluentinc/kafka-connect-elasticsearch</sourceUrl>
+                            <documentationUrl>https://docs.confluent.io/current/connect/connect-elasticsearch/docs/elasticsearch_connector.html</documentationUrl>
+                            <description>
+                                The Elasticsearch connector allows moving data from Kafka to Elasticsearch. It writes data from a topic in Kafka to an index in Elasticsearch and all data for a topic have the same type.
+
+                                Elasticsearch is often used for text queries, analytics and as an key-value store (use cases). The connector covers both the analytics and key-value store use cases. For the analytics use case, each message is in Kafka is treated as an event and the connector uses topic+partition+offset as a unique identifier for events, which then converted to unique documents in Elasticsearch. For the key-value store use case, it supports using keys from Kafka messages as document ids in Elasticsearch and provides configurations ensuring that updates to a key are written to Elasticsearch in order. For both use cases, Elasticsearch’s idempotent write semantics guarantees exactly once delivery.
+
+                                Mapping is the process of defining how a document, and the fields it contains, are stored and indexed. Users can explicitly define mappings for types in indices. When mapping is not explicitly defined, Elasticsearch can determine field names and types from data, however, some types such as timestamp and decimal, may not be correctly inferred. To ensure that the types are correctly inferred, the connector provides a feature to infer mapping from the schemas of Kafka messages.
+                            </description>
+
+                            <supportProviderName>Confluent, Inc.</supportProviderName>
+                            <supportSummary>Confluent supports the Elasticsearch sink connector alongside community members as part of its Confluent Platform open source offering.</supportSummary>
+                            <supportUrl>https://docs.confluent.io/current/</supportUrl>
+                            <supportLogo>logos/confluent.png</supportLogo>
+
+                            <ownerUsername>confluentinc</ownerUsername>
+                            <ownerType>organization</ownerType>
+                            <ownerName>Confluent, Inc.</ownerName>
+                            <ownerUrl>https://confluent.io/</ownerUrl>
+                            <ownerLogo>logos/confluent.png</ownerLogo>
+
+                            <pluginTypes>
+                                <pluginType>sink</pluginType>
+                            </pluginTypes>
+
+                            <tags>
+                                <tag>elasticsearch</tag>
+                                <tag>search</tag>
+                                <tag>key value store</tag>
+                            </tags>
+
+                            <requirements>
+                                <requirement>Confluent Platform installed and running</requirement>
+                                <requirement>Elasticsearch 5.x installed and running</requirement>
+                            </requirements>
+
+                            <deliveryGuarantee>
+                                <deliveryGuarantee>exactlyOnce</deliveryGuarantee>
+                            </deliveryGuarantee>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
                 <inherited>true</inherited>
