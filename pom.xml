@@ -169,7 +169,7 @@
                             </tags>
 
                             <requirements>
-                                <requirement>Elasticsearch 5.x</requirement>
+                                <requirement>Elasticsearch 2.x, 5.x, or 6.x</requirement>
                             </requirements>
 
                             <deliveryGuarantee>
