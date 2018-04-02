@@ -136,7 +136,6 @@
                         <configuration>
                             <title>Kafka Connect Elasticsearch</title>
                             <logo>logos/elasticsearch.png</logo>
-                            <sourceUrl>https://github.com/confluentinc/kafka-connect-elasticsearch</sourceUrl>
                             <documentationUrl>https://docs.confluent.io/current/connect/connect-elasticsearch/docs/elasticsearch_connector.html</documentationUrl>
                             <description>
                                 The Elasticsearch connector allows moving data from Kafka to Elasticsearch. It writes data from a topic in Kafka to an index in Elasticsearch and all data for a topic have the same type.
@@ -162,14 +161,15 @@
                             </pluginTypes>
 
                             <tags>
+                                <tag>Elastic</tag>
                                 <tag>elasticsearch</tag>
                                 <tag>search</tag>
-                                <tag>key value store</tag>
+                                <tag>analytics</tag>
+                                <tag>log</tag>
                             </tags>
 
                             <requirements>
-                                <requirement>Confluent Platform installed and running</requirement>
-                                <requirement>Elasticsearch 5.x installed and running</requirement>
+                                <requirement>Elasticsearch 5.x</requirement>
                             </requirements>
 
                             <deliveryGuarantee>
