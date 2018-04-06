@@ -16,10 +16,7 @@
 
 package io.confluent.connect.elasticsearch;
 
-import org.apache.kafka.connect.data.Decimal;
-import org.apache.kafka.connect.data.Schema;
-import org.apache.kafka.connect.data.SchemaBuilder;
-import org.apache.kafka.connect.data.Struct;
+import org.apache.kafka.connect.data.*;
 import org.apache.kafka.connect.errors.DataException;
 import org.apache.kafka.connect.sink.SinkRecord;
 import org.junit.Before;
@@ -261,6 +258,38 @@ public class DataConverterTest {
         SchemaBuilder.struct().name("struct").field("decimal", Schema.FLOAT64_SCHEMA).optional().build(),
         converter.preProcessSchema(SchemaBuilder.struct().name("struct").field("decimal", Decimal.schema(2)).optional().build())
     );
+  }
+
+  @Test
+  public void optionalFieldsWithoutDefaults() {
+    // One primitive type should be enough
+    testOptionalFieldWithoutDefault(SchemaBuilder.bool());
+    // Logical types
+    testOptionalFieldWithoutDefault(Decimal.builder(2));
+    testOptionalFieldWithoutDefault(Time.builder());
+    testOptionalFieldWithoutDefault(Timestamp.builder());
+    // Complex types
+    testOptionalFieldWithoutDefault(SchemaBuilder.array(Schema.BOOLEAN_SCHEMA));
+    testOptionalFieldWithoutDefault(SchemaBuilder.struct().field("innerField", Schema.BOOLEAN_SCHEMA));
+    testOptionalFieldWithoutDefault(SchemaBuilder.map(Schema.STRING_SCHEMA, Schema.BOOLEAN_SCHEMA));
+    // Have to test maps with useCompactMapEntries set to true and set to false
+    converter = new DataConverter(false, BehaviorOnNullValues.DEFAULT);
+    testOptionalFieldWithoutDefault(SchemaBuilder.map(Schema.STRING_SCHEMA, Schema.BOOLEAN_SCHEMA));
+  }
+
+  private void testOptionalFieldWithoutDefault(
+    SchemaBuilder optionalFieldSchema
+  ) {
+    Schema origSchema = SchemaBuilder.struct().name("struct").field(
+        "optionalField", optionalFieldSchema.optional().build()
+    );
+    Schema preProcessedSchema = converter.preProcessSchema(origSchema);
+
+    Object preProcessedValue = converter.preProcessValue(
+        new Struct(origSchema).put("optionalField", null), origSchema, preProcessedSchema
+    );
+
+    assertEquals(new Struct(preProcessedSchema).put("optionalField", null), preProcessedValue);
   }
 
   @Test

@@ -16,6 +16,7 @@
 
 package io.confluent.connect.elasticsearch;
 
+import com.sun.istack.internal.NotNull;
 import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.connect.data.ConnectSchema;
 import org.apache.kafka.connect.data.Date;
@@ -235,7 +236,8 @@ public class DataConverter {
     Schema preprocessedKeySchema = preProcessSchema(keySchema);
     Schema preprocessedValueSchema = preProcessSchema(valueSchema);
     if (useCompactMapEntries && keySchema.type() == Schema.Type.STRING) {
-      return SchemaBuilder.map(preprocessedKeySchema, preprocessedValueSchema).build();
+      SchemaBuilder result = SchemaBuilder.map(preprocessedKeySchema, preprocessedValueSchema);
+      return copySchemaBasics(schema, result).build();
     }
     Schema elementSchema = SchemaBuilder.struct().name(keyName + "-" + valueName)
         .field(MAP_KEY, preprocessedKeySchema)
@@ -269,11 +271,9 @@ public class DataConverter {
     if (schema == null) {
       return value;
     }
+    
     if (value == null) {
-      Object result = preProcessNullValue(schema);
-      if (result != null) {
-        return result;
-      }
+      return preProcessNullValue(schema);
     }
 
     // Handle logical types
