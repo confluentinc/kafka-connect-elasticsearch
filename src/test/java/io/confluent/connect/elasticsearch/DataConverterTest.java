@@ -282,7 +282,7 @@ public class DataConverterTest {
   ) {
     Schema origSchema = SchemaBuilder.struct().name("struct").field(
         "optionalField", optionalFieldSchema.optional().build()
-    );
+    ).build();
     Schema preProcessedSchema = converter.preProcessSchema(origSchema);
 
     Object preProcessedValue = converter.preProcessValue(
