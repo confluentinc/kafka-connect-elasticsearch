@@ -16,7 +16,6 @@
 
 package io.confluent.connect.elasticsearch;
 
-import com.sun.istack.internal.NotNull;
 import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.connect.data.ConnectSchema;
 import org.apache.kafka.connect.data.Date;
@@ -271,7 +270,7 @@ public class DataConverter {
     if (schema == null) {
       return value;
     }
-    
+
     if (value == null) {
       return preProcessNullValue(schema);
     }
