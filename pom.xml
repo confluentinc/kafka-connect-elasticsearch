@@ -143,6 +143,7 @@
 
                                 Mapping is the process of defining how a document, and the fields it contains, are stored and indexed. Users can explicitly define mappings for types in indices. When mapping is not explicitly defined, Elasticsearch can determine field names and types from data, however, some types such as timestamp and decimal, may not be correctly inferred. To ensure that the types are correctly inferred, the connector provides a feature to infer mapping from the schemas of Kafka messages.
                             </description>
+                            <logo>logos/elasticsearch.jpg</logo>
 
                             <supportProviderName>Confluent, Inc.</supportProviderName>
                             <supportSummary>Confluent supports the Elasticsearch sink connector alongside community members as part of its Confluent Platform open source offering.</supportSummary>
