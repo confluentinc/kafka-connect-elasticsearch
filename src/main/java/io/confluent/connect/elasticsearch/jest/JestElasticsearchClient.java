@@ -44,17 +44,20 @@ import io.searchbox.indices.CreateIndex;
 import io.searchbox.indices.IndicesExists;
 import io.searchbox.indices.mapping.GetMapping;
 import io.searchbox.indices.mapping.PutMapping;
+import org.apache.http.HttpHost;
 import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
 import java.io.IOException;
-import java.util.ArrayList;
+import java.net.MalformedURLException;
+import java.net.URL;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
+import java.util.ArrayList;
 
 public class JestElasticsearchClient implements ElasticsearchClient {
 
@@ -70,6 +73,8 @@ public class JestElasticsearchClient implements ElasticsearchClient {
 
   private final JestClient client;
   private final Version version;
+
+  private final HashSet hostSet = new HashSet<HttpHost>();
 
   // visible for testing
   public JestElasticsearchClient(JestClient client) {
@@ -122,11 +127,15 @@ public class JestElasticsearchClient implements ElasticsearchClient {
 
       List<String> address =
           config.getList(ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG);
+
+      updateHttpHosts(address);
+
       JestClientFactory factory = new JestClientFactory();
       factory.setHttpClientConfig(new HttpClientConfig.Builder(address)
           .connTimeout(connTimeout)
           .readTimeout(readTimeout)
           .defaultCredentials(username, password)
+          .preemptiveAuthTargetHosts(hostSet)
           .multiThreaded(true)
           .build()
       );
@@ -142,6 +151,21 @@ public class JestElasticsearchClient implements ElasticsearchClient {
           "Couldn't start ElasticsearchSinkTask due to configuration error:",
           e
       );
+    }
+  }
+
+  /*
+   * This method generate HttpHost for each elastic url, so we can permit it for the jest client
+   */
+  private void updateHttpHosts(List<String> esUrls) {
+    for (String esUrl: esUrls) {
+      try {
+        URL url = new URL(esUrl);
+        HttpHost host = new HttpHost(url.getHost(), url.getPort(), url.getProtocol());
+        hostSet.add(host);
+      } catch (MalformedURLException e) {
+        e.printStackTrace();
+      }
     }
   }
 
