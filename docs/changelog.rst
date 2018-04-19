@@ -6,7 +6,7 @@ Changelog
 Version 4.0.1
 -------------
 
-* `PR-182 <https://github.com/confluentinc/kafka-connect-elasticsearch/pull/182>`_ - Add 2.x to supported versions
+* `PR-182 <https://github.com/confluentinc/kafka-connect-elasticsearch/pull/182>`_ - Add ES 2.x to supported versions
 * `PR-169 <https://github.com/confluentinc/kafka-connect-elasticsearch/pull/169>`_ - CC-1385:  Enhance connector to use text type with ES 5+
 * `PR-165 <https://github.com/confluentinc/kafka-connect-elasticsearch/pull/165>`_ - CC-350, CC-1097: Added support for delete and null handling
 * `PR-158 <https://github.com/confluentinc/kafka-connect-elasticsearch/pull/158>`_ - CC-1372: Add configuration options for read and connect timeouts
