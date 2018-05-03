@@ -126,7 +126,7 @@
         <plugins>
             <plugin>
                 <groupId>io.confluent</groupId>
-                <version>0.9.1</version>
+                <version>0.10.0</version>
                 <artifactId>kafka-connect-maven-plugin</artifactId>
                 <executions>
                     <execution>
@@ -156,9 +156,13 @@
                             <ownerUrl>https://confluent.io/</ownerUrl>
                             <ownerLogo>logos/confluent.png</ownerLogo>
 
-                            <pluginTypes>
-                                <pluginType>sink</pluginType>
-                            </pluginTypes>
+                            <dockerNamespace>confluentinc</dockerNamespace>
+                            <dockerName>cp-kafka-connect</dockerName>
+                            <dockerTag>4.1.0</dockerTag>
+
+                            <componentTypes>
+                                <componentType>sink</componentType>
+                            </componentTypes>
 
                             <tags>
                                 <tag>Elastic</tag>
