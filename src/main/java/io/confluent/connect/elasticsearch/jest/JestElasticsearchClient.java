@@ -89,6 +89,7 @@ public class JestElasticsearchClient implements ElasticsearchClient {
     try {
       JestClientFactory factory = new JestClientFactory();
       factory.setHttpClientConfig(new HttpClientConfig.Builder(address)
+          .readTimeout(30000) // explicitly setting timeout of 30s
           .multiThreaded(true)
           .build()
       );
@@ -301,6 +302,10 @@ public class JestElasticsearchClient implements ElasticsearchClient {
         } else if ("mapper_parse_exception".equals(errorType)) {
           retriable = false;
           errors.add(item.error);
+        } else if ("delete_failed_engine_exception".equals(errorType)) {
+          // swallow failed delete operations, assumed to be delete on non-existent ID
+          LOG.info("Swallowing error type {} for document ID {} and index {}", errorType, item.id, item.index);
+          continue;
         } else {
           errors.add(item.error);
         }
