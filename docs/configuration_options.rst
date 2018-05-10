@@ -1,5 +1,8 @@
 Configuration Options
----------------------
+=====================
+
+.. contents::
+    :local:
 
 Connector
 ^^^^^^^^^
