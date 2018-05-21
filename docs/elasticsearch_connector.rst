@@ -34,7 +34,7 @@ producer to Elasticsearch.
 **Prerequisites:**
 
 - :ref:`Confluent Platform <installation>` is installed and services are running by using the Confluent CLI. This quick start assumes that you are using the Confluent CLI, but standalone installations are also supported. By default ZooKeeper, Kafka, Schema Registry, Kafka Connect REST API, and Kafka Connect are started with the ``confluent start`` command. For more information, see :ref:`installation_archive`.
-- Elasticsearch 5.x or 6.x is installed and running.
+- Elasticsearch 2.x, 5.x, or 6.x is installed and running.
 
 ----------------------------
 Add a Record to the Consumer
@@ -292,7 +292,7 @@ Increasing the maximum number of retries adds more backoff:
      6         0.0                     16.0                             31.5
      7         0.0                     32.0                             63.5
      8         0.0                     64.0                            127.5
-     9         0.0                    128.0                            256.5
+     9         0.0                    128.0                            255.5
     10         0.0                    256.0                            511.5
     11         0.0                    512.0                           1023.5
     12         0.0                   1024.0                           2047.5
