@@ -170,7 +170,7 @@ public class DataConverterTest {
                 .put(ElasticsearchSinkConnectorConstants.MAP_KEY, 2)
                 .put(ElasticsearchSinkConnectorConstants.MAP_VALUE, 0.42)
         )),
-        new HashSet<>((List) converter.preProcessValue(origValue, origSchema, preProcessedSchema))
+        new HashSet<>((List<?>) converter.preProcessValue(origValue, origSchema, preProcessedSchema))
     );
 
     // optional
@@ -216,7 +216,7 @@ public class DataConverterTest {
                         .put(ElasticsearchSinkConnectorConstants.MAP_KEY, "field2")
                         .put(ElasticsearchSinkConnectorConstants.MAP_VALUE, 2)
         )),
-        new HashSet<>((List) converter.preProcessValue(origValue, origSchema, preProcessedSchema))
+        new HashSet<>((List<?>) converter.preProcessValue(origValue, origSchema, preProcessedSchema))
     );
   }
 
