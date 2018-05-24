@@ -13,6 +13,18 @@ Connector
   * Type: list
   * Importance: high
 
+``connection.username``
+  Default username used to connect to a secure Elastic instance.
+
+  * Type: string
+  * Importance: medium
+
+``connection.password``
+  Default password used to connect to a secure Elastic instance.
+
+  * Type: string
+  * Importance: medium
+
 ``batch.size``
   The number of records to process as a batch when writing to Elasticsearch.
 
