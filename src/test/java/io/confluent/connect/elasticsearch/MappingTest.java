@@ -16,6 +16,9 @@
 
 package io.confluent.connect.elasticsearch;
 
+import com.fasterxml.jackson.databind.node.NumericNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.fasterxml.jackson.databind.node.TextNode;
 import com.google.gson.JsonObject;
 
 import org.apache.kafka.connect.data.Date;
@@ -30,6 +33,11 @@ import org.elasticsearch.test.InternalTestCluster;
 import org.junit.Test;
 
 import static io.confluent.connect.elasticsearch.DataConverter.BehaviorOnNullValues;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConstants.KEYWORD_TYPE;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConstants.TEXT_TYPE;
+import static org.junit.Assert.assertEquals;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 public class MappingTest extends ElasticsearchSinkTestBase {
 
@@ -49,6 +57,29 @@ public class MappingTest extends ElasticsearchSinkTestBase {
     JsonObject mapping = Mapping.getMapping(client, INDEX, TYPE);
     assertNotNull(mapping);
     verifyMapping(schema, mapping);
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  public void testStringMappingForES6() throws Exception {
+    ElasticsearchClient client = mock(ElasticsearchClient.class);
+    when(client.getVersion()).thenReturn(ElasticsearchClient.Version.ES_V6);
+
+    Schema schema = SchemaBuilder.struct().name("textRecord")
+            .field("string", Schema.STRING_SCHEMA)
+            .build();
+    ObjectNode mapping = (ObjectNode) Mapping.inferMapping(client, schema);
+    ObjectNode properties = mapping.with("properties");
+    ObjectNode string = properties.with("string");
+    TextNode stringType = (TextNode) string.get("type");
+    ObjectNode fields = string.with("fields");
+    ObjectNode keyword = fields.with("keyword");
+    TextNode keywordType = (TextNode) keyword.get("type");
+    NumericNode ignoreAbove = (NumericNode) keyword.get("ignore_above");
+
+    assertEquals(TEXT_TYPE, stringType.asText());
+    assertEquals(KEYWORD_TYPE, keywordType.asText());
+    assertEquals(256, ignoreAbove.asInt());
   }
 
   protected Schema createSchema() {

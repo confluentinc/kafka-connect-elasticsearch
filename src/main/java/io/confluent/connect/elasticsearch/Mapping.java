@@ -38,6 +38,7 @@ import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConst
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConstants.DOUBLE_TYPE;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConstants.FLOAT_TYPE;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConstants.INTEGER_TYPE;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConstants.KEYWORD_TYPE;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConstants.LONG_TYPE;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConstants.MAP_KEY;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConstants.MAP_VALUE;
@@ -174,6 +175,9 @@ public class Mapping {
 
     ObjectNode obj = JsonNodeFactory.instance.objectNode();
     obj.set("type", JsonNodeFactory.instance.textNode(type));
+    if (type.equals(TEXT_TYPE)) {
+      addTextMapping(obj);
+    }
     JsonNode defaultValueNode = null;
     if (defaultValue != null) {
       switch (type) {
@@ -216,6 +220,16 @@ public class Mapping {
       obj.set("null_value", defaultValueNode);
     }
     return obj;
+  }
+
+  private static void addTextMapping(ObjectNode obj) {
+    // Add additional mapping for indexing, per https://www.elastic.co/blog/strings-are-dead-long-live-strings
+    ObjectNode keyword = JsonNodeFactory.instance.objectNode();
+    keyword.set("type", JsonNodeFactory.instance.textNode(KEYWORD_TYPE));
+    keyword.set("ignore_above", JsonNodeFactory.instance.numberNode(256));
+    ObjectNode fields = JsonNodeFactory.instance.objectNode();
+    fields.set("keyword", keyword);
+    obj.set("fields", fields);
   }
 
   private static byte[] bytes(Object value) {
