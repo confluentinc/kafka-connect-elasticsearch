@@ -51,6 +51,7 @@ public class ElasticsearchSinkTask extends SinkTask {
     start(props, null);
   }
 
+  @SuppressWarnings("deprecation")
   // public for testing
   public void start(Map<String, String> props, ElasticsearchClient client) {
     try {
