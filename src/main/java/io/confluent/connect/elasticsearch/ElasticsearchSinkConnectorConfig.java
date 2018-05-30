@@ -36,13 +36,13 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   public static final String CONNECTION_USERNAME_CONFIG = "connection.username";
   private static final String CONNECTION_USERNAME_DOC =
       "The username used to authenticate with Elasticsearch. "
-      + "The default is the empty string, and authentication will only be performed if "
-      + " both the username and password are non-empty.";
+      + "The default is the null, and authentication will only be performed if "
+      + " both the username and password are non-null.";
   public static final String CONNECTION_PASSWORD_CONFIG = "connection.password";
   private static final String CONNECTION_PASSWORD_DOC =
       "The password used to authenticate with Elasticsearch. "
-      + "The default is the empty string, and authentication will only be performed if "
-      + " both the username and password are non-empty.";
+      + "The default is the null, and authentication will only be performed if "
+      + " both the username and password are non-null.";
   public static final String BATCH_SIZE_CONFIG = "batch.size";
   private static final String BATCH_SIZE_DOC =
       "The number of records to process as a batch when writing to Elasticsearch.";
@@ -171,7 +171,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
     ).define(
         CONNECTION_USERNAME_CONFIG,
         Type.STRING,
-        "",
+        null,
         Importance.MEDIUM,
         CONNECTION_USERNAME_DOC,
         group,
@@ -181,7 +181,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
     ).define(
         CONNECTION_PASSWORD_CONFIG,
         Type.STRING,
-        "",
+        null,
         Importance.MEDIUM,
         CONNECTION_PASSWORD_DOC,
         group,

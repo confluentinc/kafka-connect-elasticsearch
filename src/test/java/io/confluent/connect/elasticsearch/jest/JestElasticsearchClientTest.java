@@ -118,6 +118,26 @@ public class JestElasticsearchClientTest {
   }
 
   @Test
+  public void connectsSecurelyWithEmptyUsernameAndPassword() {
+    Map<String, String> props = new HashMap<>();
+    props.put(ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG, "http://localhost:9200");
+    props.put(ElasticsearchSinkConnectorConfig.CONNECTION_USERNAME_CONFIG, "");
+    props.put(ElasticsearchSinkConnectorConfig.CONNECTION_PASSWORD_CONFIG, "");
+    props.put(ElasticsearchSinkConnectorConfig.TYPE_NAME_CONFIG, "kafka-connect");
+    JestElasticsearchClient client = new JestElasticsearchClient(props, jestClientFactory);
+
+    ArgumentCaptor<HttpClientConfig> captor = ArgumentCaptor.forClass(HttpClientConfig.class);
+    verify(jestClientFactory).setHttpClientConfig(captor.capture());
+    HttpClientConfig httpClientConfig = captor.getValue();
+    CredentialsProvider credentialsProvider = httpClientConfig.getCredentialsProvider();
+    Credentials credentials = credentialsProvider.getCredentials(AuthScope.ANY);
+    Set<HttpHost> preemptiveAuthTargetHosts = httpClientConfig.getPreemptiveAuthTargetHosts();
+    assertEquals("", credentials.getUserPrincipal().getName());
+    assertEquals("", credentials.getPassword());
+    assertEquals(HttpHost.create("http://localhost:9200"), preemptiveAuthTargetHosts.iterator().next());
+  }
+
+  @Test
   public void getsVersion() {
     JestElasticsearchClient client = new JestElasticsearchClient(jestClient);
     assertThat(client.getVersion(), is(equalTo(ElasticsearchClient.Version.ES_V1)));

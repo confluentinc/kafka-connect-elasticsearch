@@ -14,13 +14,13 @@ Connector
   * Importance: high
 
 ``connection.username``
-  The username used to authenticate with Elasticsearch. The default is the empty string, and authentication will only be performed if both the username and password are non-empty.
+  The username used to authenticate with Elasticsearch. The default is null, and authentication will only be performed if both the username and password are non-null.
 
   * Type: string
   * Importance: medium
 
 ``connection.password``
-  The password used to authenticate with Elasticsearch. The default is the empty string, and authentication will only be performed if both the username and password are non-empty.
+  The password used to authenticate with Elasticsearch. The default is null, and authentication will only be performed if both the username and password are non-null.
 
   * Type: string
   * Importance: medium
