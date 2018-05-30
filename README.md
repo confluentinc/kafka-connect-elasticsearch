@@ -1,3 +1,7 @@
+# Custom change from TDA
+
+- Give mapping elastic type from TEXT_TYPE to KEYWORD_TYPE `Mapping.getElasticsearchType()` 
+
 # Kafka Connect Elasticsearch Connector
 [![FOSSA Status](https://app.fossa.io/api/projects/git%2Bhttps%3A%2F%2Fgithub.com%2Fconfluentinc%2Fkafka-connect-elasticsearch.svg?type=shield)](https://app.fossa.io/projects/git%2Bhttps%3A%2F%2Fgithub.com%2Fconfluentinc%2Fkafka-connect-elasticsearch?ref=badge_shield)
 

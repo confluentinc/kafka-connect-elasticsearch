@@ -43,7 +43,7 @@ import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConst
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConstants.MAP_VALUE;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConstants.SHORT_TYPE;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConstants.STRING_TYPE;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConstants.TEXT_TYPE;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConstants.KEYWORD_TYPE;
 
 public class Mapping {
 
@@ -138,7 +138,7 @@ public class Mapping {
           case ES_V5:
           case ES_V6:
           default:
-            return TEXT_TYPE;
+            return KEYWORD_TYPE;
         }
       case BYTES:
         return BINARY_TYPE;
