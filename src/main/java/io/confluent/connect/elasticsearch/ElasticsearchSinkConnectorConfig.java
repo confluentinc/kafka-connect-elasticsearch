@@ -33,6 +33,16 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   private static final String CONNECTION_URL_DOC =
       "List of Elasticsearch HTTP connection URLs e.g. ``http://eshost1:9200,"
       + "http://eshost2:9200``.";
+  public static final String CONNECTION_USERNAME_CONFIG = "connection.username";
+  private static final String CONNECTION_USERNAME_DOC =
+      "The username used to authenticate with Elasticsearch. "
+      + "The default is the null, and authentication will only be performed if "
+      + " both the username and password are non-null.";
+  public static final String CONNECTION_PASSWORD_CONFIG = "connection.password";
+  private static final String CONNECTION_PASSWORD_DOC =
+      "The password used to authenticate with Elasticsearch. "
+      + "The default is the null, and authentication will only be performed if "
+      + " both the username and password are non-null.";
   public static final String BATCH_SIZE_CONFIG = "batch.size";
   private static final String BATCH_SIZE_DOC =
       "The number of records to process as a batch when writing to Elasticsearch.";
@@ -158,6 +168,26 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
         ++order,
         Width.LONG,
         "Connection URLs"
+    ).define(
+        CONNECTION_USERNAME_CONFIG,
+        Type.STRING,
+        null,
+        Importance.MEDIUM,
+        CONNECTION_USERNAME_DOC,
+        group,
+        ++order,
+        Width.SHORT,
+        "Connection Username"
+    ).define(
+        CONNECTION_PASSWORD_CONFIG,
+        Type.STRING,
+        null,
+        Importance.MEDIUM,
+        CONNECTION_PASSWORD_DOC,
+        group,
+        ++order,
+        Width.SHORT,
+        "Connection Password"
     ).define(
         BATCH_SIZE_CONFIG,
         Type.INT,

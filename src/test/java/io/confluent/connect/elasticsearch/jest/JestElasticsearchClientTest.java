@@ -22,12 +22,15 @@ import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import io.confluent.connect.elasticsearch.ElasticsearchClient;
+import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig;
 import io.confluent.connect.elasticsearch.IndexableRecord;
 import io.confluent.connect.elasticsearch.Key;
 import io.confluent.connect.elasticsearch.Mapping;
 import io.confluent.connect.elasticsearch.bulk.BulkRequest;
 import io.searchbox.client.JestClient;
+import io.searchbox.client.JestClientFactory;
 import io.searchbox.client.JestResult;
+import io.searchbox.client.config.HttpClientConfig;
 import io.searchbox.cluster.NodesInfo;
 import io.searchbox.core.BulkResult;
 import io.searchbox.core.Search;
@@ -36,22 +39,30 @@ import io.searchbox.indices.CreateIndex;
 import io.searchbox.indices.IndicesExists;
 import io.searchbox.indices.mapping.GetMapping;
 import io.searchbox.indices.mapping.PutMapping;
+import org.apache.http.HttpHost;
+import org.apache.http.auth.AuthScope;
+import org.apache.http.auth.Credentials;
+import org.apache.http.client.CredentialsProvider;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.junit.Before;
 import org.junit.Test;
+import org.mockito.ArgumentCaptor;
 import org.mockito.ArgumentMatcher;
 import org.mockito.InOrder;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.equalTo;
 
+import static org.junit.Assert.assertEquals;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
@@ -66,11 +77,14 @@ public class JestElasticsearchClientTest {
   private static final String QUERY = "query";
 
   private JestClient jestClient;
+  private JestClientFactory jestClientFactory;
   private NodesInfo info;
 
   @Before
   public void setUp() throws Exception {
     jestClient = mock(JestClient.class);
+    jestClientFactory = mock(JestClientFactory.class);
+    when(jestClientFactory.getObject()).thenReturn(jestClient);
     info = new NodesInfo.Builder().addCleanApiParameter("version").build();
     JsonObject nodeRoot = new JsonObject();
     nodeRoot.addProperty("version", "1.0");
@@ -81,6 +95,46 @@ public class JestElasticsearchClientTest {
     JestResult result = new JestResult(new Gson());
     result.setJsonObject(nodesInfo);
     when(jestClient.execute(info)).thenReturn(result);
+  }
+
+  @Test
+  public void connectsSecurely() {
+    Map<String, String> props = new HashMap<>();
+    props.put(ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG, "http://localhost:9200");
+    props.put(ElasticsearchSinkConnectorConfig.CONNECTION_USERNAME_CONFIG, "elastic");
+    props.put(ElasticsearchSinkConnectorConfig.CONNECTION_PASSWORD_CONFIG, "elasticpw");
+    props.put(ElasticsearchSinkConnectorConfig.TYPE_NAME_CONFIG, "kafka-connect");
+    JestElasticsearchClient client = new JestElasticsearchClient(props, jestClientFactory);
+
+    ArgumentCaptor<HttpClientConfig> captor = ArgumentCaptor.forClass(HttpClientConfig.class);
+    verify(jestClientFactory).setHttpClientConfig(captor.capture());
+    HttpClientConfig httpClientConfig = captor.getValue();
+    CredentialsProvider credentialsProvider = httpClientConfig.getCredentialsProvider();
+    Credentials credentials = credentialsProvider.getCredentials(AuthScope.ANY);
+    Set<HttpHost> preemptiveAuthTargetHosts = httpClientConfig.getPreemptiveAuthTargetHosts();
+    assertEquals("elastic", credentials.getUserPrincipal().getName());
+    assertEquals("elasticpw", credentials.getPassword());
+    assertEquals(HttpHost.create("http://localhost:9200"), preemptiveAuthTargetHosts.iterator().next());
+  }
+
+  @Test
+  public void connectsSecurelyWithEmptyUsernameAndPassword() {
+    Map<String, String> props = new HashMap<>();
+    props.put(ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG, "http://localhost:9200");
+    props.put(ElasticsearchSinkConnectorConfig.CONNECTION_USERNAME_CONFIG, "");
+    props.put(ElasticsearchSinkConnectorConfig.CONNECTION_PASSWORD_CONFIG, "");
+    props.put(ElasticsearchSinkConnectorConfig.TYPE_NAME_CONFIG, "kafka-connect");
+    JestElasticsearchClient client = new JestElasticsearchClient(props, jestClientFactory);
+
+    ArgumentCaptor<HttpClientConfig> captor = ArgumentCaptor.forClass(HttpClientConfig.class);
+    verify(jestClientFactory).setHttpClientConfig(captor.capture());
+    HttpClientConfig httpClientConfig = captor.getValue();
+    CredentialsProvider credentialsProvider = httpClientConfig.getCredentialsProvider();
+    Credentials credentials = credentialsProvider.getCredentials(AuthScope.ANY);
+    Set<HttpHost> preemptiveAuthTargetHosts = httpClientConfig.getPreemptiveAuthTargetHosts();
+    assertEquals("", credentials.getUserPrincipal().getName());
+    assertEquals("", credentials.getPassword());
+    assertEquals(HttpHost.create("http://localhost:9200"), preemptiveAuthTargetHosts.iterator().next());
   }
 
   @Test

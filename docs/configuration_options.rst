@@ -13,6 +13,18 @@ Connector
   * Type: list
   * Importance: high
 
+``connection.username``
+  The username used to authenticate with Elasticsearch. The default is null, and authentication will only be performed if both the username and password are non-null.
+
+  * Type: string
+  * Importance: medium
+
+``connection.password``
+  The password used to authenticate with Elasticsearch. The default is null, and authentication will only be performed if both the username and password are non-null.
+
+  * Type: string
+  * Importance: medium
+
 ``batch.size``
   The number of records to process as a batch when writing to Elasticsearch.
 

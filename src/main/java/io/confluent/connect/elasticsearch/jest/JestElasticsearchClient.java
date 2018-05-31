@@ -44,6 +44,7 @@ import io.searchbox.indices.CreateIndex;
 import io.searchbox.indices.IndicesExists;
 import io.searchbox.indices.mapping.GetMapping;
 import io.searchbox.indices.mapping.PutMapping;
+import org.apache.http.HttpHost;
 import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.errors.ConnectException;
@@ -55,6 +56,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 public class JestElasticsearchClient implements ElasticsearchClient {
 
@@ -108,6 +110,11 @@ public class JestElasticsearchClient implements ElasticsearchClient {
   }
 
   public JestElasticsearchClient(Map<String, String> props) {
+    this(props, new JestClientFactory());
+  }
+
+  // visible for testing
+  protected JestElasticsearchClient(Map<String, String> props, JestClientFactory factory) {
     try {
       ElasticsearchSinkConnectorConfig config = new ElasticsearchSinkConnectorConfig(props);
       final int connTimeout = config.getInt(
@@ -115,15 +122,24 @@ public class JestElasticsearchClient implements ElasticsearchClient {
       final int readTimeout = config.getInt(
           ElasticsearchSinkConnectorConfig.READ_TIMEOUT_MS_CONFIG);
 
+      final String username = config.getString(
+          ElasticsearchSinkConnectorConfig.CONNECTION_USERNAME_CONFIG);
+      final String password = config.getString(
+          ElasticsearchSinkConnectorConfig.CONNECTION_PASSWORD_CONFIG);
+
       List<String> address =
           config.getList(ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG);
-      JestClientFactory factory = new JestClientFactory();
-      factory.setHttpClientConfig(new HttpClientConfig.Builder(address)
+      HttpClientConfig.Builder builder = new HttpClientConfig.Builder(address)
           .connTimeout(connTimeout)
           .readTimeout(readTimeout)
-          .multiThreaded(true)
-          .build()
-      );
+          .multiThreaded(true);
+      if (username != null && password != null) {
+        builder.defaultCredentials(username, password)
+            .preemptiveAuthTargetHosts(address.stream()
+                .map(addr -> HttpHost.create(addr)).collect(Collectors.toSet()));
+      }
+      HttpClientConfig httpClientConfig = builder.build();
+      factory.setHttpClientConfig(httpClientConfig);
       this.client = factory.getObject();
       this.version = getServerVersion();
     } catch (IOException e) {
@@ -154,6 +170,8 @@ public class JestElasticsearchClient implements ElasticsearchClient {
       return defaultVersion;
     }
 
+    checkForError(result);
+
     JsonObject nodesRoot = result.get("nodes").getAsJsonObject();
     if (nodesRoot == null || nodesRoot.entrySet().size() == 0) {
       LOG.warn("Couldn't get Elasticsearch version, nodesRoot is null or empty");
@@ -180,6 +198,16 @@ public class JestElasticsearchClient implements ElasticsearchClient {
       return Version.ES_V6;
     }
     return defaultVersion;
+  }
+
+  private void checkForError(JsonObject result) {
+    if (result.has("error") && result.get("error").isJsonObject()) {
+      final JsonObject errorObject = result.get("error").getAsJsonObject();
+      String errorType = errorObject.has("type") ? errorObject.get("type").getAsString() : "";
+      String errorReason = errorObject.has("reason") ? errorObject.get("reason").getAsString() : "";
+      throw new ConnectException("Couldn't connect to Elasticsearch, error: "
+          + errorType + ", reason: " + errorReason);
+    }
   }
 
   public Version getVersion() {
