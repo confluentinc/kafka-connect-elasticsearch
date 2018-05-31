@@ -180,7 +180,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
         "Connection Username"
     ).define(
         CONNECTION_PASSWORD_CONFIG,
-        Type.STRING,
+        Type.PASSWORD,
         null,
         Importance.MEDIUM,
         CONNECTION_PASSWORD_DOC,
