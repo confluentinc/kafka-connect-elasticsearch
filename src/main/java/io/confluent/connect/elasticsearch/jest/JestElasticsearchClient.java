@@ -46,6 +46,7 @@ import io.searchbox.indices.mapping.GetMapping;
 import io.searchbox.indices.mapping.PutMapping;
 import org.apache.http.HttpHost;
 import org.apache.kafka.common.config.ConfigException;
+import org.apache.kafka.common.config.types.Password;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.slf4j.Logger;
@@ -124,7 +125,7 @@ public class JestElasticsearchClient implements ElasticsearchClient {
 
       final String username = config.getString(
           ElasticsearchSinkConnectorConfig.CONNECTION_USERNAME_CONFIG);
-      final String password = config.getString(
+      final Password password = config.getPassword(
           ElasticsearchSinkConnectorConfig.CONNECTION_PASSWORD_CONFIG);
 
       List<String> address =
@@ -134,7 +135,7 @@ public class JestElasticsearchClient implements ElasticsearchClient {
           .readTimeout(readTimeout)
           .multiThreaded(true);
       if (username != null && password != null) {
-        builder.defaultCredentials(username, password)
+        builder.defaultCredentials(username, password.value())
             .preemptiveAuthTargetHosts(address.stream()
                 .map(addr -> HttpHost.create(addr)).collect(Collectors.toSet()));
       }
