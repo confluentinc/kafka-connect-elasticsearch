@@ -45,6 +45,9 @@
         <mockito.version>2.13.0</mockito.version>
         <jest.version>2.4.0</jest.version>
         <confluent.maven.repo>http://packages.confluent.io/maven/</confluent.maven.repo>
+        <maven-site-plugin.version>3.7.1</maven-site-plugin.version>
+        <maven-project-info-reports-plugin.version>2.9</maven-project-info-reports-plugin.version>
+        <dependency.locations.enabled>false</dependency.locations.enabled>
     </properties>
 
     <repositories>
@@ -231,6 +234,23 @@
                         </goals>
                     </execution>
                 </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-site-plugin</artifactId>
+                <version>${maven-site-plugin.version}</version>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-project-info-reports-plugin</artifactId>
+                <version>${maven-project-info-reports-plugin.version}</version>
+                <configuration>
+                    <!--
+                    Disable dependency locations for latest maven-plugin-info-reports to eliminate blacklisting
+                    warnings: "The repository url '...' is invalid - Repository '...' will be blacklisted."
+                    -->
+                    <dependencyLocationsEnabled>false</dependencyLocationsEnabled>
+                </configuration>
             </plugin>
         </plugins>
 
