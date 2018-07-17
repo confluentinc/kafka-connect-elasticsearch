@@ -19,6 +19,7 @@ package io.confluent.connect.elasticsearch;
 import com.carrotsearch.randomizedtesting.annotations.ThreadLeakScope;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import io.confluent.connect.elasticsearch.producer.DualWriteProducer;
 import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaBuilder;
@@ -43,6 +44,7 @@ import java.util.Map;
 import java.util.Set;
 
 import org.junit.rules.ExpectedException;
+import org.mockito.Mockito;
 
 import static io.confluent.connect.elasticsearch.DataConverter.BehaviorOnNullValues;
 
@@ -505,6 +507,7 @@ public class ElasticsearchWriterTest extends ElasticsearchSinkTestBase {
       boolean dropInvalidMessage,
       BehaviorOnNullValues behavior
   ) {
+    @SuppressWarnings("unchecked")
     ElasticsearchWriter writer = new ElasticsearchWriter.Builder(client)
         .setType(TYPE)
         .setIgnoreKey(ignoreKey, ignoreKeyTopics)
@@ -519,6 +522,7 @@ public class ElasticsearchWriterTest extends ElasticsearchSinkTestBase {
         .setMaxRetry(3)
         .setDropInvalidMessage(dropInvalidMessage)
         .setBehaviorOnNullValues(behavior)
+        .setPassthroughProducer(Mockito.mock(DualWriteProducer.class))
         .build();
     writer.start();
     writer.createIndicesForTopics(Collections.singleton(TOPIC));

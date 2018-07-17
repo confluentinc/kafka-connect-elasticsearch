@@ -16,18 +16,31 @@
 
 package io.confluent.connect.elasticsearch;
 
+import org.apache.kafka.clients.CommonClientConfigs;
+import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.common.config.ConfigDef.Importance;
 import org.apache.kafka.common.config.ConfigDef.Type;
 import org.apache.kafka.common.config.ConfigDef.Width;
 
+import java.util.Collections;
 import java.util.Map;
+import java.util.Properties;
 
 import static io.confluent.connect.elasticsearch.DataConverter.BehaviorOnNullValues;
 import static io.confluent.connect.elasticsearch.bulk.BulkProcessor.BehaviorOnMalformedDoc;
 
 public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
+
+  public static final String OUTPUT_TOPIC_CONFIG = "output.topic";
+  public static final String OUTPUT_TOPIC_DOC = "Kafka topic to write to upon "
+          + "Elasticsearch index success.";
+
+  public static final String ENABLE_DUAL_WRITE_CONFIG = "enable.dual.write";
+  public static final String ENABLE_DUAL_WRITE_DOC = "Enables the ability to "
+          + "dual write the messages to downstream topic only if successfully "
+          + "indexed into Elasticsearch.";
 
   public static final String CONNECTION_URL_CONFIG = "connection.url";
   private static final String CONNECTION_URL_DOC =
@@ -153,6 +166,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
     final ConfigDef configDef = new ConfigDef();
     addConnectorConfigs(configDef);
     addConversionConfigs(configDef);
+    addDualWriteConfigs(configDef);
     return configDef;
   }
 
@@ -386,6 +400,65 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
         "Behavior on malformed documents");
   }
 
+  private static void addDualWriteConfigs(ConfigDef configDef) {
+    final String group = "Dual Writer";
+    int order = 0;
+    configDef.define(OUTPUT_TOPIC_CONFIG,
+            Type.STRING,
+            "",
+            Importance.HIGH,
+            OUTPUT_TOPIC_DOC,
+            group,
+            ++order,
+            Width.LONG,
+            "Output Kafka Topic on ES Success"
+    ).define(ENABLE_DUAL_WRITE_CONFIG,
+            Type.BOOLEAN,
+            false,
+            Importance.HIGH,
+            ENABLE_DUAL_WRITE_DOC,
+            group,
+            ++order,
+            Width.SHORT,
+            "Enable Dual Write functionality"
+    ).define(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG,
+            Type.LIST,
+            Collections.emptyList(),
+            Importance.HIGH,
+            CommonClientConfigs.BOOTSTRAP_SERVERS_DOC,
+            group,
+            ++order,
+            Width.LONG,
+            "Bootstrap Servers for Dual Write"
+    ).define(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG,
+            Type.CLASS,
+            "io.confluent.kafka.serializers.KafkaAvroSerializer",
+            Importance.HIGH,
+            ProducerConfig.KEY_SERIALIZER_CLASS_DOC,
+            group,
+            ++order,
+            Width.LONG,
+            "Key Serializer for Output Topic"
+    ).define(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG,
+            Type.CLASS,
+            "io.confluent.kafka.serializers.KafkaAvroSerializer",
+            Importance.HIGH,
+            ProducerConfig.VALUE_SERIALIZER_CLASS_DOC,
+            group,
+            ++order,
+            Width.LONG,
+            "Value Serializer for Output Topic"
+    ).define(ProducerConfig.TRANSACTIONAL_ID_CONFIG,
+            Type.STRING,
+            "",
+            Importance.HIGH,
+            ProducerConfig.TRANSACTIONAL_ID_DOC,
+            group,
+            ++order,
+            Width.LONG,
+            "Transaction id for dual write to ensure exactly-once on batch.");
+  }
+
   public static final ConfigDef CONFIG = baseConfigDef();
 
   public ElasticsearchSinkConnectorConfig(Map<String, String> props) {
@@ -394,5 +467,13 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
 
   public static void main(String[] args) {
     System.out.println(CONFIG.toEnrichedRst());
+  }
+
+  public Properties getProducerConfig() {
+    Properties properties = new Properties();
+    originals().keySet().forEach(s -> {
+      properties.put(s, originals().get(s));
+    });
+    return properties;
   }
 }

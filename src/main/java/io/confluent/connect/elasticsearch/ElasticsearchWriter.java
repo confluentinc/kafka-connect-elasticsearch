@@ -17,7 +17,10 @@
 package io.confluent.connect.elasticsearch;
 
 import io.confluent.connect.elasticsearch.bulk.BulkProcessor;
+import io.confluent.connect.elasticsearch.producer.DualWriteProducer;
+
 import org.apache.kafka.common.utils.SystemTime;
+import org.apache.kafka.connect.connector.ConnectRecord;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.sink.SinkRecord;
 import org.slf4j.Logger;
@@ -54,6 +57,7 @@ public class ElasticsearchWriter {
 
   private final Set<String> existingMappings;
   private final BehaviorOnMalformedDoc behaviorOnMalformedDoc;
+  private final DualWriteProducer<ConnectRecord> dualWriteProducer;
 
   ElasticsearchWriter(
       ElasticsearchClient client,
@@ -73,7 +77,8 @@ public class ElasticsearchWriter {
       long retryBackoffMs,
       boolean dropInvalidMessage,
       BehaviorOnNullValues behaviorOnNullValues,
-      BehaviorOnMalformedDoc behaviorOnMalformedDoc
+      BehaviorOnMalformedDoc behaviorOnMalformedDoc,
+      DualWriteProducer<ConnectRecord> dualWriteProducer
   ) {
     this.client = client;
     this.type = type;
@@ -87,6 +92,7 @@ public class ElasticsearchWriter {
     this.behaviorOnNullValues = behaviorOnNullValues;
     this.converter = new DataConverter(useCompactMapEntries, behaviorOnNullValues);
     this.behaviorOnMalformedDoc = behaviorOnMalformedDoc;
+    this.dualWriteProducer = dualWriteProducer;
 
     bulkProcessor = new BulkProcessor<>(
         new SystemTime(),
@@ -97,7 +103,8 @@ public class ElasticsearchWriter {
         lingerMs,
         maxRetries,
         retryBackoffMs,
-        behaviorOnMalformedDoc
+        behaviorOnMalformedDoc,
+        dualWriteProducer
     );
 
     existingMappings = new HashSet<>();
@@ -122,6 +129,7 @@ public class ElasticsearchWriter {
     private boolean dropInvalidMessage;
     private BehaviorOnNullValues behaviorOnNullValues = BehaviorOnNullValues.DEFAULT;
     private BehaviorOnMalformedDoc behaviorOnMalformedDoc;
+    private DualWriteProducer<ConnectRecord> dualWriteProducer;
 
     public Builder(ElasticsearchClient client) {
       this.client = client;
@@ -211,6 +219,11 @@ public class ElasticsearchWriter {
       return this;
     }
 
+    public Builder setPassthroughProducer(DualWriteProducer<ConnectRecord> dualWriteProducer) {
+      this.dualWriteProducer = dualWriteProducer;
+      return this;
+    }
+
     public ElasticsearchWriter build() {
       return new ElasticsearchWriter(
           client,
@@ -230,7 +243,8 @@ public class ElasticsearchWriter {
           retryBackoffMs,
           dropInvalidMessage,
           behaviorOnNullValues,
-          behaviorOnMalformedDoc
+          behaviorOnMalformedDoc,
+          dualWriteProducer
       );
     }
   }
@@ -289,6 +303,7 @@ public class ElasticsearchWriter {
           ignoreKey,
           ignoreSchema);
       if (record != null) {
+        dualWriteProducer.addRecordForIndex(sinkRecord);
         bulkProcessor.add(record, flushTimeoutMs);
       }
     } catch (ConnectException convertException) {

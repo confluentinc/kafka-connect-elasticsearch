@@ -15,18 +15,17 @@
  **/
 package io.confluent.connect.elasticsearch.bulk;
 
+import io.confluent.connect.elasticsearch.producer.DualWriteProducer;
 import org.apache.kafka.common.utils.Time;
+import org.apache.kafka.connect.connector.ConnectRecord;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
+import org.mockito.Mockito;
 
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Queue;
+import java.util.*;
 import java.util.concurrent.ExecutionException;
 
 import static org.junit.Assert.assertEquals;
@@ -105,6 +104,8 @@ public class BulkProcessorTest {
     final int maxRetries = 0;
     final int retryBackoffMs = 0;
     final BehaviorOnMalformedDoc behaviorOnMalformedDoc = BehaviorOnMalformedDoc.DEFAULT;
+    @SuppressWarnings("unchecked")
+    final DualWriteProducer<ConnectRecord> dualWriteProducer = Mockito.mock(DualWriteProducer.class);
 
     final BulkProcessor<Integer, ?> bulkProcessor = new BulkProcessor<>(
         Time.SYSTEM,
@@ -115,7 +116,8 @@ public class BulkProcessorTest {
         lingerMs,
         maxRetries,
         retryBackoffMs,
-        behaviorOnMalformedDoc
+        behaviorOnMalformedDoc,
+        dualWriteProducer
     );
 
     final int addTimeoutMs = 10;
@@ -149,6 +151,8 @@ public class BulkProcessorTest {
     final int maxRetries = 0;
     final int retryBackoffMs = 0;
     final BehaviorOnMalformedDoc behaviorOnMalformedDoc = BehaviorOnMalformedDoc.DEFAULT;
+    @SuppressWarnings("unchecked")
+    final DualWriteProducer<ConnectRecord> dualWriteProducer = Mockito.mock(DualWriteProducer.class);
 
     final BulkProcessor<Integer, ?> bulkProcessor = new BulkProcessor<>(
         Time.SYSTEM,
@@ -159,7 +163,8 @@ public class BulkProcessorTest {
         lingerMs,
         maxRetries,
         retryBackoffMs,
-        behaviorOnMalformedDoc
+        behaviorOnMalformedDoc,
+        dualWriteProducer
     );
 
     client.expect(Arrays.asList(1, 2, 3), BulkResponse.success());
@@ -186,6 +191,8 @@ public class BulkProcessorTest {
     final int maxRetries = 0;
     final int retryBackoffMs = 0;
     final BehaviorOnMalformedDoc behaviorOnMalformedDoc = BehaviorOnMalformedDoc.DEFAULT;
+    @SuppressWarnings("unchecked")
+    final DualWriteProducer<ConnectRecord> dualWriteProducer = Mockito.mock(DualWriteProducer.class);
 
     final BulkProcessor<Integer, ?> bulkProcessor = new BulkProcessor<>(
         Time.SYSTEM,
@@ -196,7 +203,8 @@ public class BulkProcessorTest {
         lingerMs,
         maxRetries,
         retryBackoffMs,
-        behaviorOnMalformedDoc
+        behaviorOnMalformedDoc,
+        dualWriteProducer
     );
 
     final int addTimeoutMs = 10;
@@ -219,6 +227,8 @@ public class BulkProcessorTest {
     final int maxRetries = 3;
     final int retryBackoffMs = 1;
     final BehaviorOnMalformedDoc behaviorOnMalformedDoc = BehaviorOnMalformedDoc.DEFAULT;
+    @SuppressWarnings("unchecked")
+    final DualWriteProducer<ConnectRecord> dualWriteProducer = Mockito.mock(DualWriteProducer.class);
 
     client.expect(Arrays.asList(42, 43), BulkResponse.failure(true, "a retiable error"));
     client.expect(Arrays.asList(42, 43), BulkResponse.failure(true, "a retriable error again"));
@@ -233,7 +243,8 @@ public class BulkProcessorTest {
         lingerMs,
         maxRetries,
         retryBackoffMs,
-        behaviorOnMalformedDoc
+        behaviorOnMalformedDoc,
+        dualWriteProducer
     );
 
     final int addTimeoutMs = 10;
@@ -253,6 +264,8 @@ public class BulkProcessorTest {
     final int retryBackoffMs = 1;
     final String errorInfo = "a final retriable error again";
     final BehaviorOnMalformedDoc behaviorOnMalformedDoc = BehaviorOnMalformedDoc.DEFAULT;
+    @SuppressWarnings("unchecked")
+    final DualWriteProducer<ConnectRecord> dualWriteProducer = Mockito.mock(DualWriteProducer.class);
 
     client.expect(Arrays.asList(42, 43), BulkResponse.failure(true, "a retiable error"));
     client.expect(Arrays.asList(42, 43), BulkResponse.failure(true, "a retriable error again"));
@@ -267,7 +280,8 @@ public class BulkProcessorTest {
         lingerMs,
         maxRetries,
         retryBackoffMs,
-        behaviorOnMalformedDoc
+        behaviorOnMalformedDoc,
+        dualWriteProducer
     );
 
     final int addTimeoutMs = 10;
@@ -291,6 +305,8 @@ public class BulkProcessorTest {
     final int maxRetries = 3;
     final int retryBackoffMs = 1;
     final BehaviorOnMalformedDoc behaviorOnMalformedDoc = BehaviorOnMalformedDoc.DEFAULT;
+    @SuppressWarnings("unchecked")
+    final DualWriteProducer<ConnectRecord> dualWriteProducer = Mockito.mock(DualWriteProducer.class);
 
     final String errorInfo = "an unretriable error";
     client.expect(Arrays.asList(42, 43), BulkResponse.failure(false, errorInfo));
@@ -304,7 +320,8 @@ public class BulkProcessorTest {
         lingerMs,
         maxRetries,
         retryBackoffMs,
-        behaviorOnMalformedDoc
+        behaviorOnMalformedDoc,
+        dualWriteProducer
     );
 
     final int addTimeoutMs = 10;
@@ -328,6 +345,8 @@ public class BulkProcessorTest {
     final int maxRetries = 3;
     final int retryBackoffMs = 1;
     final BehaviorOnMalformedDoc behaviorOnMalformedDoc = BehaviorOnMalformedDoc.FAIL;
+    @SuppressWarnings("unchecked")
+    final DualWriteProducer<ConnectRecord> dualWriteProducer = Mockito.mock(DualWriteProducer.class);
 
     final String errorInfo = " [{\"type\":\"mapper_parsing_exception\",\"reason\":\"failed to parse\"," +
         "\"caused_by\":{\"type\":\"illegal_argument_exception\",\"reason\":\"object\n" +
@@ -343,7 +362,8 @@ public class BulkProcessorTest {
         lingerMs,
         maxRetries,
         retryBackoffMs,
-        behaviorOnMalformedDoc
+        behaviorOnMalformedDoc,
+        dualWriteProducer
     );
 
     bulkProcessor.start();
@@ -370,6 +390,9 @@ public class BulkProcessorTest {
     final int maxRetries = 3;
     final int retryBackoffMs = 1;
 
+    @SuppressWarnings("unchecked")
+    final DualWriteProducer<ConnectRecord> dualWriteProducer = Mockito.mock(DualWriteProducer.class);
+
     // Test both IGNORE and WARN options
     // There is no difference in logic between IGNORE and WARN, except for the logging.
     // Test to ensure they both work the same logically
@@ -394,7 +417,8 @@ public class BulkProcessorTest {
           lingerMs,
           maxRetries,
           retryBackoffMs,
-          behaviorOnMalformedDoc
+          behaviorOnMalformedDoc,
+          dualWriteProducer
       );
 
       bulkProcessor.start();

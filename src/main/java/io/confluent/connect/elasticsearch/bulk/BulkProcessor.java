@@ -18,8 +18,11 @@ package io.confluent.connect.elasticsearch.bulk;
 
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig;
 import io.confluent.connect.elasticsearch.RetryUtil;
+import io.confluent.connect.elasticsearch.producer.DualWriteProducer;
+
 import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.common.utils.Time;
+import org.apache.kafka.connect.connector.ConnectRecord;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -72,6 +75,8 @@ public class BulkProcessor<R, B> {
   private final Deque<R> unsentRecords;
   private int inFlightRecords = 0;
 
+  private final DualWriteProducer<ConnectRecord> dualWriteProducer;
+
   public BulkProcessor(
       Time time,
       BulkClient<R, B> bulkClient,
@@ -81,7 +86,8 @@ public class BulkProcessor<R, B> {
       long lingerMs,
       int maxRetries,
       long retryBackoffMs,
-      BehaviorOnMalformedDoc behaviorOnMalformedDoc
+      BehaviorOnMalformedDoc behaviorOnMalformedDoc,
+      DualWriteProducer<ConnectRecord> dualWriteProducer
   ) {
     this.time = time;
     this.bulkClient = bulkClient;
@@ -91,6 +97,7 @@ public class BulkProcessor<R, B> {
     this.maxRetries = maxRetries;
     this.retryBackoffMs = retryBackoffMs;
     this.behaviorOnMalformedDoc = behaviorOnMalformedDoc;
+    this.dualWriteProducer = dualWriteProducer;
 
     unsentRecords = new ArrayDeque<>(maxBufferedRecords);
 
@@ -157,6 +164,7 @@ public class BulkProcessor<R, B> {
     final int batchableSize = Math.min(batchSize, unsentRecords.size());
     final List<R> batch = new ArrayList<>(batchableSize);
     for (int i = 0; i < batchableSize; i++) {
+      dualWriteProducer.addFirstForPassthrough();
       batch.add(unsentRecords.removeFirst());
     }
     inFlightRecords += batchableSize;
@@ -272,7 +280,7 @@ public class BulkProcessor<R, B> {
    * <p>If any task has failed prior to or while blocked in the add, or if the timeout expires
    * while blocked, {@link ConnectException} will be thrown.
    */
-  public synchronized void add(R record, long timeoutMs) {
+  public synchronized void  add(R record, long timeoutMs) {
     throwIfTerminal();
 
     if (bufferedRecords() >= maxBufferedRecords) {
@@ -341,8 +349,11 @@ public class BulkProcessor<R, B> {
     public BulkResponse call() throws Exception {
       final BulkResponse rsp;
       try {
+        dualWriteProducer.submitAllInTransction();
         rsp = execute();
+        dualWriteProducer.commitTransaction();
       } catch (Exception e) {
+        dualWriteProducer.abortTransaction();
         failAndStop(e);
         throw e;
       }

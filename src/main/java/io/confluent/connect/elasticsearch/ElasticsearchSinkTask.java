@@ -18,9 +18,12 @@ package io.confluent.connect.elasticsearch;
 
 import io.confluent.connect.elasticsearch.bulk.BulkProcessor;
 import io.confluent.connect.elasticsearch.jest.JestElasticsearchClient;
+import io.confluent.connect.elasticsearch.producer.DualWriteProducer;
+
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.config.ConfigException;
+import org.apache.kafka.connect.connector.ConnectRecord;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.sink.SinkRecord;
 import org.apache.kafka.connect.sink.SinkTask;
@@ -120,6 +123,12 @@ public class ElasticsearchSinkTask extends SinkTask {
         this.client = new JestElasticsearchClient(props);
       }
 
+      DualWriteProducer<ConnectRecord> dualWriteProducer =
+            new DualWriteProducer<>(
+                    config.getBoolean(ElasticsearchSinkConnectorConfig.ENABLE_DUAL_WRITE_CONFIG),
+                    config.getProducerConfig(),
+                     config.getString(ElasticsearchSinkConnectorConfig.OUTPUT_TOPIC_CONFIG));
+
       ElasticsearchWriter.Builder builder = new ElasticsearchWriter.Builder(this.client)
           .setType(type)
           .setIgnoreKey(ignoreKey, topicIgnoreKey)
@@ -135,7 +144,8 @@ public class ElasticsearchSinkTask extends SinkTask {
           .setMaxRetry(maxRetry)
           .setDropInvalidMessage(dropInvalidMessage)
           .setBehaviorOnNullValues(behaviorOnNullValues)
-          .setBehaviorOnMalformedDoc(behaviorOnMalformedDoc);
+          .setBehaviorOnMalformedDoc(behaviorOnMalformedDoc)
+          .setPassthroughProducer(dualWriteProducer);
 
       writer = builder.build();
       writer.start();
