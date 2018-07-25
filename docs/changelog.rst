@@ -3,6 +3,14 @@
 Changelog
 =========
 
+Version 5.0.0
+-------------
+
+* `PR-217 <https://github.com/confluentinc/kafka-connect-elasticsearch/pull/217>`_ - MINOR: Use correct config type for recently added password field
+* `PR-215 <https://github.com/confluentinc/kafka-connect-elasticsearch/pull/215>`_ - CC-374 Support basic auth with secure Elasticsearch
+* `PR-216 <https://github.com/confluentinc/kafka-connect-elasticsearch/pull/216>`_ - CC-2037 Support keyword subfields for text types
+* `PR-194 <https://github.com/confluentinc/kafka-connect-elasticsearch/pull/194>`_ - Fixed typo in retry delays example.
+
 Version 4.1.2
 -------------
 
