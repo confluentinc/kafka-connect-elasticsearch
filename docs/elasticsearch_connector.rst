@@ -31,6 +31,9 @@ Quick Start
 This quick start uses the Elasticsearch connector to export data produced by the Avro console
 producer to Elasticsearch.
 
+For a more detailed Docker-based example of the Confluent Elasticsearch Connector, check out :ref:`Confluent Platform demo<cp-demo>`.
+With this demo you can deploy a Kafka streaming ETL, including Elasticsearch, using KSQL for stream processing.
+
 **Prerequisites:**
 
 - :ref:`Confluent Platform <installation>` is installed and services are running by using the Confluent CLI. This quick start assumes that you are using the Confluent CLI, but standalone installations are also supported. By default ZooKeeper, Kafka, Schema Registry, Kafka Connect REST API, and Kafka Connect are started with the ``confluent start`` command. For more information, see :ref:`installation_archive`.

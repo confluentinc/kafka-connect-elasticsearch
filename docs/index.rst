@@ -12,5 +12,6 @@ Contents:
    configuration_options
    changelog
 
-To see a working example of the Confluent Elasticsearch Connector, check out :ref:`Confluent Platform demo<cp-demo>`. The demo shows you how to deploy a Kafka streaming ETL, including Elasticsearch, using KSQL for stream processing.
-
+The Elasticsearch connector is available as open source software under the
+`Apache License v2.0 license <http://www.apache.org/licenses/LICENSE-2.0>`_.
+Source code at `https://github.com/confluentinc/kafka-connect-elasticsearch <https://github.com/confluentinc/kafka-connect-elasticsearch>`_.
