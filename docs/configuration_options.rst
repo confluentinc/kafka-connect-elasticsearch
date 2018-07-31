@@ -1,5 +1,5 @@
-Configuration Options
-=====================
+Elasticsearch Configuration Options
+===================================
 
 .. contents::
     :local:
