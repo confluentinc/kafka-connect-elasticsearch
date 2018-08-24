@@ -18,6 +18,7 @@ package io.confluent.connect.elasticsearch.producer;
 
 import io.confluent.connect.avro.AvroData;
 import io.confluent.connect.avro.AvroDataConfig;
+import io.confluent.kafka.serializers.NonRecordContainer;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.Producer;
 import org.apache.kafka.clients.producer.ProducerRecord;
@@ -62,13 +63,13 @@ public class DualWriteProducer<T extends ConnectRecord> {
 
       Object value =
               avroData.fromConnectData(connectRecord.valueSchema(), connectRecord.value());
-      Object key =
-              avroData.fromConnectData(connectRecord.keySchema(), connectRecord.key());
       ProducerRecord<Object, Object> producerRecord =
               new ProducerRecord<>(outputTopic,
                       null,
                       connectRecord.timestamp(),
-                      key,
+                      connectRecord.key() instanceof NonRecordContainer
+                              ? ((NonRecordContainer) connectRecord.key()).getValue()
+                              : connectRecord.key(),
                       value);
       currentBatchProcessed.addLast(producerRecord);
     }
