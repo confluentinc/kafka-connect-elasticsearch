@@ -6,11 +6,11 @@
 
     <groupId>io.confluent</groupId>
     <artifactId>kafka-connect-elasticsearch</artifactId>
-    <version>3.3.3-SNAPSHOT</version>
+    <version>3.3.3</version>
 
     <properties>
-        <confluent.version>3.3.3-SNAPSHOT</confluent.version>
-        <kafka.version>0.11.0.4-SNAPSHOT</kafka.version>
+        <confluent.version>3.3.3</confluent.version>
+        <kafka.version>0.11.0.3-cp2</kafka.version>
         <junit.version>4.12</junit.version>
         <es.version>2.4.1</es.version>
         <lucene.version>5.5.2</lucene.version>
@@ -18,7 +18,7 @@
         <jna.version>4.2.1</jna.version>
         <hamcrest.version>2.0.0.0</hamcrest.version>
         <jest.version>2.0.0</jest.version>
-        <licenses.version>3.3.3-SNAPSHOT</licenses.version>
+        <licenses.version>3.3.3</licenses.version>
         <confluent.maven.repo>http://packages.confluent.io/maven/</confluent.maven.repo>
         <maven-site-plugin.version>3.7.1</maven-site-plugin.version>
         <maven-project-info-reports-plugin.version>2.9</maven-project-info-reports-plugin.version>
