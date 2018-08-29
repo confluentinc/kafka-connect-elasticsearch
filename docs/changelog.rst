@@ -19,7 +19,7 @@ No changes
 Version 4.1.1
 -------------
 
-* `PR-191 <https://github.com/confluentinc/kafka-connect-elasticsearch/pull/191>`_ - CC-918 Add Kafka Connect Maven plugin to build
+* `PR-191 <https://github.com/confluentinc/kafka-connect-elasticsearch/pull/191>`_ - CC-918 Add |kconnect| Maven plugin to build
 
 Version 4.1.0
 -------------
