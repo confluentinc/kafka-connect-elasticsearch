@@ -356,8 +356,6 @@ The Elasticsearch connector can read data from secure Kafka by following the ins
 
 The Elasticsearch connector can write data to a secure Elasticsearch cluster that supports basic authentication by setting the ``connection.username`` and ``connection.password`` configuration properties.
 
-Contents:
-
 .. toctree::
    :maxdepth: 1
    :hidden:
