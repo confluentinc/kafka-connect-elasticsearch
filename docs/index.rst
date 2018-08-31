@@ -29,6 +29,10 @@ Elasticsearch can determine field names and types from data, however, some types
 and decimal, may not be correctly inferred. To ensure that the types are correctly inferred, the
 connector provides a feature to infer mapping from the schemas of Kafka messages.
 
+.. contents::
+    :local:
+    :depth: 1
+
 -------------------------------
 Install Elasticsearch Connector
 -------------------------------
