@@ -10,6 +10,12 @@ for copying data between Kafka and Elasticsearch.
 To build a development version you'll need a recent version of Kafka. You can build
 kafka-connect-elasticsearch with Maven using the standard lifecycle phases.
 
+# Supported versions
+
+|kafka-connect-elasticsearch version |Elasticsearch version |
+|------------------------------------|----------------------|
+| 4.0.x -                            | 2.4.1                | 
+
 
 # Contribute
 
