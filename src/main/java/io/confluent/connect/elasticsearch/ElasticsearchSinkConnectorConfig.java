@@ -22,8 +22,11 @@ import org.apache.kafka.common.config.ConfigDef.Importance;
 import org.apache.kafka.common.config.ConfigDef.Type;
 import org.apache.kafka.common.config.ConfigDef.Width;
 
+import java.util.Arrays;
+import java.util.Locale;
 import java.util.Map;
 
+import static io.confluent.connect.elasticsearch.jest.JestElasticsearchClient.WriteMethod;
 import static io.confluent.connect.elasticsearch.DataConverter.BehaviorOnNullValues;
 import static io.confluent.connect.elasticsearch.bulk.BulkProcessor.BehaviorOnMalformedDoc;
 
@@ -148,6 +151,23 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
       + "Elasticsearch rejects due to some malformation of the document itself, such as an index"
       + " mapping conflict or a field name containing illegal characters. Valid options are "
       + "'ignore', 'warn', and 'fail'.";
+  public static final String WRITE_METHOD_CONFIG = "write.method";
+  private static final String WRITE_METHOD_DOC = "What method to use for storing data to "
+          + "Elasticsearch. We can use one of " + WriteMethod.INSERT.toString() + ", "
+          + WriteMethod.UPDATE.toString() + " or " + WriteMethod.UPSERT.toString()
+          + ". In case of " +  WriteMethod.INSERT.toString() + ", documents are inserted. "
+          + "If document with same ID already exists it is fully replaced. If "
+          + WriteMethod.UPDATE.toString() + " is used, documents will be updated. I.e. "
+          + "only fields present in payload will be updated (or added if original document "
+          + "does not contain them). Other fields stays untouched. However, if document with "
+          + "specified ID does not exist, update will fail. " + WriteMethod.UPSERT.toString()
+          + " works similar way " + WriteMethod.UPDATE.toString() + " does, but if document "
+          + "with specified ID does not exists it will be created. Valid options are "
+          + Arrays.toString(WriteMethod.names()).toLowerCase(Locale.ROOT)
+          + ". Default to '" + WriteMethod.DEFAULT.toString() + "'.\n"
+          + "If Elasticsearch has limited resources, " + WriteMethod.UPSERT.toString()
+          + " may take significant amount of time. You may want to modify properties "
+          + FLUSH_TIMEOUT_MS_CONFIG + ", " + READ_TIMEOUT_MS_CONFIG + " and " + BATCH_SIZE_CONFIG;
 
   protected static ConfigDef baseConfigDef() {
     final ConfigDef configDef = new ConfigDef();
@@ -383,7 +403,18 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
         group,
         ++order,
         Width.SHORT,
-        "Behavior on malformed documents");
+        "Behavior on malformed documents"
+    ).define(
+        WRITE_METHOD_CONFIG,
+        Type.STRING,
+        WriteMethod.DEFAULT.toString(),
+        WriteMethod.VALIDATOR,
+        Importance.LOW,
+        WRITE_METHOD_DOC,
+        group,
+        ++order,
+        Width.SHORT,
+        "Write method");
   }
 
   public static final ConfigDef CONFIG = baseConfigDef();

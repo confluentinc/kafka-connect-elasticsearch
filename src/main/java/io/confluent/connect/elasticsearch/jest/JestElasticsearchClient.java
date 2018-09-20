@@ -40,11 +40,13 @@ import io.searchbox.core.Delete;
 import io.searchbox.core.Index;
 import io.searchbox.core.Search;
 import io.searchbox.core.SearchResult;
+import io.searchbox.core.Update;
 import io.searchbox.indices.CreateIndex;
 import io.searchbox.indices.IndicesExists;
 import io.searchbox.indices.mapping.GetMapping;
 import io.searchbox.indices.mapping.PutMapping;
 import org.apache.http.HttpHost;
+import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.config.types.Password;
 import org.apache.kafka.connect.data.Schema;
@@ -55,6 +57,7 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -73,6 +76,7 @@ public class JestElasticsearchClient implements ElasticsearchClient {
 
   private final JestClient client;
   private final Version version;
+  private WriteMethod writeMethod = WriteMethod.DEFAULT;
 
   // visible for testing
   public JestElasticsearchClient(JestClient client) {
@@ -143,6 +147,8 @@ public class JestElasticsearchClient implements ElasticsearchClient {
       factory.setHttpClientConfig(httpClientConfig);
       this.client = factory.getObject();
       this.version = getServerVersion();
+      this.writeMethod = WriteMethod.forValue(
+              config.getString(ElasticsearchSinkConnectorConfig.WRITE_METHOD_CONFIG));
     } catch (IOException e) {
       throw new ConnectException(
           "Couldn't start ElasticsearchSinkTask due to connection error:",
@@ -154,6 +160,11 @@ public class JestElasticsearchClient implements ElasticsearchClient {
           e
       );
     }
+  }
+
+  // visible for testing
+  protected void setWriteMethod(WriteMethod writeMethod) {
+    this.writeMethod = writeMethod;
   }
 
   /*
@@ -286,7 +297,12 @@ public class JestElasticsearchClient implements ElasticsearchClient {
   // visible for testing
   protected BulkableAction toBulkableAction(IndexableRecord record) {
     // If payload is null, the record was a tombstone and we should delete from the index.
-    return record.payload != null ? toIndexRequest(record) : toDeleteRequest(record);
+    if (record.payload == null) {
+      return toDeleteRequest(record);
+    }
+    return writeMethod == WriteMethod.INSERT
+            ? toIndexRequest(record)
+            : toUpdateRequest(record, writeMethod);
   }
 
   private Delete toDeleteRequest(IndexableRecord record) {
@@ -307,6 +323,16 @@ public class JestElasticsearchClient implements ElasticsearchClient {
       req.setParameter("version_type", "external").setParameter("version", record.version);
     }
     return req.build();
+  }
+
+  private Update toUpdateRequest(IndexableRecord record, WriteMethod method) {
+    String payload = "{\"doc\":" + record.payload
+        + ", \"doc_as_upsert\":" + (method == WriteMethod.UPSERT) + "}";
+    return new Update.Builder(payload)
+        .index(record.key.index)
+        .type(record.key.type)
+        .id(record.key.id)
+        .build();
   }
 
   public BulkResponse executeBulk(BulkRequest bulk) throws IOException {
@@ -365,5 +391,52 @@ public class JestElasticsearchClient implements ElasticsearchClient {
 
   public void close() {
     client.shutdownClient();
+  }
+
+  public enum WriteMethod {
+    INSERT,
+    UPDATE,
+    UPSERT,
+    ;
+
+    public static final WriteMethod DEFAULT = INSERT;
+    public static final ConfigDef.Validator VALIDATOR = new ConfigDef.Validator() {
+      private final ConfigDef.ValidString validator = ConfigDef.ValidString.in(names());
+
+      @Override
+      public void ensureValid(String name, Object value) {
+        if (value instanceof String) {
+          value = ((String) value).toLowerCase(Locale.ROOT);
+        }
+        validator.ensureValid(name, value);
+      }
+
+      // Overridden here so that ConfigDef.toEnrichedRst shows possible values correctly
+      @Override
+      public String toString() {
+        return validator.toString();
+      }
+
+    };
+
+    public static String[] names() {
+      WriteMethod[] wm = values();
+      String[] result = new String[wm.length];
+
+      for (int i = 0; i < wm.length; i++) {
+        result[i] = wm[i].toString();
+      }
+
+      return result;
+    }
+
+    public static WriteMethod forValue(String value) {
+      return valueOf(value.toUpperCase(Locale.ROOT));
+    }
+
+    @Override
+    public String toString() {
+      return name().toLowerCase(Locale.ROOT);
+    }
   }
 }
