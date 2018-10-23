@@ -349,11 +349,9 @@ public class BulkProcessor<R, B> {
     public BulkResponse call() throws Exception {
       final BulkResponse rsp;
       try {
-        dualWriteProducer.submitAllInTransction();
         rsp = execute();
-        dualWriteProducer.commitTransaction();
+        dualWriteProducer.submitAll();
       } catch (Exception e) {
-        dualWriteProducer.abortTransaction();
         failAndStop(e);
         throw e;
       }

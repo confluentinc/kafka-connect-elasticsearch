@@ -43,6 +43,7 @@ public class ElasticsearchSinkTask extends SinkTask {
   private static final Logger log = LoggerFactory.getLogger(ElasticsearchSinkTask.class);
   private ElasticsearchWriter writer;
   private ElasticsearchClient client;
+  private DualWriteProducer<ConnectRecord> dualWriteProducer;
 
   @Override
   public String version() {
@@ -61,6 +62,17 @@ public class ElasticsearchSinkTask extends SinkTask {
       log.info("Starting ElasticsearchSinkTask.");
 
       ElasticsearchSinkConnectorConfig config = new ElasticsearchSinkConnectorConfig(props);
+
+      if (dualWriteProducer == null) {
+        this.dualWriteProducer =
+                new DualWriteProducer<>(
+                        config.getBoolean(
+                                ElasticsearchSinkConnectorConfig.ENABLE_DUAL_WRITE_CONFIG),
+                        config.getProducerConfig(),
+                        config.getString(
+                                ElasticsearchSinkConnectorConfig.OUTPUT_TOPIC_CONFIG));
+      }
+
       String type = config.getString(ElasticsearchSinkConnectorConfig.TYPE_NAME_CONFIG);
       boolean ignoreKey =
           config.getBoolean(ElasticsearchSinkConnectorConfig.KEY_IGNORE_CONFIG);
@@ -122,12 +134,6 @@ public class ElasticsearchSinkTask extends SinkTask {
       } else {
         this.client = new JestElasticsearchClient(props);
       }
-
-      DualWriteProducer<ConnectRecord> dualWriteProducer =
-            new DualWriteProducer<>(
-                    config.getBoolean(ElasticsearchSinkConnectorConfig.ENABLE_DUAL_WRITE_CONFIG),
-                    config.getProducerConfig(),
-                     config.getString(ElasticsearchSinkConnectorConfig.OUTPUT_TOPIC_CONFIG));
 
       ElasticsearchWriter.Builder builder = new ElasticsearchWriter.Builder(this.client)
           .setType(type)

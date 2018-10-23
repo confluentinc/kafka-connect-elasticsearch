@@ -421,7 +421,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
             ++order,
             Width.SHORT,
             "Enable Dual Write functionality"
-    ).define(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG,
+    ).define("producer." + ProducerConfig.BOOTSTRAP_SERVERS_CONFIG,
             Type.LIST,
             Collections.emptyList(),
             Importance.HIGH,
@@ -430,7 +430,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
             ++order,
             Width.LONG,
             "Bootstrap Servers for Dual Write"
-    ).define(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG,
+    ).define("producer." + ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG,
             Type.CLASS,
             "io.confluent.kafka.serializers.KafkaAvroSerializer",
             Importance.HIGH,
@@ -439,7 +439,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
             ++order,
             Width.LONG,
             "Key Serializer for Output Topic"
-    ).define(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG,
+    ).define("producer." + ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG,
             Type.CLASS,
             "io.confluent.kafka.serializers.KafkaAvroSerializer",
             Importance.HIGH,
@@ -447,16 +447,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
             group,
             ++order,
             Width.LONG,
-            "Value Serializer for Output Topic"
-    ).define(ProducerConfig.TRANSACTIONAL_ID_CONFIG,
-            Type.STRING,
-            "",
-            Importance.HIGH,
-            ProducerConfig.TRANSACTIONAL_ID_DOC,
-            group,
-            ++order,
-            Width.LONG,
-            "Transaction id for dual write to ensure exactly-once on batch.");
+            "Value Serializer for Output Topic");
   }
 
   public static final ConfigDef CONFIG = baseConfigDef();
@@ -472,7 +463,10 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   public Properties getProducerConfig() {
     Properties properties = new Properties();
     originals().keySet().forEach(s -> {
-      properties.put(s, originals().get(s));
+      if (s.startsWith("producer.")) {
+        String producerKey = s.substring(9);
+        properties.put(producerKey, originals().get(s));
+      }
     });
     return properties;
   }

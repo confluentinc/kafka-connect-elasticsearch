@@ -46,7 +46,6 @@ public class DualWriteProducer<T extends ConnectRecord> {
     if (isEnabled) {
       this.passthroughProducer = new KafkaProducer<>(config);
       this.outputTopic = outputTopic;
-      this.passthroughProducer.initTransactions();
     }
   }
 
@@ -75,24 +74,17 @@ public class DualWriteProducer<T extends ConnectRecord> {
     }
   }
 
-  public void submitAllInTransction() {
+  public void submitAll() {
     if (isEnabled) {
-      passthroughProducer.beginTransaction();
-      currentBatchProcessed.forEach(t -> {
-        passthroughProducer.send(t);
-      });
-    }
-  }
-
-  public void commitTransaction() {
-    if (isEnabled) {
-      passthroughProducer.commitTransaction();
-    }
-  }
-
-  public void abortTransaction() {
-    if (isEnabled) {
-      passthroughProducer.abortTransaction();
+      ProducerRecord<Object, Object> currentRecord = null;
+      do {
+        currentRecord = currentBatchProcessed.pollFirst();
+        if (currentRecord != null) {
+          passthroughProducer.send(currentRecord);
+        }
+      }
+      while (currentRecord != null);
+      passthroughProducer.flush();
     }
   }
 }
