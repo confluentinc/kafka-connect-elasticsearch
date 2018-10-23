@@ -18,6 +18,7 @@ package io.confluent.connect.elasticsearch;
 
 import com.carrotsearch.randomizedtesting.annotations.ThreadLeakScope;
 
+import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.sink.SinkRecord;
@@ -25,15 +26,14 @@ import org.elasticsearch.test.ESIntegTestCase;
 import org.elasticsearch.test.InternalTestCluster;
 import org.junit.Test;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Map;
+import java.util.*;
 
 @ThreadLeakScope(ThreadLeakScope.Scope.NONE)
 public class ElasticsearchSinkTaskTest extends ElasticsearchSinkTestBase {
+
+  private static final String TOPIC_IN_CAPS = "AnotherTopicInCaps";
+  private static final int PARTITION_113 = 113;
+  private static final TopicPartition TOPIC_IN_CAPS_PARTITION = new TopicPartition(TOPIC_IN_CAPS, PARTITION_113);
 
   private Map<String, String> createProps() {
     Map<String, String> props = new HashMap<>();
@@ -70,6 +70,41 @@ public class ElasticsearchSinkTaskTest extends ElasticsearchSinkTestBase {
     refresh();
 
     verifySearchResults(records, true, false);
+  }
+
+  @Test
+  public void testPutWithTopicInCaps() {
+    // We should as well test that writing a record with a previously un seen record will create
+    // an index following the required elasticsearch requirements of lowercasing.
+    InternalTestCluster cluster = ESIntegTestCase.internalCluster();
+    cluster.ensureAtLeastNumDataNodes(3);
+    Map<String, String> props = createProps();
+
+    ElasticsearchSinkTask task = new ElasticsearchSinkTask();
+
+    String key = "key";
+    Schema schema = createSchema();
+    Struct record = createRecord(schema);
+
+    SinkRecord sinkRecord = new SinkRecord(TOPIC_IN_CAPS,
+            PARTITION_113,
+            Schema.STRING_SCHEMA,
+            key,
+            schema,
+            record,
+            0 );
+
+    try {
+      task.start(props, client);
+      task.open(new HashSet<>(Collections.singletonList(TOPIC_IN_CAPS_PARTITION)));
+      task.put(Collections.singleton(sinkRecord));
+      assertTrue("A topic name not in lowercase was created in Elasticsearch", true);
+    } catch (Exception ex) {
+      fail("A topic name not in lowercase can not be used as index name in Elasticsearch");
+    } finally {
+      task.stop();
+    }
+
   }
 
 }

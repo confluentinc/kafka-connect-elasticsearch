@@ -249,7 +249,7 @@ public class ElasticsearchWriter {
       }
 
       final String indexOverride = topicToIndexMap.get(sinkRecord.topic());
-      final String index = indexOverride != null ? indexOverride : sinkRecord.topic();
+      final String index = indexOverride != null ? indexOverride : sinkRecord.topic().toLowerCase();
       final boolean ignoreKey = ignoreKeyTopics.contains(sinkRecord.topic()) || this.ignoreKey;
       final boolean ignoreSchema =
           ignoreSchemaTopics.contains(sinkRecord.topic()) || this.ignoreSchema;
@@ -337,7 +337,9 @@ public class ElasticsearchWriter {
       if (index != null) {
         indices.add(index);
       } else {
-        indices.add(topic);
+        String topicAsIndex = topic.toLowerCase();
+        log.debug("Topic " + topic + " was created as index name " + topicAsIndex);
+        indices.add(topicAsIndex);
       }
     }
     return indices;
