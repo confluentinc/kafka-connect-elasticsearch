@@ -214,18 +214,15 @@ public class ElasticsearchWriter {
 
   }
 
+
   /**
-   * Return the expected index name for a given topic. It makes sure to lowercase the topic name
-   * as elasticsearch require all index names to be lowercase.
-   * See https://github.com/confluentinc/kafka-connect-elasticsearch/issues/246 for connector details.
-   * See https://github.com/elastic/elasticsearch/issues/29420 for elasticsearch details.
-   * @param topic The topic name being proceed.
-   * @return String A valid elasticsearch index name
+   * Return the expected index name for a given topic, using the configured mapping or the topic name. Elasticsearch
+   * <a href="https://github.com/elastic/elasticsearch/issues/29420">accepts only lowercase index names</a>.
    */
   private String convertTopicToIndexName(String topic) {
     final String indexOverride = topicToIndexMap.get(topic);
     String index = indexOverride != null ? indexOverride : topic.toLowerCase();
-    log.debug("Topic " + topic + " was translated as index name " + index);
+    log.debug("Topic '{}' was translated as index '{}'", topic, index);
     return index;
   }
 
