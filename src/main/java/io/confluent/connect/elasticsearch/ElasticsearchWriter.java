@@ -189,9 +189,9 @@ public class ElasticsearchWriter {
   }
 
   public void write(Collection<SinkRecord> records) {
+
     for (SinkRecord sinkRecord : records) {
-      final String indexOverride = topicToIndexMap.get(sinkRecord.topic());
-      final String index = indexOverride != null ? indexOverride : sinkRecord.topic();
+      final String index = convertTopicToIndexName(sinkRecord.topic());
       final boolean ignoreKey = ignoreKeyTopics.contains(sinkRecord.topic()) || this.ignoreKey;
       final boolean ignoreSchema = ignoreSchemaTopics.contains(sinkRecord.topic()) || this.ignoreSchema;
 
@@ -211,6 +211,22 @@ public class ElasticsearchWriter {
 
       bulkProcessor.add(indexableRecord, flushTimeoutMs);
     }
+
+  }
+
+  /**
+   * Return the expected index name for a given topic. It makes sure to lowercase the topic name
+   * as elasticsearch require all index names to be lowercase.
+   * See https://github.com/confluentinc/kafka-connect-elasticsearch/issues/246 for connector details.
+   * See https://github.com/elastic/elasticsearch/issues/29420 for elasticsearch details.
+   * @param topic The topic name being proceed.
+   * @return String A valid elasticsearch index name
+   */
+  private String convertTopicToIndexName(String topic) {
+    final String indexOverride = topicToIndexMap.get(topic);
+    String index = indexOverride != null ? indexOverride : topic.toLowerCase();
+    log.debug("Topic " + topic + " was translated as index name " + index);
+    return index;
   }
 
   public void flush() {
@@ -261,12 +277,7 @@ public class ElasticsearchWriter {
   private Set<String> indicesForTopics(Set<String> assignedTopics) {
     final Set<String> indices = new HashSet<>();
     for (String topic : assignedTopics) {
-      final String index = topicToIndexMap.get(topic);
-      if (index != null) {
-        indices.add(index);
-      } else {
-        indices.add(topic);
-      }
+      indices.add(convertTopicToIndexName(topic));
     }
     return indices;
   }
