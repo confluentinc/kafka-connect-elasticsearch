@@ -80,7 +80,7 @@ public class ElasticsearchSinkTaskTest extends ElasticsearchSinkTestBase {
   }
 
   @Test
-  public void testPutWithTopicInCaps() {
+  public void testCreateAndWriteToIndexForTopicWithUppercaseCharacters() {
     // We should as well test that writing a record with a previously un seen record will create
     // an index following the required elasticsearch requirements of lowercasing.
     InternalTestCluster cluster = ESIntegTestCase.internalCluster();
@@ -105,7 +105,6 @@ public class ElasticsearchSinkTaskTest extends ElasticsearchSinkTestBase {
       task.start(props, client);
       task.open(new HashSet<>(Collections.singletonList(TOPIC_IN_CAPS_PARTITION)));
       task.put(Collections.singleton(sinkRecord));
-      assertTrue("A topic name not in lowercase was created in Elasticsearch", true);
     } catch (Exception ex) {
       fail("A topic name not in lowercase can not be used as index name in Elasticsearch");
     } finally {
