@@ -18,12 +18,27 @@ package io.confluent.connect.elasticsearch.bulk;
 
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig;
 import io.confluent.connect.elasticsearch.RetryUtil;
+// DLQ implem
+import org.apache.kafka.common.utils.Utils;
+import org.apache.kafka.clients.producer.ProducerConfig;
+import org.apache.kafka.clients.producer.KafkaProducer;
+import org.apache.kafka.clients.producer.ProducerRecord;
+import org.apache.kafka.common.errors.TopicExistsException;
+import org.apache.kafka.common.header.Header;
+import org.apache.kafka.common.header.Headers;
+import org.apache.kafka.common.header.internals.RecordHeaders;
+import org.apache.kafka.common.header.internals.RecordHeader;
+//
 import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+// DLQ                                                                          
+import java.util.HashMap;                                                       
+import java.util.Map;                                                           
+//
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
@@ -72,6 +87,11 @@ public class BulkProcessor<R, B> {
   private final Deque<R> unsentRecords;
   private int inFlightRecords = 0;
 
+  // DLQ implem
+  private KafkaProducer<byte[], byte[]> kafkaProducer;
+  private final Map<String, Object> producerProps;
+  //
+
   public BulkProcessor(
       Time time,
       BulkClient<R, B> bulkClient,
@@ -97,6 +117,19 @@ public class BulkProcessor<R, B> {
     final ThreadFactory threadFactory = makeThreadFactory();
     farmer = threadFactory.newThread(farmerTask());
     executor = Executors.newFixedThreadPool(maxInFlightRequests, threadFactory);
+    // DLQ implem
+    producerProps = new HashMap<>();
+    // TOFIX : Ugly but usefull for testing
+    producerProps.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, "169.255.254.255:9092");
+    producerProps.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, "org.apache.kafka.common.serialization.ByteArraySerializer");
+    producerProps.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, "org.apache.kafka.common.serialization.ByteArraySerializer");
+    producerProps.put(ProducerConfig.REQUEST_TIMEOUT_MS_CONFIG, Integer.toString(Integer.MAX_VALUE));
+    producerProps.put(ProducerConfig.MAX_BLOCK_MS_CONFIG, Long.toString(Long.MAX_VALUE));
+    producerProps.put(ProducerConfig.ACKS_CONFIG, "all");
+    producerProps.put(ProducerConfig.MAX_IN_FLIGHT_REQUESTS_PER_CONNECTION, "1");
+    producerProps.put("delivery.timeout.ms", Integer.toString(Integer.MAX_VALUE));
+    kafkaProducer = new KafkaProducer<>(producerProps);
+    //
   }
 
   private ThreadFactory makeThreadFactory() {
@@ -160,7 +193,7 @@ public class BulkProcessor<R, B> {
       batch.add(unsentRecords.removeFirst());
     }
     inFlightRecords += batchableSize;
-    return executor.submit(new BulkTask(batch));
+    return executor.submit(new BulkTask(batch, kafkaProducer));
   }
 
   /**
@@ -333,8 +366,13 @@ public class BulkProcessor<R, B> {
 
     final List<R> batch;
 
-    BulkTask(List<R> batch) {
+    // DLQ implem
+    final KafkaProducer<byte[], byte[]> kafkaProducer;
+    //
+
+    BulkTask(List<R> batch, KafkaProducer<byte[], byte[]> kafkaProducer) {
       this.batch = batch;
+      this.kafkaProducer = kafkaProducer;
     }
 
     @Override
@@ -398,7 +436,25 @@ public class BulkProcessor<R, B> {
           } else {
             log.error("Failed to execute batch {} of {} records after total of {} attempt(s)",
                     batchId, batch.size(), attempts, e);
-            throw e;
+            //throw e;
+            // return value is not used (trace to submitBatchWhenReady)
+            // We do not want connector to fail at all case. Log use case.
+            // DLQ implem
+            // TOFIX here
+            ProducerRecord<byte[], byte[]> producerRecord;
+
+            producerRecord = new ProducerRecord<byte[], byte[]>(                             
+              "deadletterqueue-1", 0, null,                           
+              "dlq-elastic".getBytes(), e.getMessage().getBytes(), new RecordHeaders(new Header[]{new RecordHeader("key", "value".getBytes())}));
+
+            this.kafkaProducer.send(producerRecord, (metadata, exception) -> {
+              if (exception != null) {
+                log.error("Could not produce message to dead letter queue. topic=deadletterqueue-1", exception);
+                throw new ConnectException("DQL failed");
+              }
+            });
+            //
+            return null;
           }
         }
       }
@@ -471,7 +527,8 @@ public class BulkProcessor<R, B> {
   public enum BehaviorOnMalformedDoc {
     IGNORE,
     WARN,
-    FAIL;
+    FAIL,
+    DLQ;
 
     public static final BehaviorOnMalformedDoc DEFAULT = FAIL;
 
