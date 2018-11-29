@@ -110,7 +110,5 @@ public class ElasticsearchSinkTaskTest extends ElasticsearchSinkTestBase {
     } finally {
       task.stop();
     }
-
   }
-
 }

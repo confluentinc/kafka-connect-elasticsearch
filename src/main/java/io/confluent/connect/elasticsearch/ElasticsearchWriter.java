@@ -189,7 +189,6 @@ public class ElasticsearchWriter {
   }
 
   public void write(Collection<SinkRecord> records) {
-
     for (SinkRecord sinkRecord : records) {
       final String index = convertTopicToIndexName(sinkRecord.topic());
       final boolean ignoreKey = ignoreKeyTopics.contains(sinkRecord.topic()) || this.ignoreKey;
@@ -211,9 +210,7 @@ public class ElasticsearchWriter {
 
       bulkProcessor.add(indexableRecord, flushTimeoutMs);
     }
-
   }
-
 
   /**
    * Return the expected index name for a given topic, using the configured mapping or the topic name. Elasticsearch
