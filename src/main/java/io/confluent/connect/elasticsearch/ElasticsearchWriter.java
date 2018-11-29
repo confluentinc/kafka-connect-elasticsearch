@@ -235,8 +235,7 @@ public class ElasticsearchWriter {
         continue;
       }
 
-      final String indexOverride = topicToIndexMap.get(sinkRecord.topic());
-      final String index = indexOverride != null ? indexOverride : sinkRecord.topic();
+      final String index = convertTopicToIndexName(sinkRecord.topic());
       final boolean ignoreKey = ignoreKeyTopics.contains(sinkRecord.topic()) || this.ignoreKey;
       final boolean ignoreSchema =
           ignoreSchemaTopics.contains(sinkRecord.topic()) || this.ignoreSchema;
@@ -294,6 +293,17 @@ public class ElasticsearchWriter {
     }
   }
 
+  /**
+   * Return the expected index name for a given topic, using the configured mapping or the topic name. Elasticsearch
+   * <a href="https://github.com/elastic/elasticsearch/issues/29420">accepts only lowercase index names</a>.
+   */
+  private String convertTopicToIndexName(String topic) {
+    final String indexOverride = topicToIndexMap.get(topic);
+    String index = indexOverride != null ? indexOverride : topic.toLowerCase();
+    log.debug("Topic '{}' was translated as index '{}'", topic, index);
+    return index;
+  }
+
   public void flush() {
     bulkProcessor.flush(flushTimeoutMs);
   }
@@ -320,12 +330,7 @@ public class ElasticsearchWriter {
   private Set<String> indicesForTopics(Set<String> assignedTopics) {
     final Set<String> indices = new HashSet<>();
     for (String topic : assignedTopics) {
-      final String index = topicToIndexMap.get(topic);
-      if (index != null) {
-        indices.add(index);
-      } else {
-        indices.add(topic);
-      }
+      indices.add(convertTopicToIndexName(topic));
     }
     return indices;
   }
