@@ -294,8 +294,9 @@ public class ElasticsearchWriter {
   }
 
   /**
-   * Return the expected index name for a given topic, using the configured mapping or the topic name. Elasticsearch
-   * <a href="https://github.com/elastic/elasticsearch/issues/29420">accepts only lowercase index names</a>.
+   * Return the expected index name for a given topic, using the configured mapping or the topic
+   * name. Elasticsearch accepts only lowercase index names
+   * (<a href="https://github.com/elastic/elasticsearch/issues/29420">ref</a>_.
    */
   private String convertTopicToIndexName(String topic) {
     final String indexOverride = topicToIndexMap.get(topic);
