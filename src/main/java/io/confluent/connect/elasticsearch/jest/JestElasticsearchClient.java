@@ -54,6 +54,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -70,6 +71,7 @@ public class JestElasticsearchClient implements ElasticsearchClient {
   private static final Logger LOG = LoggerFactory.getLogger(JestElasticsearchClient.class);
 
   private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+  private final HashSet<String> createdIndices = new HashSet<>();
 
   private final JestClient client;
   private final Version version;
@@ -215,7 +217,7 @@ public class JestElasticsearchClient implements ElasticsearchClient {
     return version;
   }
 
-  public boolean indexExists(String index) {
+  private boolean indexExists(String index) {
     Action<JestResult> action = new IndicesExists.Builder(index).build();
     try {
       JestResult result = client.execute(action);
@@ -227,7 +229,7 @@ public class JestElasticsearchClient implements ElasticsearchClient {
 
   public void createIndices(Set<String> indices) {
     for (String index : indices) {
-      if (!indexExists(index)) {
+      if (!this.createdIndices.contains(index) && !indexExists(index)) {
         CreateIndex createIndex = new CreateIndex.Builder(index).build();
         try {
           JestResult result = client.execute(createIndex);
@@ -241,6 +243,7 @@ public class JestElasticsearchClient implements ElasticsearchClient {
         } catch (IOException e) {
           throw new ConnectException(e);
         }
+        this.createdIndices.add(index);
       }
     }
   }

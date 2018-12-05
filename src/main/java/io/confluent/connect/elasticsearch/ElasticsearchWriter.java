@@ -24,12 +24,13 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.util.Collections;
+import java.util.Arrays;
 import java.util.Collection;
-import java.util.HashMap;
+import java.util.Collections;
 import java.util.HashSet;
-import java.util.Map;
+import java.util.HashMap;
 import java.util.Objects;
+import java.util.Map;
 import java.util.Set;
 
 import static io.confluent.connect.elasticsearch.DataConverter.BehaviorOnNullValues;
@@ -255,11 +256,7 @@ public class ElasticsearchWriter {
 
       if (!ignoreSchema && !existingMappings.contains(index)) {
         try {
-          if (client.indexExists(index) == false) {
-            Set<String> indicies = new HashSet<String>();
-            indicies.add(index);
-            client.createIndices(indicies);
-          }
+          client.createIndices(new HashSet<>(Arrays.asList(index)));
           if (Mapping.getMapping(client, index, type) == null) {
             Mapping.createMapping(client, index, type, sinkRecord.valueSchema());
           }
