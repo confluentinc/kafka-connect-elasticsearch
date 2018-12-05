@@ -255,6 +255,11 @@ public class ElasticsearchWriter {
 
       if (!ignoreSchema && !existingMappings.contains(index)) {
         try {
+          if (client.indexExists(index) == false) {
+            Set<String> indicies = new HashSet<String>();
+            indicies.add(index);
+            client.createIndices(indicies);
+          }
           if (Mapping.getMapping(client, index, type) == null) {
             Mapping.createMapping(client, index, type, sinkRecord.valueSchema());
           }

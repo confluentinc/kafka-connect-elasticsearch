@@ -111,4 +111,34 @@ public class ElasticsearchSinkTaskTest extends ElasticsearchSinkTestBase {
       task.stop();
     }
   }
+  @Test
+  public void testCreateAndWriteToIndexCreatedByAnSMT() {
+    // If the index mapping is changed by an SMT, the index wouldn't have been created on open()
+    InternalTestCluster cluster = ESIntegTestCase.internalCluster();
+    cluster.ensureAtLeastNumDataNodes(3);
+    Map<String, String> props = createProps();
+    ElasticsearchSinkTask task = new ElasticsearchSinkTask();
+
+    String key = "key";
+    Schema schema = createSchema();
+    Struct record = createRecord(schema);
+
+    SinkRecord sinkRecord = new SinkRecord("IndexThatDoesntExist",
+            PARTITION_113,
+            Schema.STRING_SCHEMA,
+            key,
+            schema,
+            record,
+            0 );
+
+    try {
+      task.start(props, client);
+      task.open(new HashSet<>());
+      task.put(Collections.singleton(sinkRecord));
+    } catch (Exception ex) {
+      fail(ex.getMessage());
+    } finally {
+      task.stop();
+    }
+  }
 }

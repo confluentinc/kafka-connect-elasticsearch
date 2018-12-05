@@ -46,6 +46,15 @@ public interface ElasticsearchClient extends AutoCloseable {
   void createIndices(Set<String> indices);
 
   /**
+   * Gets the Elasticsearch version.
+   *
+   * @param index the index check exists
+   * @return whether the index exists
+   * @throws IOException if the client cannot execute the request
+   */
+  boolean indexExists(String index);
+
+  /**
    * Creates an explicit mapping.
    *
    * @param index the index to write
