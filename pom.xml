@@ -25,8 +25,8 @@
 
     <licenses>
         <license>
-            <name>Apache License 2.0</name>
-            <url>http://www.apache.org/licenses/LICENSE-2.0.html</url>
+            <name>Confluent Community License</name>
+            <url>http://www.confluent.io/confluent-community-license</url>
             <distribution>repo</distribution>
         </license>
     </licenses>
@@ -145,7 +145,7 @@
                             <logo>logos/elasticsearch.jpg</logo>
 
                             <supportProviderName>Confluent, Inc.</supportProviderName>
-                            <supportSummary>Confluent supports the Elasticsearch sink connector alongside community members as part of its Confluent Platform open source offering.</supportSummary>
+                            <supportSummary>Confluent supports the Elasticsearch sink connector alongside community members as part of its Confluent Platform offering.</supportSummary>
                             <supportUrl>https://docs.confluent.io/current/</supportUrl>
                             <supportLogo>logos/confluent.png</supportLogo>
 
