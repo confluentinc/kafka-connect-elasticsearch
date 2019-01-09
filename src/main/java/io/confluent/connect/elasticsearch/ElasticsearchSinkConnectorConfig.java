@@ -147,6 +147,11 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
       + " mapping conflict or a field name containing illegal characters. Valid options are "
       + "'ignore', 'warn', and 'fail'.";
 
+  public static final String CONNECTION_SSL_CONFIG = "connection.ssl";
+  private static final String CONNECTION_SSL_DOC = "Override to specify whether to use SSL "
+      + "connection despite URL protocol. By default, the connector will use SSL when at "
+      + "least one URL begins with 'https:'.";
+
   protected static ConfigDef baseConfigDef() {
     final ConfigDef configDef = new ConfigDef();
     addConnectorConfigs(configDef);
@@ -275,7 +280,18 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
         group, 
         ++order, 
         Width.SHORT, 
-        "Read Timeout");
+        "Read Timeout"
+    ).define(
+        CONNECTION_SSL_CONFIG,
+        Type.BOOLEAN,
+        ConfigDef.NO_DEFAULT_VALUE,
+        Importance.HIGH,
+        CONNECTION_SSL_DOC,
+        group,
+        ++order,
+        Width.LONG,
+        "Use Secure Connection"
+    );
   }
 
   private static void addConversionConfigs(ConfigDef configDef) {

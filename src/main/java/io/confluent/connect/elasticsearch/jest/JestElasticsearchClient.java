@@ -43,6 +43,7 @@ import io.searchbox.indices.IndicesExists;
 import io.searchbox.indices.mapping.GetMapping;
 import io.searchbox.indices.mapping.PutMapping;
 import org.apache.http.HttpHost;
+import org.apache.http.conn.ssl.SSLConnectionSocketFactory;
 import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.config.types.Password;
 import org.apache.kafka.connect.data.Schema;
@@ -51,11 +52,13 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
+import javax.net.ssl.SSLContext;
 
 public class JestElasticsearchClient implements ElasticsearchClient {
 
@@ -125,9 +128,14 @@ public class JestElasticsearchClient implements ElasticsearchClient {
           ElasticsearchSinkConnectorConfig.CONNECTION_USERNAME_CONFIG);
       final Password password = config.getPassword(
           ElasticsearchSinkConnectorConfig.CONNECTION_PASSWORD_CONFIG);
+      final Boolean alwaysSecured = config.getBoolean(
+          ElasticsearchSinkConnectorConfig.CONNECTION_SSL_CONFIG);
 
-      List<String> address =
+      final List<String> address =
           config.getList(ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG);
+      final boolean secured = alwaysSecured != null
+                        ? alwaysSecured
+                        : address.stream().anyMatch(a -> a.startsWith("https:"));
       HttpClientConfig.Builder builder = new HttpClientConfig.Builder(address)
           .connTimeout(connTimeout)
           .readTimeout(readTimeout)
@@ -136,6 +144,26 @@ public class JestElasticsearchClient implements ElasticsearchClient {
         builder.defaultCredentials(username, password.value())
             .preemptiveAuthTargetHosts(address.stream()
                 .map(addr -> HttpHost.create(addr)).collect(Collectors.toSet()));
+      }
+      if(secured) {
+        try {
+          // TODO: This doesn't really provide a secured connection, since this only verifies
+          // DNS names use suffix names on the Public Suffix List, and certs are not verified.
+          // If we should use a
+          // Should we use a keystore store?
+          // See also https://github.com/searchbox-io/Jest/tree/master/jest#https--ssl
+          SSLContext sslContext = SSLContext.getDefault();
+          SSLConnectionSocketFactory sslSocketFactory = new SSLConnectionSocketFactory(sslContext);
+          builder.sslSocketFactory(sslSocketFactory);
+          // TODO: Or instead load a key store using connector properties
+          // and create SSLContext that uses the key store to validate certificates
+
+        } catch (NoSuchAlgorithmException e) {
+          throw new ConnectException(
+              "Unable to find the algorithm required for SSL",
+              e
+          );
+        }
       }
       HttpClientConfig httpClientConfig = builder.build();
       factory.setHttpClientConfig(httpClientConfig);
