@@ -22,6 +22,12 @@ import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.sink.SinkRecord;
+import org.elasticsearch.action.ActionFuture;
+import org.elasticsearch.action.ActionRequest;
+import org.elasticsearch.action.ActionRequestValidationException;
+import org.elasticsearch.action.admin.indices.exists.indices.IndicesExistsRequest;
+import org.elasticsearch.action.admin.indices.exists.indices.IndicesExistsResponse;
+import org.elasticsearch.action.index.IndexRequest;
 import org.elasticsearch.test.ESIntegTestCase;
 import org.elasticsearch.test.InternalTestCluster;
 import org.junit.Test;
@@ -123,6 +129,8 @@ public class ElasticsearchSinkTaskTest extends ElasticsearchSinkTestBase {
     cluster.ensureAtLeastNumDataNodes(3);
     Map<String, String> props = createProps();
 
+    props.put(ElasticsearchSinkConnectorConfig.AUTO_CREATE_INDICES_AT_START_CONFIG, "false");
+
     ElasticsearchSinkTask task = new ElasticsearchSinkTask();
 
     String key = "key";
@@ -130,21 +138,30 @@ public class ElasticsearchSinkTaskTest extends ElasticsearchSinkTestBase {
     Struct record = createRecord(schema);
 
     SinkRecord sinkRecord = new SinkRecord(UNSEEN_TOPIC,
-            PARTITION_114,
-            Schema.STRING_SCHEMA,
-            key,
-            schema,
-            record,
-            0 );
+        PARTITION_114,
+        Schema.STRING_SCHEMA,
+        key,
+        schema,
+        record,
+        0 );
 
-    try {
-      task.start(props, client);
-      task.open(new HashSet<>(Collections.singletonList(TOPIC_IN_CAPS_PARTITION)));
-      task.put(Collections.singleton(sinkRecord));
-    } catch (Exception ex) {
-      fail("Record could not be written to elasticsearch due to non existing index");
-    } finally {
-      task.stop();
-    }
+    task.start(props, client);
+    task.open(new HashSet<>(Collections.singletonList(TOPIC_IN_CAPS_PARTITION)));
+    task.put(Collections.singleton(sinkRecord));
+    task.stop();
+
+    assertTrue(UNSEEN_TOPIC + " index created without errors ",
+        verifyIndexExist(cluster, UNSEEN_TOPIC.toLowerCase()));
+
+  }
+
+  private boolean verifyIndexExist(InternalTestCluster cluster, String ... indices) {
+    ActionFuture<IndicesExistsResponse> action = cluster
+        .client()
+        .admin()
+        .indices()
+        .exists(new IndicesExistsRequest(indices));
+
+    return action.actionGet().isExists();
   }
 }

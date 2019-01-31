@@ -40,7 +40,7 @@ public class ElasticsearchSinkTask extends SinkTask {
   private static final Logger log = LoggerFactory.getLogger(ElasticsearchSinkTask.class);
   private ElasticsearchWriter writer;
   private ElasticsearchClient client;
-  private Boolean createIndexAtStartTime;
+  private Boolean createIndicesAtStartTime;
 
   @Override
   public String version() {
@@ -91,8 +91,8 @@ public class ElasticsearchSinkTask extends SinkTask {
           config.getInt(ElasticsearchSinkConnectorConfig.MAX_RETRIES_CONFIG);
       boolean dropInvalidMessage =
           config.getBoolean(ElasticsearchSinkConnectorConfig.DROP_INVALID_MESSAGE_CONFIG);
-      boolean createIndexAtStartTime =
-          config.getBoolean(ElasticsearchSinkConnectorConfig.CREATE_INDEX_AT_START_CONFIG);
+      boolean createIndicesAtStartTime =
+          config.getBoolean(ElasticsearchSinkConnectorConfig.AUTO_CREATE_INDICES_AT_START_CONFIG);
 
       DataConverter.BehaviorOnNullValues behaviorOnNullValues =
           DataConverter.BehaviorOnNullValues.forValue(
@@ -139,7 +139,7 @@ public class ElasticsearchSinkTask extends SinkTask {
           .setBehaviorOnNullValues(behaviorOnNullValues)
           .setBehaviorOnMalformedDoc(behaviorOnMalformedDoc);
 
-      this.createIndexAtStartTime = createIndexAtStartTime;
+      this.createIndicesAtStartTime = createIndicesAtStartTime;
 
       writer = builder.build();
       writer.start();
@@ -154,7 +154,7 @@ public class ElasticsearchSinkTask extends SinkTask {
   @Override
   public void open(Collection<TopicPartition> partitions) {
     log.debug("Opening the task for topic partitions: {}", partitions);
-    if (createIndexAtStartTime) {
+    if (createIndicesAtStartTime) {
       Set<String> topics = new HashSet<>();
       for (TopicPartition tp : partitions) {
         topics.add(tp.topic());
