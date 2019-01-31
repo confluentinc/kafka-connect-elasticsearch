@@ -147,6 +147,11 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
       + " mapping conflict or a field name containing illegal characters. Valid options are "
       + "'ignore', 'warn', and 'fail'.";
 
+  public static final String CREATE_INDEX_AT_START_CONFIG = "create.index.at.start";
+  private static final String CREATE_INDEX_AT_START__DOC = "Create the Elasticsearch indexes at "
+      + " bootstrap time. This is useful when the indexes are a direct mapping "
+      + " of the Kafka topics.";
+
   protected static ConfigDef baseConfigDef() {
     final ConfigDef configDef = new ConfigDef();
     addConnectorConfigs(configDef);
@@ -272,10 +277,20 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
         3000, 
         Importance.LOW, 
         READ_TIMEOUT_MS_CONFIG_DOC,
-        group, 
-        ++order, 
-        Width.SHORT, 
-        "Read Timeout");
+        group,
+        ++order,
+        Width.SHORT,
+        "Read Timeout"
+    ).define(
+        CREATE_INDEX_AT_START_CONFIG,
+        Type.BOOLEAN,
+        true,
+        Importance.LOW,
+        CREATE_INDEX_AT_START__DOC,
+        group,
+        ++order,
+        Width.SHORT,
+        "Create indexes at bootstrap time");
   }
 
   private static void addConversionConfigs(ConfigDef configDef) {
