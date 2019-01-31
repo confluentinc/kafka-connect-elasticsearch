@@ -91,7 +91,7 @@ public class ElasticsearchSinkTask extends SinkTask {
       boolean dropInvalidMessage =
           config.getBoolean(ElasticsearchSinkConnectorConfig.DROP_INVALID_MESSAGE_CONFIG);
       boolean createIndexAtStartTime =
-          config.getBoolean(ElasticsearchSinkConnectorConfig.CREATE_INDEX_AT_START_CONFIG);
+          config.getBoolean(ElasticsearchSinkConnectorConfig.AUTO_CREATE_INDEX_AT_START_CONFIG);
 
       DataConverter.BehaviorOnNullValues behaviorOnNullValues =
           DataConverter.BehaviorOnNullValues.forValue(
