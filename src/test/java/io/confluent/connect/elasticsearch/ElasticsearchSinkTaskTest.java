@@ -42,6 +42,11 @@ public class ElasticsearchSinkTaskTest extends ElasticsearchSinkTestBase {
   private static final int PARTITION_113 = 113;
   private static final TopicPartition TOPIC_IN_CAPS_PARTITION = new TopicPartition(TOPIC_IN_CAPS, PARTITION_113);
 
+  private static final String UNSEEN_TOPIC = "UnseenTopic";
+  private static final int PARTITION_114 = 114;
+  private static final TopicPartition UNSEEN_TOPIC_PARTITION = new TopicPartition(UNSEEN_TOPIC, PARTITION_114);
+
+
   private Map<String, String> createProps() {
     Map<String, String> props = new HashMap<>();
     props.put(ElasticsearchSinkConnectorConfig.TYPE_NAME_CONFIG, TYPE);
@@ -94,7 +99,38 @@ public class ElasticsearchSinkTaskTest extends ElasticsearchSinkTestBase {
     Struct record = createRecord(schema);
 
     SinkRecord sinkRecord = new SinkRecord(TOPIC_IN_CAPS,
-            PARTITION_113,
+        PARTITION_113,
+        Schema.STRING_SCHEMA,
+        key,
+        schema,
+        record,
+        0 );
+
+    try {
+      task.start(props, client);
+      task.open(new HashSet<>(Collections.singletonList(TOPIC_IN_CAPS_PARTITION)));
+      task.put(Collections.singleton(sinkRecord));
+    } catch (Exception ex) {
+      fail("A topic name not in lowercase can not be used as index name in Elasticsearch");
+    } finally {
+      task.stop();
+    }
+  }
+
+  @Test
+  public void testCreateAndWriteToIndexNotCreatedAtStartTime() {
+    InternalTestCluster cluster = ESIntegTestCase.internalCluster();
+    cluster.ensureAtLeastNumDataNodes(3);
+    Map<String, String> props = createProps();
+
+    ElasticsearchSinkTask task = new ElasticsearchSinkTask();
+
+    String key = "key";
+    Schema schema = createSchema();
+    Struct record = createRecord(schema);
+
+    SinkRecord sinkRecord = new SinkRecord(UNSEEN_TOPIC,
+            PARTITION_114,
             Schema.STRING_SCHEMA,
             key,
             schema,
@@ -106,7 +142,7 @@ public class ElasticsearchSinkTaskTest extends ElasticsearchSinkTestBase {
       task.open(new HashSet<>(Collections.singletonList(TOPIC_IN_CAPS_PARTITION)));
       task.put(Collections.singleton(sinkRecord));
     } catch (Exception ex) {
-      fail("A topic name not in lowercase can not be used as index name in Elasticsearch");
+      fail("Record could not be written to elasticsearch due to non existing index");
     } finally {
       task.stop();
     }
