@@ -204,13 +204,13 @@ public class JestElasticsearchClient implements ElasticsearchClient {
               .map(addr -> HttpHost.create(addr)).collect(Collectors.toSet()));
     }
 
-    final String proxy =
-        config.getString(ElasticsearchSinkConnectorConfig.CONNECTION_PROXY_CONFIG);
-    if (proxy != null && !proxy.isEmpty()) {
-      try {
-        String protocol = proxy.split("://")[0];
-        String host = proxy.split("://")[1].split(":")[0];
-        int port = Integer.valueOf(proxy.split(":")[2]);
+      final String proxy =
+              config.getString(ElasticsearchSinkConnectorConfig.CONNECTION_PROXY_CONFIG);
+      if (proxy != null && !proxy.isEmpty()) {
+        try {
+          String protocol = proxy.split("://")[0];
+          String host = proxy.split("://")[1].split(":")[0];
+          int port = Integer.parseInt(proxy.split(":")[2]);
 
         builder.proxy(new HttpHost(host, port, protocol));
       } catch (NumberFormatException | ArrayIndexOutOfBoundsException e) {
