@@ -48,6 +48,8 @@ import org.apache.http.HttpHost;
 import org.apache.http.auth.AuthScope;
 import org.apache.http.auth.Credentials;
 import org.apache.http.client.CredentialsProvider;
+import org.apache.http.conn.routing.HttpRoutePlanner;
+import org.apache.http.impl.conn.DefaultProxyRoutePlanner;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.junit.Assert;
@@ -57,6 +59,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.ArgumentMatcher;
 import org.mockito.InOrder;
 
+import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -126,6 +129,31 @@ public class JestElasticsearchClientTest {
     assertEquals("elastic", credentials.getUserPrincipal().getName());
     assertEquals("elasticpw", credentials.getPassword());
     assertEquals(HttpHost.create("http://localhost:9200"), preemptiveAuthTargetHosts.iterator().next());
+  }
+
+  @Test
+  public void connectsWithProxy() throws NoSuchFieldException, IllegalAccessException {
+    Map<String, String> props = new HashMap<>();
+    props.put(ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG, "http://localhost:9200");
+    props.put(ElasticsearchSinkConnectorConfig.CONNECTION_PROXY_CONFIG, "https://myproxy:443");
+    props.put(ElasticsearchSinkConnectorConfig.TYPE_NAME_CONFIG, "kafka-connect");
+    JestElasticsearchClient client = new JestElasticsearchClient(props, jestClientFactory);
+
+    ArgumentCaptor<HttpClientConfig> captor = ArgumentCaptor.forClass(HttpClientConfig.class);
+    verify(jestClientFactory).setHttpClientConfig(captor.capture());
+    HttpClientConfig httpClientConfig = captor.getValue();
+    HttpRoutePlanner routePlanner = httpClientConfig.getHttpRoutePlanner();
+
+    assertTrue(routePlanner instanceof DefaultProxyRoutePlanner);
+    DefaultProxyRoutePlanner proxyRoutePlanner = (DefaultProxyRoutePlanner) routePlanner;
+
+    Field f = proxyRoutePlanner.getClass().getDeclaredField("proxy");
+    f.setAccessible(true);
+    HttpHost httpProxy = (HttpHost) f.get(proxyRoutePlanner);
+
+    assertEquals("https", httpProxy.getSchemeName());
+    assertEquals("myproxy", httpProxy.getHostName());
+    assertEquals(443, httpProxy.getPort());
   }
 
   @Test
