@@ -37,6 +37,10 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
       + "http://eshost2:9200`` or ``https://eshost3:9200``. HTTPS is used for all connections "
       + "if any of the URLs starts with ``https:``. A URL without a protocol is treated as "
       + "``http``.";
+  public static final String CONNECTION_PROXY_CONFIG = "connection.proxy";
+  private static final String CONNECTION_PROXY_DOC =
+      "A URL of Elasticsearch HTTP(S) proxy e.g. ``https://proxy1:443``,"
+          + " ``http://proxy2:9876``, etc. Format: (http|https)://<host>:<port>";
   public static final String CONNECTION_USERNAME_CONFIG = "connection.username";
   private static final String CONNECTION_USERNAME_DOC =
       "The username used to authenticate with Elasticsearch. "
@@ -251,6 +255,16 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
         Width.SHORT,
         "Connection Password"
     ).define(
+        CONNECTION_PROXY_CONFIG,
+        Type.STRING,
+        null,
+        Importance.MEDIUM,
+        CONNECTION_PROXY_DOC,
+        group,
+        ++order,
+        Width.LONG,
+        "Connection Proxy"
+    ).define(
         BATCH_SIZE_CONFIG,
         Type.INT,
         2000,
@@ -341,7 +355,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
         Width.SHORT,
         "Max Connection Idle Time"
     ).define(
-        CONNECTION_TIMEOUT_MS_CONFIG, 
+        CONNECTION_TIMEOUT_MS_CONFIG,
         Type.INT, 
         1000, 
         Importance.LOW, 
@@ -357,8 +371,8 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
         Importance.LOW, 
         READ_TIMEOUT_MS_CONFIG_DOC,
         group,
-        ++order, 
-        Width.SHORT, 
+        ++order,
+        Width.SHORT,
         "Read Timeout"
     ).define(
         AUTO_CREATE_INDICES_AT_START_CONFIG,

@@ -155,7 +155,7 @@ public class JestElasticsearchClient implements ElasticsearchClient {
               config.getLong(ElasticsearchSinkConnectorConfig.RETRY_BACKOFF_MS_CONFIG);
       this.maxRetries = config.getInt(ElasticsearchSinkConnectorConfig.MAX_RETRIES_CONFIG);
       this.timeout = config.getInt(ElasticsearchSinkConnectorConfig.READ_TIMEOUT_MS_CONFIG);
-      
+
     } catch (IOException e) {
       throw new ConnectException(
           "Couldn't start ElasticsearchSinkTask due to connection error:",
@@ -202,6 +202,21 @@ public class JestElasticsearchClient implements ElasticsearchClient {
       builder.defaultCredentials(username, password.value())
           .preemptiveAuthTargetHosts(address.stream()
               .map(addr -> HttpHost.create(addr)).collect(Collectors.toSet()));
+    }
+
+    final String proxy =
+        config.getString(ElasticsearchSinkConnectorConfig.CONNECTION_PROXY_CONFIG);
+    if (proxy != null && !proxy.isEmpty()) {
+      try {
+        String protocol = proxy.split("://")[0];
+        String host = proxy.split("://")[1].split(":")[0];
+        int port = Integer.valueOf(proxy.split(":")[2]);
+
+        builder.proxy(new HttpHost(host, port, protocol));
+      } catch (NumberFormatException | ArrayIndexOutOfBoundsException e) {
+        throw new ConfigException("Unable to set up proxy: "
+            + "invalid proxy URL found in config: " + proxy, e);
+      }
     }
 
     if (config.secured()) {
