@@ -24,6 +24,7 @@ import java.util.Map;
 
 import static io.confluent.connect.elasticsearch.DataConverter.BehaviorOnNullValues;
 import static io.confluent.connect.elasticsearch.bulk.BulkProcessor.BehaviorOnMalformedDoc;
+import static org.apache.kafka.common.config.SslConfigs.addClientSslSupport;
 
 public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
 
@@ -147,10 +148,22 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
       + " mapping conflict or a field name containing illegal characters. Valid options are "
       + "'ignore', 'warn', and 'fail'.";
 
+  public static final String CONNECTION_SSL_CONFIG = "elastic.https";
+  private static final String CONNECTION_SSL_DOC = "Override to specify whether to use SSL "
+      + "connection despite URL protocol. By default, the connector will use SSL when at "
+      + "least one URL begins with 'https:'.";
+  public static final String CONNECTION_SSL_DEFAULT = "false";
+
   protected static ConfigDef baseConfigDef() {
     final ConfigDef configDef = new ConfigDef();
     addConnectorConfigs(configDef);
     addConversionConfigs(configDef);
+    ConfigDef sslConfigDef = new ConfigDef();
+    addClientSslSupport(sslConfigDef);
+    configDef.embed(
+        CONNECTION_SSL_CONFIG + ".", "HTTPS",
+        configDef.configKeys().size() + 1, sslConfigDef);
+
     return configDef;
   }
 
@@ -275,7 +288,18 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
         group, 
         ++order, 
         Width.SHORT, 
-        "Read Timeout");
+        "Read Timeout"
+    ).define(
+        CONNECTION_SSL_CONFIG,
+        Type.BOOLEAN,
+        CONNECTION_SSL_DEFAULT,
+        Importance.HIGH,
+        CONNECTION_SSL_DOC,
+        group,
+        ++order,
+        Width.LONG,
+        "Use Secure Connection"
+    );
   }
 
   private static void addConversionConfigs(ConfigDef configDef) {
@@ -388,6 +412,12 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
 
   public ElasticsearchSinkConnectorConfig(Map<String, String> props) {
     super(CONFIG, props);
+  }
+
+  public Map<String, Object> sslConfigs() {
+    ConfigDef sslConfigDef = new ConfigDef();
+    addClientSslSupport(sslConfigDef);
+    return sslConfigDef.parse(originalsWithPrefix(CONNECTION_SSL_CONFIG + "."));
   }
 
   public static void main(String[] args) {

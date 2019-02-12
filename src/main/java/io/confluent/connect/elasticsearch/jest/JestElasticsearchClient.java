@@ -43,8 +43,11 @@ import io.searchbox.indices.IndicesExists;
 import io.searchbox.indices.mapping.GetMapping;
 import io.searchbox.indices.mapping.PutMapping;
 import org.apache.http.HttpHost;
+import org.apache.http.conn.ssl.SSLConnectionSocketFactory;
 import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.config.types.Password;
+import org.apache.kafka.common.network.Mode;
+import org.apache.kafka.common.security.ssl.SslFactory;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.slf4j.Logger;
@@ -56,8 +59,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
+import javax.net.ssl.SSLContext;
 
 public class JestElasticsearchClient implements ElasticsearchClient {
+  private static final Logger log = LoggerFactory.getLogger(JestElasticsearchClient.class);
 
   // visible for testing
   protected static final String MAPPER_PARSE_EXCEPTION
@@ -113,7 +118,7 @@ public class JestElasticsearchClient implements ElasticsearchClient {
   }
 
   // visible for testing
-  protected JestElasticsearchClient(Map<String, String> props, JestClientFactory factory) {
+  public JestElasticsearchClient(Map<String, String> props, JestClientFactory factory) {
     try {
       ElasticsearchSinkConnectorConfig config = new ElasticsearchSinkConnectorConfig(props);
       final int connTimeout = config.getInt(
@@ -125,9 +130,16 @@ public class JestElasticsearchClient implements ElasticsearchClient {
           ElasticsearchSinkConnectorConfig.CONNECTION_USERNAME_CONFIG);
       final Password password = config.getPassword(
           ElasticsearchSinkConnectorConfig.CONNECTION_PASSWORD_CONFIG);
+      Boolean alwaysSecured = config.getBoolean(
+          ElasticsearchSinkConnectorConfig.CONNECTION_SSL_CONFIG);
+      alwaysSecured = alwaysSecured == null ? false : alwaysSecured;
 
       List<String> address =
           config.getList(ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG);
+
+
+      final boolean secured = alwaysSecured
+          || address.stream().anyMatch(a -> a.startsWith("https:"));
       HttpClientConfig.Builder builder = new HttpClientConfig.Builder(address)
           .connTimeout(connTimeout)
           .readTimeout(readTimeout)
@@ -137,6 +149,19 @@ public class JestElasticsearchClient implements ElasticsearchClient {
             .preemptiveAuthTargetHosts(address.stream()
                 .map(addr -> HttpHost.create(addr)).collect(Collectors.toSet()));
       }
+
+      if (secured) {
+        log.info("Using secured connection");
+        SslFactory kafkaSslFactory = new SslFactory(Mode.CLIENT, "nonev", false);
+        kafkaSslFactory.configure(config.sslConfigs());
+        SSLContext sslContext = kafkaSslFactory.sslContext();
+        SSLConnectionSocketFactory sslSocketFactory = new SSLConnectionSocketFactory(
+            sslContext, SSLConnectionSocketFactory.getDefaultHostnameVerifier());
+
+        builder.sslSocketFactory(sslSocketFactory); // this only affects sync calls
+        // TODO builder.httpsIOSessionStrategy(httpsIOSessionStrategy);this only affects async calls
+      }
+
       HttpClientConfig httpClientConfig = builder.build();
       factory.setHttpClientConfig(httpClientConfig);
       this.client = factory.getObject();

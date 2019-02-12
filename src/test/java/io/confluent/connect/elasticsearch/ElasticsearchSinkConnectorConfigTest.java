@@ -1,5 +1,6 @@
 package io.confluent.connect.elasticsearch;
 
+import org.apache.kafka.common.config.types.Password;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -44,6 +45,22 @@ public class ElasticsearchSinkConnectorConfigTest {
     Assert.assertEquals(
         config.getInt(ElasticsearchSinkConnectorConfig.CONNECTION_TIMEOUT_MS_CONFIG),
         (Integer) 15000
+    );
+  }
+
+  @Test
+  public void testSslConfigs() {
+    props.put("elastic.ssl", "true");
+    props.put("elastic.https.ssl.keystore.location", "/path");
+    props.put("elastic.https.ssl.keystore.password", "pword");
+    props.put("elastic.https.ssl.truststore.location", "/path2");
+    props.put("elastic.https.ssl.truststore.password", "pword2");
+    ElasticsearchSinkConnectorConfig config = new ElasticsearchSinkConnectorConfig(props);
+    Map<String, Object> sslConfigs = config.sslConfigs();
+    Assert.assertTrue(sslConfigs.size() > 0);
+    Assert.assertEquals(
+        sslConfigs.get("ssl.keystore.password"),
+        new Password("pword")
     );
   }
 }
