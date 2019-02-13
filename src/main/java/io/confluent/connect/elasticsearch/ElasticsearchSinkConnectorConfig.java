@@ -150,9 +150,15 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
 
   public static final String CONNECTION_SSL_CONFIG = "elastic.https";
   private static final String CONNECTION_SSL_DOC = "Override to specify whether to use SSL "
-      + "connection despite URL protocol. By default, the connector will use SSL when at "
-      + "least one URL begins with 'https:'.";
+      + "connection in all cases. By default, the connector will use SSL when at "
+      + "least one URL begins with 'https:'. This config allows users to specify SSL even if "
+      + "host is specified without a protocol.";
   public static final String CONNECTION_SSL_DEFAULT = "false";
+
+  public static final String CLIENT_AUTH_REQ_CONF = "elastic.https.client.auth.required";
+  private static final String CLIENT_AUTH_REQ_DOC = "Specify whether the client (connector) will "
+      + "be required to authenticate itself for SSL communication.";
+  public static final String CLIENT_AUTH_REQ_DEFAULT = "false";
 
   protected static ConfigDef baseConfigDef() {
     final ConfigDef configDef = new ConfigDef();
@@ -299,6 +305,17 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
         ++order,
         Width.LONG,
         "Use Secure Connection"
+    )
+    .define(
+        CLIENT_AUTH_REQ_CONF,
+        Type.BOOLEAN,
+        CLIENT_AUTH_REQ_DEFAULT,
+        Importance.HIGH,
+        CLIENT_AUTH_REQ_DOC,
+        group,
+        ++order,
+        Width.SHORT,
+        "Client authentication Required"
     );
   }
 

@@ -44,6 +44,7 @@ import io.searchbox.indices.mapping.GetMapping;
 import io.searchbox.indices.mapping.PutMapping;
 import org.apache.http.HttpHost;
 import org.apache.http.conn.ssl.SSLConnectionSocketFactory;
+import org.apache.http.nio.conn.ssl.SSLIOSessionStrategy;
 import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.config.types.Password;
 import org.apache.kafka.common.network.Mode;
@@ -130,9 +131,8 @@ public class JestElasticsearchClient implements ElasticsearchClient {
           ElasticsearchSinkConnectorConfig.CONNECTION_USERNAME_CONFIG);
       final Password password = config.getPassword(
           ElasticsearchSinkConnectorConfig.CONNECTION_PASSWORD_CONFIG);
-      Boolean alwaysSecured = config.getBoolean(
+      final Boolean alwaysSecured = config.getBoolean(
           ElasticsearchSinkConnectorConfig.CONNECTION_SSL_CONFIG);
-      alwaysSecured = alwaysSecured == null ? false : alwaysSecured;
 
       List<String> address =
           config.getList(ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG);
@@ -152,14 +152,23 @@ public class JestElasticsearchClient implements ElasticsearchClient {
 
       if (secured) {
         log.info("Using secured connection");
-        SslFactory kafkaSslFactory = new SslFactory(Mode.CLIENT, "nonev", false);
+        String clientAuth = config.getBoolean(ElasticsearchSinkConnectorConfig.CLIENT_AUTH_REQ_CONF)
+            ? "required" : "requested";
+        SslFactory kafkaSslFactory = new SslFactory(Mode.CLIENT, clientAuth, false);
         kafkaSslFactory.configure(config.sslConfigs());
         SSLContext sslContext = kafkaSslFactory.sslContext();
+
+        // Sync calls
         SSLConnectionSocketFactory sslSocketFactory = new SSLConnectionSocketFactory(
             sslContext, SSLConnectionSocketFactory.getDefaultHostnameVerifier());
+        builder.sslSocketFactory(sslSocketFactory);
 
-        builder.sslSocketFactory(sslSocketFactory); // this only affects sync calls
-        // TODO builder.httpsIOSessionStrategy(httpsIOSessionStrategy);this only affects async calls
+        // Async calls
+        SSLIOSessionStrategy sessionStrategy = new SSLIOSessionStrategy(
+            sslContext, SSLConnectionSocketFactory.getDefaultHostnameVerifier());
+        builder.httpsIOSessionStrategy(sessionStrategy);
+      } else {
+        log.info("Using unsecured connection");
       }
 
       HttpClientConfig httpClientConfig = builder.build();
