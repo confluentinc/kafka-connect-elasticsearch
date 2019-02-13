@@ -152,8 +152,7 @@ public class JestElasticsearchClient implements ElasticsearchClient {
 
       if (secured) {
         log.info("Using secured connection");
-        String clientAuth = config.getBoolean(ElasticsearchSinkConnectorConfig.CLIENT_AUTH_REQ_CONF)
-            ? "required" : "requested";
+        String clientAuth = config.getString(ElasticsearchSinkConnectorConfig.CLIENT_AUTH_CONF);
         SslFactory kafkaSslFactory = new SslFactory(Mode.CLIENT, clientAuth, false);
         kafkaSslFactory.configure(config.sslConfigs());
         SSLContext sslContext = kafkaSslFactory.sslContext();

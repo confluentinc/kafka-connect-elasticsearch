@@ -59,8 +59,8 @@ public class ElasticsearchSinkConnectorConfigTest {
     Map<String, Object> sslConfigs = config.sslConfigs();
     Assert.assertTrue(sslConfigs.size() > 0);
     Assert.assertEquals(
-        sslConfigs.get("ssl.keystore.password"),
-        new Password("opensesame")
+        new Password("opensesame"),
+        sslConfigs.get("ssl.keystore.password")
     );
   }
 }

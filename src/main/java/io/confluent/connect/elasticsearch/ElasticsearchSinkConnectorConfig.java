@@ -19,6 +19,7 @@ import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.common.config.ConfigDef.Importance;
 import org.apache.kafka.common.config.ConfigDef.Type;
 import org.apache.kafka.common.config.ConfigDef.Width;
+import org.apache.kafka.common.config.internals.BrokerSecurityConfigs;
 
 import java.util.Map;
 
@@ -155,10 +156,9 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
       + "host is specified without a protocol.";
   public static final String CONNECTION_SSL_DEFAULT = "false";
 
-  public static final String CLIENT_AUTH_REQ_CONF = "elastic.https.client.auth.required";
-  private static final String CLIENT_AUTH_REQ_DOC = "Specify whether the client (connector) will "
-      + "be required to authenticate itself for SSL communication.";
-  public static final String CLIENT_AUTH_REQ_DEFAULT = "false";
+  public static final String CLIENT_AUTH_CONF = BrokerSecurityConfigs.SSL_CLIENT_AUTH_CONFIG;
+  private static final String CLIENT_AUTH_DOC = BrokerSecurityConfigs.SSL_CLIENT_AUTH_DOC;
+  private static final String CLIENT_AUTH_DEFAULT = "requested";
 
   protected static ConfigDef baseConfigDef() {
     final ConfigDef configDef = new ConfigDef();
@@ -167,7 +167,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
     ConfigDef sslConfigDef = new ConfigDef();
     addClientSslSupport(sslConfigDef);
     configDef.embed(
-        CONNECTION_SSL_CONFIG + ".", "HTTPS",
+        CONNECTION_SSL_CONFIG + ".", "Security",
         configDef.configKeys().size() + 1, sslConfigDef);
 
     return configDef;
@@ -305,16 +305,15 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
         ++order,
         Width.LONG,
         "Use Secure Connection"
-    ).define(
-        CLIENT_AUTH_REQ_CONF,
-        Type.BOOLEAN,
-        CLIENT_AUTH_REQ_DEFAULT,
-        Importance.HIGH,
-        CLIENT_AUTH_REQ_DOC,
+    ).define(CLIENT_AUTH_CONF,
+        Type.STRING,
+        CLIENT_AUTH_DEFAULT,
+        Importance.MEDIUM,
+        CLIENT_AUTH_DOC,
         group,
         ++order,
         Width.SHORT,
-        "Client authentication Required"
+        "Client Authentication Required"
     );
   }
 
