@@ -305,8 +305,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
         ++order,
         Width.LONG,
         "Use Secure Connection"
-    )
-    .define(
+    ).define(
         CLIENT_AUTH_REQ_CONF,
         Type.BOOLEAN,
         CLIENT_AUTH_REQ_DEFAULT,
