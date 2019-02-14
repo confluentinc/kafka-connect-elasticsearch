@@ -62,10 +62,12 @@ public class ElasticsearchSinkConnectorConfigTest {
     Assert.assertTrue(sslConfigs.size() > 0);
     Assert.assertEquals(
         new Password("opensesame"),
-        sslConfigs.get("ssl.keystore.password"));
+        sslConfigs.get("ssl.keystore.password")
+    );
     Assert.assertEquals(
         new Password("opensesame2"),
-        sslConfigs.get("ssl.truststore.password"));
+        sslConfigs.get("ssl.truststore.password")
+    );
     Assert.assertEquals("/path", sslConfigs.get("ssl.keystore.location"));
     Assert.assertEquals("/path2", sslConfigs.get("ssl.truststore.location"));
   }

@@ -33,10 +33,10 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
 
   public static final String CONNECTION_URL_CONFIG = "connection.url";
   private static final String CONNECTION_URL_DOC =
-      "List of Elasticsearch HTTP connection URLs e.g. ``http://eshost1:9200,"
-      + "http://eshost2:9200``, or ``https://eshost3:9200``. If any of the URLs specifies "
-      + "``https:`` protocol, https will be used for all connections. A URL with no protocol will "
-      + "be treated as ``http``.";
+      "The comma-separated list of one or more Elasticsearch URLs, such as ``http://eshost1:9200,"
+      + "http://eshost2:9200`` or ``https://eshost3:9200``. HTTPS will be used for all connections "
+      + "if any of the URLs starts with ``https:``. A URL without a protocol will be treated as "
+      + "``http``.";
   public static final String CONNECTION_USERNAME_CONFIG = "connection.username";
   private static final String CONNECTION_USERNAME_DOC =
       "The username used to authenticate with Elasticsearch. "
@@ -153,9 +153,9 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
       + " mapping conflict or a field name containing illegal characters. Valid options are "
       + "'ignore', 'warn', and 'fail'.";
 
-  public static final String CONNECTION_SSL_CONFIG = "elastic.https";
+  public static final String CONNECTION_SSL_CONFIG_PREFIX = "elastic.https.";
 
-  public static final String CLIENT_AUTH_CONF = CONNECTION_SSL_CONFIG + "."
+  public static final String CLIENT_AUTH_CONF = CONNECTION_SSL_CONFIG_PREFIX
       + BrokerSecurityConfigs.SSL_CLIENT_AUTH_CONFIG;
   private static final String CLIENT_AUTH_DOC = BrokerSecurityConfigs.SSL_CLIENT_AUTH_DOC;
   private static final String CLIENT_AUTH_DEFAULT = "requested";
@@ -167,8 +167,9 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
     ConfigDef sslConfigDef = new ConfigDef();
     addClientSslSupport(sslConfigDef);
     configDef.embed(
-        CONNECTION_SSL_CONFIG + ".", SSL_GROUP,
-        configDef.configKeys().size() + 1, sslConfigDef);
+        CONNECTION_SSL_CONFIG_PREFIX, SSL_GROUP,
+        configDef.configKeys().size() + 1, sslConfigDef
+    );
 
     return configDef;
   }
@@ -427,7 +428,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   public Map<String, Object> sslConfigs() {
     ConfigDef sslConfigDef = new ConfigDef();
     addClientSslSupport(sslConfigDef);
-    return sslConfigDef.parse(originalsWithPrefix(CONNECTION_SSL_CONFIG + "."));
+    return sslConfigDef.parse(originalsWithPrefix(CONNECTION_SSL_CONFIG_PREFIX));
   }
 
   public static void main(String[] args) {
