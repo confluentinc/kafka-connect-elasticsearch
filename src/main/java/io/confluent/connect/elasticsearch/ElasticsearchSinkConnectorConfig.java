@@ -21,6 +21,7 @@ import org.apache.kafka.common.config.ConfigDef.Type;
 import org.apache.kafka.common.config.ConfigDef.Width;
 import org.apache.kafka.common.config.internals.BrokerSecurityConfigs;
 
+import java.util.List;
 import java.util.Map;
 
 import static io.confluent.connect.elasticsearch.DataConverter.BehaviorOnNullValues;
@@ -32,7 +33,8 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   public static final String CONNECTION_URL_CONFIG = "connection.url";
   private static final String CONNECTION_URL_DOC =
       "List of Elasticsearch HTTP connection URLs e.g. ``http://eshost1:9200,"
-      + "http://eshost2:9200``.";
+      + "http://eshost2:9200``, or ``https://eshost3:9200``. If any of the URLs specifies "
+      + "\"https:\" protocol, https will be used for all connections.";
   public static final String CONNECTION_USERNAME_CONFIG = "connection.username";
   private static final String CONNECTION_USERNAME_DOC =
       "The username used to authenticate with Elasticsearch. "
@@ -150,11 +152,6 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
       + "'ignore', 'warn', and 'fail'.";
 
   public static final String CONNECTION_SSL_CONFIG = "elastic.https";
-  private static final String CONNECTION_SSL_DOC = "Override to specify whether to use SSL "
-      + "connection in all cases. By default, the connector will use SSL when at "
-      + "least one URL begins with 'https:'. This config allows users to specify SSL even if "
-      + "host is specified without a protocol.";
-  public static final String CONNECTION_SSL_DEFAULT = "false";
 
   public static final String CLIENT_AUTH_CONF = BrokerSecurityConfigs.SSL_CLIENT_AUTH_CONFIG;
   private static final String CLIENT_AUTH_DOC = BrokerSecurityConfigs.SSL_CLIENT_AUTH_DOC;
@@ -295,16 +292,6 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
         ++order, 
         Width.SHORT, 
         "Read Timeout"
-    ).define(
-        CONNECTION_SSL_CONFIG,
-        Type.BOOLEAN,
-        CONNECTION_SSL_DEFAULT,
-        Importance.HIGH,
-        CONNECTION_SSL_DOC,
-        group,
-        ++order,
-        Width.LONG,
-        "Use Secure Connection"
     ).define(CLIENT_AUTH_CONF,
         Type.STRING,
         CLIENT_AUTH_DEFAULT,
@@ -315,6 +302,11 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
         Width.SHORT,
         "Client Authentication Required"
     );
+  }
+
+  public boolean secured() {
+    List<String> address = getList(ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG);
+    return address.stream().anyMatch(a -> a.startsWith("https:"));
   }
 
   private static void addConversionConfigs(ConfigDef configDef) {

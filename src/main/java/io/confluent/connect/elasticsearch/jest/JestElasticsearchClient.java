@@ -131,15 +131,11 @@ public class JestElasticsearchClient implements ElasticsearchClient {
           ElasticsearchSinkConnectorConfig.CONNECTION_USERNAME_CONFIG);
       final Password password = config.getPassword(
           ElasticsearchSinkConnectorConfig.CONNECTION_PASSWORD_CONFIG);
-      final Boolean alwaysSecured = config.getBoolean(
-          ElasticsearchSinkConnectorConfig.CONNECTION_SSL_CONFIG);
-
       List<String> address =
           config.getList(ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG);
 
+      final boolean secured = config.secured();
 
-      final boolean secured = alwaysSecured
-          || address.stream().anyMatch(a -> a.startsWith("https:"));
       HttpClientConfig.Builder builder = new HttpClientConfig.Builder(address)
           .connTimeout(connTimeout)
           .readTimeout(readTimeout)

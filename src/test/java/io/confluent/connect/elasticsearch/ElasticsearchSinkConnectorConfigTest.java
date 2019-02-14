@@ -8,6 +8,9 @@ import org.junit.Test;
 import java.util.HashMap;
 import java.util.Map;
 
+import static junit.framework.TestCase.assertTrue;
+import static org.junit.Assert.assertFalse;
+
 public class ElasticsearchSinkConnectorConfigTest {
 
   private Map<String, String> props;
@@ -50,7 +53,6 @@ public class ElasticsearchSinkConnectorConfigTest {
 
   @Test
   public void testSslConfigs() {
-    props.put("elastic.ssl", "true");
     props.put("elastic.https.ssl.keystore.location", "/path");
     props.put("elastic.https.ssl.keystore.password", "opensesame");
     props.put("elastic.https.ssl.truststore.location", "/path2");
@@ -66,5 +68,21 @@ public class ElasticsearchSinkConnectorConfigTest {
         sslConfigs.get("ssl.truststore.password"));
     Assert.assertEquals("/path", sslConfigs.get("ssl.keystore.location"));
     Assert.assertEquals("/path2", sslConfigs.get("ssl.truststore.location"));
+  }
+
+  @Test
+  public void testSecured() {
+    props.put("connection.url", "http://host:9999");
+    assertFalse(new ElasticsearchSinkConnectorConfig(props).secured());
+
+    props.put("connection.url", "https://host:9999");
+    assertTrue(new ElasticsearchSinkConnectorConfig(props).secured());
+
+    props.put("connection.url", "http://host1:9992,https://host:9999");
+    assertTrue(new ElasticsearchSinkConnectorConfig(props).secured());
+
+    // Default behavior should be backwards compat
+    props.put("connection.url", "host1:9992");
+    assertFalse(new ElasticsearchSinkConnectorConfig(props).secured());
   }
 }
