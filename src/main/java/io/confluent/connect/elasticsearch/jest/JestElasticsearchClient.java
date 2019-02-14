@@ -119,7 +119,7 @@ public class JestElasticsearchClient implements ElasticsearchClient {
   }
 
   // visible for testing
-  public JestElasticsearchClient(Map<String, String> props, JestClientFactory factory) {
+  protected JestElasticsearchClient(Map<String, String> props, JestClientFactory factory) {
     try {
       ElasticsearchSinkConnectorConfig config = new ElasticsearchSinkConnectorConfig(props);
       final int connTimeout = config.getInt(
