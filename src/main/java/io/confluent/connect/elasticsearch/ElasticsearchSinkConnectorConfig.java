@@ -34,7 +34,8 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   private static final String CONNECTION_URL_DOC =
       "List of Elasticsearch HTTP connection URLs e.g. ``http://eshost1:9200,"
       + "http://eshost2:9200``, or ``https://eshost3:9200``. If any of the URLs specifies "
-      + "``https:`` protocol, https will be used for all connections.";
+      + "``https:`` protocol, https will be used for all connections. A URL with no protocol will "
+      + "be treated as ``http``.";
   public static final String CONNECTION_USERNAME_CONFIG = "connection.username";
   private static final String CONNECTION_USERNAME_DOC =
       "The username used to authenticate with Elasticsearch. "
