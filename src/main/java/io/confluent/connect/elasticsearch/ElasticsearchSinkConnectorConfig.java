@@ -29,6 +29,7 @@ import static io.confluent.connect.elasticsearch.bulk.BulkProcessor.BehaviorOnMa
 import static org.apache.kafka.common.config.SslConfigs.addClientSslSupport;
 
 public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
+  private static final String SSL_GROUP = "Security";
 
   public static final String CONNECTION_URL_CONFIG = "connection.url";
   private static final String CONNECTION_URL_DOC =
@@ -154,7 +155,8 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
 
   public static final String CONNECTION_SSL_CONFIG = "elastic.https";
 
-  public static final String CLIENT_AUTH_CONF = BrokerSecurityConfigs.SSL_CLIENT_AUTH_CONFIG;
+  public static final String CLIENT_AUTH_CONF = CONNECTION_SSL_CONFIG + "."
+      + BrokerSecurityConfigs.SSL_CLIENT_AUTH_CONFIG;
   private static final String CLIENT_AUTH_DOC = BrokerSecurityConfigs.SSL_CLIENT_AUTH_DOC;
   private static final String CLIENT_AUTH_DEFAULT = "requested";
 
@@ -165,7 +167,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
     ConfigDef sslConfigDef = new ConfigDef();
     addClientSslSupport(sslConfigDef);
     configDef.embed(
-        CONNECTION_SSL_CONFIG + ".", "Security",
+        CONNECTION_SSL_CONFIG + ".", SSL_GROUP,
         configDef.configKeys().size() + 1, sslConfigDef);
 
     return configDef;
@@ -298,7 +300,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
         CLIENT_AUTH_DEFAULT,
         Importance.MEDIUM,
         CLIENT_AUTH_DOC,
-        group,
+        SSL_GROUP,
         ++order,
         Width.SHORT,
         "Client Authentication Required"
