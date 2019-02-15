@@ -19,7 +19,6 @@ import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.common.config.ConfigDef.Importance;
 import org.apache.kafka.common.config.ConfigDef.Type;
 import org.apache.kafka.common.config.ConfigDef.Width;
-import org.apache.kafka.common.config.internals.BrokerSecurityConfigs;
 
 import java.util.List;
 import java.util.Map;
@@ -34,8 +33,8 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   public static final String CONNECTION_URL_CONFIG = "connection.url";
   private static final String CONNECTION_URL_DOC =
       "The comma-separated list of one or more Elasticsearch URLs, such as ``http://eshost1:9200,"
-      + "http://eshost2:9200`` or ``https://eshost3:9200``. HTTPS will be used for all connections "
-      + "if any of the URLs starts with ``https:``. A URL without a protocol will be treated as "
+      + "http://eshost2:9200`` or ``https://eshost3:9200``. HTTPS is used for all connections "
+      + "if any of the URLs starts with ``https:``. A URL without a protocol is treated as "
       + "``http``.";
   public static final String CONNECTION_USERNAME_CONFIG = "connection.username";
   private static final String CONNECTION_USERNAME_DOC =
@@ -113,7 +112,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
       "Whether to ignore schemas during indexing. When this is set to ``true``, the record "
       + "schema will be ignored for the purpose of registering an Elasticsearch mapping. "
       + "Elasticsearch will infer the mapping from the data (dynamic mapping needs to be enabled "
-      + "by the user).\n Note that this is a global config that applies to all topics, use ``"
+      + "by the user).\n Note that this is a global config that applies to all topics. Use ``"
       + TOPIC_SCHEMA_IGNORE_CONFIG + "`` to override as ``true`` for specific topics.";
   private static final String TOPIC_SCHEMA_IGNORE_DOC =
       "List of topics for which ``" + SCHEMA_IGNORE_CONFIG + "`` should be ``true``.";
@@ -154,11 +153,6 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
       + "'ignore', 'warn', and 'fail'.";
 
   public static final String CONNECTION_SSL_CONFIG_PREFIX = "elastic.https.";
-
-  public static final String CLIENT_AUTH_CONF = CONNECTION_SSL_CONFIG_PREFIX
-      + BrokerSecurityConfigs.SSL_CLIENT_AUTH_CONFIG;
-  private static final String CLIENT_AUTH_DOC = BrokerSecurityConfigs.SSL_CLIENT_AUTH_DOC;
-  private static final String CLIENT_AUTH_DEFAULT = "requested";
 
   protected static ConfigDef baseConfigDef() {
     final ConfigDef configDef = new ConfigDef();
@@ -296,15 +290,6 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
         ++order, 
         Width.SHORT, 
         "Read Timeout"
-    ).define(CLIENT_AUTH_CONF,
-        Type.STRING,
-        CLIENT_AUTH_DEFAULT,
-        Importance.MEDIUM,
-        CLIENT_AUTH_DOC,
-        SSL_GROUP,
-        ++order,
-        Width.SHORT,
-        "Client Authentication Required"
     );
   }
 
