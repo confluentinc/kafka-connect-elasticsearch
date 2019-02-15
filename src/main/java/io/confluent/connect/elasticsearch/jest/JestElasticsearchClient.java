@@ -43,8 +43,12 @@ import io.searchbox.indices.IndicesExists;
 import io.searchbox.indices.mapping.GetMapping;
 import io.searchbox.indices.mapping.PutMapping;
 import org.apache.http.HttpHost;
+import org.apache.http.conn.ssl.SSLConnectionSocketFactory;
+import org.apache.http.nio.conn.ssl.SSLIOSessionStrategy;
 import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.config.types.Password;
+import org.apache.kafka.common.network.Mode;
+import org.apache.kafka.common.security.ssl.SslFactory;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.slf4j.Logger;
@@ -56,8 +60,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
+import javax.net.ssl.SSLContext;
 
 public class JestElasticsearchClient implements ElasticsearchClient {
+  private static final Logger log = LoggerFactory.getLogger(JestElasticsearchClient.class);
 
   // visible for testing
   protected static final String MAPPER_PARSE_EXCEPTION
@@ -125,9 +131,9 @@ public class JestElasticsearchClient implements ElasticsearchClient {
           ElasticsearchSinkConnectorConfig.CONNECTION_USERNAME_CONFIG);
       final Password password = config.getPassword(
           ElasticsearchSinkConnectorConfig.CONNECTION_PASSWORD_CONFIG);
-
       List<String> address =
           config.getList(ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG);
+
       HttpClientConfig.Builder builder = new HttpClientConfig.Builder(address)
           .connTimeout(connTimeout)
           .readTimeout(readTimeout)
@@ -137,6 +143,26 @@ public class JestElasticsearchClient implements ElasticsearchClient {
             .preemptiveAuthTargetHosts(address.stream()
                 .map(addr -> HttpHost.create(addr)).collect(Collectors.toSet()));
       }
+
+      if (config.secured()) {
+        log.info("Using secured connection to {}", address);
+        SslFactory kafkaSslFactory = new SslFactory(Mode.CLIENT, null, false);
+        kafkaSslFactory.configure(config.sslConfigs());
+        SSLContext sslContext = kafkaSslFactory.sslContext();
+
+        // Sync calls
+        SSLConnectionSocketFactory sslSocketFactory = new SSLConnectionSocketFactory(
+            sslContext, SSLConnectionSocketFactory.getDefaultHostnameVerifier());
+        builder.sslSocketFactory(sslSocketFactory);
+
+        // Async calls
+        SSLIOSessionStrategy sessionStrategy = new SSLIOSessionStrategy(
+            sslContext, SSLConnectionSocketFactory.getDefaultHostnameVerifier());
+        builder.httpsIOSessionStrategy(sessionStrategy);
+      } else {
+        log.info("Using unsecured connection to {}", address);
+      }
+
       HttpClientConfig httpClientConfig = builder.build();
       factory.setHttpClientConfig(httpClientConfig);
       this.client = factory.getObject();

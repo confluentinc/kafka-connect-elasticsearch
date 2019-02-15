@@ -20,17 +20,22 @@ import org.apache.kafka.common.config.ConfigDef.Importance;
 import org.apache.kafka.common.config.ConfigDef.Type;
 import org.apache.kafka.common.config.ConfigDef.Width;
 
+import java.util.List;
 import java.util.Map;
 
 import static io.confluent.connect.elasticsearch.DataConverter.BehaviorOnNullValues;
 import static io.confluent.connect.elasticsearch.bulk.BulkProcessor.BehaviorOnMalformedDoc;
+import static org.apache.kafka.common.config.SslConfigs.addClientSslSupport;
 
 public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
+  private static final String SSL_GROUP = "Security";
 
   public static final String CONNECTION_URL_CONFIG = "connection.url";
   private static final String CONNECTION_URL_DOC =
-      "List of Elasticsearch HTTP connection URLs e.g. ``http://eshost1:9200,"
-      + "http://eshost2:9200``.";
+      "The comma-separated list of one or more Elasticsearch URLs, such as ``http://eshost1:9200,"
+      + "http://eshost2:9200`` or ``https://eshost3:9200``. HTTPS is used for all connections "
+      + "if any of the URLs starts with ``https:``. A URL without a protocol is treated as "
+      + "``http``.";
   public static final String CONNECTION_USERNAME_CONFIG = "connection.username";
   private static final String CONNECTION_USERNAME_DOC =
       "The username used to authenticate with Elasticsearch. "
@@ -107,7 +112,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
       "Whether to ignore schemas during indexing. When this is set to ``true``, the record "
       + "schema will be ignored for the purpose of registering an Elasticsearch mapping. "
       + "Elasticsearch will infer the mapping from the data (dynamic mapping needs to be enabled "
-      + "by the user).\n Note that this is a global config that applies to all topics, use ``"
+      + "by the user).\n Note that this is a global config that applies to all topics. Use ``"
       + TOPIC_SCHEMA_IGNORE_CONFIG + "`` to override as ``true`` for specific topics.";
   private static final String TOPIC_SCHEMA_IGNORE_DOC =
       "List of topics for which ``" + SCHEMA_IGNORE_CONFIG + "`` should be ``true``.";
@@ -147,10 +152,19 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
       + " mapping conflict or a field name containing illegal characters. Valid options are "
       + "'ignore', 'warn', and 'fail'.";
 
+  public static final String CONNECTION_SSL_CONFIG_PREFIX = "elastic.https.";
+
   protected static ConfigDef baseConfigDef() {
     final ConfigDef configDef = new ConfigDef();
     addConnectorConfigs(configDef);
     addConversionConfigs(configDef);
+    ConfigDef sslConfigDef = new ConfigDef();
+    addClientSslSupport(sslConfigDef);
+    configDef.embed(
+        CONNECTION_SSL_CONFIG_PREFIX, SSL_GROUP,
+        configDef.configKeys().size() + 1, sslConfigDef
+    );
+
     return configDef;
   }
 
@@ -275,7 +289,13 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
         group, 
         ++order, 
         Width.SHORT, 
-        "Read Timeout");
+        "Read Timeout"
+    );
+  }
+
+  public boolean secured() {
+    List<String> address = getList(ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG);
+    return address.stream().anyMatch(a -> a.startsWith("https:"));
   }
 
   private static void addConversionConfigs(ConfigDef configDef) {
@@ -388,6 +408,12 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
 
   public ElasticsearchSinkConnectorConfig(Map<String, String> props) {
     super(CONFIG, props);
+  }
+
+  public Map<String, Object> sslConfigs() {
+    ConfigDef sslConfigDef = new ConfigDef();
+    addClientSslSupport(sslConfigDef);
+    return sslConfigDef.parse(originalsWithPrefix(CONNECTION_SSL_CONFIG_PREFIX));
   }
 
   public static void main(String[] args) {
