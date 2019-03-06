@@ -44,6 +44,7 @@
         <jest.version>2.4.0</jest.version>
         <kafka.connect.maven.plugin.version>0.11.1</kafka.connect.maven.plugin.version>
         <confluent.maven.repo>http://packages.confluent.io/maven/</confluent.maven.repo>
+        <version.docker.maven.plugin>0.28.0</version.docker.maven.plugin>
     </properties>
 
     <repositories>
@@ -119,10 +120,105 @@
             <version>${lucene.version}</version>
             <scope>test</scope>
         </dependency>
+        <!--Require newer version than inherited-->
+        <dependency>
+            <groupId>com.google.guava</groupId>
+            <artifactId>guava</artifactId>
+            <version>27.0.1-jre</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.kafka</groupId>
+            <artifactId>connect-runtime</artifactId>
+            <version>${kafka.version}</version>
+            <classifier>test</classifier>
+            <type>test-jar</type>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.kafka</groupId>
+            <artifactId>connect-runtime</artifactId>
+            <version>${kafka.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.kafka</groupId>
+            <artifactId>kafka-clients</artifactId>
+            <version>${kafka.version}</version>
+            <classifier>test</classifier>
+            <type>test-jar</type>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.kafka</groupId>
+            <artifactId>kafka_2.11</artifactId>
+            <version>${kafka.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.kafka</groupId>
+            <artifactId>kafka_2.11</artifactId>
+            <type>test-jar</type>
+            <classifier>test</classifier>
+            <scope>test</scope>
+            <version>${kafka.version}</version>
+        </dependency>
     </dependencies>
 
     <build>
         <plugins>
+            <plugin>
+                <groupId>io.fabric8</groupId>
+                <artifactId>docker-maven-plugin</artifactId>
+                <version>${version.docker.maven.plugin}</version>
+                <configuration>
+                    <watchInterval>500</watchInterval>
+                    <logDate>default</logDate>
+                    <verbose>true</verbose>
+                    <images>
+                        <image>
+                            <alias>elastic-integration-test</alias>
+                            <!--"name" is in local images if "build" is defined, else will look
+                            for an image in a remote repo-->
+                            <name>confluentinc/elastic-integration</name>
+                            <build>
+                                <dockerFile>${project.basedir}/src/test/resources/Dockerfile</dockerFile>
+                            </build>
+                            <run>
+                                <hostname>elastichost</hostname>
+                                <ports>
+                                    <port>9200:9200</port>
+                                </ports>
+                                <wait>
+                                    <tcp>
+                                        <host>localhost</host>
+                                        <ports>
+                                            <port>9200</port>
+                                        </ports>
+                                    </tcp>
+                                    <time>120000</time>
+                                </wait>
+                            </run>
+                        </image>
+                    </images>
+
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>start</id>
+                        <phase>pre-integration-test</phase>
+                        <goals>
+                            <goal>build</goal>
+                            <goal>start</goal>
+                        </goals>
+                    </execution>
+                    <execution>
+                        <id>stop</id>
+                        <phase>post-integration-test</phase>
+                        <goals>
+                            <goal>stop</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
             <plugin>
                 <groupId>io.confluent</groupId>
                 <version>${kafka.connect.maven.plugin.version}</version>
