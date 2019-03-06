@@ -122,50 +122,7 @@ public class JestElasticsearchClient implements ElasticsearchClient {
   // visible for testing
   protected JestElasticsearchClient(Map<String, String> props, JestClientFactory factory) {
     try {
-      ElasticsearchSinkConnectorConfig config = new ElasticsearchSinkConnectorConfig(props);
-      final int connTimeout = config.getInt(
-          ElasticsearchSinkConnectorConfig.CONNECTION_TIMEOUT_MS_CONFIG);
-      final int readTimeout = config.getInt(
-          ElasticsearchSinkConnectorConfig.READ_TIMEOUT_MS_CONFIG);
-
-      final String username = config.getString(
-          ElasticsearchSinkConnectorConfig.CONNECTION_USERNAME_CONFIG);
-      final Password password = config.getPassword(
-          ElasticsearchSinkConnectorConfig.CONNECTION_PASSWORD_CONFIG);
-      List<String> address =
-          config.getList(ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG);
-
-      HttpClientConfig.Builder builder = new HttpClientConfig.Builder(address)
-          .connTimeout(connTimeout)
-          .readTimeout(readTimeout)
-          .multiThreaded(true);
-      if (username != null && password != null) {
-        builder.defaultCredentials(username, password.value())
-            .preemptiveAuthTargetHosts(address.stream()
-                .map(addr -> HttpHost.create(addr)).collect(Collectors.toSet()));
-      }
-
-      if (config.secured()) {
-        log.info("Using secured connection to {}", address);
-        SslFactory kafkaSslFactory = new SslFactory(Mode.CLIENT, null, false);
-        kafkaSslFactory.configure(config.sslConfigs());
-        SSLContext sslContext = kafkaSslFactory.sslContext();
-
-        // Sync calls
-        SSLConnectionSocketFactory sslSocketFactory = new SSLConnectionSocketFactory(
-            sslContext, SSLConnectionSocketFactory.getDefaultHostnameVerifier());
-        builder.sslSocketFactory(sslSocketFactory);
-
-        // Async calls
-        SSLIOSessionStrategy sessionStrategy = new SSLIOSessionStrategy(
-            sslContext, SSLConnectionSocketFactory.getDefaultHostnameVerifier());
-        builder.httpsIOSessionStrategy(sessionStrategy);
-      } else {
-        log.info("Using unsecured connection to {}", address);
-      }
-
-      HttpClientConfig httpClientConfig = builder.build();
-      factory.setHttpClientConfig(httpClientConfig);
+      factory.setHttpClientConfig(getClientConfig(props));
       this.client = factory.getObject();
       this.version = getServerVersion();
     } catch (IOException e) {
@@ -179,6 +136,58 @@ public class JestElasticsearchClient implements ElasticsearchClient {
           e
       );
     }
+  }
+
+  public static HttpClientConfig getClientConfig(Map<String, String> props) {
+    ElasticsearchSinkConnectorConfig config = new ElasticsearchSinkConnectorConfig(props);
+    final int connTimeout = config.getInt(
+        ElasticsearchSinkConnectorConfig.CONNECTION_TIMEOUT_MS_CONFIG);
+    final int readTimeout = config.getInt(
+        ElasticsearchSinkConnectorConfig.READ_TIMEOUT_MS_CONFIG);
+
+    final String username = config.getString(
+        ElasticsearchSinkConnectorConfig.CONNECTION_USERNAME_CONFIG);
+    final Password password = config.getPassword(
+        ElasticsearchSinkConnectorConfig.CONNECTION_PASSWORD_CONFIG);
+    List<String> address = config.getList(
+        ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG);
+
+    HttpClientConfig.Builder builder =
+        new HttpClientConfig.Builder(address)
+            .connTimeout(connTimeout)
+            .readTimeout(readTimeout)
+            .multiThreaded(true);
+    if (username != null && password != null) {
+      builder.defaultCredentials(username, password.value())
+          .preemptiveAuthTargetHosts(address.stream()
+              .map(addr -> HttpHost.create(addr)).collect(Collectors.toSet()));
+    }
+
+    if (config.secured()) {
+      log.info("Using secured connection to {}", address);
+      configureSslContext(builder, config);
+    } else {
+      log.info("Using unsecured connection to {}", address);
+    }
+
+    return builder.build();
+  }
+
+  private static void configureSslContext(HttpClientConfig.Builder builder,
+                                            ElasticsearchSinkConnectorConfig config) {
+    SslFactory kafkaSslFactory = new SslFactory(Mode.CLIENT, null, false);
+    kafkaSslFactory.configure(config.sslConfigs());
+    SSLContext sslContext = kafkaSslFactory.sslContext();
+
+    // Sync calls
+    SSLConnectionSocketFactory sslSocketFactory = new SSLConnectionSocketFactory(sslContext,
+        SSLConnectionSocketFactory.getDefaultHostnameVerifier());
+    builder.sslSocketFactory(sslSocketFactory);
+
+    // Async calls
+    SSLIOSessionStrategy sessionStrategy = new SSLIOSessionStrategy(sslContext,
+        SSLConnectionSocketFactory.getDefaultHostnameVerifier());
+    builder.httpsIOSessionStrategy(sessionStrategy);
   }
 
   /*
