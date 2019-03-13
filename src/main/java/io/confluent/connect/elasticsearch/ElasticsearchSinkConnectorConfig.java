@@ -141,7 +141,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
 
   public static final String AUTO_CREATE_INDICES_AT_START_CONFIG = "auto.create.indices.at.start";
   private static final String AUTO_CREATE_INDICES_AT_START_DOC = "Auto create the Elasticsearch"
-      + " indices at bootstrap time. This is useful when the indices are a direct mapping "
+      + " indices at startup. This is useful when the indices are a direct mapping "
       + " of the Kafka topics.";
 
   protected static ConfigDef baseConfigDef() {
@@ -262,7 +262,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
         group,
         ++order,
         Width.SHORT,
-        "Create indices at bootstrap time"
+        "Create indices at startup"
       );
   }
 
