@@ -4,6 +4,9 @@
 # Copy these into the docker image to make available to client (Java class in this repo) and
 # elastic server (docker container started in test setup). Volume mounting is unsolved issue.
 
+# Todo: It may be possible to call this directly from the docker-maven-plugin
+
+# Todo: find a way to use DNS and hostnames
 DOMAIN=172.17.0.1
 
 openssl genrsa -out key.pem 2048

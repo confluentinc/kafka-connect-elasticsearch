@@ -2,6 +2,8 @@
 # Currently, volume mounting is unsolved in Jenkins, since the slave container mu
 # Push this image with the appropriate tag so that the `docker-maven-plugin` pulls it
 
+# Todo: It may be possible to call this directly from the docker-maven-plugin
+
 FROM docker.elastic.co/elasticsearch/elasticsearch:6.6.1
 
 RUN mkdir -p /usr/share/elasticsearch/config/certs

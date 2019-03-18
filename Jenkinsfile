@@ -1,5 +1,10 @@
 #!/usr/bin/env groovy
 
+/*
+Copied from jenkins-common/var/common.groovy
+todo: Merge this back into jenkins-common and call the new centralized function
+ */
+
 def defaultConfig = [
         nodeLabel       : defaultNodeLabel(),
         cron            : '@weekly',
@@ -21,6 +26,8 @@ def job = {
             options: [findbugsPublisher(disabled: true)]
     ) {
       // Append validate after site to fix site checkstyle issue: https://github.com/confluentinc/common/pull/78
+      // withDockerServer lets the container running the tests access the docker daemon to run
+      // integration test containers
       withDockerServer([uri: dockerHost()]) {
         withEnv(['MAVEN_OPTS=-XX:MaxPermSize=128M']) {
           sh "mvn --batch-mode -Pjenkins clean install dependency:analyze site validate -U"
