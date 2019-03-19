@@ -20,10 +20,8 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.TimeoutException;
 
 import static io.confluent.connect.elasticsearch.jest.JestElasticsearchClient.getClientConfig;
-import static java.lang.Thread.sleep;
 import static org.apache.kafka.connect.runtime.ConnectorConfig.CONNECTOR_CLASS_CONFIG;
 import static org.apache.kafka.connect.runtime.ConnectorConfig.TASKS_MAX_CONFIG;
 import static org.apache.kafka.connect.runtime.ConnectorConfig.VALUE_CONVERTER_CLASS_CONFIG;
@@ -44,7 +42,7 @@ public class SecurityIT {
   private static final String KAFKA_TOPIC = "test-elasticsearch-sink";
   private static final String TYPE_NAME = "kafka-connect";
   private static final int TASKS_MAX = 1;
-  private static final int RETRY__VERIFY_SECONDS = 30;
+  private static final long RETRY_VERIFY_MS = 30000;
 
   @Before
   public void setup() throws IOException {
@@ -68,6 +66,10 @@ public class SecurityIT {
     return props;
   }
 
+  /**
+   * Run test against docker image running Elasticsearch.
+   * Certificates are generated with src/test/resources/certs/generate_certificates.sh
+   */
   @Test
   public void testSecureConnection() throws Throwable {
     // TODO: Find a more robust way to get the IP address
@@ -104,16 +106,12 @@ public class SecurityIT {
     // Read the message out of elastic directly via Jest
     final Get get = new Get.Builder(KAFKA_TOPIC, MESSAGE_KEY).type(TYPE_NAME).build();
 
-    for (int i=0; i<RETRY__VERIFY_SECONDS; i++) {
-      try {
-        JsonObject result = client.execute(get).getJsonObject();
-        Boolean success = Boolean.parseBoolean(result.get("found").getAsString());
-        if (success) return;
-      } catch (Exception e) {
-        sleep(1000);
-      }
-    }
-    throw new TimeoutException("Could not read data from Elastic");
+    waitForCondition(() -> {
+        try {
+          JsonObject result = client.execute(get).getJsonObject();
+          return Boolean.parseBoolean(result.get("found").getAsString());
+        } catch (Exception e) { return false; }
+      }, RETRY_VERIFY_MS, "Could not read data from Elastic");
   }
 
 }

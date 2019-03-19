@@ -2,7 +2,8 @@ The Integration tests are built to run with `maven-surefire-plugin` in conjuctio
 `docker-maven-plugin` by `io.fabric8` to set up docker containers for Elasticsearch 
 (embedded nodes are no longer supported or recommended by Elasticsearch).
 
-To run the tests in their entirety, use `mvn verify`.
+To run the tests in their entirety, use `mvn verify`. This will setup, run and tear
+down integration tests correctly (which `mvn integration-test` will not do).
 
 To run the test manually (e.g. in Intellij IDEA),
 * Set up container with `mvn pre-integration-test`.
