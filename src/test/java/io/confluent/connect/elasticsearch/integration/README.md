@@ -8,6 +8,6 @@ down integration tests correctly (which `mvn integration-test` will not do).
 To run the test manually (e.g. in Intellij IDEA),
 * Set up container with `mvn pre-integration-test`.
 * Run the tests manually
-* Tear down container with `mvn post-integration-test`.
+* Tear down container with `mvn post-integration-test` between each test to ensure a clean slate.
 
 See the plugin specification in `pom.xml` for more details.

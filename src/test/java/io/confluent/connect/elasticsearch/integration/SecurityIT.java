@@ -6,6 +6,7 @@ import io.confluent.connect.elasticsearch.ElasticsearchSinkConnector;
 import io.searchbox.client.JestClient;
 import io.searchbox.client.JestClientFactory;
 import io.searchbox.core.Get;
+import io.searchbox.core.Search;
 import org.apache.kafka.connect.json.JsonConverter;
 import org.apache.kafka.connect.runtime.SinkConnectorConfig;
 import org.apache.kafka.connect.runtime.rest.entities.ConnectorStateInfo;
@@ -42,7 +43,8 @@ public class SecurityIT {
   private static final String KAFKA_TOPIC = "test-elasticsearch-sink";
   private static final String TYPE_NAME = "kafka-connect";
   private static final int TASKS_MAX = 1;
-  private static final long RETRY_VERIFY_MS = 30000;
+  private static final int NUM_MSG = 2000;
+  private static final long VERIFY_TIMEOUT_MS = 120000;
 
   @Before
   public void setup() throws IOException {
@@ -91,8 +93,10 @@ public class SecurityIT {
       return info != null && info.tasks() != null && info.tasks().size() == 1;
     }, "Timed out waiting for connector task to start");
 
-    connect.kafka().produce(KAFKA_TOPIC, MESSAGE_KEY, MESSAGE_VAL);
-
+    for (int i=0; i<NUM_MSG; i++){
+      connect.kafka().produce(KAFKA_TOPIC, MESSAGE_KEY+i, MESSAGE_VAL);
+    }
+    verify(getClient(props));
     verify(getClient(props));
   }
 
@@ -104,14 +108,17 @@ public class SecurityIT {
 
   private void verify(JestClient client) throws Throwable {
     // Read the message out of elastic directly via Jest
-    final Get get = new Get.Builder(KAFKA_TOPIC, MESSAGE_KEY).type(TYPE_NAME).build();
+    Search search = new Search.Builder("{}").addIndex(KAFKA_TOPIC).addType(TYPE_NAME).build();
 
     waitForCondition(() -> {
         try {
-          JsonObject result = client.execute(get).getJsonObject();
-          return Boolean.parseBoolean(result.get("found").getAsString());
+          int found = client.execute(search).getJsonObject()
+              .get("hits").getAsJsonObject()
+              .get("total").getAsInt();
+          log.debug("Found {} documents", found);
+          return found == NUM_MSG;
         } catch (Exception e) { return false; }
-      }, RETRY_VERIFY_MS, "Could not read data from Elastic");
+      }, VERIFY_TIMEOUT_MS, "Could not read data from Elastic");
   }
 
 }
