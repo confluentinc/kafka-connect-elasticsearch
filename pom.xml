@@ -176,7 +176,10 @@
                     <images>
                         <image>
                             <alias>elastic-integration-test</alias>
-                            <name>registry.hub.docker.com/cyrusv/elastic-integration</name>
+                            <name>confluentinc/elastic-integration</name>
+                            <build>
+                                <dockerFile>${project.basedir}/src/test/resources/Dockerfile</dockerFile>
+                            </build>
                             <run>
                                 <hostname>elastichost</hostname>
                                 <ports>
@@ -201,6 +204,7 @@
                         <id>start</id>
                         <phase>pre-integration-test</phase>
                         <goals>
+                            <goal>build</goal>
                             <goal>start</goal>
                         </goals>
                     </execution>
