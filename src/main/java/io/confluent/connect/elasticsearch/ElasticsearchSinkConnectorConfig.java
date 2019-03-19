@@ -155,6 +155,11 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
 
   public static final String CONNECTION_SSL_CONFIG_PREFIX = "elastic.https.";
 
+  public static final String AUTO_CREATE_INDICES_AT_START_CONFIG = "auto.create.indices.at.start";
+  private static final String AUTO_CREATE_INDICES_AT_START_DOC = "Auto create the Elasticsearch"
+      + " indices at startup. This is useful when the indices are a direct mapping "
+      + " of the Kafka topics.";
+
   protected static ConfigDef baseConfigDef() {
     final ConfigDef configDef = new ConfigDef();
     addConnectorConfigs(configDef);
@@ -287,10 +292,20 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
         3000, 
         Importance.LOW, 
         READ_TIMEOUT_MS_CONFIG_DOC,
-        group, 
+        group,
         ++order, 
         Width.SHORT, 
         "Read Timeout"
+    ).define(
+        AUTO_CREATE_INDICES_AT_START_CONFIG,
+        Type.BOOLEAN,
+        true,
+        Importance.LOW,
+        AUTO_CREATE_INDICES_AT_START_DOC,
+        group,
+        ++order,
+        Width.SHORT,
+        "Create indices at startup"
     );
   }
 
