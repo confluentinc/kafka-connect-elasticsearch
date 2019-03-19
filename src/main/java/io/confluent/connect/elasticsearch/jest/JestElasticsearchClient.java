@@ -222,7 +222,7 @@ public class JestElasticsearchClient implements ElasticsearchClient {
     if (indexCache.contains(index)) {
       return true;
     }
-    Action action = new IndicesExists.Builder(index).build();
+    Action<?> action = new IndicesExists.Builder(index).build();
     try {
       JestResult result = client.execute(action);
       return result.isSucceeded();
