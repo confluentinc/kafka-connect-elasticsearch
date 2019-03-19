@@ -20,12 +20,12 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.google.gson.JsonObject;
-import io.confluent.connect.elasticsearch.bulk.BulkRequest;
 import io.confluent.connect.elasticsearch.ElasticsearchClient;
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig;
 import io.confluent.connect.elasticsearch.IndexableRecord;
 import io.confluent.connect.elasticsearch.Key;
 import io.confluent.connect.elasticsearch.Mapping;
+import io.confluent.connect.elasticsearch.bulk.BulkRequest;
 import io.confluent.connect.elasticsearch.bulk.BulkResponse;
 import io.searchbox.action.Action;
 import io.searchbox.action.BulkableAction;
@@ -54,6 +54,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -73,6 +74,8 @@ public class JestElasticsearchClient implements ElasticsearchClient {
 
   private final JestClient client;
   private final Version version;
+
+  private final Set<String> indexCache = new HashSet<>();
 
   // visible for testing
   public JestElasticsearchClient(JestClient client) {
@@ -216,7 +219,10 @@ public class JestElasticsearchClient implements ElasticsearchClient {
   }
 
   private boolean indexExists(String index) {
-    Action<JestResult> action = new IndicesExists.Builder(index).build();
+    if (indexCache.contains(index)) {
+      return true;
+    }
+    Action<?> action = new IndicesExists.Builder(index).build();
     try {
       JestResult result = client.execute(action);
       return result.isSucceeded();
@@ -238,6 +244,7 @@ public class JestElasticsearchClient implements ElasticsearchClient {
               throw new ConnectException("Could not create index '" + index + "'" + msg);
             }
           }
+          indexCache.add(index);
         } catch (IOException e) {
           throw new ConnectException(e);
         }
