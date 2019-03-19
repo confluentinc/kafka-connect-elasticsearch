@@ -252,6 +252,8 @@ public class ElasticsearchWriter {
       final boolean ignoreSchema =
           ignoreSchemaTopics.contains(sinkRecord.topic()) || this.ignoreSchema;
 
+      client.createIndices(Collections.singleton(index));
+
       if (!ignoreSchema && !existingMappings.contains(index)) {
         try {
           if (Mapping.getMapping(client, index, type) == null) {
