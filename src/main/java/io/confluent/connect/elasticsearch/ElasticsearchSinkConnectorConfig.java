@@ -292,7 +292,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
         ++order,
         Width.SHORT,
         "Create indices at startup"
-      );
+    );
   }
 
   private static void addConversionConfigs(ConfigDef configDef) {
