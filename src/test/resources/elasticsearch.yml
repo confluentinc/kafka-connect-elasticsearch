@@ -1,0 +1,10 @@
+## Used by Docker images in our integration test
+http.host: 0.0.0.0
+network.host: 0.0.0.0
+node.store.allow_mmapfs: false
+xpack.security.enabled: true
+xpack.security.http.ssl.enabled: true
+xpack.security.http.ssl.client_authentication: required
+xpack.security.http.ssl.key:  certs/key.pem
+xpack.security.http.ssl.certificate: certs/cert.pem
+xpack.security.http.ssl.certificate_authorities: [ "certs/ca.pem" ]
