@@ -420,7 +420,7 @@ public class BulkProcessor<R, B> {
         case FAIL:
           log.error("Encountered an illegal document error when executing batch {} of {}"
                   + " records. Error was {} (to ignore future records like this"
-                  + " change the configuration property '%s' from '%s' to '%s').",
+                  + " change the configuration property '{}' from '{}' to '{}').",
               batchId, batch.size(), bulkRsp.getErrorInfo(),
               ElasticsearchSinkConnectorConfig.BEHAVIOR_ON_MALFORMED_DOCS_CONFIG,
               BehaviorOnMalformedDoc.FAIL,
