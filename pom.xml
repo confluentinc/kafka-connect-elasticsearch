@@ -167,61 +167,12 @@
     <build>
         <plugins>
             <plugin>
-                <groupId>io.fabric8</groupId>
-                <artifactId>docker-maven-plugin</artifactId>
-                <version>${version.docker.maven.plugin}</version>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-failsafe-plugin</artifactId>
+                <version>3.0.0-M3</version>
                 <configuration>
-                    <watchInterval>500</watchInterval>
-                    <logDate>default</logDate>
-                    <verbose>true</verbose>
-                    <images>
-                        <image>
-                            <alias>elastic-integration-test</alias>
-                            <!--"name" is in local images if "build" is defined, else will look
-                            for an image in a remote repo-->
-                            <name>confluentinc/elastic-integration-%t</name>
-                            <build>
-                                <tags>
-                                    <tag>${project.version}</tag>
-                                </tags>
-                                <dockerFile>${project.basedir}/src/test/resources/Dockerfile</dockerFile>
-                            </build>
-                            <run>
-                                <hostname>elastichost</hostname>
-                                <ports>
-                                    <port>9200:9200</port>
-                                </ports>
-                                <wait>
-                                    <tcp>
-                                        <host>localhost</host>
-                                        <ports>
-                                            <port>9200</port>
-                                        </ports>
-                                    </tcp>
-                                    <time>120000</time>
-                                </wait>
-                            </run>
-                        </image>
-                    </images>
-
+                    <skipITs>true</skipITs>
                 </configuration>
-                <executions>
-                    <execution>
-                        <id>start</id>
-                        <phase>pre-integration-test</phase>
-                        <goals>
-                            <goal>build</goal>
-                            <goal>start</goal>
-                        </goals>
-                    </execution>
-                    <execution>
-                        <id>stop</id>
-                        <phase>post-integration-test</phase>
-                        <goals>
-                            <goal>stop</goal>
-                        </goals>
-                    </execution>
-                </executions>
             </plugin>
             <plugin>
                 <groupId>io.confluent</groupId>
@@ -359,6 +310,80 @@
                                 <descriptor>src/assembly/standalone.xml</descriptor>
                             </descriptors>
                         </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+        <profile>
+            <id>jenkins</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-failsafe-plugin</artifactId>
+                        <version>3.0.0-M3</version>
+                        <configuration>
+                            <skipITs>false</skipITs>
+                        </configuration>
+                    </plugin>
+                    <plugin>
+                        <groupId>io.fabric8</groupId>
+                        <artifactId>docker-maven-plugin</artifactId>
+                        <version>${version.docker.maven.plugin}</version>
+                        <configuration>
+                            <watchInterval>500</watchInterval>
+                            <logDate>default</logDate>
+                            <verbose>true</verbose>
+                            <images>
+                                <image>
+                                    <alias>elastic-integration-test</alias>
+                                    <!--"name" is in local images if "build" is defined, else will look
+                                    for an image in a remote repo-->
+                                    <name>confluentinc/elastic-integration-%t</name>
+                                    <build>
+                                        <tags>
+                                            <tag>${project.version}</tag>
+                                        </tags>
+                                        <dockerFile>
+                                            ${project.basedir}/src/test/resources/Dockerfile
+                                        </dockerFile>
+                                    </build>
+                                    <run>
+                                        <hostname>elastichost</hostname>
+                                        <ports>
+                                            <port>9200:9200</port>
+                                        </ports>
+                                        <wait>
+                                            <tcp>
+                                                <host>localhost</host>
+                                                <ports>
+                                                    <port>9200</port>
+                                                </ports>
+                                            </tcp>
+                                            <time>120000</time>
+                                        </wait>
+                                    </run>
+                                </image>
+                            </images>
+
+                        </configuration>
+                        <executions>
+                            <execution>
+                                <id>start</id>
+                                <phase>pre-integration-test</phase>
+                                <goals>
+                                    <goal>build</goal>
+                                    <goal>start</goal>
+                                </goals>
+                            </execution>
+                            <execution>
+                                <id>stop</id>
+                                <phase>post-integration-test</phase>
+                                <goals>
+                                    <goal>stop</goal>
+                                </goals>
+                            </execution>
+                        </executions>
                     </plugin>
                 </plugins>
             </build>

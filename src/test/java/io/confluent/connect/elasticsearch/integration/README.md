@@ -19,3 +19,7 @@ using `src/test/resources/certs/generate_certificates.sh`. These certificates ar
 into the elasticsearch docker image, and referenced in the connector config. They may need
 to be regenerated if the certificates expire, or if the FQDN for either certificate changes 
 (which may happen if the way Jenkins assigns hosts/IPs changes).
+
+Temporarily, due to packaging issues, integration tests will only run with `mvn -Pjenkins` profile
+activated. Thus, integration tests will run by default on Jenkins PR builds, and only locally
+if you pass `-Pjenkins`.
