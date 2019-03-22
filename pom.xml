@@ -315,7 +315,13 @@
             </build>
         </profile>
         <profile>
-            <id>jenkins</id>
+            <id>docker-integration</id>
+            <activation>
+                <activeByDefault>false</activeByDefault>
+                <file>
+                    <exists>/var/run/docker.sock</exists>
+                </file>
+            </activation>
             <build>
                 <plugins>
                     <plugin>
