@@ -46,7 +46,9 @@ def job = {
               // skip publishing results again to avoid double-counting
               options: [openTasksPublisher(disabled: true), junitPublisher(disabled: true), findbugsPublisher(disabled: true)]
       ) {
-        sh "mvn --batch-mode -Pjenkins -D${env.deployOptions} deploy -DskipTests"
+        withDockerServer([uri: dockerHost()]) {
+          sh "mvn --batch-mode -Pjenkins -D${env.deployOptions} deploy -DskipTests"
+        }
       }
     }
   }
