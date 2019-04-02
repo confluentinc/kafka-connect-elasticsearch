@@ -1,18 +1,17 @@
-/**
- * Copyright 2016 Confluent Inc.
+/*
+ * Copyright 2018 Confluent Inc.
  *
- * Licensed under the Apache License, Version 2.0 (the "License"); you may not
- * use this file except in compliance with the License. You may obtain a copy of
- * the License at
+ * Licensed under the Confluent Community License (the "License"); you may not use
+ * this file except in compliance with the License.  You may obtain a copy of the
+ * License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.confluent.io/confluent-community-license
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
- * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
- * License for the specific language governing permissions and limitations under
- * the License.
- **/
+ * WARRANTIES OF ANY KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations under the License.
+ */
 
 package io.confluent.connect.elasticsearch;
 
@@ -23,19 +22,24 @@ import org.apache.kafka.common.config.ConfigDef.Type;
 import org.apache.kafka.common.config.ConfigDef.Width;
 
 import java.util.Arrays;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
 import static io.confluent.connect.elasticsearch.jest.JestElasticsearchClient.WriteMethod;
 import static io.confluent.connect.elasticsearch.DataConverter.BehaviorOnNullValues;
 import static io.confluent.connect.elasticsearch.bulk.BulkProcessor.BehaviorOnMalformedDoc;
+import static org.apache.kafka.common.config.SslConfigs.addClientSslSupport;
 
 public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
+  private static final String SSL_GROUP = "Security";
 
   public static final String CONNECTION_URL_CONFIG = "connection.url";
   private static final String CONNECTION_URL_DOC =
-      "List of Elasticsearch HTTP connection URLs e.g. ``http://eshost1:9200,"
-      + "http://eshost2:9200``.";
+      "The comma-separated list of one or more Elasticsearch URLs, such as ``http://eshost1:9200,"
+      + "http://eshost2:9200`` or ``https://eshost3:9200``. HTTPS is used for all connections "
+      + "if any of the URLs starts with ``https:``. A URL without a protocol is treated as "
+      + "``http``.";
   public static final String CONNECTION_USERNAME_CONFIG = "connection.username";
   private static final String CONNECTION_USERNAME_DOC =
       "The username used to authenticate with Elasticsearch. "
@@ -112,7 +116,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
       "Whether to ignore schemas during indexing. When this is set to ``true``, the record "
       + "schema will be ignored for the purpose of registering an Elasticsearch mapping. "
       + "Elasticsearch will infer the mapping from the data (dynamic mapping needs to be enabled "
-      + "by the user).\n Note that this is a global config that applies to all topics, use ``"
+      + "by the user).\n Note that this is a global config that applies to all topics. Use ``"
       + TOPIC_SCHEMA_IGNORE_CONFIG + "`` to override as ``true`` for specific topics.";
   private static final String TOPIC_SCHEMA_IGNORE_DOC =
       "List of topics for which ``" + SCHEMA_IGNORE_CONFIG + "`` should be ``true``.";
@@ -169,10 +173,24 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
           + " may take significant amount of time. You may want to modify properties "
           + FLUSH_TIMEOUT_MS_CONFIG + ", " + READ_TIMEOUT_MS_CONFIG + " and " + BATCH_SIZE_CONFIG;
 
+  public static final String CONNECTION_SSL_CONFIG_PREFIX = "elastic.https.";
+
+  public static final String AUTO_CREATE_INDICES_AT_START_CONFIG = "auto.create.indices.at.start";
+  private static final String AUTO_CREATE_INDICES_AT_START_DOC = "Auto create the Elasticsearch"
+      + " indices at startup. This is useful when the indices are a direct mapping "
+      + " of the Kafka topics.";
+
   protected static ConfigDef baseConfigDef() {
     final ConfigDef configDef = new ConfigDef();
     addConnectorConfigs(configDef);
     addConversionConfigs(configDef);
+    ConfigDef sslConfigDef = new ConfigDef();
+    addClientSslSupport(sslConfigDef);
+    configDef.embed(
+        CONNECTION_SSL_CONFIG_PREFIX, SSL_GROUP,
+        configDef.configKeys().size() + 1, sslConfigDef
+    );
+
     return configDef;
   }
 
@@ -294,10 +312,26 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
         3000, 
         Importance.LOW, 
         READ_TIMEOUT_MS_CONFIG_DOC,
-        group, 
+        group,
         ++order, 
         Width.SHORT, 
-        "Read Timeout");
+        "Read Timeout"
+    ).define(
+        AUTO_CREATE_INDICES_AT_START_CONFIG,
+        Type.BOOLEAN,
+        true,
+        Importance.LOW,
+        AUTO_CREATE_INDICES_AT_START_DOC,
+        group,
+        ++order,
+        Width.SHORT,
+        "Create indices at startup"
+    );
+  }
+
+  public boolean secured() {
+    List<String> address = getList(ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG);
+    return address.stream().anyMatch(a -> a.startsWith("https:"));
   }
 
   private static void addConversionConfigs(ConfigDef configDef) {
@@ -421,6 +455,12 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
 
   public ElasticsearchSinkConnectorConfig(Map<String, String> props) {
     super(CONFIG, props);
+  }
+
+  public Map<String, Object> sslConfigs() {
+    ConfigDef sslConfigDef = new ConfigDef();
+    addClientSslSupport(sslConfigDef);
+    return sslConfigDef.parse(originalsWithPrefix(CONNECTION_SSL_CONFIG_PREFIX));
   }
 
   public static void main(String[] args) {
