@@ -352,15 +352,6 @@ public class JestElasticsearchClientTest {
     assertEquals(idx.key.id, ba.getId());
     assertEquals(idx.key.type, ba.getType());
     assertEquals("{\"doc\":" + idx.payload + ", \"doc_as_upsert\":true}", ba.getData(null));
-    // update
-    client.setWriteMethod(JestElasticsearchClient.WriteMethod.UPDATE);
-    ba = client.toBulkableAction(idx);
-    assertNotNull(ba);
-    assertSame(Update.class, ba.getClass());
-    assertEquals(idx.key.index, ba.getIndex());
-    assertEquals(idx.key.id, ba.getId());
-    assertEquals(idx.key.type, ba.getType());
-    assertEquals("{\"doc\":" + idx.payload + ", \"doc_as_upsert\":false}", ba.getData(null));
   }
 
   private BulkResult createBulkResultFailure(String exception) {

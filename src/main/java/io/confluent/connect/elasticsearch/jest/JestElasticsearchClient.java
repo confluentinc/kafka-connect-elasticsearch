@@ -343,7 +343,7 @@ public class JestElasticsearchClient implements ElasticsearchClient {
     }
     return writeMethod == WriteMethod.INSERT
             ? toIndexRequest(record)
-            : toUpdateRequest(record, writeMethod);
+            : toUpdateRequest(record);
   }
 
   private Delete toDeleteRequest(IndexableRecord record) {
@@ -366,9 +366,9 @@ public class JestElasticsearchClient implements ElasticsearchClient {
     return req.build();
   }
 
-  private Update toUpdateRequest(IndexableRecord record, WriteMethod method) {
+  private Update toUpdateRequest(IndexableRecord record) {
     String payload = "{\"doc\":" + record.payload
-        + ", \"doc_as_upsert\":" + (method == WriteMethod.UPSERT) + "}";
+        + ", \"doc_as_upsert\":true}";
     return new Update.Builder(payload)
         .index(record.key.index)
         .type(record.key.type)
@@ -436,7 +436,6 @@ public class JestElasticsearchClient implements ElasticsearchClient {
 
   public enum WriteMethod {
     INSERT,
-    UPDATE,
     UPSERT,
     ;
 
@@ -446,29 +445,19 @@ public class JestElasticsearchClient implements ElasticsearchClient {
 
       @Override
       public void ensureValid(String name, Object value) {
-        if (value instanceof String) {
-          value = ((String) value).toLowerCase(Locale.ROOT);
-        }
         validator.ensureValid(name, value);
       }
 
       // Overridden here so that ConfigDef.toEnrichedRst shows possible values correctly
       @Override
       public String toString() {
-        return validator.toString();
+        return "One of " + INSERT.toString() + " or " + UPSERT.toString();
       }
 
     };
 
     public static String[] names() {
-      WriteMethod[] wm = values();
-      String[] result = new String[wm.length];
-
-      for (int i = 0; i < wm.length; i++) {
-        result[i] = wm[i].toString();
-      }
-
-      return result;
+      return new String[] {INSERT.toString(), UPSERT.toString()};
     }
 
     public static WriteMethod forValue(String value) {
