@@ -24,6 +24,7 @@ import org.apache.kafka.common.config.ConfigDef.Width;
 import java.util.List;
 import java.util.Map;
 
+import static io.confluent.connect.elasticsearch.jest.JestElasticsearchClient.WriteMethod;
 import static io.confluent.connect.elasticsearch.DataConverter.BehaviorOnNullValues;
 import static io.confluent.connect.elasticsearch.bulk.BulkProcessor.BehaviorOnMalformedDoc;
 import static org.apache.kafka.common.config.SslConfigs.addClientSslSupport;
@@ -152,6 +153,19 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
       + "Elasticsearch rejects due to some malformation of the document itself, such as an index"
       + " mapping conflict or a field name containing illegal characters. Valid options are "
       + "'ignore', 'warn', and 'fail'.";
+  public static final String WRITE_METHOD_CONFIG = "write.method";
+  private static final String WRITE_METHOD_DOC = "Method used for writing data to Elasticsearch,"
+          + " and one of " + WriteMethod.INSERT.toString() + " or " + WriteMethod.UPSERT.toString()
+          + ". The default method is " + WriteMethod.INSERT.toString() + ", in which the "
+          + "connector constructs a document from the record value and inserts that document "
+          + "into Elasticsearch, completely replacing any existing document with the same ID; "
+          + "this matches previous behavior. The " + WriteMethod.UPSERT.toString()
+          + " method will create a new document if one with the specified ID does not yet "
+          + "exist, or will update an existing document with the same ID by adding/replacing "
+          + "only those fields present in the record value. The " + WriteMethod.UPSERT.toString()
+          + " method may require additional time and resources of Elasticsearch, so consider "
+          + "increasing the " + FLUSH_TIMEOUT_MS_CONFIG + ", " + READ_TIMEOUT_MS_CONFIG
+          + ", and decrease " + BATCH_SIZE_CONFIG + " configuration properties.";
 
   public static final String CONNECTION_SSL_CONFIG_PREFIX = "elastic.https.";
 
@@ -417,7 +431,18 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
         group,
         ++order,
         Width.SHORT,
-        "Behavior on malformed documents");
+        "Behavior on malformed documents"
+    ).define(
+        WRITE_METHOD_CONFIG,
+        Type.STRING,
+        WriteMethod.DEFAULT.toString(),
+        WriteMethod.VALIDATOR,
+        Importance.LOW,
+        WRITE_METHOD_DOC,
+        group,
+        ++order,
+        Width.SHORT,
+        "Write method");
   }
 
   public static final ConfigDef CONFIG = baseConfigDef();

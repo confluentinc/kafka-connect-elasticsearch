@@ -3,6 +3,7 @@ package io.confluent.connect.elasticsearch.integration;
 import com.google.gson.JsonObject;
 import io.confluent.common.utils.IntegrationTest;
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnector;
+import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig;
 import io.searchbox.client.JestClient;
 import io.searchbox.client.JestClientFactory;
 import io.searchbox.core.Get;
@@ -102,7 +103,7 @@ public class SecurityIT {
 
   private JestClient getClient(Map<String, String> props) {
     JestClientFactory factory = new JestClientFactory();
-    factory.setHttpClientConfig(getClientConfig(props));
+    factory.setHttpClientConfig(getClientConfig(new ElasticsearchSinkConnectorConfig(props)));
     return factory.getObject();
   }
 

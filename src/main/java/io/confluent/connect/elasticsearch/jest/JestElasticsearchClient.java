@@ -39,11 +39,13 @@ import io.searchbox.core.Delete;
 import io.searchbox.core.Index;
 import io.searchbox.core.Search;
 import io.searchbox.core.SearchResult;
+import io.searchbox.core.Update;
 import io.searchbox.indices.CreateIndex;
 import io.searchbox.indices.IndicesExists;
 import io.searchbox.indices.mapping.GetMapping;
 import io.searchbox.indices.mapping.PutMapping;
 import org.apache.http.HttpHost;
+import org.apache.kafka.common.config.ConfigDef;
 import org.apache.http.conn.ssl.SSLConnectionSocketFactory;
 import org.apache.http.nio.conn.ssl.SSLIOSessionStrategy;
 import org.apache.kafka.common.config.ConfigException;
@@ -59,6 +61,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -79,6 +82,7 @@ public class JestElasticsearchClient implements ElasticsearchClient {
 
   private final JestClient client;
   private final Version version;
+  private WriteMethod writeMethod = WriteMethod.DEFAULT;
 
   private final Set<String> indexCache = new HashSet<>();
 
@@ -125,9 +129,12 @@ public class JestElasticsearchClient implements ElasticsearchClient {
   // visible for testing
   protected JestElasticsearchClient(Map<String, String> props, JestClientFactory factory) {
     try {
-      factory.setHttpClientConfig(getClientConfig(props));
+      ElasticsearchSinkConnectorConfig config = new ElasticsearchSinkConnectorConfig(props);
+      factory.setHttpClientConfig(getClientConfig(config));
       this.client = factory.getObject();
       this.version = getServerVersion();
+      this.writeMethod = WriteMethod.forValue(
+              config.getString(ElasticsearchSinkConnectorConfig.WRITE_METHOD_CONFIG));
     } catch (IOException e) {
       throw new ConnectException(
           "Couldn't start ElasticsearchSinkTask due to connection error:",
@@ -142,8 +149,7 @@ public class JestElasticsearchClient implements ElasticsearchClient {
   }
 
   // Visible for Testing
-  public static HttpClientConfig getClientConfig(Map<String, String> props) {
-    ElasticsearchSinkConnectorConfig config = new ElasticsearchSinkConnectorConfig(props);
+  public static HttpClientConfig getClientConfig(ElasticsearchSinkConnectorConfig config) {
     final int connTimeout = config.getInt(
         ElasticsearchSinkConnectorConfig.CONNECTION_TIMEOUT_MS_CONFIG);
     final int readTimeout = config.getInt(
@@ -173,7 +179,6 @@ public class JestElasticsearchClient implements ElasticsearchClient {
     } else {
       log.info("Using unsecured connection to {}", address);
     }
-
     return builder.build();
   }
 
@@ -192,6 +197,11 @@ public class JestElasticsearchClient implements ElasticsearchClient {
     SSLIOSessionStrategy sessionStrategy = new SSLIOSessionStrategy(sslContext,
         SSLConnectionSocketFactory.getDefaultHostnameVerifier());
     builder.httpsIOSessionStrategy(sessionStrategy);
+  }
+
+  // visible for testing
+  protected void setWriteMethod(WriteMethod writeMethod) {
+    this.writeMethod = writeMethod;
   }
 
   /*
@@ -328,7 +338,12 @@ public class JestElasticsearchClient implements ElasticsearchClient {
   // visible for testing
   protected BulkableAction toBulkableAction(IndexableRecord record) {
     // If payload is null, the record was a tombstone and we should delete from the index.
-    return record.payload != null ? toIndexRequest(record) : toDeleteRequest(record);
+    if (record.payload == null) {
+      return toDeleteRequest(record);
+    }
+    return writeMethod == WriteMethod.INSERT
+            ? toIndexRequest(record)
+            : toUpdateRequest(record);
   }
 
   private Delete toDeleteRequest(IndexableRecord record) {
@@ -349,6 +364,16 @@ public class JestElasticsearchClient implements ElasticsearchClient {
       req.setParameter("version_type", "external").setParameter("version", record.version);
     }
     return req.build();
+  }
+
+  private Update toUpdateRequest(IndexableRecord record) {
+    String payload = "{\"doc\":" + record.payload
+        + ", \"doc_as_upsert\":true}";
+    return new Update.Builder(payload)
+        .index(record.key.index)
+        .type(record.key.type)
+        .id(record.key.id)
+        .build();
   }
 
   public BulkResponse executeBulk(BulkRequest bulk) throws IOException {
@@ -407,5 +432,41 @@ public class JestElasticsearchClient implements ElasticsearchClient {
 
   public void close() {
     client.shutdownClient();
+  }
+
+  public enum WriteMethod {
+    INSERT,
+    UPSERT,
+    ;
+
+    public static final WriteMethod DEFAULT = INSERT;
+    public static final ConfigDef.Validator VALIDATOR = new ConfigDef.Validator() {
+      private final ConfigDef.ValidString validator = ConfigDef.ValidString.in(names());
+
+      @Override
+      public void ensureValid(String name, Object value) {
+        validator.ensureValid(name, value);
+      }
+
+      // Overridden here so that ConfigDef.toEnrichedRst shows possible values correctly
+      @Override
+      public String toString() {
+        return "One of " + INSERT.toString() + " or " + UPSERT.toString();
+      }
+
+    };
+
+    public static String[] names() {
+      return new String[] {INSERT.toString(), UPSERT.toString()};
+    }
+
+    public static WriteMethod forValue(String value) {
+      return valueOf(value.toUpperCase(Locale.ROOT));
+    }
+
+    @Override
+    public String toString() {
+      return name().toLowerCase(Locale.ROOT);
+    }
   }
 }

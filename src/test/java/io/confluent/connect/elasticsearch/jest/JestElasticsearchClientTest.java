@@ -26,14 +26,18 @@ import io.confluent.connect.elasticsearch.IndexableRecord;
 import io.confluent.connect.elasticsearch.Key;
 import io.confluent.connect.elasticsearch.Mapping;
 import io.confluent.connect.elasticsearch.bulk.BulkRequest;
+import io.searchbox.action.BulkableAction;
 import io.searchbox.client.JestClient;
 import io.searchbox.client.JestClientFactory;
 import io.searchbox.client.JestResult;
 import io.searchbox.client.config.HttpClientConfig;
 import io.searchbox.cluster.NodesInfo;
 import io.searchbox.core.BulkResult;
+import io.searchbox.core.Delete;
+import io.searchbox.core.Index;
 import io.searchbox.core.Search;
 import io.searchbox.core.SearchResult;
+import io.searchbox.core.Update;
 import io.searchbox.indices.CreateIndex;
 import io.searchbox.indices.IndicesExists;
 import io.searchbox.indices.mapping.GetMapping;
@@ -44,6 +48,7 @@ import org.apache.http.auth.Credentials;
 import org.apache.http.client.CredentialsProvider;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.errors.ConnectException;
+import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 import org.mockito.ArgumentCaptor;
@@ -62,6 +67,8 @@ import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.equalTo;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertSame;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
@@ -316,6 +323,35 @@ public class JestElasticsearchClientTest {
     client.close();
 
     verify(jestClient).shutdownClient();
+  }
+
+  @Test
+  public void toBulkableAction(){
+    JestElasticsearchClient client = new JestElasticsearchClient(jestClient);
+    IndexableRecord del = new IndexableRecord(new Key("idx", "tp", "xxx"), null, 1L);
+    BulkableAction ba = client.toBulkableAction(del);
+    assertNotNull(ba);
+    assertSame(Delete.class, ba.getClass());
+    assertEquals(del.key.index, ba.getIndex());
+    assertEquals(del.key.id, ba.getId());
+    assertEquals(del.key.type, ba.getType());
+    IndexableRecord idx = new IndexableRecord(new Key("idx", "tp", "xxx"), "yyy", 1L);
+    ba = client.toBulkableAction(idx);
+    assertNotNull(ba);
+    assertSame(Index.class, ba.getClass());
+    assertEquals(idx.key.index, ba.getIndex());
+    assertEquals(idx.key.id, ba.getId());
+    assertEquals(idx.key.type, ba.getType());
+    assertEquals(idx.payload, ba.getData(null));
+    // upsert
+    client.setWriteMethod(JestElasticsearchClient.WriteMethod.UPSERT);
+    ba = client.toBulkableAction(idx);
+    assertNotNull(ba);
+    assertSame(Update.class, ba.getClass());
+    assertEquals(idx.key.index, ba.getIndex());
+    assertEquals(idx.key.id, ba.getId());
+    assertEquals(idx.key.type, ba.getType());
+    assertEquals("{\"doc\":" + idx.payload + ", \"doc_as_upsert\":true}", ba.getData(null));
   }
 
   private BulkResult createBulkResultFailure(String exception) {
