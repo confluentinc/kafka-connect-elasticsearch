@@ -19,6 +19,7 @@ package io.confluent.connect.elasticsearch;
 import com.fasterxml.jackson.databind.node.NumericNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.node.TextNode;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.google.gson.JsonObject;
 
 import org.apache.kafka.connect.data.Date;
@@ -35,7 +36,6 @@ import org.junit.Test;
 import static io.confluent.connect.elasticsearch.DataConverter.BehaviorOnNullValues;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConstants.KEYWORD_TYPE;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConstants.TEXT_TYPE;
-import static org.junit.Assert.assertEquals;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -80,6 +80,29 @@ public class MappingTest extends ElasticsearchSinkTestBase {
     assertEquals(TEXT_TYPE, stringType.asText());
     assertEquals(KEYWORD_TYPE, keywordType.asText());
     assertEquals(256, ignoreAbove.asInt());
+  }
+
+  @Test
+  public void testInferMapping() throws Exception {
+
+    Schema stringSchema = SchemaBuilder
+        .struct()
+        .name("record")
+        .field("foo", SchemaBuilder.string().defaultValue("0").build())
+        .build();
+    JsonNode stringMapping = Mapping.inferMapping(client, stringSchema);
+
+    assertNull(stringMapping.get("properties").get("foo").get("null_value"));
+
+    Schema intSchema =SchemaBuilder
+        .struct()
+        .name("record")
+        .field("foo", SchemaBuilder.int32().defaultValue(0).build())
+        .build();
+
+    JsonNode intMapping = Mapping.inferMapping(client, intSchema);
+    assertNotNull(intMapping.get("properties").get("foo").get("null_value"));
+    assertEquals(0, intMapping.get("properties").get("foo").get("null_value").asInt());
   }
 
   protected Schema createSchema() {
@@ -127,7 +150,6 @@ public class MappingTest extends ElasticsearchSinkTestBase {
   @SuppressWarnings("unchecked")
   private void verifyMapping(Schema schema, JsonObject mapping) throws Exception {
     String schemaName = schema.name();
-
     Object type = mapping.get("type");
     if (schemaName != null) {
       switch (schemaName) {
