@@ -16,6 +16,7 @@
 
 package io.confluent.connect.elasticsearch;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.google.gson.JsonObject;
 
 import org.apache.kafka.connect.data.Date;
@@ -49,6 +50,29 @@ public class MappingTest extends ElasticsearchSinkTestBase {
     JsonObject mapping = Mapping.getMapping(client, INDEX, TYPE);
     assertNotNull(mapping);
     verifyMapping(schema, mapping);
+  }
+
+  @Test
+  public void testInferMapping() throws Exception {
+
+    Schema stringSchema = SchemaBuilder
+        .struct()
+        .name("record")
+        .field("foo", SchemaBuilder.string().defaultValue("0").build())
+        .build();
+    JsonNode stringMapping = Mapping.inferMapping(client, stringSchema);
+
+    assertNull(stringMapping.get("properties").get("foo").get("null_value"));
+
+    Schema intSchema =SchemaBuilder
+        .struct()
+        .name("record")
+        .field("foo", SchemaBuilder.int32().defaultValue(0).build())
+        .build();
+
+    JsonNode intMapping = Mapping.inferMapping(client, intSchema);
+    assertNotNull(intMapping.get("properties").get("foo").get("null_value"));
+    assertEquals(0, intMapping.get("properties").get("foo").get("null_value").asInt());
   }
 
   protected Schema createSchema() {
@@ -96,7 +120,6 @@ public class MappingTest extends ElasticsearchSinkTestBase {
   @SuppressWarnings("unchecked")
   private void verifyMapping(Schema schema, JsonObject mapping) throws Exception {
     String schemaName = schema.name();
-
     Object type = mapping.get("type");
     if (schemaName != null) {
       switch (schemaName) {
