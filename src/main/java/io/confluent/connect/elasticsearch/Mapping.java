@@ -197,13 +197,12 @@ public class Mapping {
           break;
         case ElasticsearchSinkConnectorConstants.STRING_TYPE:
         case ElasticsearchSinkConnectorConstants.TEXT_TYPE:
-          // IGNORE default values for text types as this is not supported by ES side.
+        case ElasticsearchSinkConnectorConstants.BINARY_TYPE:
+          // IGNORE default values for text and binary types as this is not supported by ES side.
           // see https://www.elastic.co/guide/en/elasticsearch/reference/current/text.html
+          // https://www.elastic.co/guide/en/elasticsearch/reference/current/binary.html
           // for more details.
           //defaultValueNode = null;
-          break;
-        case ElasticsearchSinkConnectorConstants.BINARY_TYPE:
-          defaultValueNode = JsonNodeFactory.instance.binaryNode(bytes(defaultValue));
           break;
         case ElasticsearchSinkConnectorConstants.BOOLEAN_TYPE:
           defaultValueNode = JsonNodeFactory.instance.booleanNode((boolean) defaultValue);
