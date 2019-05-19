@@ -186,7 +186,7 @@ public class JestElasticsearchClient implements ElasticsearchClient {
                                             ElasticsearchSinkConnectorConfig config) {
     SslFactory kafkaSslFactory = new SslFactory(Mode.CLIENT, null, false);
     kafkaSslFactory.configure(config.sslConfigs());
-    SSLContext sslContext = kafkaSslFactory.sslContext();
+    SSLContext sslContext = kafkaSslFactory.sslEngineBuilder().sslContext();
 
     // Sync calls
     SSLConnectionSocketFactory sslSocketFactory = new SSLConnectionSocketFactory(sslContext,
