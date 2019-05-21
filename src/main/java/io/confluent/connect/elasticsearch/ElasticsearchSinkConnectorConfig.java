@@ -21,11 +21,11 @@ import org.apache.kafka.common.config.ConfigDef.Importance;
 import org.apache.kafka.common.config.ConfigDef.Type;
 import org.apache.kafka.common.config.ConfigDef.Width;
 
-import java.util.List;
 import java.util.Map;
 
 import static io.confluent.connect.elasticsearch.DataConverter.BehaviorOnNullValues;
 import static io.confluent.connect.elasticsearch.bulk.BulkProcessor.BehaviorOnMalformedDoc;
+import static io.confluent.connect.elasticsearch.jest.JestElasticsearchClient.WriteMethod;
 import static org.apache.kafka.common.config.SslConfigs.addClientSslSupport;
 
 public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
@@ -160,18 +160,38 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
       + " indices at startup. This is useful when the indices are a direct mapping "
       + " of the Kafka topics.";
 
+  private static final String ELASTICSEARCH_SECURITY_PROTOCOL_CONFIG = "elastic.security.protocol";
+  private static final String ELASTICSEARCH_SECURITY_PROTOCOL_DOC =
+      "The security protocol to use when connecting to Elasticsearch. "
+          + "Values can be `PLAINTEXT` or `SSL`.";
+
   protected static ConfigDef baseConfigDef() {
     final ConfigDef configDef = new ConfigDef();
     addConnectorConfigs(configDef);
     addConversionConfigs(configDef);
+    addSecurityConfigs(configDef);
+    return configDef;
+  }
+
+  private static void addSecurityConfigs(ConfigDef configDef) {
     ConfigDef sslConfigDef = new ConfigDef();
     addClientSslSupport(sslConfigDef);
+    int order = 0;
+    configDef.define(
+        ELASTICSEARCH_SECURITY_PROTOCOL_CONFIG,
+        Type.STRING,
+        SecurityProtocol.PLAINTEXT.name(),
+        Importance.MEDIUM,
+        ELASTICSEARCH_SECURITY_PROTOCOL_DOC,
+        SSL_GROUP,
+        ++order,
+        Width.SHORT,
+        "Security protocol"
+    );
     configDef.embed(
         CONNECTION_SSL_CONFIG_PREFIX, SSL_GROUP,
-        configDef.configKeys().size() + 1, sslConfigDef
+        configDef.configKeys().size() + 2, sslConfigDef
     );
-
-    return configDef;
   }
 
   private static void addConnectorConfigs(ConfigDef configDef) {
@@ -310,8 +330,13 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   }
 
   public boolean secured() {
-    List<String> address = getList(ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG);
-    return address.stream().anyMatch(a -> a.startsWith("https:"));
+    getString(ElasticsearchSinkConnectorConfig.ELASTICSEARCH_SECURITY_PROTOCOL_CONFIG);
+    SecurityProtocol securityProtocol = securityProtocol();
+    return SecurityProtocol.SSL.equals(securityProtocol);
+  }
+
+  private SecurityProtocol securityProtocol() {
+    return SecurityProtocol.valueOf(getString(ELASTICSEARCH_SECURITY_PROTOCOL_CONFIG));
   }
 
   private static void addConversionConfigs(ConfigDef configDef) {
