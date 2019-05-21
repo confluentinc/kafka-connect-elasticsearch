@@ -163,7 +163,8 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   private static final String ELASTICSEARCH_SECURITY_PROTOCOL_CONFIG = "elastic.security.protocol";
   private static final String ELASTICSEARCH_SECURITY_PROTOCOL_DOC =
       "The security protocol to use when connecting to Elasticsearch. "
-          + "Values can be `PLAINTEXT` or `SSL`.";
+          + "Values can be `PLAINTEXT` or `SSL`. If `PLAINTEXT` is passed, "
+          + "all configs prefixed by " + CONNECTION_SSL_CONFIG_PREFIX + " will be ignored.";
 
   protected static ConfigDef baseConfigDef() {
     final ConfigDef configDef = new ConfigDef();
@@ -330,7 +331,6 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   }
 
   public boolean secured() {
-    getString(ElasticsearchSinkConnectorConfig.ELASTICSEARCH_SECURITY_PROTOCOL_CONFIG);
     SecurityProtocol securityProtocol = securityProtocol();
     return SecurityProtocol.SSL.equals(securityProtocol);
   }
