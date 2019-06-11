@@ -103,10 +103,9 @@ public class SecurityIT {
     verify(getClient(props));
   }
 
-/**
+  /**
    * Run test against docker image running Elasticsearch, using plaintext connection.
    */
-/*
   @Test
   public void testNonSecureConnection() throws Throwable {
     final String address = "http://172.17.0.1:" + HTTP_PORT;
@@ -127,7 +126,7 @@ public class SecurityIT {
     }
     verify(getClient(props));
     verify(getClient(props));
-  }*/
+  }
 
   private JestClient getClient(Map<String, String> props) {
     JestClientFactory factory = new JestClientFactory();
