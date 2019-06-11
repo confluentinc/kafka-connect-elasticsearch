@@ -25,7 +25,6 @@ import java.util.Map;
 
 import static io.confluent.connect.elasticsearch.DataConverter.BehaviorOnNullValues;
 import static io.confluent.connect.elasticsearch.bulk.BulkProcessor.BehaviorOnMalformedDoc;
-import static io.confluent.connect.elasticsearch.jest.JestElasticsearchClient.WriteMethod;
 import static org.apache.kafka.common.config.SslConfigs.addClientSslSupport;
 
 public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
