@@ -1,0 +1,8 @@
+## Used by Docker images in our integration test
+http.host: 0.0.0.0
+http.port: 9215
+transport.port: 9315
+network.host: 0.0.0.0
+node.store.allow_mmapfs: false
+xpack.security.enabled: false
+xpack.security.http.ssl.enabled: false

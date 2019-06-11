@@ -365,8 +365,34 @@
                                         </wait>
                                     </run>
                                 </image>
+                                <image>
+                                    <alias>elastic-integration-test-plaintext</alias>
+                                    <name>confluentinc/elastic-integration-plaintext-%t</name>
+                                    <build>
+                                        <tags>
+                                            <tag>${project.version}</tag>
+                                        </tags>
+                                        <dockerFile>
+                                            ${project.basedir}/src/test/resources/plaintext/Dockerfile
+                                        </dockerFile>
+                                    </build>
+                                    <run>
+                                        <hostname>elastichost</hostname>
+                                        <ports>
+                                            <port>9215:9215</port>
+                                        </ports>
+                                        <wait>
+                                            <tcp>
+                                                <host>localhost</host>
+                                                <ports>
+                                                    <port>9215</port>
+                                                </ports>
+                                            </tcp>
+                                            <time>120000</time>
+                                        </wait>
+                                    </run>
+                                </image>
                             </images>
-
                         </configuration>
                         <executions>
                             <execution>

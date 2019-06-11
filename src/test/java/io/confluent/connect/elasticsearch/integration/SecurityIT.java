@@ -36,11 +36,13 @@ public class SecurityIT {
 
   private EmbeddedConnectCluster connect;
 
+  private static final String HTTP_PORT = "9215";
   private static final String MESSAGE_KEY = "message-key";
   private static final String MESSAGE_VAL = "{ \"schema\": { \"type\": \"map\", \"keys\": "
       + "{ \"type\" : \"string\" }, \"values\": { \"type\" : \"int32\" } }, "
       + "\"payload\": { \"key1\": 12, \"key2\": 15} }";
   private static final String CONNECTOR_NAME = "elastic-sink";
+  private static final String CONNECTOR_NAME_PLAINTEXT = "elastic-sink-plaintext";
   private static final String KAFKA_TOPIC = "test-elasticsearch-sink";
   private static final String TYPE_NAME = "kafka-connect";
   private static final int TASKS_MAX = 1;
@@ -100,6 +102,32 @@ public class SecurityIT {
     verify(getClient(props));
     verify(getClient(props));
   }
+
+/**
+   * Run test against docker image running Elasticsearch, using plaintext connection.
+   */
+/*
+  @Test
+  public void testNonSecureConnection() throws Throwable {
+    final String address = "http://172.17.0.1:" + HTTP_PORT;
+
+    connect.kafka().createTopic(KAFKA_TOPIC, 1);
+
+    // Start connector
+    Map<String, String> props = getProps();
+    props.put("connection.url", address);
+    connect.configureConnector(CONNECTOR_NAME_PLAINTEXT, props);
+    waitForCondition(() -> {
+      ConnectorStateInfo info = connect.connectorStatus(CONNECTOR_NAME_PLAINTEXT);
+      return info != null && info.tasks() != null && info.tasks().size() == 1;
+    }, "Timed out waiting for connector task to start");
+
+    for (int i=0; i<NUM_MSG; i++){
+      connect.kafka().produce(KAFKA_TOPIC, MESSAGE_KEY+i, MESSAGE_VAL);
+    }
+    verify(getClient(props));
+    verify(getClient(props));
+  }*/
 
   private JestClient getClient(Map<String, String> props) {
     JestClientFactory factory = new JestClientFactory();
