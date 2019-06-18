@@ -21,5 +21,8 @@ You can build kafka-connect-elasticsearch with Maven using the standard lifecycl
 
 This project is licensed under the [Confluent Community License](LICENSE).
 
+# Notes
+
+- While installing confluent-common, please make sure they had set the kafka version correctly in their pom.xml to the kafka version you are going to 'gradle installAll', if not, change it to what you just installed manually.
 
 [![FOSSA Status](https://app.fossa.io/api/projects/git%2Bhttps%3A%2F%2Fgithub.com%2Fconfluentinc%2Fkafka-connect-elasticsearch.svg?type=large)](https://app.fossa.io/projects/git%2Bhttps%3A%2F%2Fgithub.com%2Fconfluentinc%2Fkafka-connect-elasticsearch?ref=badge_large)
