@@ -83,6 +83,7 @@ public class SecurityIT {
     // Start connector
     Map<String, String> props = getProps();
     props.put("connection.url", address);
+    props.put("elastic.security.protocol", "SSL");
     props.put("elastic.https.ssl.keystore.location", "./src/test/resources/certs/keystore.jks");
     props.put("elastic.https.ssl.keystore.password", "asdfasdf");
     props.put("elastic.https.ssl.key.password", "asdfasdf");
