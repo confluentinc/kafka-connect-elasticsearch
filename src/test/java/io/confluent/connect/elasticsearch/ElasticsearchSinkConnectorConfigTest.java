@@ -78,13 +78,20 @@ public class ElasticsearchSinkConnectorConfigTest {
     assertFalse(new ElasticsearchSinkConnectorConfig(props).secured());
 
     props.put("connection.url", "https://host:9999");
-    assertTrue(new ElasticsearchSinkConnectorConfig(props).secured());
+    assertFalse(new ElasticsearchSinkConnectorConfig(props).secured());
 
     props.put("connection.url", "http://host1:9992,https://host:9999");
-    assertTrue(new ElasticsearchSinkConnectorConfig(props).secured());
+    assertFalse(new ElasticsearchSinkConnectorConfig(props).secured());
 
     // Default behavior should be backwards compat
     props.put("connection.url", "host1:9992");
+    assertFalse(new ElasticsearchSinkConnectorConfig(props).secured());
+
+    props.put("elastic.security.protocol", SecurityProtocol.SSL.name());
+    assertTrue(new ElasticsearchSinkConnectorConfig(props).secured());
+
+    props.put("elastic.security.protocol", SecurityProtocol.PLAINTEXT.name());
+    props.put("connection.url", "https://host:9999");
     assertFalse(new ElasticsearchSinkConnectorConfig(props).secured());
   }
 }
