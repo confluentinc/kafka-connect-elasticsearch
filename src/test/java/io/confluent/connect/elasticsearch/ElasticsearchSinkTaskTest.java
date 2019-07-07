@@ -16,29 +16,25 @@
 
 package io.confluent.connect.elasticsearch;
 
-import com.carrotsearch.randomizedtesting.annotations.ThreadLeakScope;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
+import com.carrotsearch.randomizedtesting.annotations.ThreadLeakScope;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.sink.SinkRecord;
-import org.elasticsearch.action.ActionFuture;
-import org.elasticsearch.action.ActionRequest;
-import org.elasticsearch.action.ActionRequestValidationException;
-import org.elasticsearch.action.admin.indices.exists.indices.IndicesExistsRequest;
-import org.elasticsearch.action.admin.indices.exists.indices.IndicesExistsResponse;
-import org.elasticsearch.action.index.IndexRequest;
 import org.elasticsearch.test.ESIntegTestCase;
 import org.elasticsearch.test.InternalTestCluster;
 import org.junit.Test;
-
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Collection;
-import java.util.ArrayList;
-import java.util.Collections;
 
 
 @ThreadLeakScope(ThreadLeakScope.Scope.NONE)
@@ -63,8 +59,6 @@ public class ElasticsearchSinkTaskTest extends ElasticsearchSinkTestBase {
 
   @Test
   public void testPutAndFlush() throws Exception {
-    InternalTestCluster cluster = ESIntegTestCase.internalCluster();
-    cluster.ensureAtLeastNumDataNodes(3);
     Map<String, String> props = createProps();
 
     ElasticsearchSinkTask task = new ElasticsearchSinkTask();
@@ -85,7 +79,7 @@ public class ElasticsearchSinkTaskTest extends ElasticsearchSinkTestBase {
     task.put(records);
     task.flush(null);
 
-    refresh();
+    client.refresh();
 
     verifySearchResults(records, true, false);
   }
@@ -94,8 +88,6 @@ public class ElasticsearchSinkTaskTest extends ElasticsearchSinkTestBase {
   public void testCreateAndWriteToIndexForTopicWithUppercaseCharacters() {
     // We should as well test that writing a record with a previously un seen record will create
     // an index following the required elasticsearch requirements of lowercasing.
-    InternalTestCluster cluster = ESIntegTestCase.internalCluster();
-    cluster.ensureAtLeastNumDataNodes(3);
     Map<String, String> props = createProps();
 
     ElasticsearchSinkTask task = new ElasticsearchSinkTask();
@@ -125,8 +117,6 @@ public class ElasticsearchSinkTaskTest extends ElasticsearchSinkTestBase {
 
   @Test
   public void testCreateAndWriteToIndexNotCreatedAtStartTime() {
-    InternalTestCluster cluster = ESIntegTestCase.internalCluster();
-    cluster.ensureAtLeastNumDataNodes(3);
     Map<String, String> props = createProps();
 
     props.put(ElasticsearchSinkConnectorConfig.AUTO_CREATE_INDICES_AT_START_CONFIG, "false");
@@ -150,18 +140,17 @@ public class ElasticsearchSinkTaskTest extends ElasticsearchSinkTestBase {
     task.put(Collections.singleton(sinkRecord));
     task.stop();
 
-    assertTrue(UNSEEN_TOPIC + " index created without errors ",
-        verifyIndexExist(cluster, UNSEEN_TOPIC.toLowerCase()));
+    assertFalse(UNSEEN_TOPIC + " index created without errors ",
+        verifyIndexExist(UNSEEN_TOPIC.toLowerCase()));
 
   }
 
-  private boolean verifyIndexExist(InternalTestCluster cluster, String ... indices) {
-    ActionFuture<IndicesExistsResponse> action = cluster
-        .client()
-        .admin()
-        .indices()
-        .exists(new IndicesExistsRequest(indices));
-
-    return action.actionGet().isExists();
+  private boolean verifyIndexExist(String index) {
+    try {
+       client.getMapping(index, TYPE);
+       return true;
+    } catch (Exception ex){
+      return false;
+    }
   }
 }

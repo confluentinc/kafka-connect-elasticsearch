@@ -41,7 +41,9 @@ import io.searchbox.core.Index;
 import io.searchbox.core.Search;
 import io.searchbox.core.SearchResult;
 import io.searchbox.indices.CreateIndex;
+import io.searchbox.indices.Flush;
 import io.searchbox.indices.IndicesExists;
+import io.searchbox.indices.Refresh;
 import io.searchbox.indices.mapping.GetMapping;
 import io.searchbox.indices.mapping.PutMapping;
 import org.apache.http.HttpHost;
@@ -280,6 +282,24 @@ public class JestElasticsearchClient implements ElasticsearchClient {
       return null;
     }
     return mappingsJson.getAsJsonObject(type);
+  }
+
+  /**
+   * Flush all indexes to disk
+   */
+  public void flush() throws IOException {
+    client.execute(
+        new Flush.Builder().build()
+    );
+  }
+
+  /**
+   * Refresh all data in elasticsearch, making it available for search
+   */
+  public void refresh() throws IOException {
+    client.execute(
+        new Refresh.Builder().build()
+    );
   }
 
   public BulkRequest createBulkRequest(List<IndexableRecord> batch) {

@@ -92,6 +92,21 @@ public interface ElasticsearchClient extends AutoCloseable {
    */
   JsonObject search(String query, String index, String type) throws IOException;
 
+
+  /**
+   * Forces a flush of all indexes to disk
+   *
+   * @throws IOException If the client cannot execute the request
+   */
+  void flush() throws IOException;
+
+  /**
+   * Perform a refresh of all indexes, making all indexed data searchable
+   *
+   * @throws IOException If the client cannot execute the request
+   */
+  void refresh() throws IOException;
+
   /**
    * Shuts down the client.
    */
