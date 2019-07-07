@@ -15,12 +15,21 @@
 
 package io.confluent.connect.elasticsearch;
 
+import static io.confluent.connect.elasticsearch.DataConverter.BehaviorOnNullValues;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConstants.KEYWORD_TYPE;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConstants.TEXT_TYPE;
+import static junit.framework.TestCase.assertNotNull;
+import static junit.framework.TestCase.assertNull;
+import static org.junit.Assert.assertEquals;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.NumericNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.node.TextNode;
-import com.fasterxml.jackson.databind.JsonNode;
 import com.google.gson.JsonObject;
-
+import io.confluent.connect.elasticsearch.jest.JestElasticsearchClient;
 import java.util.Collections;
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
@@ -29,23 +38,40 @@ import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
-import org.elasticsearch.test.ESIntegTestCase;
-import org.elasticsearch.test.InternalTestCluster;
+import org.junit.After;
+import org.junit.Before;
 import org.junit.Test;
+import org.testcontainers.elasticsearch.ElasticsearchContainer;
 
-import static io.confluent.connect.elasticsearch.DataConverter.BehaviorOnNullValues;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConstants.KEYWORD_TYPE;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConstants.TEXT_TYPE;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertNull;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
-
-public class MappingTest extends ElasticsearchSinkTestBase {
+public class TestContainerTest {
 
   private static final String INDEX = "kafka-connect";
   private static final String TYPE = "kafka-connect-type";
+
+
+  private ElasticsearchContainer container;
+
+  @Before
+  public void setUp() {
+    container = new ElasticsearchContainer("docker.elastic.co/elasticsearch/elasticsearch:6.4.1");
+    container.start();
+
+    client = new JestElasticsearchClient("http://"+container.getHttpHostAddress());
+    converter = new DataConverter(true, BehaviorOnNullValues.IGNORE);
+  }
+
+  @After
+  public void tearDown() {
+    if (client != null) {
+      client.close();
+    }
+    client = null;
+    container.stop();
+  }
+
+
+  protected ElasticsearchClient client;
+  private DataConverter converter;
 
   @Test
   @SuppressWarnings("unchecked")
@@ -67,8 +93,8 @@ public class MappingTest extends ElasticsearchSinkTestBase {
     when(client.getVersion()).thenReturn(ElasticsearchClient.Version.ES_V6);
 
     Schema schema = SchemaBuilder.struct().name("textRecord")
-            .field("string", Schema.STRING_SCHEMA)
-            .build();
+        .field("string", Schema.STRING_SCHEMA)
+        .build();
     ObjectNode mapping = (ObjectNode) Mapping.inferMapping(client, schema);
     ObjectNode properties = mapping.with("properties");
     ObjectNode string = properties.with("string");
@@ -105,6 +131,7 @@ public class MappingTest extends ElasticsearchSinkTestBase {
     assertNotNull(intMapping.get("properties").get("foo").get("null_value"));
     assertEquals(0, intMapping.get("properties").get("foo").get("null_value").asInt());
   }
+
 
   protected Schema createSchema() {
     Schema structSchema = createInnerSchema();
@@ -187,4 +214,5 @@ public class MappingTest extends ElasticsearchSinkTestBase {
         assertEquals("\"" + Mapping.getElasticsearchType(client, schemaType) + "\"", type.toString());
     }
   }
+
 }

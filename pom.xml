@@ -120,6 +120,12 @@
             <version>${lucene.version}</version>
             <scope>test</scope>
         </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>elasticsearch</artifactId>
+            <version>1.11.3</version>
+            <scope>test</scope>
+        </dependency>
         <!--Require newer version than inherited-->
         <dependency>
             <groupId>com.google.guava</groupId>

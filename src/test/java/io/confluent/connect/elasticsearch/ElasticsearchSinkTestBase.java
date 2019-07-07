@@ -15,30 +15,26 @@
 
 package io.confluent.connect.elasticsearch;
 
+import static io.confluent.connect.elasticsearch.DataConverter.BehaviorOnNullValues;
+import static org.junit.Assert.assertEquals;
+
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
-
 import io.confluent.connect.elasticsearch.jest.JestElasticsearchClient;
+import java.io.IOException;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.Map;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.sink.SinkRecord;
-import org.elasticsearch.cluster.metadata.IndexMetaData;
-import org.elasticsearch.common.settings.Settings;
-import org.elasticsearch.node.Node;
-import org.elasticsearch.test.ESIntegTestCase;
 import org.junit.After;
 import org.junit.Before;
+import org.testcontainers.elasticsearch.ElasticsearchContainer;
 
-import java.io.IOException;
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.Map;
-
-import static io.confluent.connect.elasticsearch.DataConverter.BehaviorOnNullValues;
-
-public class ElasticsearchSinkTestBase extends ESIntegTestCase {
+public class ElasticsearchSinkTestBase {
 
   protected static final String TYPE = "kafka-connect";
 
@@ -50,30 +46,28 @@ public class ElasticsearchSinkTestBase extends ESIntegTestCase {
   protected static final TopicPartition TOPIC_PARTITION2 = new TopicPartition(TOPIC, PARTITION2);
   protected static final TopicPartition TOPIC_PARTITION3 = new TopicPartition(TOPIC, PARTITION3);
 
+  protected ElasticsearchContainer container;
   protected ElasticsearchClient client;
   private DataConverter converter;
 
   @Before
   public void setUp() throws Exception {
-    super.setUp();
-    client = new JestElasticsearchClient("http://localhost:" + getPort());
+    container = new ElasticsearchContainer("docker.elastic.co/elasticsearch/elasticsearch:6.4.1");
+    container.start();
+
+    client = new JestElasticsearchClient("http://"+container.getHttpHostAddress());
     converter = new DataConverter(true, BehaviorOnNullValues.IGNORE);
   }
 
   @After
   public void tearDown() throws Exception {
-    super.tearDown();
     if (client != null) {
       client.close();
     }
     client = null;
+    container.stop();
   }
 
-  protected int getPort() {
-    assertTrue("There should be at least 1 HTTP endpoint exposed in the test cluster",
-               cluster().httpAddresses().length > 0);
-    return cluster().httpAddresses()[0].getPort();
-  }
 
   protected Struct createRecord(Schema schema) {
     Struct struct = new Struct(schema);
@@ -129,38 +123,5 @@ public class ElasticsearchSinkTestBase extends ESIntegTestCase {
       }
     }
   }
-
-  /* For ES 2.x */
-  @Override
-  protected Settings nodeSettings(int nodeOrdinal) {
-    return Settings.settingsBuilder()
-        .put(super.nodeSettings(nodeOrdinal))
-        .put(IndexMetaData.SETTING_NUMBER_OF_SHARDS, 1)
-        .put(IndexMetaData.SETTING_NUMBER_OF_REPLICAS, 1)
-        .put(Node.HTTP_ENABLED, true)
-        .build();
-  }
-
-  /* For ES 5.x (requires Java 8) */
-  /*
-  @Override
-  protected Settings nodeSettings(int nodeOrdinal) {
-    int randomPort = randomIntBetween(49152, 65525);
-    return Settings.builder()
-        .put(super.nodeSettings(nodeOrdinal))
-        .put(NetworkModule.HTTP_ENABLED.getKey(), true)
-        .put(HttpTransportSettings.SETTING_HTTP_PORT.getKey(), randomPort)
-        .put("network.host", "127.0.0.1")
-        .build();
-  }
-
-  @Override
-  protected Collection<Class<? extends Plugin>> nodePlugins() {
-    System.setProperty("es.set.netty.runtime.available.processors", "false");
-    Collection<Class<? extends Plugin>> al = new ArrayList<Class<? extends Plugin>>();
-    al.add(Netty4Plugin.class);
-    return al;
-  }
-  */
 
 }
