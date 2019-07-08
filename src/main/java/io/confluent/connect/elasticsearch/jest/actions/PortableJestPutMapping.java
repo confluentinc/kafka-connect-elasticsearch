@@ -13,7 +13,7 @@
  * specific language governing permissions and limitations under the License.
  */
 
-package io.confluent.connect.elasticsearch.jest;
+package io.confluent.connect.elasticsearch.jest.actions;
 
 import io.confluent.connect.elasticsearch.ElasticsearchClient.Version;
 import io.searchbox.indices.mapping.PutMapping;
