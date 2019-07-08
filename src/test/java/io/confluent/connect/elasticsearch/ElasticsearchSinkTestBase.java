@@ -31,7 +31,9 @@ import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.sink.SinkRecord;
 import org.junit.After;
+import org.junit.AfterClass;
 import org.junit.Before;
+import org.junit.BeforeClass;
 import org.testcontainers.elasticsearch.ElasticsearchContainer;
 
 public class ElasticsearchSinkTestBase {
@@ -46,26 +48,39 @@ public class ElasticsearchSinkTestBase {
   protected static final TopicPartition TOPIC_PARTITION2 = new TopicPartition(TOPIC, PARTITION2);
   protected static final TopicPartition TOPIC_PARTITION3 = new TopicPartition(TOPIC, PARTITION3);
 
-  protected ElasticsearchContainer container;
+  protected static ElasticsearchContainer container;
   protected ElasticsearchClient client;
   private DataConverter converter;
 
+  @BeforeClass
+  public static void setupBeforeAll() {
+    // Relevant and available docker images for elastic can be found at https://www.docker.elastic.co
+    container = new ElasticsearchContainer("docker.elastic.co/elasticsearch/elasticsearch:7.0.0");
+    container.start();
+  }
+
+  @AfterClass
+  public static void teardownAfterAll() {
+    container.close();
+  }
+
   @Before
   public void setUp() throws Exception {
-    container = new ElasticsearchContainer("docker.elastic.co/elasticsearch/elasticsearch:6.4.1");
-    container.start();
-
     client = new JestElasticsearchClient("http://"+container.getHttpHostAddress());
     converter = new DataConverter(true, BehaviorOnNullValues.IGNORE);
   }
 
   @After
-  public void tearDown() throws Exception {
+  public void tearDown() {
+   try {
+     client.deleteAll();
+   } catch (Exception ex) {
+     // IGNORE in case of error
+   }
     if (client != null) {
       client.close();
     }
     client = null;
-    container.stop();
   }
 
 
