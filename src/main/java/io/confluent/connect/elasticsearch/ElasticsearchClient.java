@@ -28,7 +28,7 @@ import java.util.Set;
 public interface ElasticsearchClient extends AutoCloseable {
 
   enum Version {
-    ES_V1, ES_V2, ES_V5, ES_V6
+    ES_V1, ES_V2, ES_V5, ES_V6, ES_V7
   }
 
   /**
@@ -92,13 +92,18 @@ public interface ElasticsearchClient extends AutoCloseable {
    */
   JsonObject search(String query, String index, String type) throws IOException;
 
-
   /**
    * Forces a flush of all indexes to disk
    *
    * @throws IOException If the client cannot execute the request
    */
   void flush() throws IOException;
+
+  /**
+   * Delete all indexes in Elasticsearch (useful for test)
+   * @throws IOException if the client cannot execute the request
+   */
+  void deleteAll() throws IOException;
 
   /**
    * Perform a refresh of all indexes, making all indexed data searchable
