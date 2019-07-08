@@ -34,7 +34,9 @@ import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.sink.SinkRecord;
 import org.junit.After;
+import org.junit.AfterClass;
 import org.junit.Before;
+import org.junit.BeforeClass;
 import org.testcontainers.elasticsearch.ElasticsearchContainer;
 
 public class ElasticsearchIntegrationTestBase {
@@ -48,27 +50,51 @@ public class ElasticsearchIntegrationTestBase {
   protected static final TopicPartition TOPIC_PARTITION = new TopicPartition(TOPIC, PARTITION);
   protected static final TopicPartition TOPIC_PARTITION2 = new TopicPartition(TOPIC, PARTITION2);
   protected static final TopicPartition TOPIC_PARTITION3 = new TopicPartition(TOPIC, PARTITION3);
+  private static final String DEFAULT_ES_VERSION = "7.0.0";
+  private static final String DEFAULT_DOCKER_IMAGE_NAME = "docker.elastic.co/elasticsearch/elasticsearch";
 
-  protected ElasticsearchContainer container;
+  protected static ElasticsearchContainer container;
   protected ElasticsearchClient client;
   private DataConverter converter;
 
+
+  @BeforeClass
+  public static void setupBeforeAll() {
+    String dockerImageName = getElasticsearchDockerImageName();
+    String esVersion = getElasticsearchContainerVersion();
+    // Relevant and available docker images for elastic can be found at https://www.docker.elastic.co
+    container = new ElasticsearchContainer(dockerImageName + ":" + esVersion);
+    container.start();
+  }
+
+  @AfterClass
+  public static void teardownAfterAll() {
+    container.close();
+  }
+
   @Before
   public void setUp() throws Exception {
-    container = new ElasticsearchContainer("docker.elastic.co/elasticsearch/elasticsearch:6.4.1");
-    container.start();
-
-    client = new JestElasticsearchClient("http://"+container.getHttpHostAddress());
+    client = new JestElasticsearchClient("http://" + container.getHttpHostAddress());
     converter = new DataConverter(true, BehaviorOnNullValues.IGNORE);
   }
 
   @After
-  public void tearDown() throws Exception {
+  public void tearDown() {
+    try {
+      client.deleteAll();
+    } catch (IOException ex) {
+      // IGNORE in case of error
+    } catch (java.lang.IllegalStateException illegalStateException) {
+      // IGNORED for now until we can fix
+      // this issue https://stackoverflow.com/questions/25889925
+      // Issue looks to be a race condition with the close method on httpcore 4.4 in shared
+      // environments like test could be. Need more research, but for now it can be ignored
+      // as this is only for the tear down of the test.
+    }
     if (client != null) {
       client.close();
     }
     client = null;
-    container.stop();
   }
 
 
@@ -125,6 +151,14 @@ public class ElasticsearchIntegrationTestBase {
         assertEquals(record, hits.get("key"));
       }
     }
+  }
+
+  private static String getElasticsearchContainerVersion() {
+    return System.getProperty("esVersion", DEFAULT_ES_VERSION);
+  }
+
+  private static String getElasticsearchDockerImageName() {
+    return System.getProperty("esImageName", DEFAULT_DOCKER_IMAGE_NAME);
   }
 
 }
