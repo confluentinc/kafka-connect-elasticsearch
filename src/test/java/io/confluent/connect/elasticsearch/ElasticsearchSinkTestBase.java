@@ -48,15 +48,20 @@ public class ElasticsearchSinkTestBase {
   protected static final TopicPartition TOPIC_PARTITION = new TopicPartition(TOPIC, PARTITION);
   protected static final TopicPartition TOPIC_PARTITION2 = new TopicPartition(TOPIC, PARTITION2);
   protected static final TopicPartition TOPIC_PARTITION3 = new TopicPartition(TOPIC, PARTITION3);
+  private static final String DEFAULT_ES_VERSION = "7.0.0";
+  private static final String DEFAULT_DOCKER_IMAGE_NAME = "docker.elastic.co/elasticsearch/elasticsearch";
 
   protected static ElasticsearchContainer container;
   protected ElasticsearchClient client;
   private DataConverter converter;
 
+
   @BeforeClass
   public static void setupBeforeAll() {
+    String dockerImageName = getElasticsearchDockerImageName();
+    String esVersion = getElasticsearchContainerVersion();
     // Relevant and available docker images for elastic can be found at https://www.docker.elastic.co
-    container = new ElasticsearchContainer("docker.elastic.co/elasticsearch/elasticsearch:7.0.0");
+    container = new ElasticsearchContainer(dockerImageName + ":" + esVersion);
     container.start();
   }
 
@@ -144,6 +149,14 @@ public class ElasticsearchSinkTestBase {
         assertEquals(record, hits.get("key"));
       }
     }
+  }
+
+  private static String getElasticsearchContainerVersion() {
+    return System.getProperty("esVersion", DEFAULT_ES_VERSION);
+  }
+
+  private static String getElasticsearchDockerImageName() {
+    return System.getProperty("esImageName", DEFAULT_DOCKER_IMAGE_NAME);
   }
 
 }
