@@ -26,9 +26,9 @@ import io.confluent.connect.elasticsearch.Key;
 import io.confluent.connect.elasticsearch.Mapping;
 import io.confluent.connect.elasticsearch.bulk.BulkRequest;
 import io.confluent.connect.elasticsearch.bulk.BulkResponse;
-import io.confluent.connect.elasticsearch.jest.actions.PortableJestCreateIndex;
-import io.confluent.connect.elasticsearch.jest.actions.PortableJestGetMapping;
-import io.confluent.connect.elasticsearch.jest.actions.PortableJestPutMapping;
+import io.confluent.connect.elasticsearch.jest.actions.PortableJestCreateIndexBuilder;
+import io.confluent.connect.elasticsearch.jest.actions.PortableJestGetMappingBuilder;
+import io.confluent.connect.elasticsearch.jest.actions.PortableJestPutMappingBuilder;
 import io.searchbox.action.Action;
 import io.searchbox.action.BulkableAction;
 import io.searchbox.client.JestClient;
@@ -49,19 +49,10 @@ import io.searchbox.indices.Flush;
 import io.searchbox.indices.IndicesExists;
 import io.searchbox.indices.Refresh;
 import io.searchbox.indices.mapping.PutMapping;
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Set;
-import java.util.stream.Collectors;
-import javax.net.ssl.SSLContext;
 import org.apache.http.HttpHost;
+import org.apache.kafka.common.config.ConfigDef;
 import org.apache.http.conn.ssl.SSLConnectionSocketFactory;
 import org.apache.http.nio.conn.ssl.SSLIOSessionStrategy;
-import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.config.types.Password;
 import org.apache.kafka.common.network.Mode;
@@ -71,7 +62,18 @@ import org.apache.kafka.connect.errors.ConnectException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
+import javax.net.ssl.SSLContext;
+
 public class JestElasticsearchClient implements ElasticsearchClient {
+
   private static final Logger log = LoggerFactory.getLogger(JestElasticsearchClient.class);
 
   // visible for testing
@@ -79,6 +81,8 @@ public class JestElasticsearchClient implements ElasticsearchClient {
       = "mapper_parse_exception";
   protected static final String VERSION_CONFLICT_ENGINE_EXCEPTION
       = "version_conflict_engine_exception";
+  protected static final String ALL_FIELD_PARAM
+      = "_all";
 
   private static final Logger LOG = LoggerFactory.getLogger(JestElasticsearchClient.class);
 
@@ -285,7 +289,7 @@ public class JestElasticsearchClient implements ElasticsearchClient {
   public void createIndices(Set<String> indices) {
     for (String index : indices) {
       if (!indexExists(index)) {
-        CreateIndex createIndex = new PortableJestCreateIndex(index, version).build();
+        CreateIndex createIndex = new PortableJestCreateIndexBuilder(index, version).build();
         try {
           JestResult result = client.execute(createIndex);
           if (!result.isSucceeded()) {
@@ -306,7 +310,7 @@ public class JestElasticsearchClient implements ElasticsearchClient {
   public void createMapping(String index, String type, Schema schema) throws IOException {
     ObjectNode obj = JsonNodeFactory.instance.objectNode();
     obj.set(type, Mapping.inferMapping(this, schema));
-    PutMapping putMapping = new PortableJestPutMapping(index, type, obj.toString(), version)
+    PutMapping putMapping = new PortableJestPutMappingBuilder(index, type, obj.toString(), version)
         .build();
     JestResult result = client.execute(putMapping);
     if (!result.isSucceeded()) {
@@ -321,7 +325,7 @@ public class JestElasticsearchClient implements ElasticsearchClient {
    */
   public JsonObject getMapping(String index, String type) throws IOException {
     final JestResult result = client.execute(
-        new PortableJestGetMapping(version)
+        new PortableJestGetMappingBuilder(version)
             .addIndex(index)
             .addType(type)
             .build()
@@ -342,7 +346,7 @@ public class JestElasticsearchClient implements ElasticsearchClient {
    */
   public void deleteAll() throws IOException {
     client.execute(new DeleteIndex
-        .Builder("_all")
+        .Builder(ALL_FIELD_PARAM)
         .build());
   }
 
@@ -471,7 +475,7 @@ public class JestElasticsearchClient implements ElasticsearchClient {
     try {
       client.close();
     } catch (IOException e) {
-      log.error("Exception while closing the JEST client", e);
+      log.warn("Exception while closing the JEST client", e);
     }
   }
 

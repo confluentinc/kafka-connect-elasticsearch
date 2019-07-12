@@ -15,16 +15,10 @@
 
 package io.confluent.connect.elasticsearch;
 
-import static io.confluent.connect.elasticsearch.DataConverter.BehaviorOnNullValues;
 import static org.junit.Assert.assertEquals;
-
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import io.confluent.connect.elasticsearch.jest.JestElasticsearchClient;
-import java.io.IOException;
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.Map;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaBuilder;
@@ -35,6 +29,13 @@ import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.testcontainers.elasticsearch.ElasticsearchContainer;
+
+import java.io.IOException;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.Map;
+
+import static io.confluent.connect.elasticsearch.DataConverter.BehaviorOnNullValues;
 
 public class ElasticsearchSinkTestBase {
 
@@ -66,7 +67,7 @@ public class ElasticsearchSinkTestBase {
 
   @Before
   public void setUp() throws Exception {
-    client = new JestElasticsearchClient("http://"+container.getHttpHostAddress());
+    client = new JestElasticsearchClient("http://" + container.getHttpHostAddress());
     converter = new DataConverter(true, BehaviorOnNullValues.IGNORE);
   }
 
@@ -74,8 +75,14 @@ public class ElasticsearchSinkTestBase {
   public void tearDown() {
    try {
      client.deleteAll();
-   } catch (Exception ex) {
+   } catch (IOException ex) {
      // IGNORE in case of error
+   } catch (java.lang.IllegalStateException illegalStateException) {
+     // IGNORED for now until we can fix
+     // this issue https://stackoverflow.com/questions/25889925
+     // Issue looks to be a race condition with the close method on httpcore 4.4 in shared
+     // environments like test could be. Need more research, but for now it can be ignored
+     // as this is only for the tear down of the test.
    }
     if (client != null) {
       client.close();

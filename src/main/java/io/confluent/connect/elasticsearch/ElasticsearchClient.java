@@ -100,6 +100,7 @@ public interface ElasticsearchClient extends AutoCloseable {
 
   /**
    * Delete all indexes in Elasticsearch (useful for test)
+   *
    * @throws IOException if the client cannot execute the request
    */
   void deleteAll() throws IOException;

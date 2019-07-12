@@ -19,22 +19,25 @@ import io.confluent.connect.elasticsearch.ElasticsearchClient.Version;
 import io.searchbox.indices.mapping.GetMapping;
 
 /**
- * Portable Jest action to put a new mapping, this action will support ES version 7 with type
- * support still enabled.
+ * Portable Jest action builder to put a new mapping.
+ * This builder add support for ES version 7 by keeping the type support still enabled, this is
+ * done by passing the include_type_name parameter. This parameter is no longer required with ES 8,
+ * as types should not be used anymore by the time of ES 8 release.
  */
-public class PortableJestGetMapping extends GetMapping.Builder {
+public class PortableJestGetMappingBuilder extends GetMapping.Builder {
+
+  public static final String INCLUDE_TYPE_NAME_PARAM = "include_type_name";
 
   private final Version version;
 
-  public PortableJestGetMapping(Version version) {
-    super();
+  public PortableJestGetMappingBuilder(Version version) {
     this.version = version;
   }
 
   @Override
   public GetMapping build() {
     if (version.equals(Version.ES_V7)) {
-      setParameter("include_type_name", true);
+      setParameter(INCLUDE_TYPE_NAME_PARAM, true);
     }
     return super.build();
   }
