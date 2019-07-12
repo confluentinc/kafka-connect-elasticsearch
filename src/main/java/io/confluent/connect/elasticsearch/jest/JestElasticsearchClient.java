@@ -45,7 +45,6 @@ import io.searchbox.core.SearchResult;
 import io.searchbox.core.Update;
 import io.searchbox.indices.CreateIndex;
 import io.searchbox.indices.DeleteIndex;
-import io.searchbox.indices.Flush;
 import io.searchbox.indices.IndicesExists;
 import io.searchbox.indices.Refresh;
 import io.searchbox.indices.mapping.PutMapping;

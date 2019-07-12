@@ -92,18 +92,22 @@ public interface ElasticsearchClient extends AutoCloseable {
   JsonObject search(String query, String index, String type) throws IOException;
 
   /**
-   * Delete all indexes in Elasticsearch (useful for test)
+   * Delete all indexes in Elasticsearch (useful mostly for test)
    *
    * @throws IOException if the client cannot execute the request
    */
-  void deleteAll() throws IOException;
+  default void deleteAll() throws IOException {
+    throw new UnsupportedOperationException("deleteAll is not implemented yet by this client");
+  }
 
   /**
-   * Perform a refresh of all indexes, making all indexed data searchable
+   * Perform a refresh of all indexes, making all indexed data searchable (useful mostly for test)
    *
    * @throws IOException If the client cannot execute the request
    */
-  void refresh() throws IOException;
+  default void refresh() throws IOException {
+    throw new UnsupportedOperationException("refresh is not implemented yet by this client");
+  }
 
   /**
    * Shuts down the client.
