@@ -307,15 +307,6 @@ public class JestElasticsearchClient implements ElasticsearchClient {
   }
 
   /**
-   * Flush all indexes to disk
-   */
-  public void flush() throws IOException {
-    client.execute(
-        new Flush.Builder().build()
-    );
-  }
-
-  /**
    * Refresh all data in elasticsearch, making it available for search
    */
   public void refresh() throws IOException {
