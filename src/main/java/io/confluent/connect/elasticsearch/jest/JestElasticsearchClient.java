@@ -27,9 +27,9 @@ import io.confluent.connect.elasticsearch.Key;
 import io.confluent.connect.elasticsearch.Mapping;
 import io.confluent.connect.elasticsearch.bulk.BulkRequest;
 import io.confluent.connect.elasticsearch.bulk.BulkResponse;
-import io.confluent.connect.elasticsearch.jest.actions.PortableJestCreateIndex;
-import io.confluent.connect.elasticsearch.jest.actions.PortableJestGetMapping;
-import io.confluent.connect.elasticsearch.jest.actions.PortableJestPutMapping;
+import io.confluent.connect.elasticsearch.jest.actions.PortableJestCreateIndexBuilder;
+import io.confluent.connect.elasticsearch.jest.actions.PortableJestGetMappingBuilder;
+import io.confluent.connect.elasticsearch.jest.actions.PortableJestPutMappingBuilder;
 import io.searchbox.action.Action;
 import io.searchbox.action.BulkableAction;
 import io.searchbox.client.JestClient;
@@ -57,12 +57,15 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 import org.apache.http.HttpHost;
+import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.config.types.Password;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.util.Locale;
 
 public class JestElasticsearchClient implements ElasticsearchClient {
 
@@ -71,6 +74,8 @@ public class JestElasticsearchClient implements ElasticsearchClient {
       = "mapper_parse_exception";
   protected static final String VERSION_CONFLICT_ENGINE_EXCEPTION
       = "version_conflict_engine_exception";
+  protected static final String ALL_FIELD_PARAM
+      = "_all";
 
   private static final Logger LOG = LoggerFactory.getLogger(JestElasticsearchClient.class);
 
@@ -240,7 +245,7 @@ public class JestElasticsearchClient implements ElasticsearchClient {
   public void createIndices(Set<String> indices) {
     for (String index : indices) {
       if (!indexExists(index)) {
-        CreateIndex createIndex = new PortableJestCreateIndex(index, version).build();
+        CreateIndex createIndex = new PortableJestCreateIndexBuilder(index, version).build();
         try {
           JestResult result = client.execute(createIndex);
           if (!result.isSucceeded()) {
@@ -261,7 +266,7 @@ public class JestElasticsearchClient implements ElasticsearchClient {
   public void createMapping(String index, String type, Schema schema) throws IOException {
     ObjectNode obj = JsonNodeFactory.instance.objectNode();
     obj.set(type, Mapping.inferMapping(this, schema));
-    PutMapping putMapping = new PortableJestPutMapping(index, type, obj.toString(), version)
+    PutMapping putMapping = new PortableJestPutMappingBuilder(index, type, obj.toString(), version)
         .build();
     JestResult result = client.execute(putMapping);
     if (!result.isSucceeded()) {
@@ -276,7 +281,7 @@ public class JestElasticsearchClient implements ElasticsearchClient {
    */
   public JsonObject getMapping(String index, String type) throws IOException {
     final JestResult result = client.execute(
-        new PortableJestGetMapping(version)
+        new PortableJestGetMappingBuilder(version)
             .addIndex(index)
             .addType(type)
             .build()
@@ -297,7 +302,7 @@ public class JestElasticsearchClient implements ElasticsearchClient {
    */
   public void deleteAll() throws IOException {
     client.execute(new DeleteIndex
-        .Builder("_all")
+        .Builder(ALL_FIELD_PARAM)
         .build());
   }
 
@@ -412,6 +417,42 @@ public class JestElasticsearchClient implements ElasticsearchClient {
       client.close();
     } catch (IOException e) {
       LOG.error("Exception while closing the JEST client", e);
+    }
+  }
+
+  public enum WriteMethod {
+    INSERT,
+    UPSERT,
+    ;
+
+    public static final WriteMethod DEFAULT = INSERT;
+    public static final ConfigDef.Validator VALIDATOR = new ConfigDef.Validator() {
+      private final ConfigDef.ValidString validator = ConfigDef.ValidString.in(names());
+
+      @Override
+      public void ensureValid(String name, Object value) {
+        validator.ensureValid(name, value);
+      }
+
+      // Overridden here so that ConfigDef.toEnrichedRst shows possible values correctly
+      @Override
+      public String toString() {
+        return "One of " + INSERT.toString() + " or " + UPSERT.toString();
+      }
+
+    };
+
+    public static String[] names() {
+      return new String[] {INSERT.toString(), UPSERT.toString()};
+    }
+
+    public static WriteMethod forValue(String value) {
+      return valueOf(value.toUpperCase(Locale.ROOT));
+    }
+
+    @Override
+    public String toString() {
+      return name().toLowerCase(Locale.ROOT);
     }
   }
 }
