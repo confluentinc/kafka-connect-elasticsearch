@@ -15,7 +15,6 @@
 
 package io.confluent.connect.elasticsearch;
 
-import com.carrotsearch.randomizedtesting.annotations.ThreadLeakScope;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.fail;
 
@@ -33,7 +32,6 @@ import java.util.Arrays;
 import org.junit.Test;
 
 
-@ThreadLeakScope(ThreadLeakScope.Scope.NONE)
 public class ElasticsearchSinkTaskTest extends ElasticsearchSinkTestBase {
 
   private static final String TOPIC_IN_CAPS = "AnotherTopicInCaps";

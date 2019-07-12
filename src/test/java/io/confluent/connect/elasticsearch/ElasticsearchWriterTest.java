@@ -15,7 +15,6 @@
 
 package io.confluent.connect.elasticsearch;
 
-import com.carrotsearch.randomizedtesting.annotations.ThreadLeakScope;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import org.apache.kafka.connect.data.Decimal;
@@ -46,7 +45,6 @@ import org.junit.rules.ExpectedException;
 import static io.confluent.connect.elasticsearch.DataConverter.BehaviorOnNullValues;
 import static org.junit.Assert.fail;
 
-@ThreadLeakScope(ThreadLeakScope.Scope.NONE)
 public class ElasticsearchWriterTest extends ElasticsearchSinkTestBase {
 
   private final String key = "key";
