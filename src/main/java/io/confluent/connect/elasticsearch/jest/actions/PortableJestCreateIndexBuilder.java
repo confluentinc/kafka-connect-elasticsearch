@@ -16,25 +16,29 @@
 package io.confluent.connect.elasticsearch.jest.actions;
 
 import io.confluent.connect.elasticsearch.ElasticsearchClient.Version;
-import io.searchbox.indices.mapping.PutMapping;
+import io.searchbox.indices.CreateIndex;
 
 /**
- * Portable Jest action to put a new mapping, this action will support ES version 7 with type
- * support still enabled.
+ * Portable Jest action builder, across ES versions, to create indexes.
+ * This builder add support for ES version 7 by keeping the type support still enabled, this is
+ * done by passing the include_type_name parameter. This parameter is no longer required with ES 8,
+ * as types should not be used anymore by the time of ES 8 release.
  */
-public class PortableJestPutMapping extends PutMapping.Builder {
+public class PortableJestCreateIndexBuilder extends CreateIndex.Builder {
+
+  public static final String INCLUDE_TYPE_NAME_PARAM = "include_type_name";
 
   private final Version version;
 
-  public PortableJestPutMapping(String index, String type, Object source, Version version) {
-    super(index, type, source);
+  public PortableJestCreateIndexBuilder(String index, Version version) {
+    super(index);
     this.version = version;
   }
 
   @Override
-  public PutMapping build() {
+  public CreateIndex build() {
     if (version.equals(Version.ES_V7)) {
-      setParameter("include_type_name", true);
+      setParameter(INCLUDE_TYPE_NAME_PARAM, true);
     }
     return super.build();
   }

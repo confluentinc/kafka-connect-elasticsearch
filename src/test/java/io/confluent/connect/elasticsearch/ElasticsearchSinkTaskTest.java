@@ -15,13 +15,11 @@
 
 package io.confluent.connect.elasticsearch;
 
+import com.carrotsearch.randomizedtesting.annotations.ThreadLeakScope;
 import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
-import com.carrotsearch.randomizedtesting.annotations.ThreadLeakScope;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
@@ -31,8 +29,7 @@ import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.sink.SinkRecord;
-import org.elasticsearch.test.ESIntegTestCase;
-import org.elasticsearch.test.InternalTestCluster;
+import java.util.Arrays;
 import org.junit.Test;
 
 
