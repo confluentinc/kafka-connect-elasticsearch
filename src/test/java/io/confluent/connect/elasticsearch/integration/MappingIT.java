@@ -27,7 +27,7 @@ import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
 @Category(IntegrationTest.class)
-public class MappingIntegrationTest extends ElasticsearchIntegrationTestBase {
+public class MappingIT extends ElasticsearchIntegrationTestBase {
 
   private static final String INDEX = "kafka-connect";
   private static final String TYPE = "kafka-connect-type";
