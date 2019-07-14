@@ -36,9 +36,6 @@ import org.junit.Test;
 import static io.confluent.connect.elasticsearch.DataConverter.BehaviorOnNullValues;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConstants.KEYWORD_TYPE;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConstants.TEXT_TYPE;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -50,8 +47,10 @@ public class MappingTest extends ElasticsearchSinkTestBase {
   @Test
   @SuppressWarnings("unchecked")
   public void testMapping() throws Exception {
+    InternalTestCluster cluster = ESIntegTestCase.internalCluster();
+    cluster.ensureAtLeastNumDataNodes(1);
 
-    client.createIndices(Collections.singleton(INDEX));
+    createIndex(INDEX);
     Schema schema = createSchema();
     Mapping.createMapping(client, INDEX, TYPE, schema);
 
@@ -67,8 +66,8 @@ public class MappingTest extends ElasticsearchSinkTestBase {
     when(client.getVersion()).thenReturn(ElasticsearchClient.Version.ES_V6);
 
     Schema schema = SchemaBuilder.struct().name("textRecord")
-            .field("string", Schema.STRING_SCHEMA)
-            .build();
+        .field("string", Schema.STRING_SCHEMA)
+        .build();
     ObjectNode mapping = (ObjectNode) Mapping.inferMapping(client, schema);
     ObjectNode properties = mapping.with("properties");
     ObjectNode string = properties.with("string");
@@ -157,10 +156,12 @@ public class MappingTest extends ElasticsearchSinkTestBase {
         case Date.LOGICAL_NAME:
         case Time.LOGICAL_NAME:
         case Timestamp.LOGICAL_NAME:
-          assertEquals("\"" + ElasticsearchSinkConnectorConstants.DATE_TYPE + "\"", type.toString());
+          assertEquals("\"" + ElasticsearchSinkConnectorConstants.DATE_TYPE + "\"",
+              type.toString());
           return;
         case Decimal.LOGICAL_NAME:
-          assertEquals("\"" + ElasticsearchSinkConnectorConstants.DOUBLE_TYPE + "\"", type.toString());
+          assertEquals("\"" + ElasticsearchSinkConnectorConstants.DOUBLE_TYPE + "\"",
+              type.toString());
           return;
       }
     }
@@ -174,17 +175,20 @@ public class MappingTest extends ElasticsearchSinkTestBase {
       case MAP:
         Schema newSchema = converter.preProcessSchema(schema);
         JsonObject mapProperties = mapping.get("properties").getAsJsonObject();
-        verifyMapping(newSchema.keySchema(), mapProperties.get(ElasticsearchSinkConnectorConstants.MAP_KEY).getAsJsonObject());
-        verifyMapping(newSchema.valueSchema(), mapProperties.get(ElasticsearchSinkConnectorConstants.MAP_VALUE).getAsJsonObject());
+        verifyMapping(newSchema.keySchema(),
+            mapProperties.get(ElasticsearchSinkConnectorConstants.MAP_KEY).getAsJsonObject());
+        verifyMapping(newSchema.valueSchema(),
+            mapProperties.get(ElasticsearchSinkConnectorConstants.MAP_VALUE).getAsJsonObject());
         break;
       case STRUCT:
         JsonObject properties = mapping.get("properties").getAsJsonObject();
-        for (Field field: schema.fields()) {
+        for (Field field : schema.fields()) {
           verifyMapping(field.schema(), properties.get(field.name()).getAsJsonObject());
         }
         break;
       default:
-        assertEquals("\"" + Mapping.getElasticsearchType(client, schemaType) + "\"", type.toString());
+        assertEquals("\"" + Mapping.getElasticsearchType(client, schemaType) + "\"",
+            type.toString());
     }
   }
 }
