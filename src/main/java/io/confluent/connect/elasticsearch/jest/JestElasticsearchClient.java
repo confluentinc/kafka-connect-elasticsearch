@@ -404,7 +404,7 @@ public class JestElasticsearchClient implements ElasticsearchClient {
     }
 
     if (!versionConflicts.isEmpty()) {
-      LOG.debug("Ignoring version conflicts for items: {}", versionConflicts);
+      LOG.warn("Ignoring version conflicts for items: {}", versionConflicts);
       if (errors.isEmpty()) {
         // The only errors were version conflicts
         return BulkResponse.success();
