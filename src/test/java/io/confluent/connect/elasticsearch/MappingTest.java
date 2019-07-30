@@ -22,7 +22,6 @@ import com.fasterxml.jackson.databind.node.TextNode;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.google.gson.JsonObject;
 
-import java.util.Collections;
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Field;
@@ -67,8 +66,8 @@ public class MappingTest extends ElasticsearchSinkTestBase {
     when(client.getVersion()).thenReturn(ElasticsearchClient.Version.ES_V6);
 
     Schema schema = SchemaBuilder.struct().name("textRecord")
-        .field("string", Schema.STRING_SCHEMA)
-        .build();
+            .field("string", Schema.STRING_SCHEMA)
+            .build();
     ObjectNode mapping = (ObjectNode) Mapping.inferMapping(client, schema);
     ObjectNode properties = mapping.with("properties");
     ObjectNode string = properties.with("string");
@@ -157,12 +156,10 @@ public class MappingTest extends ElasticsearchSinkTestBase {
         case Date.LOGICAL_NAME:
         case Time.LOGICAL_NAME:
         case Timestamp.LOGICAL_NAME:
-          assertEquals("\"" + ElasticsearchSinkConnectorConstants.DATE_TYPE + "\"",
-              type.toString());
+          assertEquals("\"" + ElasticsearchSinkConnectorConstants.DATE_TYPE + "\"", type.toString());
           return;
         case Decimal.LOGICAL_NAME:
-          assertEquals("\"" + ElasticsearchSinkConnectorConstants.DOUBLE_TYPE + "\"",
-              type.toString());
+          assertEquals("\"" + ElasticsearchSinkConnectorConstants.DOUBLE_TYPE + "\"", type.toString());
           return;
       }
     }
@@ -176,20 +173,17 @@ public class MappingTest extends ElasticsearchSinkTestBase {
       case MAP:
         Schema newSchema = converter.preProcessSchema(schema);
         JsonObject mapProperties = mapping.get("properties").getAsJsonObject();
-        verifyMapping(newSchema.keySchema(),
-            mapProperties.get(ElasticsearchSinkConnectorConstants.MAP_KEY).getAsJsonObject());
-        verifyMapping(newSchema.valueSchema(),
-            mapProperties.get(ElasticsearchSinkConnectorConstants.MAP_VALUE).getAsJsonObject());
+        verifyMapping(newSchema.keySchema(), mapProperties.get(ElasticsearchSinkConnectorConstants.MAP_KEY).getAsJsonObject());
+        verifyMapping(newSchema.valueSchema(), mapProperties.get(ElasticsearchSinkConnectorConstants.MAP_VALUE).getAsJsonObject());
         break;
       case STRUCT:
         JsonObject properties = mapping.get("properties").getAsJsonObject();
-        for (Field field : schema.fields()) {
+        for (Field field: schema.fields()) {
           verifyMapping(field.schema(), properties.get(field.name()).getAsJsonObject());
         }
         break;
       default:
-        assertEquals("\"" + Mapping.getElasticsearchType(client, schemaType) + "\"",
-            type.toString());
+        assertEquals("\"" + Mapping.getElasticsearchType(client, schemaType) + "\"", type.toString());
     }
   }
 }

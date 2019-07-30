@@ -45,7 +45,6 @@ import java.util.Set;
 import org.junit.rules.ExpectedException;
 
 import static io.confluent.connect.elasticsearch.DataConverter.BehaviorOnNullValues;
-import static org.junit.Assert.fail;
 
 @ThreadLeakScope(ThreadLeakScope.Scope.NONE)
 public class ElasticsearchWriterTest extends ElasticsearchSinkTestBase {
@@ -355,8 +354,7 @@ public class ElasticsearchWriterTest extends ElasticsearchSinkTestBase {
     // Can't call writeDataAndRefresh(writer, records) since it stops the writer
     writer.write(records);
     writer.flush();
-    client.refresh();
-
+    refresh();
     // Make sure the record made it there successfully
     verifySearchResults(records);
 
@@ -532,7 +530,7 @@ public class ElasticsearchWriterTest extends ElasticsearchSinkTestBase {
     writer.write(records);
     writer.flush();
     writer.stop();
-    client.refresh();
+    refresh();
   }
 
   private void verifySearchResults(Collection<SinkRecord> records) throws Exception {

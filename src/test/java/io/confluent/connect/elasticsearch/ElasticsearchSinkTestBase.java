@@ -72,7 +72,7 @@ public class ElasticsearchSinkTestBase extends ESIntegTestCase {
 
   protected int getPort() {
     assertTrue("There should be at least 1 HTTP endpoint exposed in the test cluster",
-        cluster().httpAddresses().length > 0);
+               cluster().httpAddresses().length > 0);
     return cluster().httpAddresses()[0].getPort();
   }
 

@@ -48,15 +48,7 @@ import io.searchbox.indices.DeleteIndex;
 import io.searchbox.indices.IndicesExists;
 import io.searchbox.indices.Refresh;
 import io.searchbox.indices.mapping.PutMapping;
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.stream.Collectors;
 import org.apache.http.HttpHost;
-import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.config.types.Password;
 import org.apache.kafka.connect.data.Schema;
@@ -64,7 +56,13 @@ import org.apache.kafka.connect.errors.ConnectException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.Locale;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 public class JestElasticsearchClient implements ElasticsearchClient {
 
@@ -410,39 +408,4 @@ public class JestElasticsearchClient implements ElasticsearchClient {
     }
   }
 
-  public enum WriteMethod {
-    INSERT,
-    UPSERT,
-    ;
-
-    public static final WriteMethod DEFAULT = INSERT;
-    public static final ConfigDef.Validator VALIDATOR = new ConfigDef.Validator() {
-      private final ConfigDef.ValidString validator = ConfigDef.ValidString.in(names());
-
-      @Override
-      public void ensureValid(String name, Object value) {
-        validator.ensureValid(name, value);
-      }
-
-      // Overridden here so that ConfigDef.toEnrichedRst shows possible values correctly
-      @Override
-      public String toString() {
-        return "One of " + INSERT.toString() + " or " + UPSERT.toString();
-      }
-
-    };
-
-    public static String[] names() {
-      return new String[] {INSERT.toString(), UPSERT.toString()};
-    }
-
-    public static WriteMethod forValue(String value) {
-      return valueOf(value.toUpperCase(Locale.ROOT));
-    }
-
-    @Override
-    public String toString() {
-      return name().toLowerCase(Locale.ROOT);
-    }
-  }
 }
