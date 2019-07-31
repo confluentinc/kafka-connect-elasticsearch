@@ -55,8 +55,8 @@ public class ElasticsearchIntegrationTestBase {
   private static final String DEFAULT_DOCKER_IMAGE_NAME = "docker.elastic.co/elasticsearch/elasticsearch";
   private static final String ELASTICSEARCH_VERSION_SYS_PROP = "elasticsearch.version";
   private static final String ELASTICSEARCH_VERSION_ENV_PROP = "ELASTICSEARCH_VERSION";
-  private static final String ELASTICSEARCH_DOCKER_IMAGE_SYS_PROP = "elasticsearch.docker.image";
-  private static final String ELASTICSEARCH_DOCKER_IMAGE_ENV_PROP = "ELASTICSEARCH_DOCKER_IMAGE";
+  private static final String ELASTICSEARCH_IMAGE_SYS_PROP = "elasticsearch.image";
+  private static final String ELASTICSEARCH_IMAGE_ENV_PROP = "ELASTICSEARCH_IMAGE";
 
   protected static ElasticsearchContainer container;
   protected ElasticsearchClient client;
@@ -159,15 +159,19 @@ public class ElasticsearchIntegrationTestBase {
   }
 
   private static String getElasticsearchContainerVersion() {
-    return getSystemOrEnvProperty(ELASTICSEARCH_VERSION_SYS_PROP,
+    return getSystemOrEnvProperty(
+        ELASTICSEARCH_VERSION_SYS_PROP,
         ELASTICSEARCH_VERSION_ENV_PROP,
-        DEFAULT_ES_VERSION);
+        DEFAULT_ES_VERSION
+    );
   }
 
   private static String getElasticsearchDockerImageName() {
-    return getSystemOrEnvProperty(ELASTICSEARCH_DOCKER_IMAGE_SYS_PROP,
-        ELASTICSEARCH_DOCKER_IMAGE_ENV_PROP,
-        DEFAULT_DOCKER_IMAGE_NAME);
+    return getSystemOrEnvProperty(
+        ELASTICSEARCH_IMAGE_SYS_PROP,
+        ELASTICSEARCH_IMAGE_ENV_PROP,
+        DEFAULT_DOCKER_IMAGE_NAME
+    );
   }
 
   private static String getSystemOrEnvProperty(String sysPropName, String envPropName, String defaultValue) {
