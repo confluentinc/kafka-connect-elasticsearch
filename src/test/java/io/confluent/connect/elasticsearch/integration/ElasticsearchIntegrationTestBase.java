@@ -154,11 +154,11 @@ public class ElasticsearchIntegrationTestBase {
   }
 
   private static String getElasticsearchContainerVersion() {
-    return System.getProperty("es.version", DEFAULT_ES_VERSION);
+    return System.getProperty("elasticsearch.version", DEFAULT_ES_VERSION);
   }
 
   private static String getElasticsearchDockerImageName() {
-    return System.getProperty("es.image", DEFAULT_DOCKER_IMAGE_NAME);
+    return System.getProperty("elasticsearch.image", DEFAULT_DOCKER_IMAGE_NAME);
   }
 
 }
