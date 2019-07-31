@@ -50,8 +50,13 @@ public class ElasticsearchIntegrationTestBase {
   protected static final TopicPartition TOPIC_PARTITION = new TopicPartition(TOPIC, PARTITION);
   protected static final TopicPartition TOPIC_PARTITION2 = new TopicPartition(TOPIC, PARTITION2);
   protected static final TopicPartition TOPIC_PARTITION3 = new TopicPartition(TOPIC, PARTITION3);
+
   private static final String DEFAULT_ES_VERSION = "7.0.0";
   private static final String DEFAULT_DOCKER_IMAGE_NAME = "docker.elastic.co/elasticsearch/elasticsearch";
+  private static final String ELASTICSEARCH_VERSION_SYS_PROP = "elasticsearch.version";
+  private static final String ELASTICSEARCH_VERSION_ENV_PROP = "ELASTICSEARCH_VERSION";
+  private static final String ELASTICSEARCH_DOCKER_IMAGE_SYS_PROP = "elasticsearch.docker.image";
+  private static final String ELASTICSEARCH_DOCKER_IMAGE_ENV_PROP = "ELASTICSEARCH_DOCKER_IMAGE";
 
   protected static ElasticsearchContainer container;
   protected ElasticsearchClient client;
@@ -154,11 +159,25 @@ public class ElasticsearchIntegrationTestBase {
   }
 
   private static String getElasticsearchContainerVersion() {
-    return System.getProperty("elasticsearch.version", DEFAULT_ES_VERSION);
+    return getSystemOrEnvProperty(ELASTICSEARCH_VERSION_SYS_PROP,
+        ELASTICSEARCH_VERSION_ENV_PROP,
+        DEFAULT_ES_VERSION);
   }
 
   private static String getElasticsearchDockerImageName() {
-    return System.getProperty("elasticsearch.image", DEFAULT_DOCKER_IMAGE_NAME);
+    return getSystemOrEnvProperty(ELASTICSEARCH_DOCKER_IMAGE_SYS_PROP,
+        ELASTICSEARCH_DOCKER_IMAGE_ENV_PROP,
+        DEFAULT_DOCKER_IMAGE_NAME);
   }
 
+  private static String getSystemOrEnvProperty(String sysPropName, String envPropName, String defaultValue) {
+    String propertyValue = System.getProperty(sysPropName);
+    if (null == propertyValue) {
+      propertyValue = System.getenv(envPropName);
+      if (null == propertyValue) {
+        propertyValue = defaultValue;
+      }
+    }
+    return propertyValue;
+  }
 }
