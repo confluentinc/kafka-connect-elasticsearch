@@ -1,26 +1,32 @@
 package io.confluent.connect.elasticsearch.integration;
 
-import com.google.gson.JsonObject;
 import io.confluent.common.utils.IntegrationTest;
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnector;
 import io.searchbox.client.JestClient;
 import io.searchbox.client.JestClientFactory;
-import io.searchbox.core.Get;
 import io.searchbox.core.Search;
 import org.apache.kafka.connect.json.JsonConverter;
 import org.apache.kafka.connect.runtime.SinkConnectorConfig;
 import org.apache.kafka.connect.runtime.rest.entities.ConnectorStateInfo;
 import org.junit.After;
+import org.junit.AfterClass;
 import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.apache.kafka.connect.util.clusters.EmbeddedConnectCluster;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.testcontainers.containers.output.OutputFrame;
+import org.testcontainers.containers.wait.strategy.Wait;
+import org.testcontainers.elasticsearch.ElasticsearchContainer;
+import org.testcontainers.utility.MountableFile;
 
 import java.io.IOException;
+import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 import static io.confluent.connect.elasticsearch.jest.JestElasticsearchClient.getClientConfig;
 import static org.apache.kafka.connect.runtime.ConnectorConfig.CONNECTOR_CLASS_CONFIG;
@@ -28,10 +34,11 @@ import static org.apache.kafka.connect.runtime.ConnectorConfig.TASKS_MAX_CONFIG;
 import static org.apache.kafka.connect.runtime.ConnectorConfig.VALUE_CONVERTER_CLASS_CONFIG;
 import static org.apache.kafka.test.TestUtils.waitForCondition;
 
-
 @Category(IntegrationTest.class)
 public class SecurityIT {
   private static final Logger log = LoggerFactory.getLogger(SecurityIT.class);
+
+  protected static ElasticsearchContainer container;
 
   private EmbeddedConnectCluster connect;
 
@@ -43,8 +50,38 @@ public class SecurityIT {
   private static final String KAFKA_TOPIC = "test-elasticsearch-sink";
   private static final String TYPE_NAME = "kafka-connect";
   private static final int TASKS_MAX = 1;
-  private static final int NUM_MSG = 2000;
-  private static final long VERIFY_TIMEOUT_MS = 120000;
+  private static final int NUM_MSG = 200;
+  private static final long VERIFY_TIMEOUT_MS = TimeUnit.MINUTES.toMillis(2);
+
+  @BeforeClass
+  public static void setupBeforeAll() {
+    // Relevant and available docker images for elastic can be found at https://www.docker.elastic.co
+    String dockerImageName = ElasticsearchIntegrationTestBase.getElasticsearchDockerImageName();
+    String esVersion = ElasticsearchIntegrationTestBase.getElasticsearchContainerVersion();
+    container = new ElasticsearchContainer(dockerImageName + ":" + esVersion);
+    container.withSharedMemorySize(2L * 1024 * 1024 * 1024);
+
+    // Copy the certs and ES configuration to the image so that ES supports TLS
+    container.withCopyFileToContainer(
+        MountableFile.forHostPath("./src/test/resources/elasticsearch.yml"),
+        "/usr/share/elasticsearch/config/elasticsearch.yml"
+    );
+    container.withCopyFileToContainer(
+        MountableFile.forHostPath("./src/test/resources/certs"),
+        "/usr/share/elasticsearch/config/certs"
+    );
+    container.withLogConsumer(SecurityIT::containerLog);
+    container.waitingFor(
+        Wait.forLogMessage(".*(Security is enabled|license .* valid).*", 1)
+            .withStartupTimeout(Duration.ofMinutes(20))
+    );
+    container.start();
+  }
+
+  @AfterClass
+  public static void teardownAfterAll() {
+    container.close();
+  }
 
   @Before
   public void setup() throws IOException {
@@ -74,8 +111,12 @@ public class SecurityIT {
    */
   @Test
   public void testSecureConnection() throws Throwable {
-    // TODO: Find a more robust way to get the IP address
-    final String address = "https://172.17.0.1:9200";
+    final String address = String.format(
+        "https://%s:%d",
+        container.getContainerIpAddress(),
+        container.getMappedPort(9200)
+    );
+    log.info("Creating connector for {}", address);
 
     connect.kafka().createTopic(KAFKA_TOPIC, 1);
 
@@ -115,11 +156,37 @@ public class SecurityIT {
         try {
           int found = client.execute(search).getJsonObject()
               .get("hits").getAsJsonObject()
-              .get("total").getAsInt();
+              .get("total").getAsJsonObject()
+              .get("value").getAsInt();
           log.debug("Found {} documents", found);
           return found == NUM_MSG;
-        } catch (Exception e) { return false; }
+        } catch (Exception e) {
+          log.error("Retrying after failing to read data from Elastic: {}", e.getMessage(), e);
+          return false;
+        }
       }, VERIFY_TIMEOUT_MS, "Could not read data from Elastic");
   }
 
-}
+  /**
+   * Capture the container log by writing the container's standard output
+   * to {@link System#out} (in yellow) and standard error to {@link System#err} (in red).
+   *
+   * @param logMessage the container log message
+   */
+  protected static void containerLog(OutputFrame logMessage) {
+    switch (logMessage.getType()) {
+      case STDOUT:
+        // Normal output in yellow
+        System.out.print((char)27 + "[33m" + logMessage.getUtf8String());
+        System.out.print((char)27 + "[0m"); // reset
+        break;
+      case STDERR:
+        // Error output in red
+        System.err.print((char)27 + "[31m" + logMessage.getUtf8String());
+        System.out.print((char)27 + "[0m"); // reset
+        break;
+      case END:
+      default:
+        break;
+    }
+  }}

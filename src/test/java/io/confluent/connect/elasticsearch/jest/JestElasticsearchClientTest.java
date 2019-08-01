@@ -29,6 +29,7 @@ import io.confluent.connect.elasticsearch.bulk.BulkRequest;
 import io.searchbox.client.JestClient;
 import io.searchbox.client.JestClientFactory;
 import io.searchbox.client.JestResult;
+import io.searchbox.client.config.ElasticsearchVersion;
 import io.searchbox.client.config.HttpClientConfig;
 import io.searchbox.cluster.NodesInfo;
 import io.searchbox.core.BulkResult;
@@ -38,6 +39,7 @@ import io.searchbox.indices.CreateIndex;
 import io.searchbox.indices.IndicesExists;
 import io.searchbox.indices.mapping.GetMapping;
 import io.searchbox.indices.mapping.PutMapping;
+import java.io.IOException;
 import org.apache.http.HttpHost;
 import org.apache.http.auth.AuthScope;
 import org.apache.http.auth.Credentials;
@@ -167,7 +169,7 @@ public class JestElasticsearchClientTest {
       @Override
       public boolean matches(CreateIndex createIndex) {
         // check the URI as the equals method on CreateIndex doesn't work
-        return createIndex.getURI().equals(INDEX);
+        return createIndex.getURI(ElasticsearchVersion.V2).equals(INDEX);
       }
     };
   }
@@ -311,11 +313,11 @@ public class JestElasticsearchClientTest {
   }
 
   @Test
-  public void closes() {
+  public void closes() throws IOException {
     JestElasticsearchClient client = new JestElasticsearchClient(jestClient);
     client.close();
 
-    verify(jestClient).shutdownClient();
+    verify(jestClient).close();
   }
 
   private BulkResult createBulkResultFailure(String exception) {

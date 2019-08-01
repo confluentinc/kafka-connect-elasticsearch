@@ -27,7 +27,7 @@ import java.util.Set;
 public interface ElasticsearchClient extends AutoCloseable {
 
   enum Version {
-    ES_V1, ES_V2, ES_V5, ES_V6
+    ES_V1, ES_V2, ES_V5, ES_V6, ES_V7
   }
 
   /**
@@ -90,6 +90,24 @@ public interface ElasticsearchClient extends AutoCloseable {
    * @throws IOException if the client cannot execute the request
    */
   JsonObject search(String query, String index, String type) throws IOException;
+
+  /**
+   * Delete all indexes in Elasticsearch (useful mostly for test)
+   *
+   * @throws IOException if the client cannot execute the request
+   */
+  default void deleteAll() throws IOException {
+    throw new UnsupportedOperationException("deleteAll is not implemented yet by this client");
+  }
+
+  /**
+   * Perform a refresh of all indexes, making all indexed data searchable (useful mostly for test)
+   *
+   * @throws IOException If the client cannot execute the request
+   */
+  default void refresh() throws IOException {
+    throw new UnsupportedOperationException("refresh is not implemented yet by this client");
+  }
 
   /**
    * Shuts down the client.
