@@ -111,11 +111,8 @@ public class SecurityIT {
    */
   @Test
   public void testSecureConnection() throws Throwable {
-    final String address = String.format(
-        "https://%s:%d",
-        container.getContainerIpAddress(),
-        container.getMappedPort(9200)
-    );
+    // Use 'localhost' here because that's the IP address the certificates allow
+    final String address = String.format("https://localhost:%d", container.getMappedPort(9200));
     log.info("Creating connector for {}", address);
 
     connect.kafka().createTopic(KAFKA_TOPIC, 1);
@@ -160,6 +157,9 @@ public class SecurityIT {
               .get("value").getAsInt();
           log.debug("Found {} documents", found);
           return found == NUM_MSG;
+        } catch (NullPointerException e) {
+          // no valid results yet, but kind of expected so no need to log
+          return false;
         } catch (Exception e) {
           log.error("Retrying after failing to read data from Elastic: {}", e.getMessage(), e);
           return false;
