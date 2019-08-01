@@ -234,7 +234,7 @@ public class DataConverterTest {
         SchemaBuilder.map(Schema.STRING_SCHEMA, Schema.INT32_SCHEMA).build(),
         preProcessedSchema
     );
-    HashMap newValue = (HashMap) converter.preProcessValue(origValue, origSchema, preProcessedSchema);
+    HashMap<?, ?> newValue = (HashMap<?, ?>) converter.preProcessValue(origValue, origSchema, preProcessedSchema);
     assertEquals(origValue, newValue);
   }
 
