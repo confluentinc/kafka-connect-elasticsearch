@@ -19,12 +19,8 @@ import org.apache.kafka.connect.util.clusters.EmbeddedConnectCluster;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.testcontainers.containers.output.OutputFrame;
-import org.testcontainers.containers.wait.strategy.Wait;
-import org.testcontainers.elasticsearch.ElasticsearchContainer;
-import org.testcontainers.utility.MountableFile;
 
 import java.io.IOException;
-import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -55,29 +51,11 @@ public class SecurityIT {
   private static final long VERIFY_TIMEOUT_MS = TimeUnit.MINUTES.toMillis(2);
 
   @BeforeClass
-  public static void setupBeforeAll() {
-    // Relevant and available docker images for elastic can be found at https://www.docker.elastic.co
-    String dockerImageName = ElasticsearchIntegrationTestBase.getElasticsearchDockerImageName();
-    String esVersion = ElasticsearchIntegrationTestBase.getElasticsearchContainerVersion();
-    container = new ElasticsearchContainer(dockerImageName + ":" + esVersion);
-    container.withSharedMemorySize(2L * 1024 * 1024 * 1024);
+  public static void setupBeforeAll() throws IOException, InterruptedException {
 
-    // Copy the certs and ES configuration to the image so that ES supports TLS
-    container.withCopyFileToContainer(
-        MountableFile.forHostPath("./src/test/resources/elasticsearch.yml"),
-        "/usr/share/elasticsearch/config/elasticsearch.yml"
-    );
-    container.withCopyFileToContainer(
-        MountableFile.forHostPath("./src/test/resources/certs"),
-        "/usr/share/elasticsearch/config/certs"
-    );
-    container.withLogConsumer(SecurityIT::containerLog);
-    container.waitingFor(
-        Wait.forLogMessage(".*(Security is enabled|license .* valid).*", 1)
-            .withStartupTimeout(Duration.ofMinutes(20))
-    );
-    // TODO: Enable this once a fix is found for Jenkins; see CC-4886
-    //container.start();
+    // Relevant and available docker images for elastic can be found at https://www.docker.elastic.co
+    container = ElasticsearchContainer.fromSystemProperties().withSslEnabled(true);
+    container.start();
   }
 
   @AfterClass
@@ -114,11 +92,8 @@ public class SecurityIT {
   @Ignore("Enable this once a fix is found for Jenkins; see CC-4886")
   @Test
   public void testSecureConnection() throws Throwable {
-    final String address = String.format(
-        "https://%s:%d",
-        container.getContainerIpAddress(),
-        container.getMappedPort(9200)
-    );
+    // Use 'localhost' here because that's the IP address the certificates allow
+    final String address = container.getConnectionUrl();
     log.info("Creating connector for {}", address);
 
     connect.kafka().createTopic(KAFKA_TOPIC, 1);
@@ -127,11 +102,11 @@ public class SecurityIT {
     Map<String, String> props = getProps();
     props.put("connection.url", address);
     props.put("elastic.security.protocol", "SSL");
-    props.put("elastic.https.ssl.keystore.location", "./src/test/resources/certs/keystore.jks");
-    props.put("elastic.https.ssl.keystore.password", "asdfasdf");
-    props.put("elastic.https.ssl.key.password", "asdfasdf");
-    props.put("elastic.https.ssl.truststore.location", "./src/test/resources/certs/truststore.jks");
-    props.put("elastic.https.ssl.truststore.password", "asdfasdf");
+    props.put("elastic.https.ssl.keystore.location", container.getKeystorePath());
+    props.put("elastic.https.ssl.keystore.password", container.getKeystorePassword());
+    props.put("elastic.https.ssl.key.password", container.getKeyPassword());
+    props.put("elastic.https.ssl.truststore.location", container.getTruststorePath());
+    props.put("elastic.https.ssl.truststore.password", container.getTruststorePassword());
     connect.configureConnector(CONNECTOR_NAME, props);
     waitForCondition(() -> {
       ConnectorStateInfo info = connect.connectorStatus(CONNECTOR_NAME);
@@ -163,33 +138,13 @@ public class SecurityIT {
               .get("value").getAsInt();
           log.debug("Found {} documents", found);
           return found == NUM_MSG;
+        } catch (NullPointerException e) {
+          // no valid results yet, but kind of expected so no need to log
+          return false;
         } catch (Exception e) {
           log.error("Retrying after failing to read data from Elastic: {}", e.getMessage(), e);
           return false;
         }
       }, VERIFY_TIMEOUT_MS, "Could not read data from Elastic");
   }
-
-  /**
-   * Capture the container log by writing the container's standard output
-   * to {@link System#out} (in yellow) and standard error to {@link System#err} (in red).
-   *
-   * @param logMessage the container log message
-   */
-  protected static void containerLog(OutputFrame logMessage) {
-    switch (logMessage.getType()) {
-      case STDOUT:
-        // Normal output in yellow
-        System.out.print((char)27 + "[33m" + logMessage.getUtf8String());
-        System.out.print((char)27 + "[0m"); // reset
-        break;
-      case STDERR:
-        // Error output in red
-        System.err.print((char)27 + "[31m" + logMessage.getUtf8String());
-        System.out.print((char)27 + "[0m"); // reset
-        break;
-      case END:
-      default:
-        break;
-    }
-  }}
+}
