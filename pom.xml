@@ -41,7 +41,10 @@
     <properties>
         <es.version>2.4.1</es.version>
         <lucene.version>5.5.2</lucene.version>
-        <jest.version>2.4.0</jest.version>
+        <hamcrest.version>1.3</hamcrest.version>
+        <mockito.version>2.13.0</mockito.version>
+        <jest.version>6.3.1</jest.version>
+        <test.containers.version>1.11.4</test.containers.version>
         <kafka.connect.maven.plugin.version>0.11.1</kafka.connect.maven.plugin.version>
         <confluent.maven.repo>http://packages.confluent.io/maven/</confluent.maven.repo>
         <version.docker.maven.plugin>0.28.0</version.docker.maven.plugin>
@@ -163,6 +166,12 @@
             <scope>test</scope>
             <version>${kafka.version}</version>
         </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>elasticsearch</artifactId>
+            <version>${test.containers.version}</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>
@@ -188,7 +197,7 @@
                             <title>Kafka Connect Elasticsearch</title>
                             <documentationUrl>https://docs.confluent.io/${project.version}/connect/connect-elasticsearch/docs/index.html</documentationUrl>
                             <description>
-                                The Elasticsearch connector allows moving data from Kafka to Elasticsearch. It writes data from a topic in Kafka to an index in Elasticsearch and all data for a topic have the same type.
+                                The Elasticsearch connector allows moving data from Kafka to Elasticsearch 2.x, 5.x, 6.x, and 7.x. It writes data from a topic in Kafka to an index in Elasticsearch and all data for a topic have the same type.
 
                                 Elasticsearch is often used for text queries, analytics and as an key-value store (use cases). The connector covers both the analytics and key-value store use cases. For the analytics use case, each message is in Kafka is treated as an event and the connector uses topic+partition+offset as a unique identifier for events, which then converted to unique documents in Elasticsearch. For the key-value store use case, it supports using keys from Kafka messages as document ids in Elasticsearch and provides configurations ensuring that updates to a key are written to Elasticsearch in order. For both use cases, Elasticsearch’s idempotent write semantics guarantees exactly once delivery.
 
@@ -224,7 +233,7 @@
                             </tags>
 
                             <requirements>
-                                <requirement>Elasticsearch 2.x, 5.x, or 6.x</requirement>
+                                <requirement>Elasticsearch 2.x, 5.x, 6.x, o4r 7.x</requirement>
                             </requirements>
 
                             <deliveryGuarantee>
@@ -326,65 +335,6 @@
                         <configuration>
                             <skipITs>false</skipITs>
                         </configuration>
-                    </plugin>
-                    <plugin>
-                        <groupId>io.fabric8</groupId>
-                        <artifactId>docker-maven-plugin</artifactId>
-                        <version>${version.docker.maven.plugin}</version>
-                        <configuration>
-                            <watchInterval>500</watchInterval>
-                            <logDate>default</logDate>
-                            <verbose>true</verbose>
-                            <images>
-                                <image>
-                                    <alias>elastic-integration-test</alias>
-                                    <!--"name" is in local images if "build" is defined, else will look
-                                    for an image in a remote repo-->
-                                    <name>confluentinc/elastic-integration-%t</name>
-                                    <build>
-                                        <tags>
-                                            <tag>${project.version}</tag>
-                                        </tags>
-                                        <dockerFile>
-                                            ${project.basedir}/src/test/resources/Dockerfile
-                                        </dockerFile>
-                                    </build>
-                                    <run>
-                                        <hostname>elastichost</hostname>
-                                        <ports>
-                                            <port>9200:9200</port>
-                                        </ports>
-                                        <wait>
-                                            <tcp>
-                                                <host>localhost</host>
-                                                <ports>
-                                                    <port>9200</port>
-                                                </ports>
-                                            </tcp>
-                                            <time>120000</time>
-                                        </wait>
-                                    </run>
-                                </image>
-                            </images>
-
-                        </configuration>
-                        <executions>
-                            <execution>
-                                <id>start</id>
-                                <phase>pre-integration-test</phase>
-                                <goals>
-                                    <goal>build</goal>
-                                    <goal>start</goal>
-                                </goals>
-                            </execution>
-                            <execution>
-                                <id>stop</id>
-                                <phase>post-integration-test</phase>
-                                <goals>
-                                    <goal>stop</goal>
-                                </goals>
-                            </execution>
-                        </executions>
                     </plugin>
                 </plugins>
             </build>

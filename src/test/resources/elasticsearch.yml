@@ -1,10 +1,22 @@
 ## Used by Docker images in our integration test
 http.host: 0.0.0.0
 network.host: 0.0.0.0
-node.store.allow_mmapfs: false
+node.store.allow_mmap: false
+cluster.routing.allocation.disk.threshold_enabled: false
 xpack.security.enabled: true
 xpack.security.http.ssl.enabled: true
-xpack.security.http.ssl.client_authentication: required
-xpack.security.http.ssl.key:  certs/key.pem
+xpack.security.http.ssl.client_authentication: optional
+#xpack.security.http.ssl.key:  certs/key.pem
+xpack.security.http.ssl.keystore.path:  certs/keystore.jks
+xpack.security.http.ssl.keystore.password:  asdfasdf
+xpack.security.http.ssl.truststore.path:  certs/truststore.jks
+xpack.security.http.ssl.truststore.password:  asdfasdf
 xpack.security.http.ssl.certificate: certs/cert.pem
-xpack.security.http.ssl.certificate_authorities: [ "certs/ca.pem" ]
+#xpack.security.http.ssl.certificate_authorities: [ "certs/ca.pem" ]
+
+# enable anonymous connections since setting passwords requires running a command
+xpack.security.authc:
+  anonymous:
+    username: connect_user
+    roles: superuser
+    authz_exception: true

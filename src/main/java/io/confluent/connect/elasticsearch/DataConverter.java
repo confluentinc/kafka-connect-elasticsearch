@@ -322,7 +322,7 @@ public class DataConverter {
   }
 
   private Object preProcessArrayValue(Object value, Schema schema, Schema newSchema) {
-    Collection collection = (Collection) value;
+    Collection<?> collection = (Collection<?>) value;
     List<Object> result = new ArrayList<>();
     for (Object element: collection) {
       result.add(preProcessValue(element, schema.valueSchema(), newSchema.valueSchema()));
