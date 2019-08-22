@@ -12,6 +12,7 @@ import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.apache.kafka.connect.util.clusters.EmbeddedConnectCluster;
@@ -75,7 +76,8 @@ public class SecurityIT {
         Wait.forLogMessage(".*(Security is enabled|license .* valid).*", 1)
             .withStartupTimeout(Duration.ofMinutes(20))
     );
-    container.start();
+    // TODO: Enable this once a fix is found for Jenkins; see CC-4886
+    //container.start();
   }
 
   @AfterClass
@@ -109,6 +111,7 @@ public class SecurityIT {
    * Run test against docker image running Elasticsearch.
    * Certificates are generated with src/test/resources/certs/generate_certificates.sh
    */
+  @Ignore("Enable this once a fix is found for Jenkins; see CC-4886")
   @Test
   public void testSecureConnection() throws Throwable {
     final String address = String.format(
