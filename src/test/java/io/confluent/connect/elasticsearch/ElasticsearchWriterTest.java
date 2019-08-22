@@ -37,6 +37,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -106,7 +107,7 @@ public class ElasticsearchWriterTest extends ElasticsearchSinkTestBase {
     ignoreKey = true;
     ignoreSchema = true;
 
-    String indexOverride = "index";
+    Set<String> indexOverride = new HashSet<String>(Arrays.asList("index1", "index2"));
 
     Collection<SinkRecord> records = prepareData(2);
     ElasticsearchWriter writer = initWriter(
@@ -275,7 +276,8 @@ public class ElasticsearchWriterTest extends ElasticsearchSinkTestBase {
 
     Collection<?> expectedRecords =
         Collections.singletonList(new ObjectMapper().writeValueAsString(map));
-    verifySearchResults(expectedRecords, TOPIC);
+    Set<String> topics = new HashSet<String>(Arrays.asList(TOPIC));
+    verifySearchResults(expectedRecords, topics);
   }
 
   @Test
@@ -490,7 +492,7 @@ public class ElasticsearchWriterTest extends ElasticsearchSinkTestBase {
         client,
         Collections.<String>emptySet(),
         Collections.<String>emptySet(),
-        Collections.<String, String>emptyMap(),
+        Collections.<String, Set<String>>emptyMap(),
         dropInvalidMessage,
         behavior
     );
@@ -500,7 +502,7 @@ public class ElasticsearchWriterTest extends ElasticsearchSinkTestBase {
       ElasticsearchClient client,
       Set<String> ignoreKeyTopics,
       Set<String> ignoreSchemaTopics,
-      Map<String, String> topicToIndexMap,
+      Map<String, Set<String>> topicToIndicesMap,
       boolean dropInvalidMessage,
       BehaviorOnNullValues behavior
   ) {
@@ -508,7 +510,7 @@ public class ElasticsearchWriterTest extends ElasticsearchSinkTestBase {
         .setType(TYPE)
         .setIgnoreKey(ignoreKey, ignoreKeyTopics)
         .setIgnoreSchema(ignoreSchema, ignoreSchemaTopics)
-        .setTopicToIndexMap(topicToIndexMap)
+        .setTopicToIndicesMap(topicToIndicesMap)
         .setFlushTimoutMs(10000)
         .setMaxBufferedRecords(10000)
         .setMaxInFlightRequests(1)
@@ -536,7 +538,9 @@ public class ElasticsearchWriterTest extends ElasticsearchSinkTestBase {
     verifySearchResults(records, ignoreKey, ignoreSchema);
   }
 
-  private void verifySearchResults(Collection<?> records, String index) throws Exception {
-    verifySearchResults(records, index, ignoreKey, ignoreSchema);
+  private void verifySearchResults(Collection<?> records, Set<String> indices) throws Exception {
+    for (String index : indices) {
+      verifySearchResults(records, index, ignoreKey, ignoreSchema);
+    }
   }
 }
