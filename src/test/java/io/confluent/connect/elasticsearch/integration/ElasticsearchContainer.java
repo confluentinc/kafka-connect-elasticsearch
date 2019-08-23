@@ -120,6 +120,7 @@ public class ElasticsearchContainer
     this.imageName = imageName;
     withSharedMemorySize(TWO_GIGABYTES);
     withLogConsumer(this::containerLog);
+    setSslEnabled(false);
   }
 
   public ElasticsearchContainer withSslEnabled(boolean enable) {
@@ -131,6 +132,7 @@ public class ElasticsearchContainer
     enableSsl = enable;
     Future<String> image;
     if (enable) {
+      log.info("Will look for log pattern to wait for Elasticsearch image");
       // Because this is an secured Elasticsearch instance, we can't use HTTPS checks
       // because of the untrusted cert
       waitingFor(
@@ -155,6 +157,7 @@ public class ElasticsearchContainer
           )
           .withDockerfileFromBuilder(this::build);
     } else {
+      log.info("Will use HTTP check to wait for Elasticsearch image");
       // Because this is an unsecured Elasticsearch instance, we can use HTTP checks
       waitingFor(
           Wait.forHttp("/")

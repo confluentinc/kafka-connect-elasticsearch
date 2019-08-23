@@ -12,13 +12,11 @@ import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
-import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.apache.kafka.connect.util.clusters.EmbeddedConnectCluster;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.testcontainers.containers.output.OutputFrame;
 
 import java.io.IOException;
 import java.util.HashMap;
@@ -89,7 +87,6 @@ public class SecurityIT {
    * Run test against docker image running Elasticsearch.
    * Certificates are generated with src/test/resources/certs/generate_certificates.sh
    */
-  @Ignore("Enable this once a fix is found for Jenkins; see CC-4886")
   @Test
   public void testSecureConnection() throws Throwable {
     // Use 'localhost' here because that's the IP address the certificates allow
