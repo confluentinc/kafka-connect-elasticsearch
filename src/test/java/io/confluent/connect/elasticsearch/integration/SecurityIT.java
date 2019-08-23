@@ -49,7 +49,7 @@ public class SecurityIT {
   private static final long VERIFY_TIMEOUT_MS = TimeUnit.MINUTES.toMillis(2);
 
   @BeforeClass
-  public static void setupBeforeAll() throws IOException, InterruptedException {
+  public static void setupBeforeAll() {
 
     // Relevant and available docker images for elastic can be found at https://www.docker.elastic.co
     container = ElasticsearchContainer.fromSystemProperties().withSslEnabled(true);

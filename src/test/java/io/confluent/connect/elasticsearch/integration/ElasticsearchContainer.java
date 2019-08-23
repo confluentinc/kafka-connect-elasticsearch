@@ -11,13 +11,10 @@ import java.io.InputStream;
 import java.time.Duration;
 import java.util.concurrent.Future;
 
-import com.github.dockerjava.api.command.BuildImageCmd;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.testcontainers.containers.output.OutputFrame;
-import org.testcontainers.containers.wait.strategy.HttpWaitStrategy;
 import org.testcontainers.containers.wait.strategy.Wait;
-import org.testcontainers.containers.wait.strategy.WaitStrategyTarget;
 import org.testcontainers.images.RemoteDockerImage;
 import org.testcontainers.images.builder.ImageFromDockerfile;
 import org.testcontainers.images.builder.dockerfile.DockerfileBuilder;
@@ -49,12 +46,6 @@ public class ElasticsearchContainer
    * Default Elasticsearch port.
    */
   public static final int ELASTICSEARCH_DEFAULT_PORT = 9200;
-
-  /**
-   * The hostname to use for the Elasticsearch container. This is fixed because the certificates
-   * for SSL are generated with this hostname.
-   */
-  public static final String ELASTICSEARCH_HOST_NAME = "elasticsearch";
 
   /**
    * Path to the Elasticsearch configuration directory.
@@ -106,7 +97,7 @@ public class ElasticsearchContainer
   private static final long TWO_GIGABYTES = 2L * 1024 * 1024 * 1024;
 
   private final String imageName;
-  private boolean enableSsl;
+  private boolean enableSsl = false;
   private String localKeystorePath;
   private String localTruststorePath;
 
@@ -120,7 +111,6 @@ public class ElasticsearchContainer
     this.imageName = imageName;
     withSharedMemorySize(TWO_GIGABYTES);
     withLogConsumer(this::containerLog);
-    setSslEnabled(false);
   }
 
   public ElasticsearchContainer withSslEnabled(boolean enable) {
@@ -128,11 +118,38 @@ public class ElasticsearchContainer
     return this;
   }
 
+  /**
+   * Set whether the Elasticsearch instance should use SSL.
+   *
+   * <p>This can only be called <em>before</em> the container is started.
+   *
+   * @param enable true if SSL is to be enabled, or false otherwise
+   */
   public void setSslEnabled(boolean enable) {
+    if (isCreated()) {
+      throw new IllegalStateException(
+          "setSslEnabled can only be used before the Container is created."
+      );
+    }
     enableSsl = enable;
+  }
+
+  /**
+   * Get whether the Elasticsearch instance is configured to use SSL.
+   *
+   * @return true if SSL is enabled, or false otherwise
+   */
+  public boolean isSslEnabled() {
+    return enableSsl;
+  }
+
+  @Override
+  protected void configure() {
+    super.configure();
     Future<String> image;
-    if (enable) {
-      log.info("Will look for log pattern to wait for Elasticsearch image");
+    if (isSslEnabled()) {
+      log.info("Extending Docker image to generate certs and enable SSL");
+      log.info("Wait for 'license .* valid' in log file, signaling Elasticsearch has started");
       // Because this is an secured Elasticsearch instance, we can't use HTTPS checks
       // because of the untrusted cert
       waitingFor(
@@ -170,10 +187,6 @@ public class ElasticsearchContainer
     setImage(image);
   }
 
-  public boolean isSslEnabled() {
-    return enableSsl;
-  }
-
   protected void build(DockerfileBuilder builder) {
     log.info("Building Elasticsearch image with SSL config file and generating certs");
     builder.from(imageName)
@@ -186,6 +199,7 @@ public class ElasticsearchContainer
            // Copy and run the script to generate the certs
            .copy("instances.yml", CONFIG_SSL_PATH + "/instances.yml")
            .copy("setup-elasticsearch.sh", CONFIG_SSL_PATH + "/setup-elasticsearch.sh")
+           .run("chmod +x " + CONFIG_SSL_PATH + "/setup-elasticsearch.sh")
            .run(CONFIG_SSL_PATH + "/setup-elasticsearch.sh");
   }
 
