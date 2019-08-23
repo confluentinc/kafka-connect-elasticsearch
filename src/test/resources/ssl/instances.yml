@@ -4,19 +4,16 @@ instances:
       - elasticsearch
       - localhost
     ip:
-      - 127.0.0.1
       - ipAddress
   - name: kibana
     dns:
       - kibana
       - localhost
     ip:
-      - 127.0.0.1
       - ipAddress
   - name: logstash
     dns:
       - logstash
       - localhost
     ip:
-      - 127.0.0.1
       - ipAddress
