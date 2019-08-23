@@ -8,6 +8,12 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.InetAddress;
+import java.net.MalformedURLException;
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.net.URL;
+import java.net.UnknownHostException;
 import java.time.Duration;
 import java.util.concurrent.Future;
 
@@ -148,6 +154,9 @@ public class ElasticsearchContainer
     super.configure();
     Future<String> image;
     if (isSslEnabled()) {
+      withEnv("ELASTIC_PASSWORD", ELASTIC_PASSWORD);
+      withEnv("STORE_PASSWORD", KEY_PASSWORD);
+      withEnv("IP_ADDRESS", hostMachineIpAddress());
       log.info("Extending Docker image to generate certs and enable SSL");
       log.info("Wait for 'license .* valid' in log file, signaling Elasticsearch has started");
       // Because this is an secured Elasticsearch instance, we can't use HTTPS checks
@@ -190,8 +199,6 @@ public class ElasticsearchContainer
   protected void build(DockerfileBuilder builder) {
     log.info("Building Elasticsearch image with SSL configuration");
     builder.from(imageName)
-           .env("ELASTIC_PASSWORD", ELASTIC_PASSWORD)
-           .env("STORE_PASSWORD", KEY_PASSWORD)
            // OpenSSL and Java's Keytool used to generate the certs, so install them
            .run("yum -y install openssl")
            // Copy the Elasticsearch configuration
@@ -203,6 +210,27 @@ public class ElasticsearchContainer
            .entryPoint(
                CONFIG_SSL_PATH + "/start-elasticsearch.sh"
            );
+  }
+
+  protected String hostMachineIpAddress() {
+    String dockerHost = System.getenv("DOCKER_HOST");
+    if (dockerHost != null && !dockerHost.trim().isEmpty()) {
+      try {
+        URI url = new URI(dockerHost);
+        dockerHost = url.getHost();
+        log.info("Including DOCKER_HOST address {} in Elasticsearch certs", dockerHost);
+        return dockerHost;
+      } catch (URISyntaxException e) {
+        log.info("DOCKER_HOST={} could not be parsed into a URL: {}", dockerHost, e.getMessage(), e);
+      }
+    }
+    try {
+      String hostAddress = InetAddress.getLocalHost().getHostAddress();
+      log.info("Including test machine address {} in Elasticsearch certs", hostAddress);
+      return hostAddress;
+    } catch (IOException e) {
+      return "";
+    }
   }
 
   /**

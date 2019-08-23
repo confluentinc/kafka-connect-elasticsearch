@@ -9,11 +9,13 @@ cd $ES_DIR/../..
 ES_DIR=$(pwd)
 export PATH=/usr/share/elasticsearch/jdk/bin/:$PATH
 
-IP_ADDRESS=$(hostname -I)
+if [[ -z "${IP_ADDRESS}" ]]; then
+    IP_ADDRESS=$(hostname -I)
+fi
 
 echo
 echo "Replacing the ip address in the ${ES_DIR}/config/ssl/instances.yml file with ${IP_ADDRESS}"
-sed -i "s/127\.0\.0\.1/${IP_ADDRESS}/g" ${ES_DIR}/config/ssl/instances.yml
+sed -i "s/ipAddress/${IP_ADDRESS}/g" ${ES_DIR}/config/ssl/instances.yml
 #cat ${ES_DIR}/config/ssl/instances.yml
 
 
