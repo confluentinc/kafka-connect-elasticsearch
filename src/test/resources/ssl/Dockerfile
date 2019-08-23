@@ -15,6 +15,9 @@ ENV ELASTIC_PASSWORD=elastic
 
 RUN mkdir -p /usr/share/elasticsearch/config/certs
 COPY ./instances.yml /usr/share/elasticsearch/config/ssl/instances.yml
-COPY ./setup-elasticsearch.sh /usr/share/elasticsearch/config/ssl/setup-elasticsearch.sh
-RUN /usr/share/elasticsearch/config/ssl/setup-elasticsearch.sh
+COPY ./start-elasticsearch.sh /usr/share/elasticsearch/config/ssl/start-elasticsearch.sh
+RUN chmod +x /usr/share/elasticsearch/config/ssl/start-elasticsearch.sh
+RUN /usr/share/elasticsearch/config/ssl/start-elasticsearch.sh
+
+ENTRYPOINT /usr/share/elasticsearch/config/ssl/start-elasticsearch.sh
 

@@ -9,6 +9,14 @@ cd $ES_DIR/../..
 ES_DIR=$(pwd)
 export PATH=/usr/share/elasticsearch/jdk/bin/:$PATH
 
+IP_ADDRESS=$(hostname -I)
+
+echo
+echo "Replacing the ip address in the ${ES_DIR}/config/ssl/instances.yml file with ${IP_ADDRESS}"
+sed -i "s/127\.0\.0\.1/${IP_ADDRESS}/g" ${ES_DIR}/config/ssl/instances.yml
+#cat ${ES_DIR}/config/ssl/instances.yml
+
+
 echo "Setting up Elasticsearch and generating certificates in ${ES_DIR}"
 
 if [[ -n "$ELASTIC_PASSWORD" ]]; then
@@ -77,3 +85,7 @@ if [[ -n "$ELASTIC_PASSWORD" ]]; then
     keytool -importkeystore -destkeystore ${ES_DIR}/config/ssl/keystore.jks -deststorepass $STORE_PASSWORD -srckeystore ${ES_DIR}/config/ssl/client.p12 -srcstoretype PKCS12 -srcstorepass $STORE_PASSWORD -noprompt
     rm -f ${ES_DIR}/config/ssl/client.p12
 fi
+
+echo
+echo "Starting Elasticsearch with SSL enabled ..."
+/usr/local/bin/docker-entrypoint.sh

@@ -157,20 +157,20 @@ public class ElasticsearchContainer
               .withStartupTimeout(Duration.ofMinutes(5))
       );
       image = new ImageFromDockerfile()
-          // Copy the Elasticsearch config file into the builder's context
+          // Copy the Elasticsearch config file for SSL
           .withFileFromClasspath(
               "elasticsearch.yml",
               "/ssl/elasticsearch.yml"
           )
-          // Copy the script to generate the certs into the builder's context
+          // Copy the network definitions
           .withFileFromClasspath(
               "instances.yml",
               "/ssl/instances.yml"
           )
-          // Copy the script to generate the certs into the builder's context
+          // Copy the script to generate the certs and start Elasticsearch
           .withFileFromClasspath(
-              "setup-elasticsearch.sh",
-              "/ssl/setup-elasticsearch.sh"
+              "start-elasticsearch.sh",
+              "/ssl/start-elasticsearch.sh"
           )
           .withDockerfileFromBuilder(this::build);
     } else {
@@ -188,7 +188,7 @@ public class ElasticsearchContainer
   }
 
   protected void build(DockerfileBuilder builder) {
-    log.info("Building Elasticsearch image with SSL config file and generating certs");
+    log.info("Building Elasticsearch image with SSL configuration");
     builder.from(imageName)
            .env("ELASTIC_PASSWORD", ELASTIC_PASSWORD)
            .env("STORE_PASSWORD", KEY_PASSWORD)
@@ -198,9 +198,11 @@ public class ElasticsearchContainer
            .copy("elasticsearch.yml", CONFIG_PATH +"/elasticsearch.yml")
            // Copy and run the script to generate the certs
            .copy("instances.yml", CONFIG_SSL_PATH + "/instances.yml")
-           .copy("setup-elasticsearch.sh", CONFIG_SSL_PATH + "/setup-elasticsearch.sh")
-           .run("chmod +x " + CONFIG_SSL_PATH + "/setup-elasticsearch.sh")
-           .run(CONFIG_SSL_PATH + "/setup-elasticsearch.sh");
+           .copy("start-elasticsearch.sh", CONFIG_SSL_PATH + "/start-elasticsearch.sh")
+           .run("chmod +x " + CONFIG_SSL_PATH + "/start-elasticsearch.sh")
+           .entryPoint(
+               CONFIG_SSL_PATH + "/start-elasticsearch.sh"
+           );
   }
 
   /**
