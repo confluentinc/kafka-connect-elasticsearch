@@ -37,9 +37,12 @@ import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
-import org.testcontainers.elasticsearch.ElasticsearchContainer;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class ElasticsearchIntegrationTestBase {
+
+  private static final Logger log = LoggerFactory.getLogger(ElasticsearchIntegrationTestBase.class);
 
   protected static final String TYPE = "kafka-connect";
 
@@ -51,24 +54,14 @@ public class ElasticsearchIntegrationTestBase {
   protected static final TopicPartition TOPIC_PARTITION2 = new TopicPartition(TOPIC, PARTITION2);
   protected static final TopicPartition TOPIC_PARTITION3 = new TopicPartition(TOPIC, PARTITION3);
 
-  private static final String DEFAULT_ES_VERSION = "7.0.0";
-  private static final String DEFAULT_DOCKER_IMAGE_NAME = "docker.elastic.co/elasticsearch/elasticsearch";
-  private static final String ELASTICSEARCH_VERSION_SYS_PROP = "elasticsearch.version";
-  private static final String ELASTICSEARCH_VERSION_ENV_PROP = "ELASTICSEARCH_VERSION";
-  private static final String ELASTICSEARCH_IMAGE_SYS_PROP = "elasticsearch.image";
-  private static final String ELASTICSEARCH_IMAGE_ENV_PROP = "ELASTICSEARCH_IMAGE";
-
   protected static ElasticsearchContainer container;
   protected ElasticsearchClient client;
   private DataConverter converter;
 
-
   @BeforeClass
   public static void setupBeforeAll() {
-    String dockerImageName = getElasticsearchDockerImageName();
-    String esVersion = getElasticsearchContainerVersion();
     // Relevant and available docker images for elastic can be found at https://www.docker.elastic.co
-    container = new ElasticsearchContainer(dockerImageName + ":" + esVersion);
+    container = ElasticsearchContainer.fromSystemProperties();
     container.start();
   }
 
@@ -78,8 +71,9 @@ public class ElasticsearchIntegrationTestBase {
   }
 
   @Before
-  public void setUp() throws Exception {
-    client = new JestElasticsearchClient("http://" + container.getHttpHostAddress());
+  public void setUp() {
+    log.info("Attempting to connect to {}", container.getConnectionUrl());
+    client = new JestElasticsearchClient(container.getConnectionUrl());
     converter = new DataConverter(true, BehaviorOnNullValues.IGNORE);
   }
 
@@ -156,32 +150,5 @@ public class ElasticsearchIntegrationTestBase {
         assertEquals(record, hits.get("key"));
       }
     }
-  }
-
-  static String getElasticsearchContainerVersion() {
-    return getSystemOrEnvProperty(
-        ELASTICSEARCH_VERSION_SYS_PROP,
-        ELASTICSEARCH_VERSION_ENV_PROP,
-        DEFAULT_ES_VERSION
-    );
-  }
-
-  static String getElasticsearchDockerImageName() {
-    return getSystemOrEnvProperty(
-        ELASTICSEARCH_IMAGE_SYS_PROP,
-        ELASTICSEARCH_IMAGE_ENV_PROP,
-        DEFAULT_DOCKER_IMAGE_NAME
-    );
-  }
-
-  private static String getSystemOrEnvProperty(String sysPropName, String envPropName, String defaultValue) {
-    String propertyValue = System.getProperty(sysPropName);
-    if (null == propertyValue) {
-      propertyValue = System.getenv(envPropName);
-      if (null == propertyValue) {
-        propertyValue = defaultValue;
-      }
-    }
-    return propertyValue;
   }
 }
