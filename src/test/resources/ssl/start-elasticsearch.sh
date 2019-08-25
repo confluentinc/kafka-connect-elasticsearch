@@ -16,7 +16,6 @@ fi
 echo
 echo "Replacing the ip address in the ${ES_DIR}/config/ssl/instances.yml file with ${IP_ADDRESS}"
 sed -i "s/ipAddress/${IP_ADDRESS}/g" ${ES_DIR}/config/ssl/instances.yml
-#cat ${ES_DIR}/config/ssl/instances.yml
 
 
 echo "Setting up Elasticsearch and generating certificates in ${ES_DIR}"
@@ -69,10 +68,6 @@ if [[ -n "$ELASTIC_PASSWORD" ]]; then
     unzip ${ES_DIR}/config/ssl/cluster.zip -d ${ES_DIR}/config/ssl/cluster
     rm -f ${ES_DIR}/config/ssl/cluster.zip
 
-    #echo "Move logstash certs to logstash config dir..."
-    #mv /config/ssl/docker-cluster/logstash/* /config/logstash/
-    #echo "Move kibana certs to kibana config dir..."
-    #mv /config/ssl/docker-cluster/kibana/* /config/kibana/
     echo "Move elasticsearch certs to SSL config dir..."
     mv ${ES_DIR}/config/ssl/cluster/elasticsearch/* ${ES_DIR}/config/ssl/
 
