@@ -15,6 +15,8 @@
 
 package io.confluent.connect.elasticsearch.jest;
 
+import com.amazonaws.auth.AWS4Signer;
+import com.amazonaws.http.AWSRequestSigningApacheInterceptor;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -50,6 +52,9 @@ import io.searchbox.indices.IndicesExists;
 import io.searchbox.indices.Refresh;
 import io.searchbox.indices.mapping.PutMapping;
 import org.apache.http.HttpHost;
+import org.apache.http.HttpRequestInterceptor;
+import org.apache.http.impl.client.HttpClientBuilder;
+import org.apache.http.impl.nio.client.HttpAsyncClientBuilder;
 import org.apache.kafka.common.config.ConfigDef;
 import org.apache.http.conn.ssl.SSLConnectionSocketFactory;
 import org.apache.http.nio.conn.ssl.SSLIOSessionStrategy;
@@ -129,8 +134,43 @@ public class JestElasticsearchClient implements ElasticsearchClient {
     }
   }
 
+
+  private static String serviceName = "es";
+
+  private static JestClientFactory makeClientFactory(Map<String, String> props) {
+    ElasticsearchSinkConnectorConfig config = new ElasticsearchSinkConnectorConfig(props);
+
+    if (!config.getBoolean(ElasticsearchSinkConnectorConfig.AWS_SIGNING_ENABLED_CONFIG)) {
+      return new JestClientFactory();
+    }
+
+    AWS4Signer signer = new AWS4Signer();
+    signer.setServiceName(serviceName);
+    signer.setRegionName(config.getString(ElasticsearchSinkConnectorConfig.AWS_REGION_CONFIG));
+
+    HttpRequestInterceptor interceptor = new AWSRequestSigningApacheInterceptor(
+        serviceName,
+        signer,
+        config.getCredentialsProvider()
+    );
+
+    return new JestClientFactory() {
+      @Override
+      protected HttpClientBuilder configureHttpClient(HttpClientBuilder builder) {
+        builder.addInterceptorLast(interceptor);
+        return builder;
+      }
+
+      @Override
+      protected HttpAsyncClientBuilder configureHttpClient(HttpAsyncClientBuilder builder) {
+        builder.addInterceptorLast(interceptor);
+        return builder;
+      }
+    };
+  }
+
   public JestElasticsearchClient(Map<String, String> props) {
-    this(props, new JestClientFactory());
+    this(props, makeClientFactory(props));
   }
 
   // visible for testing
