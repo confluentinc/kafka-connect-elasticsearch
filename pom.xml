@@ -47,7 +47,6 @@
         <test.containers.version>1.11.4</test.containers.version>
         <kafka.connect.maven.plugin.version>0.11.1</kafka.connect.maven.plugin.version>
         <confluent.maven.repo>http://packages.confluent.io/maven/</confluent.maven.repo>
-        <version.docker.maven.plugin>0.28.0</version.docker.maven.plugin>
     </properties>
 
     <repositories>
