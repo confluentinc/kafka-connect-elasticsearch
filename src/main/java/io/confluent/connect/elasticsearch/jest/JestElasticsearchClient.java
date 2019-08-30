@@ -233,7 +233,11 @@ public class JestElasticsearchClient implements ElasticsearchClient {
     Action<?> action = new IndicesExists.Builder(index).build();
     try {
       JestResult result = client.execute(action);
-      return result.isSucceeded();
+      boolean isSucceded = result.isSucceeded();
+      if (isSucceded) {
+        indexCache.add(index);
+      }
+      return isSucceded;
     } catch (IOException e) {
       throw new ConnectException(e);
     }
