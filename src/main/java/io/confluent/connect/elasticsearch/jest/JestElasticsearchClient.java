@@ -196,7 +196,7 @@ public class JestElasticsearchClient implements ElasticsearchClient {
     try {
       JestResult result = client.execute(action);
       boolean exists = result.isSucceeded();
-      if(exists) {
+      if (exists) {
         indexCache.add(index);
       }
       return exists;
