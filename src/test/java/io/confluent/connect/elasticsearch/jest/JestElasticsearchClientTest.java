@@ -58,6 +58,7 @@ import org.mockito.ArgumentMatcher;
 import org.mockito.InOrder;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -75,6 +76,7 @@ import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 public class JestElasticsearchClientTest {
@@ -149,6 +151,23 @@ public class JestElasticsearchClientTest {
   public void getsVersion() {
     JestElasticsearchClient client = new JestElasticsearchClient(jestClient);
     assertThat(client.getVersion(), is(equalTo(ElasticsearchClient.Version.ES_V1)));
+  }
+
+  @Test
+  public void attemptToCreateExistingIndex() throws Exception {
+    JestElasticsearchClient client = new JestElasticsearchClient(jestClient);
+    JestResult success = new JestResult(new Gson());
+    success.setSucceeded(true);
+    IndicesExists indicesExists = new IndicesExists.Builder(INDEX).build();
+    when(jestClient.execute(indicesExists)).thenReturn(success);
+    when(jestClient.execute(argThat(isCreateIndexForTestIndex()))).thenReturn(success);
+
+    client.createIndices(Collections.singleton(INDEX));
+    InOrder inOrder = inOrder(jestClient);
+    inOrder.verify(jestClient).execute(info);
+    inOrder.verify(jestClient).execute(indicesExists);
+
+    verifyNoMoreInteractions(jestClient);
   }
 
   @Test
