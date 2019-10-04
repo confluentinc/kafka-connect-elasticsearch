@@ -23,6 +23,7 @@ import io.confluent.connect.elasticsearch.Mapping;
 import io.confluent.connect.elasticsearch.TestUtils;
 import java.util.Collections;
 import org.apache.kafka.connect.data.Schema;
+import org.junit.Assert;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
@@ -43,5 +44,8 @@ public class MappingIT extends ElasticsearchIntegrationTestBase {
     JsonObject mapping = Mapping.getMapping(client, INDEX, TYPE);
     assertNotNull(mapping);
     TestUtils.verifyMapping(client, schema, mapping);
+
+    Assert.assertFalse("Can use another type for the current index",
+        Mapping.verifyMappingType(client, INDEX, "annother-type"));
   }
 }

@@ -26,6 +26,8 @@ import java.util.Set;
 
 public interface ElasticsearchClient extends AutoCloseable {
 
+
+
   enum Version {
     ES_V1, ES_V2, ES_V5, ES_V6, ES_V7
   }
@@ -62,6 +64,14 @@ public interface ElasticsearchClient extends AutoCloseable {
    * @throws IOException if the client cannot execute the request
    */
   JsonObject getMapping(String index, String type) throws IOException;
+
+  /**
+   * Verify Mapping types available for indices
+   * @param index the index
+   * @param type the type
+   * @throws IOException if the client cannot execute the request
+   */
+  boolean verifyMappingType(String index, String type) throws IOException;
 
   /**
    * Creates a bulk request for the list of {@link IndexableRecord} records.

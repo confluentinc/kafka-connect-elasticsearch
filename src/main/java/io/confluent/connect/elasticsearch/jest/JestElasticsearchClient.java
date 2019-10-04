@@ -323,6 +323,25 @@ public class JestElasticsearchClient implements ElasticsearchClient {
     }
   }
 
+  public boolean verifyMappingType(String index, String type) throws IOException {
+    final JestResult result = client.execute(
+        new PortableJestGetMappingBuilder(version)
+            .addIndex(index)
+            .build());
+    long typesCount = -1;
+    if (result != null) {
+      JsonObject docRoot = result.getJsonObject().getAsJsonObject(index);
+      JsonObject mappingsJson = docRoot.getAsJsonObject("mappings");
+
+      typesCount = mappingsJson
+          .keySet()
+          .stream()
+          .filter(key -> key.equalsIgnoreCase(type))
+          .count();
+    }
+    return (result == null) || (result != null && typesCount == 1);
+  }
+
   /**
    * Get the JSON mapping for given index and type. Returns {@code null} if it does not exist.
    */

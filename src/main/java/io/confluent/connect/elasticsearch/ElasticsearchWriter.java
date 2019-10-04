@@ -256,13 +256,19 @@ public class ElasticsearchWriter {
 
       if (!ignoreSchema && !existingMappings.contains(index)) {
         try {
-          if (Mapping.getMapping(client, index, type) == null) {
+          if (
+              Mapping.getMapping(client, index, type) == null
+                  &&
+              Mapping.verifyMappingType(client, index, type)
+          ) {
             Mapping.createMapping(client, index, type, sinkRecord.valueSchema());
           }
         } catch (IOException e) {
           // FIXME: concurrent tasks could attempt to create the mapping and one of the requests may
           // fail
-          throw new ConnectException("Failed to initialize mapping for index: " + index, e);
+          throw new ConnectException("Failed to initialize mapping for index: " + index
+              + " and type: " +  type,
+              e);
         }
         existingMappings.add(index);
       }
