@@ -23,7 +23,7 @@ import io.confluent.connect.elasticsearch.Mapping;
 import io.confluent.connect.elasticsearch.TestUtils;
 import java.util.Collections;
 import org.apache.kafka.connect.data.Schema;
-import org.junit.Assert;
+import org.apache.kafka.connect.errors.ConnectException;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
@@ -33,7 +33,7 @@ public class MappingIT extends ElasticsearchIntegrationTestBase {
   private static final String INDEX = "kafka-connect";
   private static final String TYPE = "kafka-connect-type";
 
-  @Test
+  @Test(expected = ConnectException.class)
   @SuppressWarnings("unchecked")
   public void testMapping() throws Exception {
 
@@ -45,7 +45,7 @@ public class MappingIT extends ElasticsearchIntegrationTestBase {
     assertNotNull(mapping);
     TestUtils.verifyMapping(client, schema, mapping);
 
-    Assert.assertFalse("Can use another type for the current index",
-        Mapping.verifyMappingType(client, INDEX, "annother-type"));
+    Mapping.getMapping(client, INDEX, "another-mapping-type");
   }
+
 }

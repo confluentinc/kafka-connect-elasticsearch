@@ -256,11 +256,7 @@ public class ElasticsearchWriter {
 
       if (!ignoreSchema && !existingMappings.contains(index)) {
         try {
-          if (
-              Mapping.getMapping(client, index, type) == null
-                  &&
-              Mapping.verifyMappingType(client, index, type)
-          ) {
+          if (Mapping.getMapping(client, index, type) == null) {
             Mapping.createMapping(client, index, type, sinkRecord.valueSchema());
           }
         } catch (IOException e) {
