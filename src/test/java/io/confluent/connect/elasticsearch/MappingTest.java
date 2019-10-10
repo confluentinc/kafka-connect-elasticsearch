@@ -75,6 +75,24 @@ public class MappingTest extends ElasticsearchSinkTestBase {
     assertEquals(0, intMapping.get("properties").get("foo").get("null_value").asInt());
   }
 
+  @Test
+  public void testInferMappingDefaultDate()  {
+    java.util.Date expected = new java.util.Date();
+
+    Schema dateSchema = SchemaBuilder
+        .struct()
+        .name("record")
+        .field("foo", Date.builder().defaultValue(expected).build())
+        .build();
+
+    JsonNode stringMapping = Mapping.inferMapping(client, dateSchema);
+    assertNotNull(stringMapping.get("properties").get("foo").get("null_value"));
+    assertEquals(
+        expected.getTime(),
+        stringMapping.get("properties").get("foo").get("null_value").asLong()
+    );
+  }
+
   protected Schema createSchema() {
     Schema structSchema = createInnerSchema();
     return SchemaBuilder.struct().name("record")
