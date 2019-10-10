@@ -85,11 +85,11 @@ public class MappingTest extends ElasticsearchSinkTestBase {
         .field("foo", Date.builder().defaultValue(expected).build())
         .build();
 
-    JsonNode stringMapping = Mapping.inferMapping(client, dateSchema);
-    assertNotNull(stringMapping.get("properties").get("foo").get("null_value"));
+    JsonNode dateMapping = Mapping.inferMapping(client, dateSchema);
+    assertNotNull(dateMapping.get("properties").get("foo").get("null_value"));
     assertEquals(
         expected.getTime(),
-        stringMapping.get("properties").get("foo").get("null_value").asLong()
+        dateMapping.get("properties").get("foo").get("null_value").asLong()
     );
   }
 
