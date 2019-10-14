@@ -208,15 +208,7 @@ public class Mapping {
           defaultValueNode = JsonNodeFactory.instance.booleanNode((boolean) defaultValue);
           break;
         case ElasticsearchSinkConnectorConstants.DATE_TYPE:
-          long value;
-          if (defaultValue instanceof Long) {
-            value = (long) defaultValue;
-          } else if (defaultValue instanceof java.util.Date) {
-            value = ((java.util.Date) defaultValue).getTime();
-          } else {
-            throw new ConnectException("Date default value must be of type Date or Long");
-          }
-
+          long value = ((java.util.Date) defaultValue).getTime();
           defaultValueNode = JsonNodeFactory.instance.numberNode(value);
           break;
         default:
