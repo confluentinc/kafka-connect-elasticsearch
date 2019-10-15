@@ -179,6 +179,11 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
           + "Values can be `PLAINTEXT` or `SSL`. If `PLAINTEXT` is passed, "
           + "all configs prefixed by " + CONNECTION_SSL_CONFIG_PREFIX + " will be ignored.";
 
+  public static final String MAX_CONNECTION_IDLE_TIME_MS_CONFIG = "max.connection.idle.time.ms";
+  private static final String MAX_CONNECTION_IDLE_TIME_MS_CONFIG_DOC = "Time "
+        + "in milliseconds after which an unused connection is dropped to prevent "
+        + "a timeout.";
+
   protected static ConfigDef baseConfigDef() {
     final ConfigDef configDef = new ConfigDef();
     addConnectorConfigs(configDef);
@@ -340,6 +345,16 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
         ++order,
         Width.SHORT,
         "Create indices at startup"
+    ).define(
+        MAX_CONNECTION_IDLE_TIME_MS_CONFIG,
+        Type.INT,
+        "60000",
+        Importance.LOW,
+        MAX_CONNECTION_IDLE_TIME_MS_CONFIG_DOC,
+        group,
+        ++order,
+        Width.SHORT,
+        "Max Connection Idle"
     );
   }
 
