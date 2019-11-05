@@ -27,6 +27,7 @@ import static io.confluent.connect.elasticsearch.jest.JestElasticsearchClient.Wr
 import static io.confluent.connect.elasticsearch.DataConverter.BehaviorOnNullValues;
 import static io.confluent.connect.elasticsearch.bulk.BulkProcessor.BehaviorOnMalformedDoc;
 import static org.apache.kafka.common.config.SslConfigs.addClientSslSupport;
+import static io.confluent.connect.elasticsearch.DataConverter.DocumentVersionType;
 
 public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   private static final String SSL_GROUP = "Security";
@@ -178,6 +179,15 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
       "The security protocol to use when connecting to Elasticsearch. "
           + "Values can be `PLAINTEXT` or `SSL`. If `PLAINTEXT` is passed, "
           + "all configs prefixed by " + CONNECTION_SSL_CONFIG_PREFIX + " will be ignored.";
+
+
+  public static final String ELASTICSEARCH_DOCUMENT_VERSION_TYPE_CONFIG = "elastic.document.version.type";
+  private static final String ELASTICSEARCH_DOCUMENT_VERSION_TYPE_DOC =
+          "The version type being used by connector. "
+                  + "Values can be " + DocumentVersionType.LEGACY + ", "
+                  + DocumentVersionType.UNUSED + ", "
+                  + DocumentVersionType.MESSAGE_OFFSET + ", "
+                  + DocumentVersionType.MESSAGE_TIMESTAMP + ".";
 
   protected static ConfigDef baseConfigDef() {
     final ConfigDef configDef = new ConfigDef();
@@ -466,7 +476,18 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
         group,
         ++order,
         Width.SHORT,
-        "Write method");
+        "Write method"
+    ).define(
+            ELASTICSEARCH_DOCUMENT_VERSION_TYPE_CONFIG,
+            Type.STRING,
+            "legacy",
+            Importance.LOW,
+            ELASTICSEARCH_DOCUMENT_VERSION_TYPE_DOC,
+            group,
+            ++order,
+            Width.SHORT,
+            "Document version"
+    );
   }
 
   public static final ConfigDef CONFIG = baseConfigDef();

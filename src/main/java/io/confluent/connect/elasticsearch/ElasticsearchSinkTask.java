@@ -103,7 +103,10 @@ public class ElasticsearchSinkTask extends SinkTask {
           BulkProcessor.BehaviorOnMalformedDoc.forValue(
               config.getString(ElasticsearchSinkConnectorConfig.BEHAVIOR_ON_MALFORMED_DOCS_CONFIG)
           );
-
+    DataConverter.DocumentVersionType documentVersionType =
+            DataConverter.DocumentVersionType.forValue(
+                    config.getString(ElasticsearchSinkConnectorConfig.ELASTICSEARCH_DOCUMENT_VERSION_TYPE_CONFIG)
+            );
       // Calculate the maximum possible backoff time ...
       long maxRetryBackoffMs =
           RetryUtil.computeRetryWaitTimeInMillis(maxRetry, retryBackoffMs);
@@ -137,7 +140,8 @@ public class ElasticsearchSinkTask extends SinkTask {
           .setMaxRetry(maxRetry)
           .setDropInvalidMessage(dropInvalidMessage)
           .setBehaviorOnNullValues(behaviorOnNullValues)
-          .setBehaviorOnMalformedDoc(behaviorOnMalformedDoc);
+          .setBehaviorOnMalformedDoc(behaviorOnMalformedDoc)
+          .setDocumentVersionType(documentVersionType);
 
       this.createIndicesAtStartTime = createIndicesAtStartTime;
 

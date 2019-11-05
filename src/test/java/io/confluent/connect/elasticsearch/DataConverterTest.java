@@ -48,7 +48,7 @@ public class DataConverterTest {
 
   @Before
   public void setUp() {
-    converter = new DataConverter(true, BehaviorOnNullValues.DEFAULT);
+    converter = new DataConverter(true, BehaviorOnNullValues.DEFAULT, DataConverter.DocumentVersionType.LEGACY);
     key = "key";
     topic = "topic";
     partition = 0;
@@ -194,7 +194,7 @@ public class DataConverterTest {
     origValue.put("field2", 2);
 
     // Use the older non-compact format for map entries with string keys
-    converter = new DataConverter(false, BehaviorOnNullValues.DEFAULT);
+    converter = new DataConverter(false, BehaviorOnNullValues.DEFAULT, DataConverter.DocumentVersionType.LEGACY);
 
     Schema preProcessedSchema = converter.preProcessSchema(origSchema);
     assertEquals(
@@ -228,7 +228,7 @@ public class DataConverterTest {
     origValue.put("field2", 2);
 
     // Use the newer compact format for map entries with string keys
-    converter = new DataConverter(true, BehaviorOnNullValues.DEFAULT);
+    converter = new DataConverter(true, BehaviorOnNullValues.DEFAULT, DataConverter.DocumentVersionType.LEGACY);
     Schema preProcessedSchema = converter.preProcessSchema(origSchema);
     assertEquals(
         SchemaBuilder.map(Schema.STRING_SCHEMA, Schema.INT32_SCHEMA).build(),
@@ -272,7 +272,7 @@ public class DataConverterTest {
     testOptionalFieldWithoutDefault(SchemaBuilder.struct().field("innerField", Schema.BOOLEAN_SCHEMA));
     testOptionalFieldWithoutDefault(SchemaBuilder.map(Schema.STRING_SCHEMA, Schema.BOOLEAN_SCHEMA));
     // Have to test maps with useCompactMapEntries set to true and set to false
-    converter = new DataConverter(false, BehaviorOnNullValues.DEFAULT);
+    converter = new DataConverter(false, BehaviorOnNullValues.DEFAULT, DataConverter.DocumentVersionType.LEGACY);
     testOptionalFieldWithoutDefault(SchemaBuilder.map(Schema.STRING_SCHEMA, Schema.BOOLEAN_SCHEMA));
   }
 
@@ -293,7 +293,7 @@ public class DataConverterTest {
 
   @Test
   public void ignoreOnNullValue() {
-    converter = new DataConverter(true, BehaviorOnNullValues.IGNORE);
+    converter = new DataConverter(true, BehaviorOnNullValues.IGNORE, DataConverter.DocumentVersionType.LEGACY);
 
     SinkRecord sinkRecord = createSinkRecordWithValue(null);
     assertNull(converter.convertRecord(sinkRecord, index, type, false, false));
@@ -301,7 +301,7 @@ public class DataConverterTest {
 
   @Test
   public void deleteOnNullValue() {
-    converter = new DataConverter(true, BehaviorOnNullValues.DELETE);
+    converter = new DataConverter(true, BehaviorOnNullValues.DELETE, DataConverter.DocumentVersionType.LEGACY);
 
     SinkRecord sinkRecord = createSinkRecordWithValue(null);
     IndexableRecord expectedRecord = createIndexableRecordWithPayload(null);
@@ -312,7 +312,7 @@ public class DataConverterTest {
 
   @Test
   public void ignoreDeleteOnNullValueWithNullKey() {
-    converter = new DataConverter(true, BehaviorOnNullValues.DELETE);
+    converter = new DataConverter(true, BehaviorOnNullValues.DELETE, DataConverter.DocumentVersionType.LEGACY);
     key = null;
 
     SinkRecord sinkRecord = createSinkRecordWithValue(null);
@@ -321,7 +321,7 @@ public class DataConverterTest {
 
   @Test
   public void failOnNullValue() {
-    converter = new DataConverter(true, BehaviorOnNullValues.FAIL);
+    converter = new DataConverter(true, BehaviorOnNullValues.FAIL, DataConverter.DocumentVersionType.LEGACY);
 
     SinkRecord sinkRecord = createSinkRecordWithValue(null);
     try {

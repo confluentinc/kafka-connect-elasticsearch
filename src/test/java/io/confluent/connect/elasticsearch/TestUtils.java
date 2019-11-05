@@ -75,7 +75,7 @@ public class TestUtils {
       }
     }
 
-    DataConverter converter = new DataConverter(true, BehaviorOnNullValues.IGNORE);
+    DataConverter converter = new DataConverter(true, BehaviorOnNullValues.IGNORE, DataConverter.DocumentVersionType.LEGACY);
     Schema.Type schemaType = schema.type();
     switch (schemaType) {
       case ARRAY:

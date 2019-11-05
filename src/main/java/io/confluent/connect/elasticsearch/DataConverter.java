@@ -16,6 +16,7 @@
 package io.confluent.connect.elasticsearch;
 
 import org.apache.kafka.common.config.ConfigDef;
+import org.apache.kafka.common.record.Record;
 import org.apache.kafka.connect.data.ConnectSchema;
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
@@ -56,6 +57,7 @@ public class DataConverter {
 
   private final boolean useCompactMapEntries;
   private final BehaviorOnNullValues behaviorOnNullValues;
+  private final DocumentVersionType documentVersionType;
 
   /**
    * Create a DataConverter, specifying how map entries with string keys within record
@@ -63,15 +65,16 @@ public class DataConverter {
    * <code>"entryKey": "entryValue"</code>, while the non-compact form are written as a nested
    * document such as <code>{"key": "entryKey", "value": "entryValue"}</code>. All map entries
    * with non-string keys are always written as nested documents.
-   *
-   * @param useCompactMapEntries true for compact map entries with string keys, or false for
+   *  @param useCompactMapEntries true for compact map entries with string keys, or false for
    *                             the nested document form.
    * @param behaviorOnNullValues behavior for handling records with null values; may not be null
+   * @param documentVersionType document version generated with method
    */
-  public DataConverter(boolean useCompactMapEntries, BehaviorOnNullValues behaviorOnNullValues) {
+  public DataConverter(boolean useCompactMapEntries, BehaviorOnNullValues behaviorOnNullValues, DocumentVersionType documentVersionType) {
     this.useCompactMapEntries = useCompactMapEntries;
     this.behaviorOnNullValues =
         Objects.requireNonNull(behaviorOnNullValues, "behaviorOnNullValues cannot be null.");
+    this.documentVersionType = documentVersionType;
   }
 
   private String convertKey(Schema keySchema, Object key) {
@@ -161,8 +164,33 @@ public class DataConverter {
     }
 
     final String payload = getPayload(record, ignoreSchema);
-    final Long version = ignoreKey ? null : record.kafkaOffset();
+    final Long version = getIndexableRecordVersion(record, ignoreKey);
     return new IndexableRecord(new Key(index, type, id), payload, version);
+  }
+
+  private Long getIndexableRecordVersion(SinkRecord record, boolean ignoreKey){
+    Long version;
+    switch (documentVersionType){
+      case LEGACY:
+        version = ignoreKey ? null : record.kafkaOffset();
+        break;
+      case MESSAGE_TIMESTAMP:
+        version = record.timestamp();
+        break;
+      case UNUSED:
+        version = null;
+        break;
+      case MESSAGE_OFFSET:
+        version = record.kafkaOffset();
+        break;
+      default:
+        throw new RuntimeException(String.format(
+                "Unknown value for %s enum: %s",
+                DocumentVersionType.class.getSimpleName(),
+                documentVersionType
+        ));
+    }
+    return version;
   }
 
   private String getPayload(SinkRecord record, boolean ignoreSchema) {
@@ -366,6 +394,54 @@ public class DataConverter {
       newStruct.put(field.name(), converted);
     }
     return newStruct;
+  }
+
+  public enum DocumentVersionType {
+    LEGACY,
+    UNUSED,
+    MESSAGE_OFFSET,
+    MESSAGE_TIMESTAMP;
+
+    public static final DocumentVersionType DEFAULT = LEGACY;
+
+    public static final ConfigDef.Validator VALIDATOR = new ConfigDef.Validator() {
+      private final ConfigDef.ValidString validator = ConfigDef.ValidString.in(names());
+
+      @Override
+      public void ensureValid(String name, Object value) {
+        if (value instanceof String) {
+          value = ((String) value).toLowerCase(Locale.ROOT);
+        }
+        validator.ensureValid(name, value);
+      }
+
+      // Overridden here so that ConfigDef.toEnrichedRst shows possible values correctly
+      @Override
+      public String toString() {
+        return validator.toString();
+      }
+
+    };
+
+    public static String[] names() {
+      DocumentVersionType[] documentVersionTypes = values();
+      String[] result = new String[documentVersionTypes.length];
+
+      for (int i = 0; i < documentVersionTypes.length; i++) {
+        result[i] = documentVersionTypes[i].toString();
+      }
+
+      return result;
+    }
+
+    public static DocumentVersionType forValue(String value) {
+      return valueOf(value.toUpperCase(Locale.ROOT));
+    }
+
+    @Override
+    public String toString() {
+      return name().toLowerCase(Locale.ROOT);
+    }
   }
 
   public enum BehaviorOnNullValues {
