@@ -1,18 +1,17 @@
-/**
+/*
  * Copyright 2018 Confluent Inc.
  *
- * Licensed under the Apache License, Version 2.0 (the "License"); you may not
- * use this file except in compliance with the License. You may obtain a copy of
- * the License at
+ * Licensed under the Confluent Community License (the "License"); you may not use
+ * this file except in compliance with the License.  You may obtain a copy of the
+ * License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.confluent.io/confluent-community-license
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
- * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
- * License for the specific language governing permissions and limitations under
- * the License.
- **/
+ * WARRANTIES OF ANY KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations under the License.
+ */
 
 package io.confluent.connect.elasticsearch.jest;
 
@@ -20,13 +19,16 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.google.gson.JsonObject;
-import io.confluent.connect.elasticsearch.bulk.BulkRequest;
 import io.confluent.connect.elasticsearch.ElasticsearchClient;
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig;
 import io.confluent.connect.elasticsearch.IndexableRecord;
 import io.confluent.connect.elasticsearch.Key;
 import io.confluent.connect.elasticsearch.Mapping;
+import io.confluent.connect.elasticsearch.bulk.BulkRequest;
 import io.confluent.connect.elasticsearch.bulk.BulkResponse;
+import io.confluent.connect.elasticsearch.jest.actions.PortableJestCreateIndexBuilder;
+import io.confluent.connect.elasticsearch.jest.actions.PortableJestGetMappingBuilder;
+import io.confluent.connect.elasticsearch.jest.actions.PortableJestPutMappingBuilder;
 import io.searchbox.action.Action;
 import io.searchbox.action.BulkableAction;
 import io.searchbox.client.JestClient;
@@ -37,16 +39,24 @@ import io.searchbox.cluster.NodesInfo;
 import io.searchbox.core.Bulk;
 import io.searchbox.core.BulkResult;
 import io.searchbox.core.Delete;
+import io.searchbox.core.DocumentResult;
 import io.searchbox.core.Index;
 import io.searchbox.core.Search;
 import io.searchbox.core.SearchResult;
+import io.searchbox.core.Update;
 import io.searchbox.indices.CreateIndex;
+import io.searchbox.indices.DeleteIndex;
 import io.searchbox.indices.IndicesExists;
-import io.searchbox.indices.mapping.GetMapping;
+import io.searchbox.indices.Refresh;
 import io.searchbox.indices.mapping.PutMapping;
 import org.apache.http.HttpHost;
+import org.apache.kafka.common.config.ConfigDef;
+import org.apache.http.conn.ssl.SSLConnectionSocketFactory;
+import org.apache.http.nio.conn.ssl.SSLIOSessionStrategy;
 import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.config.types.Password;
+import org.apache.kafka.common.network.Mode;
+import org.apache.kafka.common.security.ssl.SslFactory;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.slf4j.Logger;
@@ -54,18 +64,24 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
+import javax.net.ssl.SSLContext;
 
 public class JestElasticsearchClient implements ElasticsearchClient {
+  private static final Logger log = LoggerFactory.getLogger(JestElasticsearchClient.class);
 
   // visible for testing
   protected static final String MAPPER_PARSE_EXCEPTION
       = "mapper_parse_exception";
   protected static final String VERSION_CONFLICT_ENGINE_EXCEPTION
       = "version_conflict_engine_exception";
+  protected static final String ALL_FIELD_PARAM
+      = "_all";
 
   private static final Logger LOG = LoggerFactory.getLogger(JestElasticsearchClient.class);
 
@@ -73,6 +89,9 @@ public class JestElasticsearchClient implements ElasticsearchClient {
 
   private final JestClient client;
   private final Version version;
+  private WriteMethod writeMethod = WriteMethod.DEFAULT;
+
+  private final Set<String> indexCache = new HashSet<>();
 
   // visible for testing
   public JestElasticsearchClient(JestClient client) {
@@ -118,31 +137,11 @@ public class JestElasticsearchClient implements ElasticsearchClient {
   protected JestElasticsearchClient(Map<String, String> props, JestClientFactory factory) {
     try {
       ElasticsearchSinkConnectorConfig config = new ElasticsearchSinkConnectorConfig(props);
-      final int connTimeout = config.getInt(
-          ElasticsearchSinkConnectorConfig.CONNECTION_TIMEOUT_MS_CONFIG);
-      final int readTimeout = config.getInt(
-          ElasticsearchSinkConnectorConfig.READ_TIMEOUT_MS_CONFIG);
-
-      final String username = config.getString(
-          ElasticsearchSinkConnectorConfig.CONNECTION_USERNAME_CONFIG);
-      final Password password = config.getPassword(
-          ElasticsearchSinkConnectorConfig.CONNECTION_PASSWORD_CONFIG);
-
-      List<String> address =
-          config.getList(ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG);
-      HttpClientConfig.Builder builder = new HttpClientConfig.Builder(address)
-          .connTimeout(connTimeout)
-          .readTimeout(readTimeout)
-          .multiThreaded(true);
-      if (username != null && password != null) {
-        builder.defaultCredentials(username, password.value())
-            .preemptiveAuthTargetHosts(address.stream()
-                .map(addr -> HttpHost.create(addr)).collect(Collectors.toSet()));
-      }
-      HttpClientConfig httpClientConfig = builder.build();
-      factory.setHttpClientConfig(httpClientConfig);
+      factory.setHttpClientConfig(getClientConfig(config));
       this.client = factory.getObject();
       this.version = getServerVersion();
+      this.writeMethod = WriteMethod.forValue(
+              config.getString(ElasticsearchSinkConnectorConfig.WRITE_METHOD_CONFIG));
     } catch (IOException e) {
       throw new ConnectException(
           "Couldn't start ElasticsearchSinkTask due to connection error:",
@@ -154,6 +153,62 @@ public class JestElasticsearchClient implements ElasticsearchClient {
           e
       );
     }
+  }
+
+  // Visible for Testing
+  public static HttpClientConfig getClientConfig(ElasticsearchSinkConnectorConfig config) {
+    final int connTimeout = config.getInt(
+        ElasticsearchSinkConnectorConfig.CONNECTION_TIMEOUT_MS_CONFIG);
+    final int readTimeout = config.getInt(
+        ElasticsearchSinkConnectorConfig.READ_TIMEOUT_MS_CONFIG);
+
+    final String username = config.getString(
+        ElasticsearchSinkConnectorConfig.CONNECTION_USERNAME_CONFIG);
+    final Password password = config.getPassword(
+        ElasticsearchSinkConnectorConfig.CONNECTION_PASSWORD_CONFIG);
+    List<String> address = config.getList(
+        ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG);
+
+    HttpClientConfig.Builder builder =
+        new HttpClientConfig.Builder(address)
+            .connTimeout(connTimeout)
+            .readTimeout(readTimeout)
+            .multiThreaded(true);
+    if (username != null && password != null) {
+      builder.defaultCredentials(username, password.value())
+          .preemptiveAuthTargetHosts(address.stream()
+              .map(addr -> HttpHost.create(addr)).collect(Collectors.toSet()));
+    }
+
+    if (config.secured()) {
+      log.info("Using secured connection to {}", address);
+      configureSslContext(builder, config);
+    } else {
+      log.info("Using unsecured connection to {}", address);
+    }
+    return builder.build();
+  }
+
+  private static void configureSslContext(HttpClientConfig.Builder builder,
+                                            ElasticsearchSinkConnectorConfig config) {
+    SslFactory kafkaSslFactory = new SslFactory(Mode.CLIENT, null, false);
+    kafkaSslFactory.configure(config.sslConfigs());
+    SSLContext sslContext = kafkaSslFactory.sslEngineBuilder().sslContext();
+
+    // Sync calls
+    SSLConnectionSocketFactory sslSocketFactory = new SSLConnectionSocketFactory(sslContext,
+        SSLConnectionSocketFactory.getDefaultHostnameVerifier());
+    builder.sslSocketFactory(sslSocketFactory);
+
+    // Async calls
+    SSLIOSessionStrategy sessionStrategy = new SSLIOSessionStrategy(sslContext,
+        SSLConnectionSocketFactory.getDefaultHostnameVerifier());
+    builder.httpsIOSessionStrategy(sessionStrategy);
+  }
+
+  // visible for testing
+  protected void setWriteMethod(WriteMethod writeMethod) {
+    this.writeMethod = writeMethod;
   }
 
   /*
@@ -197,6 +252,8 @@ public class JestElasticsearchClient implements ElasticsearchClient {
       return Version.ES_V5;
     } else if (esVersion.startsWith("6.")) {
       return Version.ES_V6;
+    } else if (esVersion.startsWith("7.")) {
+      return Version.ES_V7;
     }
     return defaultVersion;
   }
@@ -216,10 +273,17 @@ public class JestElasticsearchClient implements ElasticsearchClient {
   }
 
   private boolean indexExists(String index) {
-    Action<JestResult> action = new IndicesExists.Builder(index).build();
+    if (indexCache.contains(index)) {
+      return true;
+    }
+    Action<?> action = new IndicesExists.Builder(index).build();
     try {
       JestResult result = client.execute(action);
-      return result.isSucceeded();
+      boolean exists = result.isSucceeded();
+      if (exists) {
+        indexCache.add(index);
+      }
+      return exists;
     } catch (IOException e) {
       throw new ConnectException(e);
     }
@@ -228,7 +292,7 @@ public class JestElasticsearchClient implements ElasticsearchClient {
   public void createIndices(Set<String> indices) {
     for (String index : indices) {
       if (!indexExists(index)) {
-        CreateIndex createIndex = new CreateIndex.Builder(index).build();
+        CreateIndex createIndex = new PortableJestCreateIndexBuilder(index, version).build();
         try {
           JestResult result = client.execute(createIndex);
           if (!result.isSucceeded()) {
@@ -238,6 +302,7 @@ public class JestElasticsearchClient implements ElasticsearchClient {
               throw new ConnectException("Could not create index '" + index + "'" + msg);
             }
           }
+          indexCache.add(index);
         } catch (IOException e) {
           throw new ConnectException(e);
         }
@@ -248,7 +313,8 @@ public class JestElasticsearchClient implements ElasticsearchClient {
   public void createMapping(String index, String type, Schema schema) throws IOException {
     ObjectNode obj = JsonNodeFactory.instance.objectNode();
     obj.set(type, Mapping.inferMapping(this, schema));
-    PutMapping putMapping = new PutMapping.Builder(index, type, obj.toString()).build();
+    PutMapping putMapping = new PortableJestPutMappingBuilder(index, type, obj.toString(), version)
+        .build();
     JestResult result = client.execute(putMapping);
     if (!result.isSucceeded()) {
       throw new ConnectException(
@@ -262,7 +328,10 @@ public class JestElasticsearchClient implements ElasticsearchClient {
    */
   public JsonObject getMapping(String index, String type) throws IOException {
     final JestResult result = client.execute(
-        new GetMapping.Builder().addIndex(index).addType(type).build()
+        new PortableJestGetMappingBuilder(version)
+            .addIndex(index)
+            .addType(type)
+            .build()
     );
     final JsonObject indexRoot = result.getJsonObject().getAsJsonObject(index);
     if (indexRoot == null) {
@@ -275,6 +344,24 @@ public class JestElasticsearchClient implements ElasticsearchClient {
     return mappingsJson.getAsJsonObject(type);
   }
 
+  /**
+   * Delete all indexes in Elasticsearch (useful for test)
+   */
+  public void deleteAll() throws IOException {
+    client.execute(new DeleteIndex
+        .Builder(ALL_FIELD_PARAM)
+        .build());
+  }
+
+  /**
+   * Refresh all data in elasticsearch, making it available for search
+   */
+  public void refresh() throws IOException {
+    client.execute(
+        new Refresh.Builder().build()
+    );
+  }
+
   public BulkRequest createBulkRequest(List<IndexableRecord> batch) {
     final Bulk.Builder builder = new Bulk.Builder();
     for (IndexableRecord record : batch) {
@@ -284,9 +371,14 @@ public class JestElasticsearchClient implements ElasticsearchClient {
   }
 
   // visible for testing
-  protected BulkableAction toBulkableAction(IndexableRecord record) {
+  protected BulkableAction<DocumentResult> toBulkableAction(IndexableRecord record) {
     // If payload is null, the record was a tombstone and we should delete from the index.
-    return record.payload != null ? toIndexRequest(record) : toDeleteRequest(record);
+    if (record.payload == null) {
+      return toDeleteRequest(record);
+    }
+    return writeMethod == WriteMethod.INSERT
+            ? toIndexRequest(record)
+            : toUpdateRequest(record);
   }
 
   private Delete toDeleteRequest(IndexableRecord record) {
@@ -307,6 +399,16 @@ public class JestElasticsearchClient implements ElasticsearchClient {
       req.setParameter("version_type", "external").setParameter("version", record.version);
     }
     return req.build();
+  }
+
+  private Update toUpdateRequest(IndexableRecord record) {
+    String payload = "{\"doc\":" + record.payload
+        + ", \"doc_as_upsert\":true}";
+    return new Update.Builder(payload)
+        .index(record.key.index)
+        .type(record.key.type)
+        .id(record.key.id)
+        .build();
   }
 
   public BulkResponse executeBulk(BulkRequest bulk) throws IOException {
@@ -337,7 +439,7 @@ public class JestElasticsearchClient implements ElasticsearchClient {
     }
 
     if (!versionConflicts.isEmpty()) {
-      LOG.debug("Ignoring version conflicts for items: {}", versionConflicts);
+      LOG.warn("Ignoring version conflicts for items: {}", versionConflicts);
       if (errors.isEmpty()) {
         // The only errors were version conflicts
         return BulkResponse.success();
@@ -364,6 +466,46 @@ public class JestElasticsearchClient implements ElasticsearchClient {
   }
 
   public void close() {
-    client.shutdownClient();
+    try {
+      client.close();
+    } catch (IOException e) {
+      LOG.error("Exception while closing the JEST client", e);
+    }
+  }
+
+  public enum WriteMethod {
+    INSERT,
+    UPSERT,
+    ;
+
+    public static final WriteMethod DEFAULT = INSERT;
+    public static final ConfigDef.Validator VALIDATOR = new ConfigDef.Validator() {
+      private final ConfigDef.ValidString validator = ConfigDef.ValidString.in(names());
+
+      @Override
+      public void ensureValid(String name, Object value) {
+        validator.ensureValid(name, value);
+      }
+
+      // Overridden here so that ConfigDef.toEnrichedRst shows possible values correctly
+      @Override
+      public String toString() {
+        return "One of " + INSERT.toString() + " or " + UPSERT.toString();
+      }
+
+    };
+
+    public static String[] names() {
+      return new String[] {INSERT.toString(), UPSERT.toString()};
+    }
+
+    public static WriteMethod forValue(String value) {
+      return valueOf(value.toUpperCase(Locale.ROOT));
+    }
+
+    @Override
+    public String toString() {
+      return name().toLowerCase(Locale.ROOT);
+    }
   }
 }

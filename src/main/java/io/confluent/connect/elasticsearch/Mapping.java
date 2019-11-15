@@ -1,18 +1,17 @@
-/**
- * Copyright 2016 Confluent Inc.
- * <p>
- * Licensed under the Apache License, Version 2.0 (the "License"); you may not
- * use this file except in compliance with the License. You may obtain a copy of
- * the License at
- * <p>
- * http://www.apache.org/licenses/LICENSE-2.0
- * <p>
+/*
+ * Copyright 2018 Confluent Inc.
+ *
+ * Licensed under the Confluent Community License (the "License"); you may not use
+ * this file except in compliance with the License.  You may obtain a copy of the
+ * License at
+ *
+ * http://www.confluent.io/confluent-community-license
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
- * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
- * License for the specific language governing permissions and limitations under
- * the License.
- **/
+ * WARRANTIES OF ANY KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations under the License.
+ */
 
 package io.confluent.connect.elasticsearch;
 
@@ -201,16 +200,19 @@ public class Mapping {
           break;
         case ElasticsearchSinkConnectorConstants.STRING_TYPE:
         case ElasticsearchSinkConnectorConstants.TEXT_TYPE:
-          defaultValueNode = JsonNodeFactory.instance.textNode((String) defaultValue);
-          break;
         case ElasticsearchSinkConnectorConstants.BINARY_TYPE:
-          defaultValueNode = JsonNodeFactory.instance.binaryNode(bytes(defaultValue));
+          // IGNORE default values for text and binary types as this is not supported by ES side.
+          // see https://www.elastic.co/guide/en/elasticsearch/reference/current/text.html
+          // https://www.elastic.co/guide/en/elasticsearch/reference/current/binary.html
+          // for more details.
+          //defaultValueNode = null;
           break;
         case ElasticsearchSinkConnectorConstants.BOOLEAN_TYPE:
           defaultValueNode = JsonNodeFactory.instance.booleanNode((boolean) defaultValue);
           break;
         case ElasticsearchSinkConnectorConstants.DATE_TYPE:
-          defaultValueNode = JsonNodeFactory.instance.numberNode((long) defaultValue);
+          long value = ((java.util.Date) defaultValue).getTime();
+          defaultValueNode = JsonNodeFactory.instance.numberNode(value);
           break;
         default:
           throw new DataException("Invalid primitive type.");

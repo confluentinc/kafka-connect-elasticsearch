@@ -1,18 +1,17 @@
-/**
+/*
  * Copyright 2018 Confluent Inc.
  *
- * Licensed under the Apache License, Version 2.0 (the "License"); you may not
- * use this file except in compliance with the License. You may obtain a copy of
- * the License at
+ * Licensed under the Confluent Community License (the "License"); you may not use
+ * this file except in compliance with the License.  You may obtain a copy of the
+ * License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.confluent.io/confluent-community-license
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
- * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
- * License for the specific language governing permissions and limitations under
- * the License.
- **/
+ * WARRANTIES OF ANY KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations under the License.
+ */
 
 package io.confluent.connect.elasticsearch;
 
@@ -28,7 +27,7 @@ import java.util.Set;
 public interface ElasticsearchClient extends AutoCloseable {
 
   enum Version {
-    ES_V1, ES_V2, ES_V5, ES_V6
+    ES_V1, ES_V2, ES_V5, ES_V6, ES_V7
   }
 
   /**
@@ -91,6 +90,24 @@ public interface ElasticsearchClient extends AutoCloseable {
    * @throws IOException if the client cannot execute the request
    */
   JsonObject search(String query, String index, String type) throws IOException;
+
+  /**
+   * Delete all indexes in Elasticsearch (useful mostly for test)
+   *
+   * @throws IOException if the client cannot execute the request
+   */
+  default void deleteAll() throws IOException {
+    throw new UnsupportedOperationException("deleteAll is not implemented yet by this client");
+  }
+
+  /**
+   * Perform a refresh of all indexes, making all indexed data searchable (useful mostly for test)
+   *
+   * @throws IOException If the client cannot execute the request
+   */
+  default void refresh() throws IOException {
+    throw new UnsupportedOperationException("refresh is not implemented yet by this client");
+  }
 
   /**
    * Shuts down the client.

@@ -1,18 +1,17 @@
-/**
- * Copyright 2016 Confluent Inc.
+/*
+ * Copyright 2018 Confluent Inc.
  *
- * Licensed under the Apache License, Version 2.0 (the "License"); you may not
- * use this file except in compliance with the License. You may obtain a copy of
- * the License at
+ * Licensed under the Confluent Community License (the "License"); you may not use
+ * this file except in compliance with the License.  You may obtain a copy of the
+ * License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.confluent.io/confluent-community-license
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
- * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
- * License for the specific language governing permissions and limitations under
- * the License.
- **/
+ * WARRANTIES OF ANY KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations under the License.
+ */
 
 package io.confluent.connect.elasticsearch;
 
@@ -28,10 +27,13 @@ import java.util.Collections;
 import java.util.Map;
 import java.util.Properties;
 
+import static io.confluent.connect.elasticsearch.jest.JestElasticsearchClient.WriteMethod;
 import static io.confluent.connect.elasticsearch.DataConverter.BehaviorOnNullValues;
 import static io.confluent.connect.elasticsearch.bulk.BulkProcessor.BehaviorOnMalformedDoc;
+import static org.apache.kafka.common.config.SslConfigs.addClientSslSupport;
 
 public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
+  private static final String SSL_GROUP = "Security";
 
   public static final String OUTPUT_TOPIC_CONFIG = "output.topic";
   public static final String OUTPUT_TOPIC_DOC = "Kafka topic to write to upon "
@@ -44,8 +46,10 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
 
   public static final String CONNECTION_URL_CONFIG = "connection.url";
   private static final String CONNECTION_URL_DOC =
-      "List of Elasticsearch HTTP connection URLs e.g. ``http://eshost1:9200,"
-      + "http://eshost2:9200``.";
+      "The comma-separated list of one or more Elasticsearch URLs, such as ``http://eshost1:9200,"
+      + "http://eshost2:9200`` or ``https://eshost3:9200``. HTTPS is used for all connections "
+      + "if any of the URLs starts with ``https:``. A URL without a protocol is treated as "
+      + "``http``.";
   public static final String CONNECTION_USERNAME_CONFIG = "connection.username";
   private static final String CONNECTION_USERNAME_DOC =
       "The username used to authenticate with Elasticsearch. "
@@ -122,7 +126,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
       "Whether to ignore schemas during indexing. When this is set to ``true``, the record "
       + "schema will be ignored for the purpose of registering an Elasticsearch mapping. "
       + "Elasticsearch will infer the mapping from the data (dynamic mapping needs to be enabled "
-      + "by the user).\n Note that this is a global config that applies to all topics, use ``"
+      + "by the user).\n Note that this is a global config that applies to all topics. Use ``"
       + TOPIC_SCHEMA_IGNORE_CONFIG + "`` to override as ``true`` for specific topics.";
   private static final String TOPIC_SCHEMA_IGNORE_DOC =
       "List of topics for which ``" + SCHEMA_IGNORE_CONFIG + "`` should be ``true``.";
@@ -161,13 +165,61 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
       + "Elasticsearch rejects due to some malformation of the document itself, such as an index"
       + " mapping conflict or a field name containing illegal characters. Valid options are "
       + "'ignore', 'warn', and 'fail'.";
+  public static final String WRITE_METHOD_CONFIG = "write.method";
+  private static final String WRITE_METHOD_DOC = "Method used for writing data to Elasticsearch,"
+          + " and one of " + WriteMethod.INSERT.toString() + " or " + WriteMethod.UPSERT.toString()
+          + ". The default method is " + WriteMethod.INSERT.toString() + ", in which the "
+          + "connector constructs a document from the record value and inserts that document "
+          + "into Elasticsearch, completely replacing any existing document with the same ID; "
+          + "this matches previous behavior. The " + WriteMethod.UPSERT.toString()
+          + " method will create a new document if one with the specified ID does not yet "
+          + "exist, or will update an existing document with the same ID by adding/replacing "
+          + "only those fields present in the record value. The " + WriteMethod.UPSERT.toString()
+          + " method may require additional time and resources of Elasticsearch, so consider "
+          + "increasing the " + FLUSH_TIMEOUT_MS_CONFIG + ", " + READ_TIMEOUT_MS_CONFIG
+          + ", and decrease " + BATCH_SIZE_CONFIG + " configuration properties.";
+
+  public static final String CONNECTION_SSL_CONFIG_PREFIX = "elastic.https.";
+
+  public static final String AUTO_CREATE_INDICES_AT_START_CONFIG = "auto.create.indices.at.start";
+  private static final String AUTO_CREATE_INDICES_AT_START_DOC = "Auto create the Elasticsearch"
+      + " indices at startup. This is useful when the indices are a direct mapping "
+      + " of the Kafka topics.";
+
+  private static final String ELASTICSEARCH_SECURITY_PROTOCOL_CONFIG = "elastic.security.protocol";
+  private static final String ELASTICSEARCH_SECURITY_PROTOCOL_DOC =
+      "The security protocol to use when connecting to Elasticsearch. "
+          + "Values can be `PLAINTEXT` or `SSL`. If `PLAINTEXT` is passed, "
+          + "all configs prefixed by " + CONNECTION_SSL_CONFIG_PREFIX + " will be ignored.";
 
   protected static ConfigDef baseConfigDef() {
     final ConfigDef configDef = new ConfigDef();
     addConnectorConfigs(configDef);
     addConversionConfigs(configDef);
     addDualWriteConfigs(configDef);
+    addSecurityConfigs(configDef);
     return configDef;
+  }
+
+  private static void addSecurityConfigs(ConfigDef configDef) {
+    ConfigDef sslConfigDef = new ConfigDef();
+    addClientSslSupport(sslConfigDef);
+    int order = 0;
+    configDef.define(
+        ELASTICSEARCH_SECURITY_PROTOCOL_CONFIG,
+        Type.STRING,
+        SecurityProtocol.PLAINTEXT.name(),
+        Importance.MEDIUM,
+        ELASTICSEARCH_SECURITY_PROTOCOL_DOC,
+        SSL_GROUP,
+        ++order,
+        Width.SHORT,
+        "Security protocol"
+    );
+    configDef.embed(
+        CONNECTION_SSL_CONFIG_PREFIX, SSL_GROUP,
+        configDef.configKeys().size() + 2, sslConfigDef
+    );
   }
 
   private static void addConnectorConfigs(ConfigDef configDef) {
@@ -288,10 +340,30 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
         3000, 
         Importance.LOW, 
         READ_TIMEOUT_MS_CONFIG_DOC,
-        group, 
+        group,
         ++order, 
         Width.SHORT, 
-        "Read Timeout");
+        "Read Timeout"
+    ).define(
+        AUTO_CREATE_INDICES_AT_START_CONFIG,
+        Type.BOOLEAN,
+        true,
+        Importance.LOW,
+        AUTO_CREATE_INDICES_AT_START_DOC,
+        group,
+        ++order,
+        Width.SHORT,
+        "Create indices at startup"
+    );
+  }
+
+  public boolean secured() {
+    SecurityProtocol securityProtocol = securityProtocol();
+    return SecurityProtocol.SSL.equals(securityProtocol);
+  }
+
+  private SecurityProtocol securityProtocol() {
+    return SecurityProtocol.valueOf(getString(ELASTICSEARCH_SECURITY_PROTOCOL_CONFIG));
   }
 
   private static void addConversionConfigs(ConfigDef configDef) {
@@ -397,7 +469,18 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
         group,
         ++order,
         Width.SHORT,
-        "Behavior on malformed documents");
+        "Behavior on malformed documents"
+    ).define(
+        WRITE_METHOD_CONFIG,
+        Type.STRING,
+        WriteMethod.DEFAULT.toString(),
+        WriteMethod.VALIDATOR,
+        Importance.LOW,
+        WRITE_METHOD_DOC,
+        group,
+        ++order,
+        Width.SHORT,
+        "Write method");
   }
 
   private static void addDualWriteConfigs(ConfigDef configDef) {
@@ -454,6 +537,12 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
 
   public ElasticsearchSinkConnectorConfig(Map<String, String> props) {
     super(CONFIG, props);
+  }
+
+  public Map<String, Object> sslConfigs() {
+    ConfigDef sslConfigDef = new ConfigDef();
+    addClientSslSupport(sslConfigDef);
+    return sslConfigDef.parse(originalsWithPrefix(CONNECTION_SSL_CONFIG_PREFIX));
   }
 
   public static void main(String[] args) {

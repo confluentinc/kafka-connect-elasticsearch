@@ -1,24 +1,24 @@
-/**
- * Copyright 2016 Confluent Inc.
+/*
+ * Copyright 2018 Confluent Inc.
  *
- * Licensed under the Apache License, Version 2.0 (the "License"); you may not
- * use this file except in compliance with the License. You may obtain a copy of
- * the License at
+ * Licensed under the Confluent Community License (the "License"); you may not use
+ * this file except in compliance with the License.  You may obtain a copy of the
+ * License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.confluent.io/confluent-community-license
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
- * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
- * License for the specific language governing permissions and limitations under
- * the License.
- **/
+ * WARRANTIES OF ANY KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations under the License.
+ */
 
 package io.confluent.connect.elasticsearch;
 
 import com.fasterxml.jackson.databind.node.NumericNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.node.TextNode;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.google.gson.JsonObject;
 
 import org.apache.kafka.connect.data.Date;
@@ -35,7 +35,6 @@ import org.junit.Test;
 import static io.confluent.connect.elasticsearch.DataConverter.BehaviorOnNullValues;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConstants.KEYWORD_TYPE;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConstants.TEXT_TYPE;
-import static org.junit.Assert.assertEquals;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -80,6 +79,47 @@ public class MappingTest extends ElasticsearchSinkTestBase {
     assertEquals(TEXT_TYPE, stringType.asText());
     assertEquals(KEYWORD_TYPE, keywordType.asText());
     assertEquals(256, ignoreAbove.asInt());
+  }
+
+  @Test
+  public void testInferMapping() throws Exception {
+
+    Schema stringSchema = SchemaBuilder
+        .struct()
+        .name("record")
+        .field("foo", SchemaBuilder.string().defaultValue("0").build())
+        .build();
+    JsonNode stringMapping = Mapping.inferMapping(client, stringSchema);
+
+    assertNull(stringMapping.get("properties").get("foo").get("null_value"));
+
+    Schema intSchema =SchemaBuilder
+        .struct()
+        .name("record")
+        .field("foo", SchemaBuilder.int32().defaultValue(0).build())
+        .build();
+
+    JsonNode intMapping = Mapping.inferMapping(client, intSchema);
+    assertNotNull(intMapping.get("properties").get("foo").get("null_value"));
+    assertEquals(0, intMapping.get("properties").get("foo").get("null_value").asInt());
+  }
+
+  @Test
+  public void testInferMappingDefaultDate()  {
+    java.util.Date expected = new java.util.Date();
+
+    Schema dateSchema = SchemaBuilder
+        .struct()
+        .name("record")
+        .field("foo", Date.builder().defaultValue(expected).build())
+        .build();
+
+    JsonNode dateMapping = Mapping.inferMapping(client, dateSchema);
+    assertNotNull(dateMapping.get("properties").get("foo").get("null_value"));
+    assertEquals(
+        expected.getTime(),
+        dateMapping.get("properties").get("foo").get("null_value").asLong()
+    );
   }
 
   protected Schema createSchema() {
@@ -127,7 +167,6 @@ public class MappingTest extends ElasticsearchSinkTestBase {
   @SuppressWarnings("unchecked")
   private void verifyMapping(Schema schema, JsonObject mapping) throws Exception {
     String schemaName = schema.name();
-
     Object type = mapping.get("type");
     if (schemaName != null) {
       switch (schemaName) {

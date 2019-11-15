@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 Confluent Inc.
+ * Copyright 2019 Confluent Inc.
  *
  * Licensed under the Confluent Community License (the "License"); you may not use
  * this file except in compliance with the License.  You may obtain a copy of the
@@ -13,17 +13,24 @@
  * specific language governing permissions and limitations under the License.
  */
 
-package io.confluent.connect.elasticsearch.bulk;
+package io.confluent.connect.elasticsearch;
 
+public enum SecurityProtocol {
 
-import java.util.List;
+  /**
+   * Un-authenticated, non-encrypted channel
+   */
+  PLAINTEXT(0, "PLAINTEXT"),
+  /**
+   * SSL channel
+   */
+  SSL(1, "SSL");
 
-/**
- * BulkRequest is a marker interface for use with
- * {@link io.confluent.connect.elasticsearch.ElasticsearchClient#createBulkRequest(List)} and
- * {@link io.confluent.connect.elasticsearch.ElasticsearchClient#executeBulk(BulkRequest)}.
- * Implementations will typically hold state comprised of instances of classes that are
- * specific to the client library.
- */
-public interface BulkRequest {
+  private final int id;
+  private final String name;
+
+  SecurityProtocol(int id, String name) {
+    this.id = id;
+    this.name = name;
+  }
 }
