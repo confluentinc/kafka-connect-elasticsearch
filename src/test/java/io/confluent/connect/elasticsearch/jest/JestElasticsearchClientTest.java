@@ -270,7 +270,7 @@ public class JestElasticsearchClientTest {
     root.add(INDEX, indexRoot);
     JestResult result = new JestResult(new Gson());
     result.setJsonObject(root);
-    GetMapping getMapping = new GetMapping.Builder().addIndex(INDEX).addType(TYPE).build();
+    GetMapping getMapping = new GetMapping.Builder().addIndex(INDEX).build();
     when(jestClient.execute(getMapping)).thenReturn(result);
 
     assertThat(client.getMapping(INDEX, TYPE), is(equalTo(mapping)));

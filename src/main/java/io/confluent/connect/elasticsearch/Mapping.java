@@ -51,8 +51,8 @@ public class Mapping {
    * Create an explicit mapping.
    *
    * @param client The client to connect to Elasticsearch.
-   * @param index  The index to write to Elasticsearch.
-   * @param type   The type to create mapping for.
+   * @param index The index to write to Elasticsearch.
+   * @param type The type to create mapping for.
    * @param schema The schema used to infer mapping.
    * @throws IOException from underlying JestClient
    */
@@ -64,6 +64,23 @@ public class Mapping {
   )
       throws IOException {
     client.createMapping(index, type, schema);
+  }
+
+  /**
+   * Verify the index mapping types.
+   *
+   * @param client The client to connect to Elasticsearch.
+   * @param index The index to write to Elasticsearch.
+   * @param type The type to verify the mapping for.
+   * @return true if the mapping can be used, false otherwise
+   * @throws IOException from underlying JestClient
+   */
+  public static boolean verifyMappingType(
+      ElasticsearchClient client,
+      String index,
+      String type
+  ) throws IOException {
+    return client.verifyMappingType(index, type);
   }
 
   /**
@@ -245,5 +262,4 @@ public class Mapping {
     }
     return bytes;
   }
-
 }

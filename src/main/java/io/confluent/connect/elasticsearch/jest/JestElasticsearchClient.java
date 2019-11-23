@@ -327,6 +327,25 @@ public class JestElasticsearchClient implements ElasticsearchClient {
     }
   }
 
+  public boolean verifyMappingType(String index, String type) throws IOException {
+    final JestResult result = client.execute(
+        new PortableJestGetMappingBuilder(version)
+            .addIndex(index)
+            .build());
+    long typesCount = -1;
+    if (result != null) {
+      JsonObject docRoot = result.getJsonObject().getAsJsonObject(index);
+      JsonObject mappingsJson = docRoot.getAsJsonObject("mappings");
+
+      typesCount = mappingsJson
+          .keySet()
+          .stream()
+          .filter(key -> key.equalsIgnoreCase(type))
+          .count();
+    }
+    return (result == null) || (result != null && typesCount == 1);
+  }
+
   /**
    * Get the JSON mapping for given index and type. Returns {@code null} if it does not exist.
    */
@@ -334,7 +353,6 @@ public class JestElasticsearchClient implements ElasticsearchClient {
     final JestResult result = client.execute(
         new PortableJestGetMappingBuilder(version)
             .addIndex(index)
-            .addType(type)
             .build()
     );
     final JsonObject indexRoot = result.getJsonObject().getAsJsonObject(index);
@@ -345,7 +363,27 @@ public class JestElasticsearchClient implements ElasticsearchClient {
     if (mappingsJson == null) {
       return null;
     }
-    return mappingsJson.getAsJsonObject(type);
+
+    if (verifyMappingTypes(mappingsJson, type)) {
+      return mappingsJson.getAsJsonObject(type);
+    } else {
+      throw new IOException("Trying to retrieve a Mapping for the wrong type " + type);
+    }
+  }
+
+  private boolean verifyMappingTypes(JsonObject mappingsJson, String type) {
+    switch (version) {
+      case ES_V6:
+      case ES_V7:
+        long typesCount = mappingsJson
+            .keySet()
+            .stream()
+            .filter(key -> key.equalsIgnoreCase(type))
+            .count();
+        return typesCount != 1;
+      default:
+        return true;
+    }
   }
 
   /**

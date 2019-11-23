@@ -262,7 +262,9 @@ public class ElasticsearchWriter {
         } catch (IOException e) {
           // FIXME: concurrent tasks could attempt to create the mapping and one of the requests may
           // fail
-          throw new ConnectException("Failed to initialize mapping for index: " + index, e);
+          throw new ConnectException("Failed to initialize mapping for index: " + index
+              + " and type: " +  type,
+              e);
         }
         existingMappings.add(index);
       }
