@@ -212,7 +212,7 @@ public class JestElasticsearchClient implements ElasticsearchClient {
     NodesInfo info = new NodesInfo.Builder().addCleanApiParameter("version").build();
     JsonObject result = client.execute(info).getJsonObject();
     if (result == null) {
-      LOG.warn("Couldn't get Elasticsearch version, result is null");
+      LOG.warn("Couldn't get Elasticsearch version (result is null); assuming {}", defaultVersion);
       return defaultVersion;
     }
 
@@ -220,32 +220,50 @@ public class JestElasticsearchClient implements ElasticsearchClient {
 
     JsonObject nodesRoot = result.get("nodes").getAsJsonObject();
     if (nodesRoot == null || nodesRoot.entrySet().size() == 0) {
-      LOG.warn("Couldn't get Elasticsearch version, nodesRoot is null or empty");
+      LOG.warn(
+          "Couldn't get Elasticsearch version (response nodesRoot is null or empty); assuming {}",
+          defaultVersion
+      );
       return defaultVersion;
     }
 
     JsonObject nodeRoot = nodesRoot.entrySet().iterator().next().getValue().getAsJsonObject();
     if (nodeRoot == null) {
-      LOG.warn("Couldn't get Elasticsearch version, nodeRoot is null");
+      LOG.warn(
+          "Couldn't get Elasticsearch version (response nodeRoot is null); assuming {}",
+          defaultVersion
+      );
       return defaultVersion;
     }
 
     String esVersion = nodeRoot.get("version").getAsString();
+    Version version;
     if (esVersion == null) {
-      LOG.warn("Couldn't get Elasticsearch version, version is null");
-      return defaultVersion;
+      version = defaultVersion;
+      LOG.warn(
+          "Couldn't get Elasticsearch version (response version is null); assuming {}",
+          version
+      );
     } else if (esVersion.startsWith("1.")) {
-      return Version.ES_V1;
+      version = Version.ES_V1;
+      log.info("Detected Elasticsearch version is {}", version);
     } else if (esVersion.startsWith("2.")) {
-      return Version.ES_V2;
+      version = Version.ES_V2;
+      log.info("Detected Elasticsearch version is {}", version);
     } else if (esVersion.startsWith("5.")) {
-      return Version.ES_V5;
+      version = Version.ES_V5;
+      log.info("Detected Elasticsearch version is {}", version);
     } else if (esVersion.startsWith("6.")) {
-      return Version.ES_V6;
+      version = Version.ES_V6;
+      log.info("Detected Elasticsearch version is {}", version);
     } else if (esVersion.startsWith("7.")) {
-      return Version.ES_V7;
+      version = Version.ES_V7;
+      log.info("Detected Elasticsearch version is {}", version);
+    } else {
+      version = defaultVersion;
+      log.info("Detected unexpected Elasticsearch version {}, using {}", esVersion, version);
     }
-    return defaultVersion;
+    return version;
   }
 
   private void checkForError(JsonObject result) {
@@ -268,10 +286,15 @@ public class JestElasticsearchClient implements ElasticsearchClient {
     }
     Action<?> action = new IndicesExists.Builder(index).build();
     try {
+      log.info("Index '{}' not found in local cache; checking for existence", index);
       JestResult result = client.execute(action);
+      log.debug("Received response for checking existence of index '{}'", index);
       boolean exists = result.isSucceeded();
       if (exists) {
         indexCache.add(index);
+        log.info("Index '{}' exists in Elasticsearch; adding to local cache", index);
+      } else {
+        log.info("Index '{}' not found in Elasticsearch", index);
       }
       return exists;
     } catch (IOException e) {
@@ -280,17 +303,23 @@ public class JestElasticsearchClient implements ElasticsearchClient {
   }
 
   public void createIndices(Set<String> indices) {
+    log.trace("Attempting to discover or create indexes in Elasticsearch: {}", indices);
     for (String index : indices) {
       if (!indexExists(index)) {
         CreateIndex createIndex = new PortableJestCreateIndexBuilder(index, version).build();
         try {
+          log.info("Requesting Elasticsearch create index '{}'", index);
           JestResult result = client.execute(createIndex);
+          log.debug("Received response for request to create index '{}'", index);
           if (!result.isSucceeded()) {
             // Check if index was created by another client
             if (!indexExists(index)) {
               String msg = result.getErrorMessage() != null ? ": " + result.getErrorMessage() : "";
               throw new ConnectException("Could not create index '" + index + "'" + msg);
             }
+            log.info("Index '{}' exists in Elasticsearch; adding to local cache", index);
+          } else {
+            log.info("Index '{}' created in Elasticsearch; adding to local cache", index);
           }
           indexCache.add(index);
         } catch (IOException e) {
@@ -305,24 +334,28 @@ public class JestElasticsearchClient implements ElasticsearchClient {
     obj.set(type, Mapping.inferMapping(this, schema));
     PutMapping putMapping = new PortableJestPutMappingBuilder(index, type, obj.toString(), version)
         .build();
+    log.info("Creating mapping (type={}) for index '{}' and schema {}", type, index, schema);
     JestResult result = client.execute(putMapping);
     if (!result.isSucceeded()) {
       throw new ConnectException(
           "Cannot create mapping " + obj + " -- " + result.getErrorMessage()
       );
     }
+    log.info("Created mapping (type={}) for index '{}' and schema {}", type, index, schema);
   }
 
   /**
    * Get the JSON mapping for given index and type. Returns {@code null} if it does not exist.
    */
   public JsonObject getMapping(String index, String type) throws IOException {
+    log.info("Get mapping (type={}) for index '{}'", type, index);
     final JestResult result = client.execute(
         new PortableJestGetMappingBuilder(version)
             .addIndex(index)
             .addType(type)
             .build()
     );
+    log.debug("Received mapping (type={}) for index '{}'", type, index);
     final JsonObject indexRoot = result.getJsonObject().getAsJsonObject(index);
     if (indexRoot == null) {
       return null;
@@ -337,19 +370,35 @@ public class JestElasticsearchClient implements ElasticsearchClient {
   /**
    * Delete all indexes in Elasticsearch (useful for test)
    */
+  // For testing purposes
   public void deleteAll() throws IOException {
-    client.execute(new DeleteIndex
+    log.info("Request deletion of all indexes");
+    final JestResult result = client.execute(new DeleteIndex
         .Builder(ALL_FIELD_PARAM)
         .build());
+    if (result.isSucceeded()) {
+      log.info("Deletion of all indexes succeeded");
+    } else {
+      String msg = result.getErrorMessage() != null ? ": " + result.getErrorMessage() : "";
+      log.warn("Could not delete all indexes: {}", msg);
+    }
   }
 
   /**
-   * Refresh all data in elasticsearch, making it available for search
+   * Refresh all data in elasticsearch, making it available for search (useful for testing)
    */
+  // For testing purposes
   public void refresh() throws IOException {
-    client.execute(
+    log.info("Request refresh");
+    final JestResult result = client.execute(
         new Refresh.Builder().build()
     );
+    if (result.isSucceeded()) {
+      log.info("Refresh completed");
+    } else {
+      String msg = result.getErrorMessage() != null ? ": " + result.getErrorMessage() : "";
+      log.warn("Could not refresh: {}", msg);
+    }
   }
 
   public BulkRequest createBulkRequest(List<IndexableRecord> batch) {
@@ -387,11 +436,14 @@ public class JestElasticsearchClient implements ElasticsearchClient {
   }
 
   public BulkResponse executeBulk(BulkRequest bulk) throws IOException {
+    log.trace("Executing bulk request");
     final BulkResult result = client.execute(((JestBulkRequest) bulk).getBulk());
 
     if (result.isSucceeded()) {
+      log.trace("Bulk request succeeded");
       return BulkResponse.success();
     }
+    log.trace("Bulk request failed; collecting error(s)");
 
     boolean retriable = true;
 
@@ -426,6 +478,7 @@ public class JestElasticsearchClient implements ElasticsearchClient {
     return BulkResponse.failure(retriable, errorInfo);
   }
 
+  // For testing purposes
   public JsonObject search(String query, String index, String type) throws IOException {
     final Search.Builder search = new Search.Builder(query);
     if (index != null) {
@@ -435,13 +488,24 @@ public class JestElasticsearchClient implements ElasticsearchClient {
       search.addType(type);
     }
 
+    log.info("Executing search on index '{}' (type={}): {}", index, type, query);
     final SearchResult result = client.execute(search.build());
-
+    if (result.isSucceeded()) {
+      log.info(
+          "Executing search succeeded with {} total results and {} max score",
+          result.getTotal(),
+          result.getMaxScore()
+      );
+    } else {
+      String msg = result.getErrorMessage() != null ? ": " + result.getErrorMessage() : "";
+      log.warn("Failed to execute search: {}", msg);
+    }
     return result.getJsonObject();
   }
 
   public void close() {
     try {
+      log.debug("Closing Elasticsearch client");
       client.close();
     } catch (IOException e) {
       LOG.error("Exception while closing the JEST client", e);

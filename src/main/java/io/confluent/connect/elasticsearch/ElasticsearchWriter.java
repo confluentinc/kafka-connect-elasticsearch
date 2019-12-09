@@ -235,7 +235,9 @@ public class ElasticsearchWriter {
   }
 
   public void write(Collection<SinkRecord> records) {
+    log.debug("Writing {} records to Elasticsearch", records.size());
     for (SinkRecord sinkRecord : records) {
+      log.trace("Writing record to Elasticsearch: {}", sinkRecord);
       // Preemptively skip records with null values if they're going to be ignored anyways
       if (ignoreRecord(sinkRecord)) {
         log.debug(
@@ -264,6 +266,7 @@ public class ElasticsearchWriter {
           // fail
           throw new ConnectException("Failed to initialize mapping for index: " + index, e);
         }
+        log.debug("Locally caching mapping for index '{}'", index);
         existingMappings.add(index);
       }
 
@@ -289,6 +292,14 @@ public class ElasticsearchWriter {
           ignoreKey,
           ignoreSchema);
       if (record != null) {
+        if (log.isTraceEnabled()) {
+          log.trace(
+              "Adding record from topic '{}', partition {}, offset {} to bulk processor",
+              sinkRecord.topic(),
+              sinkRecord.kafkaPartition(),
+              sinkRecord.kafkaOffset()
+          );
+        }
         bulkProcessor.add(record, flushTimeoutMs);
       }
     } catch (ConnectException convertException) {
@@ -333,8 +344,10 @@ public class ElasticsearchWriter {
     } catch (Exception e) {
       log.warn("Failed to flush during stop", e);
     }
+    log.debug("Stopping Elastisearch writer");
     bulkProcessor.stop();
     bulkProcessor.awaitStop(flushTimeoutMs);
+    log.debug("Stopped Elastisearch writer");
   }
 
   public void createIndicesForTopics(Set<String> assignedTopics) {

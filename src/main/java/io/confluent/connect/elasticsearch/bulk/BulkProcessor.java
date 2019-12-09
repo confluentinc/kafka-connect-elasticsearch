@@ -152,13 +152,20 @@ public class BulkProcessor<R, B> {
   }
 
   private synchronized Future<BulkResponse> submitBatch() {
-    assert !unsentRecords.isEmpty();
-    final int batchableSize = Math.min(batchSize, unsentRecords.size());
+    final int numUnsentRecords = unsentRecords.size();
+    assert numUnsentRecords > 0;
+    final int batchableSize = Math.min(batchSize, numUnsentRecords);
     final List<R> batch = new ArrayList<>(batchableSize);
     for (int i = 0; i < batchableSize; i++) {
       batch.add(unsentRecords.removeFirst());
     }
     inFlightRecords += batchableSize;
+    log.debug(
+        "Submitting batch of {} records; {} unsent and {} total in-flight records",
+        batchableSize,
+        numUnsentRecords,
+        inFlightRecords
+    );
     return executor.submit(new BulkTask(batch));
   }
 
@@ -189,8 +196,8 @@ public class BulkProcessor<R, B> {
    * this method if this is desirable.
    */
   public void stop() {
-    log.trace("stop");
-    stopRequested = true;
+    log.debug("stop");
+    stopRequested = true; // this stops the farmer task
     synchronized (this) {
       // shutdown the pool under synchronization to avoid rejected submissions
       executor.shutdown();
@@ -274,7 +281,14 @@ public class BulkProcessor<R, B> {
   public synchronized void add(R record, long timeoutMs) {
     throwIfTerminal();
 
-    if (bufferedRecords() >= maxBufferedRecords) {
+    int numBufferedRecords = bufferedRecords();
+    if (numBufferedRecords >= maxBufferedRecords) {
+      log.trace(
+          "Number of buffered records ({}) exceeds {}; waiting up to {} ms",
+          numBufferedRecords,
+          maxBufferedRecords,
+          timeoutMs
+      );
       final long addStartTimeMs = time.milliseconds();
       for (long elapsedMs = time.milliseconds() - addStartTimeMs;
            !isTerminal() && elapsedMs < timeoutMs && bufferedRecords() >= maxBufferedRecords;
@@ -289,6 +303,14 @@ public class BulkProcessor<R, B> {
       if (bufferedRecords() >= maxBufferedRecords) {
         throw new ConnectException("Add timeout expired before buffer availability");
       }
+      if (log.isTraceEnabled()) {
+        log.trace(
+            "Adding record to queue after blocking {} ms",
+            time.milliseconds() - addStartTimeMs
+        );
+      }
+    } else {
+      log.trace("Adding record to unsent queue");
     }
 
     unsentRecords.addLast(record);
@@ -302,7 +324,7 @@ public class BulkProcessor<R, B> {
    * thrown with that error.
    */
   public void flush(long timeoutMs) {
-    log.trace("flush {}", timeoutMs);
+    log.debug("Flushing bulk processor (timeout={} ms)", timeoutMs);
     final long flushStartTimeMs = time.milliseconds();
     try {
       flushRequested = true;
@@ -323,6 +345,12 @@ public class BulkProcessor<R, B> {
       throw new ConnectException(e);
     } finally {
       flushRequested = false;
+    }
+    if (log.isDebugEnabled()) {
+      log.debug(
+          "Flushed bulk processor (total time={} ms)",
+          time.milliseconds() - flushStartTimeMs
+      );
     }
   }
 
