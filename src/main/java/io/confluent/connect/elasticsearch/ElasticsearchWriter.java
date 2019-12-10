@@ -237,18 +237,24 @@ public class ElasticsearchWriter {
   public void write(Collection<SinkRecord> records) {
     log.debug("Writing {} records to Elasticsearch", records.size());
     for (SinkRecord sinkRecord : records) {
-      log.trace("Writing record to Elasticsearch: topic/partition/offset {}/{}/{}",
-          sinkRecord.topic(),
-          sinkRecord.kafkaPartition(),
-          sinkRecord.kafkaOffset());
       // Preemptively skip records with null values if they're going to be ignored anyways
       if (ignoreRecord(sinkRecord)) {
-        log.trace(
-            "Ignoring sink record with null value for topic/partition/offset {}/{}/{}",
+        if (log.isTraceEnabled()) {
+          log.trace(
+              "Ignoring sink record with null value for topic/partition/offset {}/{}/{}",
+              sinkRecord.topic(),
+              sinkRecord.kafkaPartition(),
+              sinkRecord.kafkaOffset()
+          );
+        }
+        continue;
+      }
+      if (log.isTraceEnabled()) {
+        log.trace("Writing record to Elasticsearch: topic/partition/offset {}/{}/{}",
             sinkRecord.topic(),
             sinkRecord.kafkaPartition(),
-            sinkRecord.kafkaOffset());
-        continue;
+            sinkRecord.kafkaOffset()
+        );
       }
 
       final String index = convertTopicToIndexName(sinkRecord.topic());
@@ -342,12 +348,22 @@ public class ElasticsearchWriter {
 
   public void stop() {
     try {
+      log.debug(
+          "Flushing records, waiting up to {}ms ('{}')",
+          flushTimeoutMs,
+          ElasticsearchSinkConnectorConfig.FLUSH_TIMEOUT_MS_CONFIG
+      );
       bulkProcessor.flush(flushTimeoutMs);
     } catch (Exception e) {
       log.warn("Failed to flush during stop", e);
     }
     log.debug("Stopping Elastisearch writer");
     bulkProcessor.stop();
+    log.debug(
+        "Waiting for bulk processor to stop, up to {}ms ('{}')",
+        flushTimeoutMs,
+        ElasticsearchSinkConnectorConfig.FLUSH_TIMEOUT_MS_CONFIG
+    );
     bulkProcessor.awaitStop(flushTimeoutMs);
     log.debug("Stopped Elastisearch writer");
   }

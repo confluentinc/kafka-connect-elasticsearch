@@ -31,6 +31,7 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
+import org.slf4j.MDC;
 
 @Category(IntegrationTest.class)
 public class ElasticsearchSinkTaskIT extends ElasticsearchIntegrationTestBase {
@@ -39,6 +40,7 @@ public class ElasticsearchSinkTaskIT extends ElasticsearchIntegrationTestBase {
 
   @Before
   public void beforeEach() {
+    MDC.put("connector.context", "[MyConnector|task1] ");
     Map<String, String> props = createProps();
     task.start(props, client);
   }
@@ -48,6 +50,7 @@ public class ElasticsearchSinkTaskIT extends ElasticsearchIntegrationTestBase {
     if (task != null) {
       task.stop();
     }
+    MDC.remove("connector.context");
   }
 
   private Map<String, String> createProps() {

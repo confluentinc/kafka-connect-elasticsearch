@@ -186,7 +186,7 @@ public class ElasticsearchSinkTask extends SinkTask {
 
   @Override
   public void stop() throws ConnectException {
-    log.info("Stopping ElasticsearchSinkTask.");
+    log.info("Stopping ElasticsearchSinkTask");
     if (writer != null) {
       writer.stop();
     }

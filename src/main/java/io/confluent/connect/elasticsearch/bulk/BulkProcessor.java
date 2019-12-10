@@ -23,7 +23,6 @@ import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.slf4j.MDC;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -49,6 +48,7 @@ public class BulkProcessor<R, B> {
   private static final Logger log = LoggerFactory.getLogger(BulkProcessor.class);
 
   private static final AtomicLong BATCH_ID_GEN = new AtomicLong();
+  private static final AtomicInteger THREAD_ID_GEN = new AtomicInteger();
 
   private final Time time;
   private final BulkClient<R, B> bulkClient;
@@ -116,7 +116,11 @@ public class BulkProcessor<R, B> {
       public Thread newThread(Runnable r) {
         final int threadId = threadCounter.getAndIncrement();
         final int objId = System.identityHashCode(this);
-        final Thread t = new Thread(r, String.format("BulkProcessor@%d-%d", objId, threadId));
+        final Thread t = new BulkProcessorThread(
+            logContext,
+            r,
+            String.format("BulkProcessor@%d-%d", objId, threadId)
+        );
         t.setDaemon(true);
         t.setUncaughtExceptionHandler(uncaughtExceptionHandler);
         return t;
@@ -128,7 +132,7 @@ public class BulkProcessor<R, B> {
     return new Runnable() {
       @Override
       public void run() {
-        try (LogContext context = logContext.create("FarmerTask")) {
+        try (LogContext context = logContext.create("Farmer1")) {
           log.debug("Starting farmer task thread");
           try {
             while (!stopRequested) {
@@ -216,7 +220,6 @@ public class BulkProcessor<R, B> {
    * <p>This should only be called after a previous {@link #stop()} invocation.
    */
   public void awaitStop(long timeoutMs) {
-    log.debug("awaitStop {}", timeoutMs);
     assert stopRequested;
     try {
       if (!executor.awaitTermination(timeoutMs, TimeUnit.MILLISECONDS)) {
@@ -329,7 +332,6 @@ public class BulkProcessor<R, B> {
    * thrown with that error.
    */
   public void flush(long timeoutMs) {
-    log.debug("Flushing bulk processor (timeout={} ms)", timeoutMs);
     final long flushStartTimeMs = time.milliseconds();
     try {
       flushRequested = true;
@@ -359,6 +361,28 @@ public class BulkProcessor<R, B> {
     }
   }
 
+  private static final class BulkProcessorThread extends Thread {
+
+    private final int threadId = THREAD_ID_GEN.incrementAndGet();
+    private final LogContext parentContext;
+
+    public BulkProcessorThread(
+        LogContext parentContext,
+        Runnable target,
+        String name
+    ) {
+      super(target, name);
+      this.parentContext = parentContext;
+    }
+
+    @Override
+    public void run() {
+      try (LogContext context = parentContext.create("Thread" + threadId)) {
+        super.run();
+      }
+    }
+  }
+
   private final class BulkTask implements Callable<BulkResponse> {
 
     final long batchId = BATCH_ID_GEN.incrementAndGet();
@@ -371,27 +395,19 @@ public class BulkProcessor<R, B> {
 
     @Override
     public BulkResponse call() throws Exception {
-      try(LogContext context = logContext.create("BulkTask")) {
-        long startTime = System.currentTimeMillis();
-        final BulkResponse rsp;
-        try {
-          rsp = execute();
-        } catch (Exception e) {
-          failAndStop(e);
-          throw e;
-        }
-        log.debug(
-            "Successfully executed batch {} of {} records in {} ms",
-            batchId,
-            batch.size(),
-            System.currentTimeMillis() - startTime
-        );
-        onBatchCompletion(batch.size());
-        return rsp;
+      final BulkResponse rsp;
+      try {
+        rsp = execute();
+      } catch (Exception e) {
+        failAndStop(e);
+        throw e;
       }
+      onBatchCompletion(batch.size());
+      return rsp;
     }
 
     private BulkResponse execute() throws Exception {
+      final long startTime = System.currentTimeMillis();
       final B bulkReq;
       try {
         bulkReq = bulkClient.bulkRequest(batch);
@@ -412,10 +428,15 @@ public class BulkProcessor<R, B> {
                   batchId, batch.size(), attempts, maxAttempts);
           final BulkResponse bulkRsp = bulkClient.execute(bulkReq);
           if (bulkRsp.isSucceeded()) {
-            if (attempts > 1) {
-              // We only logged failures, so log the success immediately after a failure ...
-              log.debug("Completed batch {} of {} records with attempt {}/{}",
-                      batchId, batch.size(), attempts, maxAttempts);
+            if (log.isDebugEnabled()) {
+              log.debug(
+                  "Completed batch {} of {} records with attempt {}/{} in {} ms",
+                  batchId,
+                  batch.size(),
+                  attempts,
+                  maxAttempts,
+                  System.currentTimeMillis() - startTime
+              );
             }
             return bulkRsp;
           } else if (responseContainsMalformedDocError(bulkRsp)) {
