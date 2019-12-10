@@ -237,12 +237,14 @@ public class ElasticsearchWriter {
   public void write(Collection<SinkRecord> records) {
     log.debug("Writing {} records to Elasticsearch", records.size());
     for (SinkRecord sinkRecord : records) {
-      log.trace("Writing record to Elasticsearch: {}", sinkRecord);
+      log.trace("Writing record to Elasticsearch: topic/partition/offset {}/{}/{}",
+        sinkRecord.topic(),
+        sinkRecord.kafkaPartition(),
+        sinkRecord.kafkaOffset());
       // Preemptively skip records with null values if they're going to be ignored anyways
       if (ignoreRecord(sinkRecord)) {
         log.trace(
-            "Ignoring sink record with key {} and null value for topic/partition/offset {}/{}/{}",
-            sinkRecord.key(),
+            "Ignoring sink record with null value for topic/partition/offset {}/{}/{}",
             sinkRecord.topic(),
             sinkRecord.kafkaPartition(),
             sinkRecord.kafkaOffset());
