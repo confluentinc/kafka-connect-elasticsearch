@@ -240,7 +240,7 @@ public class ElasticsearchWriter {
       log.trace("Writing record to Elasticsearch: {}", sinkRecord);
       // Preemptively skip records with null values if they're going to be ignored anyways
       if (ignoreRecord(sinkRecord)) {
-        log.debug(
+        log.trace(
             "Ignoring sink record with key {} and null value for topic/partition/offset {}/{}/{}",
             sinkRecord.key(),
             sinkRecord.topic(),
@@ -326,7 +326,7 @@ public class ElasticsearchWriter {
   private String convertTopicToIndexName(String topic) {
     final String indexOverride = topicToIndexMap.get(topic);
     String index = indexOverride != null ? indexOverride : topic.toLowerCase();
-    log.debug("Topic '{}' was translated as index '{}'", topic, index);
+    log.trace("Topic '{}' was translated as index '{}'", topic, index);
     return index;
   }
 
