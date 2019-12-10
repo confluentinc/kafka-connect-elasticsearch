@@ -436,14 +436,14 @@ public class JestElasticsearchClient implements ElasticsearchClient {
   }
 
   public BulkResponse executeBulk(BulkRequest bulk) throws IOException {
-    log.trace("Executing bulk request");
+    log.debug("Executing bulk request");
     final BulkResult result = client.execute(((JestBulkRequest) bulk).getBulk());
 
     if (result.isSucceeded()) {
-      log.trace("Bulk request succeeded");
+      log.debug("Bulk request succeeded");
       return BulkResponse.success();
     }
-    log.trace("Bulk request failed; collecting error(s)");
+    log.debug("Bulk request failed; collecting error(s)");
 
     boolean retriable = true;
 

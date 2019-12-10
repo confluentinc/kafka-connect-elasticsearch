@@ -211,7 +211,7 @@ public class BulkProcessor<R, B> {
    * <p>This should only be called after a previous {@link #stop()} invocation.
    */
   public void awaitStop(long timeoutMs) {
-    log.trace("awaitStop {}", timeoutMs);
+    log.debug("awaitStop {}", timeoutMs);
     assert stopRequested;
     try {
       if (!executor.awaitTermination(timeoutMs, TimeUnit.MILLISECONDS)) {
@@ -283,7 +283,7 @@ public class BulkProcessor<R, B> {
 
     int numBufferedRecords = bufferedRecords();
     if (numBufferedRecords >= maxBufferedRecords) {
-      log.trace(
+      log.debug(
           "Number of buffered records ({}) exceeds {}; waiting up to {} ms",
           numBufferedRecords,
           maxBufferedRecords,
@@ -395,7 +395,7 @@ public class BulkProcessor<R, B> {
       for (int attempts = 1, retryAttempts = 0; true; ++attempts, ++retryAttempts) {
         boolean retriable = true;
         try {
-          log.trace("Executing batch {} of {} records with attempt {}/{}",
+          log.debug("Executing batch {} of {} records with attempt {}/{}",
                   batchId, batch.size(), attempts, maxAttempts);
           final BulkResponse bulkRsp = bulkClient.execute(bulkReq);
           if (bulkRsp.isSucceeded()) {
