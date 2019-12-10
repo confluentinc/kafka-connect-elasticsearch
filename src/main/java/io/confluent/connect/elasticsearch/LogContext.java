@@ -23,13 +23,8 @@ public class LogContext implements AutoCloseable {
   private final String currentContext;
 
   public LogContext() {
-    this(null);
+    this(MDC.get(CONNECTOR_CONTEXT), null);
   }
-
-  public LogContext(String suffix) {
-    this(MDC.get(CONNECTOR_CONTEXT), suffix);
-  }
-
 
   protected LogContext(String currentContext, String suffix) {
     this.previousContext = currentContext;
