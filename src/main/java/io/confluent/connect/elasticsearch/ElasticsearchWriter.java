@@ -235,7 +235,6 @@ public class ElasticsearchWriter {
   }
 
   public void write(Collection<SinkRecord> records) {
-    log.debug("Writing {} records to Elasticsearch", records.size());
     for (SinkRecord sinkRecord : records) {
       // Preemptively skip records with null values if they're going to be ignored anyways
       if (ignoreRecord(sinkRecord)) {

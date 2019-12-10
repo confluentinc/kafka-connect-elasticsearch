@@ -46,7 +46,11 @@ public class LogContext implements AutoCloseable {
   @Override
   public void close() {
     if (currentContext != null) {
-      MDC.put(CONNECTOR_CONTEXT, previousContext);
+      if (previousContext != null) {
+        MDC.put(CONNECTOR_CONTEXT, previousContext);
+      } else {
+        MDC.remove(CONNECTOR_CONTEXT);
+      }
     }
   }
 }
