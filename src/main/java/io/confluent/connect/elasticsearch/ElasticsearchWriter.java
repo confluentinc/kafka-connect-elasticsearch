@@ -302,7 +302,7 @@ public class ElasticsearchWriter {
       if (record != null) {
         if (log.isTraceEnabled()) {
           log.trace(
-              "Adding record from topic '{}', partition {}, offset {} to bulk processor",
+              "Adding record from topic/partition/offset {}/{}/{} to bulk processor",
               sinkRecord.topic(),
               sinkRecord.kafkaPartition(),
               sinkRecord.kafkaOffset()
@@ -313,7 +313,7 @@ public class ElasticsearchWriter {
     } catch (ConnectException convertException) {
       if (dropInvalidMessage) {
         log.error(
-            "Can't convert record from topic {} with partition {} and offset {}. "
+            "Can't convert record from topic/partition/offset {}/{}/{}. "
                 + "Error message: {}",
             sinkRecord.topic(),
             sinkRecord.kafkaPartition(),

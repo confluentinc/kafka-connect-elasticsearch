@@ -144,8 +144,9 @@ public class ElasticsearchSinkTask extends SinkTask {
       writer = builder.build();
       writer.start();
       log.info(
-          "Started ElasticsearchSinkTask, will {} records with null values",
-          behaviorOnNullValues
+          "Started ElasticsearchSinkTask, will {} records with null values ('{}')",
+          behaviorOnNullValues,
+          ElasticsearchSinkConnectorConfig.BEHAVIOR_ON_NULL_VALUES_CONFIG
       );
     } catch (ConfigException e) {
       throw new ConnectException(
