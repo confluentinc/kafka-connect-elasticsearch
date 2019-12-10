@@ -366,6 +366,7 @@ public class BulkProcessor<R, B> {
 
     @Override
     public BulkResponse call() throws Exception {
+      long startTime = System.currentTimeMillis();
       final BulkResponse rsp;
       try {
         rsp = execute();
@@ -373,7 +374,8 @@ public class BulkProcessor<R, B> {
         failAndStop(e);
         throw e;
       }
-      log.debug("Successfully executed batch {} of {} records", batchId, batch.size());
+      log.debug("Successfully executed batch {} of {} records in {} ms",
+          batchId, batch.size(), System.currentTimeMillis() - startTime);
       onBatchCompletion(batch.size());
       return rsp;
     }
