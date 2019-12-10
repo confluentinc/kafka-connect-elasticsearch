@@ -334,14 +334,14 @@ public class JestElasticsearchClient implements ElasticsearchClient {
     obj.set(type, Mapping.inferMapping(this, schema));
     PutMapping putMapping = new PortableJestPutMappingBuilder(index, type, obj.toString(), version)
         .build();
-    log.info("Creating mapping (type={}) for index '{}' and schema {}", type, index, schema);
+    log.info("Submitting put mapping (type={}) for index '{}' and schema {}", type, index, schema);
     JestResult result = client.execute(putMapping);
     if (!result.isSucceeded()) {
       throw new ConnectException(
           "Cannot create mapping " + obj + " -- " + result.getErrorMessage()
       );
     }
-    log.info("Created mapping (type={}) for index '{}' and schema {}", type, index, schema);
+    log.info("Completed put mapping (type={}) for index '{}' and schema {}", type, index, schema);
   }
 
   /**
@@ -355,15 +355,17 @@ public class JestElasticsearchClient implements ElasticsearchClient {
             .addType(type)
             .build()
     );
-    log.debug("Received mapping (type={}) for index '{}'", type, index);
     final JsonObject indexRoot = result.getJsonObject().getAsJsonObject(index);
     if (indexRoot == null) {
+      log.debug("Received null (root) mapping (type={}) for index '{}'", type, index);
       return null;
     }
     final JsonObject mappingsJson = indexRoot.getAsJsonObject("mappings");
     if (mappingsJson == null) {
+      log.debug("Received null mapping (type={}) for index '{}'", type, index);
       return null;
     }
+    log.debug("Received mapping (type={}) for index '{}'", type, index);
     return mappingsJson.getAsJsonObject(type);
   }
 
@@ -491,11 +493,7 @@ public class JestElasticsearchClient implements ElasticsearchClient {
     log.info("Executing search on index '{}' (type={}): {}", index, type, query);
     final SearchResult result = client.execute(search.build());
     if (result.isSucceeded()) {
-      log.info(
-          "Executing search succeeded with {} total results and {} max score",
-          result.getTotal(),
-          result.getMaxScore()
-      );
+      log.info("Executing search succeeded: {}", result);
     } else {
       String msg = result.getErrorMessage() != null ? ": " + result.getErrorMessage() : "";
       log.warn("Failed to execute search: {}", msg);

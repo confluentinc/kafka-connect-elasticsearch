@@ -27,11 +27,28 @@ import java.util.Map;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.sink.SinkRecord;
+import org.junit.After;
+import org.junit.Before;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
 @Category(IntegrationTest.class)
 public class ElasticsearchSinkTaskIT extends ElasticsearchIntegrationTestBase {
+
+  private ElasticsearchSinkTask task = new ElasticsearchSinkTask();
+
+  @Before
+  public void beforeEach() {
+    Map<String, String> props = createProps();
+    task.start(props, client);
+  }
+
+  @After
+  public void afterEach() {
+    if (task != null) {
+      task.stop();
+    }
+  }
 
   private Map<String, String> createProps() {
     Map<String, String> props = new HashMap<>();
@@ -43,10 +60,7 @@ public class ElasticsearchSinkTaskIT extends ElasticsearchIntegrationTestBase {
 
   @Test
   public void testPutAndFlush() throws Exception {
-    Map<String, String> props = createProps();
 
-    ElasticsearchSinkTask task = new ElasticsearchSinkTask();
-    task.start(props, client);
     task.open(new HashSet<>(Arrays.asList(TOPIC_PARTITION, TOPIC_PARTITION2, TOPIC_PARTITION3)));
 
     String key = "key";

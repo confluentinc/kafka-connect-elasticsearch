@@ -16,12 +16,14 @@
 package io.confluent.connect.elasticsearch.bulk;
 
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig;
+import io.confluent.connect.elasticsearch.LogContext;
 import io.confluent.connect.elasticsearch.RetryUtil;
 import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -70,6 +72,7 @@ public class BulkProcessor<R, B> {
   // changes
   private final Deque<R> unsentRecords;
   private int inFlightRecords = 0;
+  private final LogContext logContext = new LogContext();
 
   public BulkProcessor(
       Time time,
@@ -125,15 +128,17 @@ public class BulkProcessor<R, B> {
     return new Runnable() {
       @Override
       public void run() {
-        log.debug("Starting farmer task");
-        try {
-          while (!stopRequested) {
-            submitBatchWhenReady();
+        try (LogContext context = logContext.create("FarmerTask")) {
+          log.debug("Starting farmer task thread");
+          try {
+            while (!stopRequested) {
+              submitBatchWhenReady();
+            }
+          } catch (InterruptedException e) {
+            throw new ConnectException(e);
           }
-        } catch (InterruptedException e) {
-          throw new ConnectException(e);
+          log.debug("Finished farmer task thread");
         }
-        log.debug("Finished farmer task");
       }
     };
   }
@@ -366,18 +371,24 @@ public class BulkProcessor<R, B> {
 
     @Override
     public BulkResponse call() throws Exception {
-      long startTime = System.currentTimeMillis();
-      final BulkResponse rsp;
-      try {
-        rsp = execute();
-      } catch (Exception e) {
-        failAndStop(e);
-        throw e;
+      try(LogContext context = logContext.create("BulkTask")) {
+        long startTime = System.currentTimeMillis();
+        final BulkResponse rsp;
+        try {
+          rsp = execute();
+        } catch (Exception e) {
+          failAndStop(e);
+          throw e;
+        }
+        log.debug(
+            "Successfully executed batch {} of {} records in {} ms",
+            batchId,
+            batch.size(),
+            System.currentTimeMillis() - startTime
+        );
+        onBatchCompletion(batch.size());
+        return rsp;
       }
-      log.debug("Successfully executed batch {} of {} records in {} ms",
-          batchId, batch.size(), System.currentTimeMillis() - startTime);
-      onBatchCompletion(batch.size());
-      return rsp;
     }
 
     private BulkResponse execute() throws Exception {

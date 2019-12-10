@@ -55,7 +55,7 @@ public class ElasticsearchSinkTask extends SinkTask {
   // public for testing
   public void start(Map<String, String> props, ElasticsearchClient client) {
     try {
-      log.info("Starting ElasticsearchSinkTask.");
+      log.info("Starting ElasticsearchSinkTask");
 
       ElasticsearchSinkConnectorConfig config = new ElasticsearchSinkConnectorConfig(props);
       String type = config.getString(ElasticsearchSinkConnectorConfig.TYPE_NAME_CONFIG);
@@ -143,7 +143,10 @@ public class ElasticsearchSinkTask extends SinkTask {
 
       writer = builder.build();
       writer.start();
-      log.info("Elasticsearch sink task will {} records with null values", behaviorOnNullValues);
+      log.info(
+          "Started ElasticsearchSinkTask, will {} records with null values",
+          behaviorOnNullValues
+      );
     } catch (ConfigException e) {
       throw new ConnectException(
           "Couldn't start ElasticsearchSinkTask due to configuration error:",
