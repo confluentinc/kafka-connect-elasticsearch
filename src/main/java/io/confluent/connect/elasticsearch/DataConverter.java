@@ -118,14 +118,12 @@ public class DataConverter {
     if (record.value() == null) {
       switch (behaviorOnNullValues) {
         case IGNORE:
-          if (log.isTraceEnabled()) {
-            log.trace(
-                "Ignoring record with null value at topic '{}', partition {}, offset {}",
-                record.topic(),
-                record.kafkaPartition(),
-                record.kafkaOffset()
-            );
-          }
+          log.trace(
+              "Ignoring record with null value at topic '{}', partition {}, offset {}",
+              record.topic(),
+              record.kafkaPartition(),
+              record.kafkaOffset()
+          );
           return null;
         case DELETE:
           if (record.key() == null) {
@@ -136,26 +134,22 @@ public class DataConverter {
             // offset information for the SinkRecord. Since that information is guaranteed to be
             // unique per message, we can be confident that there wouldn't be any corresponding
             // index present in ES to delete anyways.
-            if (log.isTraceEnabled()) {
-              log.trace(
-                  "Ignoring record with null key at topic '{}', partition {}, offset {}, since "
-                  + "the record key is used as the ID of the index",
-                  record.topic(),
-                  record.kafkaPartition(),
-                  record.kafkaOffset()
-              );
-            }
-            return null;
-          }
-          // Will proceed as normal, ultimately creating an IndexableRecord with a null payload
-          if (log.isTraceEnabled()) {
             log.trace(
-                "Deleting from Elasticsearch record at topic '{}', partition {}, offset {}",
+                "Ignoring record with null key at topic '{}', partition {}, offset {}, since "
+                + "the record key is used as the ID of the index",
                 record.topic(),
                 record.kafkaPartition(),
                 record.kafkaOffset()
             );
+            return null;
           }
+          // Will proceed as normal, ultimately creating an IndexableRecord with a null payload
+          log.trace(
+              "Deleting from Elasticsearch record at topic '{}', partition {}, offset {}",
+              record.topic(),
+              record.kafkaPartition(),
+              record.kafkaOffset()
+          );
           break;
         case FAIL:
           throw new DataException(String.format(

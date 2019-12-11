@@ -238,23 +238,19 @@ public class ElasticsearchWriter {
     for (SinkRecord sinkRecord : records) {
       // Preemptively skip records with null values if they're going to be ignored anyways
       if (ignoreRecord(sinkRecord)) {
-        if (log.isTraceEnabled()) {
-          log.trace(
-              "Ignoring sink record with null value for topic/partition/offset {}/{}/{}",
-              sinkRecord.topic(),
-              sinkRecord.kafkaPartition(),
-              sinkRecord.kafkaOffset()
-          );
-        }
-        continue;
-      }
-      if (log.isTraceEnabled()) {
-        log.trace("Writing record to Elasticsearch: topic/partition/offset {}/{}/{}",
+        log.trace(
+            "Ignoring sink record with null value for topic/partition/offset {}/{}/{}",
             sinkRecord.topic(),
             sinkRecord.kafkaPartition(),
             sinkRecord.kafkaOffset()
         );
+        continue;
       }
+      log.trace("Writing record to Elasticsearch: topic/partition/offset {}/{}/{}",
+          sinkRecord.topic(),
+          sinkRecord.kafkaPartition(),
+          sinkRecord.kafkaOffset()
+      );
 
       final String index = convertTopicToIndexName(sinkRecord.topic());
       final boolean ignoreKey = ignoreKeyTopics.contains(sinkRecord.topic()) || this.ignoreKey;
@@ -299,14 +295,12 @@ public class ElasticsearchWriter {
           ignoreKey,
           ignoreSchema);
       if (record != null) {
-        if (log.isTraceEnabled()) {
-          log.trace(
-              "Adding record from topic/partition/offset {}/{}/{} to bulk processor",
-              sinkRecord.topic(),
-              sinkRecord.kafkaPartition(),
-              sinkRecord.kafkaOffset()
-          );
-        }
+        log.trace(
+            "Adding record from topic/partition/offset {}/{}/{} to bulk processor",
+            sinkRecord.topic(),
+            sinkRecord.kafkaPartition(),
+            sinkRecord.kafkaOffset()
+        );
         bulkProcessor.add(record, flushTimeoutMs);
       }
     } catch (ConnectException convertException) {
