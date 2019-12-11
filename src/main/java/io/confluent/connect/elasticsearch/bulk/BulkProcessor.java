@@ -48,7 +48,6 @@ public class BulkProcessor<R, B> {
   private static final Logger log = LoggerFactory.getLogger(BulkProcessor.class);
 
   private static final AtomicLong BATCH_ID_GEN = new AtomicLong();
-  private static final AtomicInteger THREAD_ID_GEN = new AtomicInteger();
 
   private final Time time;
   private final BulkClient<R, B> bulkClient;
@@ -116,11 +115,7 @@ public class BulkProcessor<R, B> {
       public Thread newThread(Runnable r) {
         final int threadId = threadCounter.getAndIncrement();
         final int objId = System.identityHashCode(this);
-        final Thread t = new BulkProcessorThread(
-            logContext,
-            r,
-            String.format("BulkProcessor@%d-%d", objId, threadId)
-        );
+        final Thread t = new BulkProcessorThread(logContext, r, objId, threadId);
         t.setDaemon(true);
         t.setUncaughtExceptionHandler(uncaughtExceptionHandler);
         return t;
@@ -353,26 +348,23 @@ public class BulkProcessor<R, B> {
     } finally {
       flushRequested = false;
     }
-    if (log.isDebugEnabled()) {
-      log.debug(
-          "Flushed bulk processor (total time={} ms)",
-          time.milliseconds() - flushStartTimeMs
-      );
-    }
+    log.debug("Flushed bulk processor (total time={} ms)", time.milliseconds() - flushStartTimeMs);
   }
 
   private static final class BulkProcessorThread extends Thread {
 
-    private final int threadId = THREAD_ID_GEN.incrementAndGet();
     private final LogContext parentContext;
+    private final int threadId;
 
     public BulkProcessorThread(
         LogContext parentContext,
         Runnable target,
-        String name
+        int objId,
+        int threadId
     ) {
-      super(target, name);
+      super(target, String.format("BulkProcessor@%d-%d", objId, threadId));
       this.parentContext = parentContext;
+      this.threadId = threadId;
     }
 
     @Override
