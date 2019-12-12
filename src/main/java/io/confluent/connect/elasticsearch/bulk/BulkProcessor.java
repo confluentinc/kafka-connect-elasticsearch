@@ -286,10 +286,9 @@ public class BulkProcessor<R, B> {
 
     int numBufferedRecords = bufferedRecords();
     if (numBufferedRecords >= maxBufferedRecords) {
-      log.debug(
-          "Number of buffered records ({}) exceeds {}; waiting up to {} ms",
+      log.trace(
+          "Buffer full at {} records, so waiting up to {} ms before adding",
           numBufferedRecords,
-          maxBufferedRecords,
           timeoutMs
       );
       final long addStartTimeMs = time.milliseconds();
@@ -306,14 +305,12 @@ public class BulkProcessor<R, B> {
       if (bufferedRecords() >= maxBufferedRecords) {
         throw new ConnectException("Add timeout expired before buffer availability");
       }
-      if (log.isTraceEnabled()) {
-        log.trace(
-            "Adding record to queue after blocking {} ms",
-            time.milliseconds() - addStartTimeMs
-        );
-      }
+      log.debug(
+          "Adding record to queue after waiting {} ms",
+          time.milliseconds() - addStartTimeMs
+      );
     } else {
-      log.trace("Adding record to unsent queue");
+      log.trace("Adding record to queue");
     }
 
     unsentRecords.addLast(record);
@@ -416,7 +413,7 @@ public class BulkProcessor<R, B> {
       for (int attempts = 1, retryAttempts = 0; true; ++attempts, ++retryAttempts) {
         boolean retriable = true;
         try {
-          log.debug("Executing batch {} of {} records with attempt {}/{}",
+          log.trace("Executing batch {} of {} records with attempt {}/{}",
                   batchId, batch.size(), attempts, maxAttempts);
           final BulkResponse bulkRsp = bulkClient.execute(bulkReq);
           if (bulkRsp.isSucceeded()) {
