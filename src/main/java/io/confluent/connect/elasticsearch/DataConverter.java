@@ -30,6 +30,8 @@ import org.apache.kafka.connect.errors.DataException;
 import org.apache.kafka.connect.json.JsonConverter;
 import org.apache.kafka.connect.sink.SinkRecord;
 import org.apache.kafka.connect.storage.Converter;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
@@ -47,6 +49,7 @@ import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConst
 
 public class DataConverter {
 
+  private static final Logger log = LoggerFactory.getLogger(DataConverter.class);
   private static final Converter JSON_CONVERTER;
 
   static {
@@ -115,6 +118,12 @@ public class DataConverter {
     if (record.value() == null) {
       switch (behaviorOnNullValues) {
         case IGNORE:
+          log.trace(
+              "Ignoring record with null value at topic '{}', partition {}, offset {}",
+              record.topic(),
+              record.kafkaPartition(),
+              record.kafkaOffset()
+          );
           return null;
         case DELETE:
           if (record.key() == null) {
@@ -125,9 +134,22 @@ public class DataConverter {
             // offset information for the SinkRecord. Since that information is guaranteed to be
             // unique per message, we can be confident that there wouldn't be any corresponding
             // index present in ES to delete anyways.
+            log.trace(
+                "Ignoring record with null key at topic '{}', partition {}, offset {}, since "
+                + "the record key is used as the ID of the index",
+                record.topic(),
+                record.kafkaPartition(),
+                record.kafkaOffset()
+            );
             return null;
           }
           // Will proceed as normal, ultimately creating an IndexableRecord with a null payload
+          log.trace(
+              "Deleting from Elasticsearch record at topic '{}', partition {}, offset {}",
+              record.topic(),
+              record.kafkaPartition(),
+              record.kafkaOffset()
+          );
           break;
         case FAIL:
           throw new DataException(String.format(
