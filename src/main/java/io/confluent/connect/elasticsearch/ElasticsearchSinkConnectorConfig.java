@@ -142,6 +142,13 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
       + "if any read operation times out, and will need to be restarted to resume "
       + "further operations.";
 
+  public static final String CONNECTION_COMPRESSION_CONFIG = "connection.compression";
+  private static final String CONNECTION_COMPRESSION_DOC = "Whether to use GZip compression on "
+          + "HTTP connection to ElasticSearch. Valid options are ``true`` and ``false``. "
+          + "Default is ``false``. To make this setting to work "
+          + "the ``http.compression`` setting also needs to be enabled at the Elasticsearch nodes "
+          + "or the load-balancer before using it.";
+
   public static final String BEHAVIOR_ON_NULL_VALUES_CONFIG = "behavior.on.null.values";
   private static final String BEHAVIOR_ON_NULL_VALUES_DOC = "How to handle records with a "
       + "non-null key and a null value (i.e. Kafka tombstone records). Valid options are "
@@ -310,6 +317,16 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
         ++order,
         Width.SHORT,
         "Retry Backoff (ms)"
+      ).define(
+        CONNECTION_COMPRESSION_CONFIG,
+        Type.BOOLEAN,
+        false,
+        Importance.LOW,
+        CONNECTION_COMPRESSION_DOC,
+        group,
+        ++order,
+        Width.SHORT,
+        "Compression"
       ).define(
         CONNECTION_TIMEOUT_MS_CONFIG, 
         Type.INT, 

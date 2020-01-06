@@ -27,26 +27,43 @@ import java.util.Map;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.sink.SinkRecord;
+import org.junit.After;
+import org.junit.Before;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
+import org.slf4j.MDC;
 
 @Category(IntegrationTest.class)
 public class ElasticsearchSinkTaskIT extends ElasticsearchIntegrationTestBase {
 
+  private ElasticsearchSinkTask task = new ElasticsearchSinkTask();
+
+  @Before
+  public void beforeEach() {
+    MDC.put("connector.context", "[MyConnector|task1] ");
+    Map<String, String> props = createProps();
+    task.start(props, client);
+  }
+
+  @After
+  public void afterEach() {
+    if (task != null) {
+      task.stop();
+    }
+    MDC.remove("connector.context");
+  }
+
   private Map<String, String> createProps() {
     Map<String, String> props = new HashMap<>();
     props.put(ElasticsearchSinkConnectorConfig.TYPE_NAME_CONFIG, TYPE);
-    props.put(ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG, container.getHttpHostAddress());
+    props.put(ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG, container.getConnectionUrl());
     props.put(ElasticsearchSinkConnectorConfig.KEY_IGNORE_CONFIG, "true");
     return props;
   }
 
   @Test
   public void testPutAndFlush() throws Exception {
-    Map<String, String> props = createProps();
 
-    ElasticsearchSinkTask task = new ElasticsearchSinkTask();
-    task.start(props, client);
     task.open(new HashSet<>(Arrays.asList(TOPIC_PARTITION, TOPIC_PARTITION2, TOPIC_PARTITION3)));
 
     String key = "key";

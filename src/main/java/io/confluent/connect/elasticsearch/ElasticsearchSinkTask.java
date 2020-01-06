@@ -55,7 +55,7 @@ public class ElasticsearchSinkTask extends SinkTask {
   // public for testing
   public void start(Map<String, String> props, ElasticsearchClient client) {
     try {
-      log.info("Starting ElasticsearchSinkTask.");
+      log.info("Starting ElasticsearchSinkTask");
 
       ElasticsearchSinkConnectorConfig config = new ElasticsearchSinkConnectorConfig(props);
       String type = config.getString(ElasticsearchSinkConnectorConfig.TYPE_NAME_CONFIG);
@@ -143,6 +143,11 @@ public class ElasticsearchSinkTask extends SinkTask {
 
       writer = builder.build();
       writer.start();
+      log.info(
+          "Started ElasticsearchSinkTask, will {} records with null values ('{}')",
+          behaviorOnNullValues,
+          ElasticsearchSinkConnectorConfig.BEHAVIOR_ON_NULL_VALUES_CONFIG
+      );
     } catch (ConfigException e) {
       throw new ConnectException(
           "Couldn't start ElasticsearchSinkTask due to configuration error:",
@@ -165,13 +170,13 @@ public class ElasticsearchSinkTask extends SinkTask {
 
   @Override
   public void put(Collection<SinkRecord> records) throws ConnectException {
-    log.trace("Putting {} to Elasticsearch.", records);
+    log.debug("Putting {} records to Elasticsearch", records.size());
     writer.write(records);
   }
 
   @Override
   public void flush(Map<TopicPartition, OffsetAndMetadata> offsets) {
-    log.trace("Flushing data to Elasticsearch with the following offsets: {}", offsets);
+    log.debug("Flushing data to Elasticsearch with the following offsets: {}", offsets);
     writer.flush();
   }
 
@@ -182,7 +187,7 @@ public class ElasticsearchSinkTask extends SinkTask {
 
   @Override
   public void stop() throws ConnectException {
-    log.info("Stopping ElasticsearchSinkTask.");
+    log.info("Stopping ElasticsearchSinkTask");
     if (writer != null) {
       writer.stop();
     }

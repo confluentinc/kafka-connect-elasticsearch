@@ -238,14 +238,19 @@ public class ElasticsearchWriter {
     for (SinkRecord sinkRecord : records) {
       // Preemptively skip records with null values if they're going to be ignored anyways
       if (ignoreRecord(sinkRecord)) {
-        log.debug(
-            "Ignoring sink record with key {} and null value for topic/partition/offset {}/{}/{}",
-            sinkRecord.key(),
+        log.trace(
+            "Ignoring sink record with null value for topic/partition/offset {}/{}/{}",
             sinkRecord.topic(),
             sinkRecord.kafkaPartition(),
-            sinkRecord.kafkaOffset());
+            sinkRecord.kafkaOffset()
+        );
         continue;
       }
+      log.trace("Writing record to Elasticsearch: topic/partition/offset {}/{}/{}",
+          sinkRecord.topic(),
+          sinkRecord.kafkaPartition(),
+          sinkRecord.kafkaOffset()
+      );
 
       final Set<String> indices = convertTopicToIndexNames(sinkRecord.topic());
       final boolean ignoreKey = ignoreKeyTopics.contains(sinkRecord.topic()) || this.ignoreKey;
@@ -265,6 +270,7 @@ public class ElasticsearchWriter {
             // may fail
             throw new ConnectException("Failed to initialize mapping for index: " + index, e);
           }
+          log.debug("Locally caching mapping for index '{}'", index);
           existingMappings.add(index);
         }
 
@@ -291,12 +297,18 @@ public class ElasticsearchWriter {
           ignoreKey,
           ignoreSchema);
       if (record != null) {
+        log.trace(
+            "Adding record from topic/partition/offset {}/{}/{} to bulk processor",
+            sinkRecord.topic(),
+            sinkRecord.kafkaPartition(),
+            sinkRecord.kafkaOffset()
+        );
         bulkProcessor.add(record, flushTimeoutMs);
       }
     } catch (ConnectException convertException) {
       if (dropInvalidMessage) {
         log.error(
-            "Can't convert record from topic {} with partition {} and offset {}. "
+            "Can't convert record from topic/partition/offset {}/{}/{}. "
                 + "Error message: {}",
             sinkRecord.topic(),
             sinkRecord.kafkaPartition(),
@@ -320,7 +332,7 @@ public class ElasticsearchWriter {
       indices = new HashSet<String>();
       indices.add(topic.toLowerCase());
     }
-    log.debug("Topic '{}' was translated as index '{}'", topic, indices);
+    log.trace("Topic '{}' was translated as index '{}'", topic, indices);
     return indices;
   }
 
@@ -334,12 +346,24 @@ public class ElasticsearchWriter {
 
   public void stop() {
     try {
+      log.debug(
+          "Flushing records, waiting up to {}ms ('{}')",
+          flushTimeoutMs,
+          ElasticsearchSinkConnectorConfig.FLUSH_TIMEOUT_MS_CONFIG
+      );
       bulkProcessor.flush(flushTimeoutMs);
     } catch (Exception e) {
       log.warn("Failed to flush during stop", e);
     }
+    log.debug("Stopping Elastisearch writer");
     bulkProcessor.stop();
+    log.debug(
+        "Waiting for bulk processor to stop, up to {}ms ('{}')",
+        flushTimeoutMs,
+        ElasticsearchSinkConnectorConfig.FLUSH_TIMEOUT_MS_CONFIG
+    );
     bulkProcessor.awaitStop(flushTimeoutMs);
+    log.debug("Stopped Elastisearch writer");
   }
 
   public void createIndicesForTopics(Set<String> assignedTopics) {

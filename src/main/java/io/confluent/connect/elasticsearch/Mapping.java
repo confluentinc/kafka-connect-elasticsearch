@@ -211,7 +211,8 @@ public class Mapping {
           defaultValueNode = JsonNodeFactory.instance.booleanNode((boolean) defaultValue);
           break;
         case ElasticsearchSinkConnectorConstants.DATE_TYPE:
-          defaultValueNode = JsonNodeFactory.instance.numberNode((long) defaultValue);
+          long value = ((java.util.Date) defaultValue).getTime();
+          defaultValueNode = JsonNodeFactory.instance.numberNode(value);
           break;
         default:
           throw new DataException("Invalid primitive type.");
