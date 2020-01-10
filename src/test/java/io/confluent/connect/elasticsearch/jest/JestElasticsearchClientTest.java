@@ -35,6 +35,7 @@ import io.searchbox.client.config.HttpClientConfig;
 import io.searchbox.cluster.NodesInfo;
 import io.searchbox.core.BulkResult;
 import io.searchbox.core.Delete;
+import io.searchbox.core.DocumentResult;
 import io.searchbox.core.Index;
 import io.searchbox.core.Search;
 import io.searchbox.core.SearchResult;
@@ -135,7 +136,9 @@ public class JestElasticsearchClientTest {
   public void connectsWithProxy() throws NoSuchFieldException, IllegalAccessException {
     Map<String, String> props = new HashMap<>();
     props.put(ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG, "http://localhost:9200");
-    props.put(ElasticsearchSinkConnectorConfig.CONNECTION_PROXY_CONFIG, "https://myproxy:443");
+    props.put(ElasticsearchSinkConnectorConfig.PROXY_HOST_CONFIG, "myproxy");
+    props.put(ElasticsearchSinkConnectorConfig.PROXY_PORT_CONFIG, "443");
+
     props.put(ElasticsearchSinkConnectorConfig.TYPE_NAME_CONFIG, "kafka-connect");
     JestElasticsearchClient client = new JestElasticsearchClient(props, jestClientFactory);
 
@@ -151,7 +154,7 @@ public class JestElasticsearchClientTest {
     f.setAccessible(true);
     HttpHost httpProxy = (HttpHost) f.get(proxyRoutePlanner);
 
-    assertEquals("https", httpProxy.getSchemeName());
+    assertEquals("http", httpProxy.getSchemeName());
     assertEquals("myproxy", httpProxy.getHostName());
     assertEquals(443, httpProxy.getPort());
   }
@@ -395,7 +398,7 @@ public class JestElasticsearchClientTest {
   public void toBulkableAction(){
     JestElasticsearchClient client = new JestElasticsearchClient(jestClient);
     IndexableRecord del = new IndexableRecord(new Key("idx", "tp", "xxx"), null, 1L);
-    BulkableAction ba = client.toBulkableAction(del);
+    BulkableAction<DocumentResult> ba = client.toBulkableAction(del);
     assertNotNull(ba);
     assertSame(Delete.class, ba.getClass());
     assertEquals(del.key.index, ba.getIndex());

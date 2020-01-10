@@ -51,6 +51,10 @@ import io.searchbox.indices.IndicesExists;
 import io.searchbox.indices.Refresh;
 import io.searchbox.indices.mapping.PutMapping;
 import org.apache.http.HttpHost;
+import org.apache.http.auth.AuthScope;
+import org.apache.http.auth.UsernamePasswordCredentials;
+import org.apache.http.client.CredentialsProvider;
+import org.apache.http.impl.client.BasicCredentialsProvider;
 import org.apache.kafka.common.config.ConfigDef;
 import org.apache.http.conn.ssl.SSLConnectionSocketFactory;
 import org.apache.http.nio.conn.ssl.SSLIOSessionStrategy;
@@ -216,19 +220,47 @@ public class JestElasticsearchClient implements ElasticsearchClient {
   }
 
   private static void configureProxy(ElasticsearchSinkConnectorConfig config,
-                              HttpClientConfig.Builder builder) {
-    final String proxy =
-            config.getString(ElasticsearchSinkConnectorConfig.CONNECTION_PROXY_CONFIG);
-    if (proxy != null && !proxy.isEmpty()) {
-      try {
-        String protocol = proxy.split("://")[0];
-        String host = proxy.split("://")[1].split(":")[0];
-        int port = Integer.parseInt(proxy.split(":")[2]);
+      HttpClientConfig.Builder builder) {
 
-        builder.proxy(new HttpHost(host, port, protocol));
-      } catch (NumberFormatException | ArrayIndexOutOfBoundsException e) {
-        throw new ConfigException("Unable to set up proxy: "
-                + "invalid proxy URL found in config: " + proxy, e);
+    if (config.isBasicProxyConfigured()) {
+      HttpHost proxy = new HttpHost(
+          config.getString(ElasticsearchSinkConnectorConfig.PROXY_HOST_CONFIG),
+          config.getInt(ElasticsearchSinkConnectorConfig.PROXY_PORT_CONFIG)
+      );
+
+      builder.proxy(proxy);
+
+      if (config.isProxyWithAuthenticationConfigured()) {
+        final String username = config.getString(
+            ElasticsearchSinkConnectorConfig.CONNECTION_USERNAME_CONFIG);
+        final Password password = config.getPassword(
+            ElasticsearchSinkConnectorConfig.CONNECTION_PASSWORD_CONFIG);
+
+        CredentialsProvider credentialsProvider = new BasicCredentialsProvider();
+        if (username != null && password != null) {
+
+          List<String> addresses = config.getList(
+              ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG);
+
+          addresses.forEach(
+              addr ->
+                  credentialsProvider.setCredentials(
+                      new AuthScope(new HttpHost(addr)),
+                      new UsernamePasswordCredentials(username, password.value())
+                  )
+          );
+        }
+
+        final String proxyUsername = config.getString(
+            ElasticsearchSinkConnectorConfig.PROXY_USERNAME_CONFIG);
+        final Password proxyPassword = config.getPassword(
+            ElasticsearchSinkConnectorConfig.PROXY_PASSWORD_CONFIG);
+        credentialsProvider.setCredentials(
+            new AuthScope(proxy),
+            new UsernamePasswordCredentials(proxyUsername, proxyPassword.value())
+        );
+
+        builder.credentialsProvider(credentialsProvider);
       }
     }
   }
