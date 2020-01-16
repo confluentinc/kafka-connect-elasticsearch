@@ -163,10 +163,14 @@ public class JestElasticsearchClient implements ElasticsearchClient {
     List<String> address = config.getList(
         ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG);
 
+    final int maxInFlightRequests = config.getInt(
+        ElasticsearchSinkConnectorConfig.MAX_IN_FLIGHT_REQUESTS_CONFIG);
+
     HttpClientConfig.Builder builder =
         new HttpClientConfig.Builder(address)
             .connTimeout(connTimeout)
             .readTimeout(readTimeout)
+            .defaultMaxTotalConnectionPerRoute(maxInFlightRequests)
             .multiThreaded(true);
     if (username != null && password != null) {
       builder.defaultCredentials(username, password.value())
