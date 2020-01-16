@@ -172,11 +172,15 @@ public class JestElasticsearchClient implements ElasticsearchClient {
     final boolean compressionEnabled = config.getBoolean(
             ElasticsearchSinkConnectorConfig.CONNECTION_COMPRESSION_CONFIG);
 
+    final int maxInFlightRequests = config.getInt(
+        ElasticsearchSinkConnectorConfig.MAX_IN_FLIGHT_REQUESTS_CONFIG);
+
     HttpClientConfig.Builder builder =
         new HttpClientConfig.Builder(address)
             .connTimeout(connTimeout)
             .readTimeout(readTimeout)
             .requestCompressionEnabled(compressionEnabled)
+            .defaultMaxTotalConnectionPerRoute(maxInFlightRequests)
             .multiThreaded(true);
     if (username != null && password != null) {
       builder.defaultCredentials(username, password.value())
