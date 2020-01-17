@@ -16,7 +16,6 @@
 package io.confluent.connect.elasticsearch;
 
 import org.apache.kafka.common.config.ConfigDef;
-import org.apache.kafka.common.record.Record;
 import org.apache.kafka.connect.data.ConnectSchema;
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
@@ -173,6 +172,10 @@ public class DataConverter {
     switch (documentVersionType){
       case LEGACY:
         version = ignoreKey ? null : record.kafkaOffset();
+        break;
+      case COMBINED_TIMESTAMP_OFFSET:
+        long extend = record.kafkaOffset() % 10_000l;
+        version = 10_000l * (record.timestamp() + (extend == 0 ? 1 : 0)) + extend;
         break;
       case MESSAGE_TIMESTAMP:
         version = record.timestamp();
@@ -400,7 +403,8 @@ public class DataConverter {
     LEGACY,
     UNUSED,
     MESSAGE_OFFSET,
-    MESSAGE_TIMESTAMP;
+    MESSAGE_TIMESTAMP,
+    COMBINED_TIMESTAMP_OFFSET;
 
     public static final DocumentVersionType DEFAULT = LEGACY;
 

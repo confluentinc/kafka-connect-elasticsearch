@@ -187,7 +187,8 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
                   + "Values can be " + DocumentVersionType.LEGACY + ", "
                   + DocumentVersionType.UNUSED + ", "
                   + DocumentVersionType.MESSAGE_OFFSET + ", "
-                  + DocumentVersionType.MESSAGE_TIMESTAMP + ".";
+                  + DocumentVersionType.MESSAGE_TIMESTAMP + ", "
+                  + DocumentVersionType.COMBINED_TIMESTAMP_OFFSET + ".";
 
   protected static ConfigDef baseConfigDef() {
     final ConfigDef configDef = new ConfigDef();
