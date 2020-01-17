@@ -138,6 +138,8 @@ public class JestElasticsearchClientTest {
     props.put(ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG, "http://localhost:9200");
     props.put(ElasticsearchSinkConnectorConfig.PROXY_HOST_CONFIG, "myproxy");
     props.put(ElasticsearchSinkConnectorConfig.PROXY_PORT_CONFIG, "443");
+    props.put(ElasticsearchSinkConnectorConfig.PROXY_USERNAME_CONFIG, "username");
+    props.put(ElasticsearchSinkConnectorConfig.PROXY_PASSWORD_CONFIG, "password");
 
     props.put(ElasticsearchSinkConnectorConfig.TYPE_NAME_CONFIG, "kafka-connect");
     JestElasticsearchClient client = new JestElasticsearchClient(props, jestClientFactory);
@@ -157,6 +159,12 @@ public class JestElasticsearchClientTest {
     assertEquals("http", httpProxy.getSchemeName());
     assertEquals("myproxy", httpProxy.getHostName());
     assertEquals(443, httpProxy.getPort());
+
+    Credentials credentials = httpClientConfig
+        .getCredentialsProvider()
+        .getCredentials(new AuthScope(httpProxy));
+
+    assertEquals("password", credentials.getPassword());
   }
 
   @Test
