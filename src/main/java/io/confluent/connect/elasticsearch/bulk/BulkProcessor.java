@@ -16,7 +16,6 @@
 package io.confluent.connect.elasticsearch.bulk;
 
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig;
-import io.confluent.connect.elasticsearch.IndexableRecord;
 import io.confluent.connect.elasticsearch.RetryUtil;
 import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.common.utils.Time;
