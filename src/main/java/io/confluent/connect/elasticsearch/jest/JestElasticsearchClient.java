@@ -24,6 +24,7 @@ import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig;
 import io.confluent.connect.elasticsearch.IndexableRecord;
 import io.confluent.connect.elasticsearch.Key;
 import io.confluent.connect.elasticsearch.Mapping;
+import io.confluent.connect.elasticsearch.RetryUtil;
 import io.confluent.connect.elasticsearch.bulk.BulkRequest;
 import io.confluent.connect.elasticsearch.bulk.BulkResponse;
 import io.confluent.connect.elasticsearch.jest.actions.PortableJestCreateIndexBuilder;
@@ -57,6 +58,8 @@ import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.config.types.Password;
 import org.apache.kafka.common.network.Mode;
 import org.apache.kafka.common.security.ssl.SslFactory;
+import org.apache.kafka.common.utils.SystemTime;
+import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.slf4j.Logger;
@@ -92,6 +95,10 @@ public class JestElasticsearchClient implements ElasticsearchClient {
   private WriteMethod writeMethod = WriteMethod.DEFAULT;
 
   private final Set<String> indexCache = new HashSet<>();
+
+  private int maxRetries;
+  private long retryBackoffMs;
+  private final Time time = new SystemTime();
 
   // visible for testing
   public JestElasticsearchClient(JestClient client) {
@@ -142,6 +149,9 @@ public class JestElasticsearchClient implements ElasticsearchClient {
       this.version = getServerVersion();
       this.writeMethod = WriteMethod.forValue(
               config.getString(ElasticsearchSinkConnectorConfig.WRITE_METHOD_CONFIG));
+      this.retryBackoffMs =
+              config.getLong(ElasticsearchSinkConnectorConfig.RETRY_BACKOFF_MS_CONFIG);
+      this.maxRetries = config.getInt(ElasticsearchSinkConnectorConfig.MAX_RETRIES_CONFIG);
     } catch (IOException e) {
       throw new ConnectException(
           "Couldn't start ElasticsearchSinkTask due to connection error:",
@@ -320,24 +330,39 @@ public class JestElasticsearchClient implements ElasticsearchClient {
     log.trace("Attempting to discover or create indexes in Elasticsearch: {}", indices);
     for (String index : indices) {
       if (!indexExists(index)) {
+        final int maxAttempts = maxRetries + 1;
         CreateIndex createIndex = new PortableJestCreateIndexBuilder(index, version).build();
-        try {
-          log.info("Requesting Elasticsearch create index '{}'", index);
-          JestResult result = client.execute(createIndex);
-          log.debug("Received response for request to create index '{}'", index);
-          if (!result.isSucceeded()) {
-            // Check if index was created by another client
-            if (!indexExists(index)) {
-              String msg = result.getErrorMessage() != null ? ": " + result.getErrorMessage() : "";
-              throw new ConnectException("Could not create index '" + index + "'" + msg);
+        boolean indexed = false;
+        for (int attempts = 1; !indexed; ++attempts) {
+          try {
+            log.info("Requesting Elasticsearch create index '{}'", index);
+            JestResult result = client.execute(createIndex);
+            log.debug("Received response for request to create index '{}'", index);
+            if (!result.isSucceeded()) {
+              // Check if index was created by another client
+              if (!indexExists(index)) {
+                String msg =
+                    result.getErrorMessage() != null ? ": " + result.getErrorMessage() : "";
+                throw new ConnectException("Could not create index '" + index + "'" + msg);
+              }
+              log.info("Index '{}' exists in Elasticsearch; adding to local cache", index);
+            } else {
+              log.info("Index '{}' created in Elasticsearch; adding to local cache", index);
             }
-            log.info("Index '{}' exists in Elasticsearch; adding to local cache", index);
-          } else {
-            log.info("Index '{}' created in Elasticsearch; adding to local cache", index);
+            indexCache.add(index);
+            indexed = true;
+          } catch (IOException e) {
+            if (attempts < maxAttempts) {
+              long sleepTimeMs = RetryUtil.computeRandomRetryWaitTimeInMillis(attempts-1,
+                  retryBackoffMs);
+              log.warn("Failed to create index {} with attempt {}/{}, "
+                      + "will attempt retry after {} ms. Failure reason: {}",
+                  index, attempts, maxAttempts, sleepTimeMs, e.getMessage());
+              time.sleep(sleepTimeMs);
+            } else {
+              throw new ConnectException(e);
+            }
           }
-          indexCache.add(index);
-        } catch (IOException e) {
-          throw new ConnectException(e);
         }
       }
     }
