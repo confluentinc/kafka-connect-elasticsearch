@@ -153,7 +153,7 @@ public class JestElasticsearchClient implements ElasticsearchClient {
       this.retryBackoffMs =
               config.getLong(ElasticsearchSinkConnectorConfig.RETRY_BACKOFF_MS_CONFIG);
       this.maxRetries = config.getInt(ElasticsearchSinkConnectorConfig.MAX_RETRIES_CONFIG);
-      this.timeout = config.getLong(ElasticsearchSinkConnectorConfig.READ_TIMEOUT_MS_CONFIG);
+      this.timeout = config.getInt(ElasticsearchSinkConnectorConfig.READ_TIMEOUT_MS_CONFIG);
     } catch (IOException e) {
       throw new ConnectException(
           "Couldn't start ElasticsearchSinkTask due to connection error:",
@@ -341,7 +341,7 @@ public class JestElasticsearchClient implements ElasticsearchClient {
           try {
             createIndex(index, createIndex);
             indexed = true;
-          } catch (IOException e) {
+          } catch (ConnectException e) {
             if (attempts < maxAttempts) {
               long sleepTimeMs = RetryUtil.computeRandomRetryWaitTimeInMillis(attempts - 1,
                   retryBackoffMs);
@@ -350,7 +350,7 @@ public class JestElasticsearchClient implements ElasticsearchClient {
                   index, attempts, maxAttempts, sleepTimeMs, e.getMessage());
               time.sleep(sleepTimeMs);
             } else {
-              throw new ConnectException(e);
+              throw e;
             }
             attempts++;
           }
@@ -359,22 +359,26 @@ public class JestElasticsearchClient implements ElasticsearchClient {
     }
   }
 
-  private void createIndex(String index, CreateIndex createIndex) throws IOException {
-    log.info("Requesting Elasticsearch create index '{}'", index);
-    JestResult result = client.execute(createIndex);
-    log.debug("Received response for request to create index '{}'", index);
-    if (!result.isSucceeded()) {
-      // Check if index was created by another client
-      if (!indexExists(index)) {
-        String msg =
-            result.getErrorMessage() != null ? ": " + result.getErrorMessage() : "";
-        throw new ConnectException("Could not create index '" + index + "'" + msg);
+  private void createIndex(String index, CreateIndex createIndex) throws ConnectException {
+    try {
+      log.info("Requesting Elasticsearch create index '{}'", index);
+      JestResult result = client.execute(createIndex);
+      log.debug("Received response for request to create index '{}'", index);
+      if (!result.isSucceeded()) {
+        // Check if index was created by another client
+        if (!indexExists(index)) {
+          String msg =
+              result.getErrorMessage() != null ? ": " + result.getErrorMessage() : "";
+          throw new ConnectException("Could not create index '" + index + "'" + msg);
+        }
+        log.info("Index '{}' exists in Elasticsearch; adding to local cache", index);
+      } else {
+        log.info("Index '{}' created in Elasticsearch; adding to local cache", index);
       }
-      log.info("Index '{}' exists in Elasticsearch; adding to local cache", index);
-    } else {
-      log.info("Index '{}' created in Elasticsearch; adding to local cache", index);
+      indexCache.add(index);
+    } catch (IOException e) {
+      throw new ConnectException(e);
     }
-    indexCache.add(index);
   }
 
   public void createMapping(String index, String type, Schema schema) throws IOException {
