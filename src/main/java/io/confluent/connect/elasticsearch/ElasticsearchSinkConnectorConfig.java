@@ -15,6 +15,7 @@
 
 package io.confluent.connect.elasticsearch;
 
+import io.confluent.connect.elasticsearch.jest.JestElasticsearchClient;
 import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.common.config.ConfigDef.Importance;
@@ -195,7 +196,8 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   // Proxy group
   public static final String PROXY_HOST_CONFIG = "proxy.host";
   public static final String PROXY_HOST_DISPLAY = "Proxy Host";
-  public static final String PROXY_HOST_DOC = "The address of the proxy host to connect through.";
+  public static final String PROXY_HOST_DOC = "The address of the proxy host to connect through. "
+      + "Supports the basic authentication scheme only.";
   public static final String PROXY_HOST_DEFAULT = "";
 
   public static final String PROXY_PORT_CONFIG = "proxy.port";
@@ -445,7 +447,6 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
         "Create indices at startup"
     );
   }
-
 
   public boolean secured() {
     SecurityProtocol securityProtocol = securityProtocol();
