@@ -17,6 +17,7 @@ package io.confluent.connect.elasticsearch.jest.actions;
 
 import io.confluent.connect.elasticsearch.ElasticsearchClient.Version;
 import io.searchbox.indices.CreateIndex;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Portable Jest action builder, across ES versions, to create indexes.
@@ -27,12 +28,15 @@ import io.searchbox.indices.CreateIndex;
 public class PortableJestCreateIndexBuilder extends CreateIndex.Builder {
 
   public static final String INCLUDE_TYPE_NAME_PARAM = "include_type_name";
+  public static final String TIMEOUT_PARAM = "timeout";
 
   private final Version version;
+  private final long timeout;
 
-  public PortableJestCreateIndexBuilder(String index, Version version) {
+  public PortableJestCreateIndexBuilder(String index, Version version, long timeout) {
     super(index);
     this.version = version;
+    this.timeout = TimeUnit.MILLISECONDS.toSeconds(timeout);
   }
 
   @Override
@@ -40,6 +44,8 @@ public class PortableJestCreateIndexBuilder extends CreateIndex.Builder {
     if (version.equals(Version.ES_V7)) {
       setParameter(INCLUDE_TYPE_NAME_PARAM, true);
     }
+    setParameter(TIMEOUT_PARAM, timeout);
+
     return super.build();
   }
 }

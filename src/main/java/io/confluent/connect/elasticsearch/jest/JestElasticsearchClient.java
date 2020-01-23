@@ -92,6 +92,7 @@ public class JestElasticsearchClient implements ElasticsearchClient {
 
   private final JestClient client;
   private final Version version;
+  private long timeout;
   private WriteMethod writeMethod = WriteMethod.DEFAULT;
 
   private final Set<String> indexCache = new HashSet<>();
@@ -152,6 +153,7 @@ public class JestElasticsearchClient implements ElasticsearchClient {
       this.retryBackoffMs =
               config.getLong(ElasticsearchSinkConnectorConfig.RETRY_BACKOFF_MS_CONFIG);
       this.maxRetries = config.getInt(ElasticsearchSinkConnectorConfig.MAX_RETRIES_CONFIG);
+      this.timeout = config.getLong(ElasticsearchSinkConnectorConfig.READ_TIMEOUT_MS_CONFIG);
     } catch (IOException e) {
       throw new ConnectException(
           "Couldn't start ElasticsearchSinkTask due to connection error:",
@@ -332,7 +334,7 @@ public class JestElasticsearchClient implements ElasticsearchClient {
       if (!indexExists(index)) {
         final int maxAttempts = maxRetries + 1;
         final int attempts = 1;
-        CreateIndex createIndex = new PortableJestCreateIndexBuilder(index, version).build();
+        CreateIndex createIndex = new PortableJestCreateIndexBuilder(index, version, timeout).build();
         boolean indexed = false;
         while (!indexed) {
           try {
