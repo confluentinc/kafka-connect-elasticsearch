@@ -353,7 +353,7 @@ public class JestElasticsearchClient implements ElasticsearchClient {
             indexed = true;
           } catch (IOException e) {
             if (attempts < maxAttempts) {
-              long sleepTimeMs = RetryUtil.computeRandomRetryWaitTimeInMillis(attempts-1,
+              long sleepTimeMs = RetryUtil.computeRandomRetryWaitTimeInMillis(attempts - 1,
                   retryBackoffMs);
               log.warn("Failed to create index {} with attempt {}/{}, "
                       + "will attempt retry after {} ms. Failure reason: {}",
