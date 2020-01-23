@@ -334,7 +334,8 @@ public class JestElasticsearchClient implements ElasticsearchClient {
       if (!indexExists(index)) {
         final int maxAttempts = maxRetries + 1;
         int attempts = 1;
-        CreateIndex createIndex = new PortableJestCreateIndexBuilder(index, version, timeout).build();
+        CreateIndex createIndex =
+            new PortableJestCreateIndexBuilder(index, version, timeout).build();
         boolean indexed = false;
         while (!indexed) {
           try {
