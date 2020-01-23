@@ -333,7 +333,7 @@ public class JestElasticsearchClient implements ElasticsearchClient {
     for (String index : indices) {
       if (!indexExists(index)) {
         final int maxAttempts = maxRetries + 1;
-        final int attempts = 1;
+        int attempts = 1;
         CreateIndex createIndex = new PortableJestCreateIndexBuilder(index, version, timeout).build();
         boolean indexed = false;
         while (!indexed) {
@@ -351,6 +351,7 @@ public class JestElasticsearchClient implements ElasticsearchClient {
             } else {
               throw new ConnectException(e);
             }
+            attempts++;
           }
         }
       }
