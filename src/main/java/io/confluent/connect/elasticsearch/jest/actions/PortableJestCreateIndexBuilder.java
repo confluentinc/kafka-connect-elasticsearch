@@ -27,12 +27,15 @@ import io.searchbox.indices.CreateIndex;
 public class PortableJestCreateIndexBuilder extends CreateIndex.Builder {
 
   public static final String INCLUDE_TYPE_NAME_PARAM = "include_type_name";
+  public static final String TIMEOUT_PARAM = "timeout";
 
   private final Version version;
+  private final long timeout;
 
-  public PortableJestCreateIndexBuilder(String index, Version version) {
+  public PortableJestCreateIndexBuilder(String index, Version version, long timeout) {
     super(index);
     this.version = version;
+    this.timeout = timeout;
   }
 
   @Override
@@ -40,6 +43,10 @@ public class PortableJestCreateIndexBuilder extends CreateIndex.Builder {
     if (version.equals(Version.ES_V7)) {
       setParameter(INCLUDE_TYPE_NAME_PARAM, true);
     }
+    if (timeout > 0) {
+      setParameter(TIMEOUT_PARAM, timeout + "ms");
+    }
+
     return super.build();
   }
 }
