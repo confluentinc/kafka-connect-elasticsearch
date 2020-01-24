@@ -36,7 +36,7 @@ public class PortableJestCreateIndexBuilder extends CreateIndex.Builder {
   public PortableJestCreateIndexBuilder(String index, Version version, long timeout) {
     super(index);
     this.version = version;
-    this.timeout = TimeUnit.MILLISECONDS.toSeconds(timeout);
+    this.timeout = timeout;
   }
 
   @Override
@@ -45,7 +45,7 @@ public class PortableJestCreateIndexBuilder extends CreateIndex.Builder {
       setParameter(INCLUDE_TYPE_NAME_PARAM, true);
     }
     if (timeout > 0) {
-      setParameter(TIMEOUT_PARAM, timeout);
+      setParameter(TIMEOUT_PARAM, timeout + "ms");
     }
 
     return super.build();
