@@ -17,7 +17,6 @@ package io.confluent.connect.elasticsearch.jest.actions;
 
 import io.confluent.connect.elasticsearch.ElasticsearchClient.Version;
 import io.searchbox.indices.CreateIndex;
-import java.util.concurrent.TimeUnit;
 
 /**
  * Portable Jest action builder, across ES versions, to create indexes.
