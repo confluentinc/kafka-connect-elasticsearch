@@ -44,7 +44,9 @@ public class PortableJestCreateIndexBuilder extends CreateIndex.Builder {
     if (version.equals(Version.ES_V7)) {
       setParameter(INCLUDE_TYPE_NAME_PARAM, true);
     }
-    setParameter(TIMEOUT_PARAM, timeout);
+    if (timeout > 0) {
+      setParameter(TIMEOUT_PARAM, timeout);
+    }
 
     return super.build();
   }
