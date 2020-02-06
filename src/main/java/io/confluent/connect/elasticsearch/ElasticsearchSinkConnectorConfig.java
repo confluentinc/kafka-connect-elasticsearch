@@ -166,6 +166,11 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
           + "increasing the " + FLUSH_TIMEOUT_MS_CONFIG + ", " + READ_TIMEOUT_MS_CONFIG
           + ", and decrease " + BATCH_SIZE_CONFIG + " configuration properties.";
 
+  public static final String RETRY_ON_CONFLICT_CONFIG = "retry.on.conflict";
+  private static final String RETRY_ON_CONFLICT_DOC = "Specify how many times the operation "
+      + "should be retried by Elasticsearch, when conflicts occur, while using the write method "
+      + WriteMethod.UPSERT.toString() + ". The value is the number of retries.";
+
   public static final String CONNECTION_SSL_CONFIG_PREFIX = "elastic.https.";
 
   public static final String AUTO_CREATE_INDICES_AT_START_CONFIG = "auto.create.indices.at.start";
@@ -466,7 +471,17 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
         group,
         ++order,
         Width.SHORT,
-        "Write method");
+        "Write method"
+    ).define(
+        RETRY_ON_CONFLICT_CONFIG,
+        Type.INT,
+        0,
+        Importance.LOW,
+        RETRY_ON_CONFLICT_DOC,
+        group,
+        ++order,
+        Width.SHORT,
+        "Retry on conflict");
   }
 
   public static final ConfigDef CONFIG = baseConfigDef();

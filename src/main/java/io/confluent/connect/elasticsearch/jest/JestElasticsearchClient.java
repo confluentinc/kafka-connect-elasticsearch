@@ -90,6 +90,7 @@ public class JestElasticsearchClient implements ElasticsearchClient {
   private final JestClient client;
   private final Version version;
   private WriteMethod writeMethod = WriteMethod.DEFAULT;
+  private int retryOnConflict;
 
   private final Set<String> indexCache = new HashSet<>();
 
@@ -142,6 +143,8 @@ public class JestElasticsearchClient implements ElasticsearchClient {
       this.version = getServerVersion();
       this.writeMethod = WriteMethod.forValue(
               config.getString(ElasticsearchSinkConnectorConfig.WRITE_METHOD_CONFIG));
+      this.retryOnConflict = config.getInt(
+          ElasticsearchSinkConnectorConfig.RETRY_ON_CONFLICT_CONFIG);
     } catch (IOException e) {
       throw new ConnectException(
           "Couldn't start ElasticsearchSinkTask due to connection error:",
@@ -455,11 +458,14 @@ public class JestElasticsearchClient implements ElasticsearchClient {
   private Update toUpdateRequest(IndexableRecord record) {
     String payload = "{\"doc\":" + record.payload
         + ", \"doc_as_upsert\":true}";
-    return new Update.Builder(payload)
+    Update.Builder req = new Update.Builder(payload)
         .index(record.key.index)
         .type(record.key.type)
-        .id(record.key.id)
-        .build();
+        .id(record.key.id);
+    if (retryOnConflict > 0) {
+      req.setParameter("retry_on_conflict", retryOnConflict);
+    }
+    return req.build();
   }
 
   public BulkResponse executeBulk(BulkRequest bulk) throws IOException {

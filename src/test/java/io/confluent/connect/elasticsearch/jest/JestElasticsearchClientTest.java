@@ -33,12 +33,7 @@ import io.searchbox.client.JestResult;
 import io.searchbox.client.config.ElasticsearchVersion;
 import io.searchbox.client.config.HttpClientConfig;
 import io.searchbox.cluster.NodesInfo;
-import io.searchbox.core.BulkResult;
-import io.searchbox.core.Delete;
-import io.searchbox.core.Index;
-import io.searchbox.core.Search;
-import io.searchbox.core.SearchResult;
-import io.searchbox.core.Update;
+import io.searchbox.core.*;
 import io.searchbox.indices.CreateIndex;
 import io.searchbox.indices.IndicesExists;
 import io.searchbox.indices.mapping.GetMapping;
@@ -373,6 +368,33 @@ public class JestElasticsearchClientTest {
     assertEquals(idx.key.id, ba.getId());
     assertEquals(idx.key.type, ba.getType());
     assertEquals("{\"doc\":" + idx.payload + ", \"doc_as_upsert\":true}", ba.getData(null));
+  }
+
+  @Test
+  public void retryOnConflict() throws Exception {
+    Map<String, String> props = new HashMap<>();
+    props.put(ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG, "http://localhost:9200");
+    props.put(ElasticsearchSinkConnectorConfig.TYPE_NAME_CONFIG, "kafka-connect");
+    props.put(ElasticsearchSinkConnectorConfig.WRITE_METHOD_CONFIG, JestElasticsearchClient.WriteMethod.UPSERT.toString());
+    props.put(ElasticsearchSinkConnectorConfig.RETRY_ON_CONFLICT_CONFIG, "2");
+    JestElasticsearchClient client = new JestElasticsearchClient(props, jestClientFactory);
+
+    IndexableRecord idx = new IndexableRecord(new Key(INDEX, TYPE, KEY), "payload", 0L);
+    BulkableAction<DocumentResult> ba = client.toBulkableAction(idx);
+    assertSame(Update.class, ba.getClass());
+    assertEquals(idx.key.index, ba.getIndex());
+    assertEquals(idx.key.id, ba.getId());
+    assertEquals(idx.key.type, ba.getType());
+    assertEquals(Collections.singletonList(2), new ArrayList<Object>(ba.getParameter("retry_on_conflict")));
+
+    List<IndexableRecord> records = new ArrayList<>();
+    records.add(idx);
+    BulkRequest request = client.createBulkRequest(records);
+    BulkResult success = new BulkResult(new Gson());
+    success.setSucceeded(true);
+    when(jestClient.execute(((JestBulkRequest) request).getBulk())).thenReturn(success);
+
+    assertThat(client.executeBulk(request).isSucceeded(), is(equalTo(true)));
   }
 
   private BulkResult createBulkResultFailure(String exception) {
