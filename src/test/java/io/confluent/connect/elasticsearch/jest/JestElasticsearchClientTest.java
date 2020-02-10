@@ -33,7 +33,13 @@ import io.searchbox.client.JestResult;
 import io.searchbox.client.config.ElasticsearchVersion;
 import io.searchbox.client.config.HttpClientConfig;
 import io.searchbox.cluster.NodesInfo;
-import io.searchbox.core.*;
+import io.searchbox.core.BulkResult;
+import io.searchbox.core.Delete;
+import io.searchbox.core.DocumentResult;
+import io.searchbox.core.Index;
+import io.searchbox.core.Search;
+import io.searchbox.core.SearchResult;
+import io.searchbox.core.Update;
 import io.searchbox.indices.CreateIndex;
 import io.searchbox.indices.IndicesExists;
 import io.searchbox.indices.mapping.GetMapping;
@@ -371,7 +377,7 @@ public class JestElasticsearchClientTest {
   }
 
   @Test
-  public void retryOnConflict() throws Exception {
+  public void retryOnConflictParameterIsPresent() throws Exception {
     Map<String, String> props = new HashMap<>();
     props.put(ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG, "http://localhost:9200");
     props.put(ElasticsearchSinkConnectorConfig.TYPE_NAME_CONFIG, "kafka-connect");

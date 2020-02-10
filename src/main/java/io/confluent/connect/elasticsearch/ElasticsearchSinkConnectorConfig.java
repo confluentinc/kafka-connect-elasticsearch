@@ -345,6 +345,16 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
         ++order,
         Width.SHORT,
         "Create indices at startup"
+    ).define(
+        RETRY_ON_CONFLICT_CONFIG,
+        Type.INT,
+        0,
+        Importance.LOW,
+        RETRY_ON_CONFLICT_DOC,
+        group,
+        ++order,
+        Width.SHORT,
+        "Retry on conflict"
     );
   }
 
@@ -471,17 +481,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
         group,
         ++order,
         Width.SHORT,
-        "Write method"
-    ).define(
-        RETRY_ON_CONFLICT_CONFIG,
-        Type.INT,
-        0,
-        Importance.LOW,
-        RETRY_ON_CONFLICT_DOC,
-        group,
-        ++order,
-        Width.SHORT,
-        "Retry on conflict");
+        "Write method");
   }
 
   public static final ConfigDef CONFIG = baseConfigDef();
