@@ -57,6 +57,7 @@ public class ElasticsearchSinkTaskTest extends ElasticsearchSinkTestBase {
     props.put(ElasticsearchSinkConnectorConfig.TYPE_NAME_CONFIG, TYPE);
     props.put(ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG, "localhost");
     props.put(ElasticsearchSinkConnectorConfig.KEY_IGNORE_CONFIG, "true");
+    props.put(ElasticsearchSinkConnectorConfig.READ_TIMEOUT_MS_CONFIG, "3000");
     return props;
   }
 
