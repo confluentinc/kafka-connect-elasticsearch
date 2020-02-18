@@ -144,7 +144,7 @@ public class ElasticsearchIntegrationTestBase {
 
     for (Object record : records) {
       if (record instanceof SinkRecord) {
-        IndexableRecord indexableRecord = converter.convertRecord((SinkRecord) record, index, TYPE, ignoreKey, ignoreSchema);
+        IndexableRecord indexableRecord = converter.convertRecord((SinkRecord) record, index, TYPE, ignoreKey, ignoreSchema, false);
         assertEquals(indexableRecord.payload, hits.get(indexableRecord.key.id));
       } else {
         assertEquals(record, hits.get("key"));
