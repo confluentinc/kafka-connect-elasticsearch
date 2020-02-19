@@ -150,8 +150,8 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   public static final String BEHAVIOR_ON_MALFORMED_DOCS_CONFIG = "behavior.on.malformed.documents";
   private static final String BEHAVIOR_ON_MALFORMED_DOCS_DOC = "How to handle records that "
       + "Elasticsearch rejects due to some malformation of the document itself, such as an index"
-      + " mapping conflict, a field name containing illegal characters, or a record with a missing id."
-      + " Valid options are ignore', 'warn', and 'fail'.";
+      + " mapping conflict, a field name containing illegal characters, or a record with a missing"
+      + " id. Valid options are ignore', 'warn', and 'fail'.";
   public static final String WRITE_METHOD_CONFIG = "write.method";
   private static final String WRITE_METHOD_DOC = "Method used for writing data to Elasticsearch,"
           + " and one of " + WriteMethod.INSERT.toString() + " or " + WriteMethod.UPSERT.toString()
