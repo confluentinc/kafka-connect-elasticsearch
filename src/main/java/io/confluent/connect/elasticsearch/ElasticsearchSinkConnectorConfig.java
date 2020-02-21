@@ -132,7 +132,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
       + "so set this to ``false`` to use that older behavior.";
   public static final String MAX_CONNECTION_IDLE_TIME_MS_CONFIG = "max.connection.idle.time.ms";
   private static final String MAX_CONNECTION_IDLE_TIME_MS_CONFIG_DOC = "How long to wait "
-        + "in milliseconds after an idle connection is dropped to prevent "
+        + "in milliseconds before dropping an idle connection to prevent "
         + "a read timeout.";
   public static final String CONNECTION_TIMEOUT_MS_CONFIG = "connection.timeout.ms";
   public static final String READ_TIMEOUT_MS_CONFIG = "read.timeout.ms";
