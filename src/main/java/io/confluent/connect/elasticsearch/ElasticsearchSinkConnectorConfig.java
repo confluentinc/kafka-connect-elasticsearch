@@ -192,7 +192,6 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   protected static ConfigDef baseConfigDef() {
     final ConfigDef configDef = new ConfigDef();
     addConnectorConfigs(configDef);
-    addConnectorTimeoutConfigs(configDef);
     addConversionConfigs(configDef);
     addSecurityConfigs(configDef);
     return configDef;
@@ -219,82 +218,6 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
     );
   }
 
-  private static void addConnectorTimeoutConfigs(ConfigDef configDef) {
-    final String group = "Connector";
-    int order = 0;
-    configDef.define(
-        LINGER_MS_CONFIG,
-        Type.LONG,
-        1L,
-        Importance.LOW,
-        LINGER_MS_DOC,
-        group,
-        ++order,
-        Width.SHORT,
-        "Linger (ms)"
-    ).define(
-        FLUSH_TIMEOUT_MS_CONFIG,
-        Type.LONG,
-        10000L,
-        Importance.LOW,
-        FLUSH_TIMEOUT_MS_DOC,
-        group,
-        ++order,
-        Width.SHORT,
-        "Flush Timeout (ms)"
-    ).define(
-        MAX_RETRIES_CONFIG,
-        Type.INT,
-        5,
-        Importance.LOW,
-        MAX_RETRIES_DOC,
-        group,
-        ++order,
-        Width.SHORT,
-        "Max Retries"
-    ).define(
-        RETRY_BACKOFF_MS_CONFIG,
-        Type.LONG,
-        100L,
-        Importance.LOW,
-        RETRY_BACKOFF_MS_DOC,
-        group,
-        ++order,
-        Width.SHORT,
-        "Retry Backoff (ms)"
-      ).define(
-        MAX_CONNECTION_IDLE_TIME_MS_CONFIG,
-        Type.INT,
-        60000,
-        Importance.LOW,
-        MAX_CONNECTION_IDLE_TIME_MS_CONFIG_DOC,
-        group,
-        ++order,
-        Width.SHORT,
-        "Max Connection Idle Time"
-    ).define(
-        CONNECTION_TIMEOUT_MS_CONFIG, 
-        Type.INT, 
-        1000, 
-        Importance.LOW, 
-        CONNECTION_TIMEOUT_MS_CONFIG_DOC,
-        group, 
-        ++order, 
-        Width.SHORT, 
-        "Connection Timeout"
-    ).define(
-        READ_TIMEOUT_MS_CONFIG, 
-        Type.INT, 
-        3000, 
-        Importance.LOW, 
-        READ_TIMEOUT_MS_CONFIG_DOC,
-        group,
-        ++order, 
-        Width.SHORT, 
-        "Read Timeout"
-    );
-  }
-  
   private static void addConnectorConfigs(ConfigDef configDef) {
     final String group = "Connector";
     int order = 0;
@@ -358,6 +281,46 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
         Width.SHORT,
         "Max Buffered Records"
     ).define(
+        LINGER_MS_CONFIG,
+        Type.LONG,
+        1L,
+        Importance.LOW,
+        LINGER_MS_DOC,
+        group,
+        ++order,
+        Width.SHORT,
+        "Linger (ms)"
+    ).define(
+        FLUSH_TIMEOUT_MS_CONFIG,
+        Type.LONG,
+        10000L,
+        Importance.LOW,
+        FLUSH_TIMEOUT_MS_DOC,
+        group,
+        ++order,
+        Width.SHORT,
+        "Flush Timeout (ms)"
+    ).define(
+        MAX_RETRIES_CONFIG,
+        Type.INT,
+        5,
+        Importance.LOW,
+        MAX_RETRIES_DOC,
+        group,
+        ++order,
+        Width.SHORT,
+        "Max Retries"
+    ).define(
+        RETRY_BACKOFF_MS_CONFIG,
+        Type.LONG,
+        100L,
+        Importance.LOW,
+        RETRY_BACKOFF_MS_DOC,
+        group,
+        ++order,
+        Width.SHORT,
+        "Retry Backoff (ms)"
+      ).define(
         CONNECTION_COMPRESSION_CONFIG,
         Type.BOOLEAN,
         false,
@@ -368,6 +331,36 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
         Width.SHORT,
         "Compression"
       ).define(
+        MAX_CONNECTION_IDLE_TIME_MS_CONFIG,
+        Type.INT,
+        "60000",
+        Importance.LOW,
+        MAX_CONNECTION_IDLE_TIME_MS_CONFIG_DOC,
+        group,
+        ++order,
+        Width.SHORT,
+        "Max Connection Idle Time"
+    ).define(
+        CONNECTION_TIMEOUT_MS_CONFIG, 
+        Type.INT, 
+        1000, 
+        Importance.LOW, 
+        CONNECTION_TIMEOUT_MS_CONFIG_DOC,
+        group, 
+        ++order, 
+        Width.SHORT, 
+        "Connection Timeout"
+        ).define(
+        READ_TIMEOUT_MS_CONFIG, 
+        Type.INT, 
+        3000, 
+        Importance.LOW, 
+        READ_TIMEOUT_MS_CONFIG_DOC,
+        group,
+        ++order, 
+        Width.SHORT, 
+        "Read Timeout"
+    ).define(
         AUTO_CREATE_INDICES_AT_START_CONFIG,
         Type.BOOLEAN,
         true,
@@ -379,6 +372,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
         "Create indices at startup"
     );
   }
+
 
   public boolean secured() {
     SecurityProtocol securityProtocol = securityProtocol();
