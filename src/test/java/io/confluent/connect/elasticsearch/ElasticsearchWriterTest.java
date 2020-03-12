@@ -54,9 +54,6 @@ public class ElasticsearchWriterTest extends ElasticsearchSinkTestBase {
   private final Schema otherSchema = createOtherSchema();
   private final Struct otherRecord = createOtherRecord(otherSchema);
 
-  @Rule
-  public ExpectedException thrown = ExpectedException.none();
-
   private boolean ignoreKey;
   private boolean ignoreSchema;
 
@@ -427,9 +424,10 @@ public class ElasticsearchWriterTest extends ElasticsearchSinkTestBase {
 
     final ElasticsearchWriter strictWriter = initWriter(client);
 
-    thrown.expect(ConnectException.class);
-    thrown.expectMessage("Key is used as document id and can not be null");
-    strictWriter.write(records);
+    Exception e = assertThrows(ConnectException.class, () -> {
+      strictWriter.write(records);
+    });
+    assertEquals("Key is used as document id and can not be null.", e.getMessage());
   }
 
   @Test
