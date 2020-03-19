@@ -320,7 +320,8 @@ public class JestElasticsearchClient implements ElasticsearchClient {
         indexCache.add(index);
         log.info("Index '{}' exists in Elasticsearch; adding to local cache", index);
       } else {
-        log.info("Index '{}' not found in Elasticsearch", index);
+        log.info("Index '{}' not found in Elasticsearch. Error message: {}",
+            index, result.getErrorMessage());
       }
       return exists;
     } catch (IOException e) {
