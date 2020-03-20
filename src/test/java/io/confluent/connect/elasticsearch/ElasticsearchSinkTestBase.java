@@ -57,7 +57,7 @@ public class ElasticsearchSinkTestBase extends ESIntegTestCase {
   public void setUp() throws Exception {
     super.setUp();
     client = new JestElasticsearchClient("http://localhost:" + getPort());
-    converter = new DataConverter(true, BehaviorOnNullValues.IGNORE);
+    converter = new DataConverter(true, BehaviorOnNullValues.IGNORE, DataConverter.DocumentVersionType.LEGACY);
   }
 
   @After

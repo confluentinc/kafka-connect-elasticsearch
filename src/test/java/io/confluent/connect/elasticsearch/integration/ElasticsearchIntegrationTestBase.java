@@ -74,7 +74,7 @@ public class ElasticsearchIntegrationTestBase {
   public void setUp() {
     log.info("Attempting to connect to {}", container.getConnectionUrl());
     client = new JestElasticsearchClient(container.getConnectionUrl());
-    converter = new DataConverter(true, BehaviorOnNullValues.IGNORE);
+    converter = new DataConverter(true, BehaviorOnNullValues.IGNORE, DataConverter.DocumentVersionType.LEGACY);
   }
 
   @After
