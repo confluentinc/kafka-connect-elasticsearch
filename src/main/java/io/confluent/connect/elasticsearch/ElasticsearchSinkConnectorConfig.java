@@ -15,7 +15,6 @@
 
 package io.confluent.connect.elasticsearch;
 
-import io.confluent.connect.elasticsearch.jest.JestElasticsearchClient;
 import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.common.config.ConfigDef.Importance;
