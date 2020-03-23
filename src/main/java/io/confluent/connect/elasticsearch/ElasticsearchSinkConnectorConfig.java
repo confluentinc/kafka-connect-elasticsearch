@@ -22,10 +22,13 @@ import org.apache.kafka.common.config.ConfigDef.Type;
 import org.apache.kafka.common.config.ConfigDef.Width;
 
 import java.util.Map;
+import org.apache.kafka.common.config.ConfigException;
+import org.apache.kafka.common.config.types.Password;
 
 import static io.confluent.connect.elasticsearch.jest.JestElasticsearchClient.WriteMethod;
 import static io.confluent.connect.elasticsearch.DataConverter.BehaviorOnNullValues;
 import static io.confluent.connect.elasticsearch.bulk.BulkProcessor.BehaviorOnMalformedDoc;
+import static org.apache.kafka.common.config.ConfigDef.Range.between;
 import static org.apache.kafka.common.config.SslConfigs.addClientSslSupport;
 
 public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
@@ -189,10 +192,33 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
           + "Values can be `PLAINTEXT` or `SSL`. If `PLAINTEXT` is passed, "
           + "all configs prefixed by " + CONNECTION_SSL_CONFIG_PREFIX + " will be ignored.";
 
+  // Proxy group
+  public static final String PROXY_HOST_CONFIG = "proxy.host";
+  public static final String PROXY_HOST_DISPLAY = "Proxy Host";
+  public static final String PROXY_HOST_DOC = "The address of the proxy host to connect through. "
+      + "Supports the basic authentication scheme only.";
+  public static final String PROXY_HOST_DEFAULT = "";
+
+  public static final String PROXY_PORT_CONFIG = "proxy.port";
+  public static final String PROXY_PORT_DISPLAY = "Proxy Port";
+  public static final String PROXY_PORT_DOC = "The port of the proxy host to connect through.";
+  public static final Integer PROXY_PORT_DEFAULT = 8080;
+
+  public static final String PROXY_USERNAME_CONFIG = "proxy.username";
+  public static final String PROXY_USERNAME_DISPLAY = "Proxy Username";
+  public static final String PROXY_USERNAME_DOC = "The username for the proxy host.";
+  public static final String PROXY_USERNAME_DEFAULT = "";
+
+  public static final String PROXY_PASSWORD_CONFIG = "proxy.password";
+  public static final String PROXY_PASSWORD_DISPLAY = "Proxy Password";
+  public static final String PROXY_PASSWORD_DOC = "The password for the proxy host.";
+  public static final Password PROXY_PASSWORD_DEFAULT = null;
+
   protected static ConfigDef baseConfigDef() {
     final ConfigDef configDef = new ConfigDef();
     addConnectorConfigs(configDef);
     addConversionConfigs(configDef);
+    addProxyConfigs(configDef);
     addSecurityConfigs(configDef);
     return configDef;
   }
@@ -215,6 +241,54 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
     configDef.embed(
         CONNECTION_SSL_CONFIG_PREFIX, SSL_GROUP,
         configDef.configKeys().size() + 2, sslConfigDef
+    );
+  }
+
+  private static void addProxyConfigs(ConfigDef configDef) {
+    final String group = "Proxy";
+    int orderInGroup = 0;
+    configDef
+        .define(
+            PROXY_HOST_CONFIG,
+            Type.STRING,
+            PROXY_HOST_DEFAULT,
+            Importance.LOW,
+            PROXY_HOST_DOC,
+            group,
+            orderInGroup++,
+            Width.LONG,
+            PROXY_HOST_DISPLAY
+        ).define(
+            PROXY_PORT_CONFIG,
+            Type.INT,
+            PROXY_PORT_DEFAULT,
+            between(1, 65535),
+            Importance.LOW,
+            PROXY_PORT_DOC,
+            group,
+            orderInGroup++,
+            Width.LONG,
+            PROXY_PORT_DISPLAY
+        ).define(
+            PROXY_USERNAME_CONFIG,
+            Type.STRING,
+            PROXY_USERNAME_DEFAULT,
+            Importance.LOW,
+            PROXY_USERNAME_DOC,
+            group,
+            orderInGroup++,
+            Width.LONG,
+            PROXY_USERNAME_DISPLAY
+        ).define(
+            PROXY_PASSWORD_CONFIG,
+            Type.PASSWORD,
+            PROXY_PASSWORD_DEFAULT,
+            Importance.LOW,
+            PROXY_PASSWORD_DOC,
+            group,
+            orderInGroup++,
+            Width.LONG,
+            PROXY_PASSWORD_DISPLAY
     );
   }
 
@@ -341,7 +415,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
         Width.SHORT,
         "Max Connection Idle Time"
     ).define(
-        CONNECTION_TIMEOUT_MS_CONFIG, 
+        CONNECTION_TIMEOUT_MS_CONFIG,
         Type.INT, 
         1000, 
         Importance.LOW, 
@@ -357,8 +431,8 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
         Importance.LOW, 
         READ_TIMEOUT_MS_CONFIG_DOC,
         group,
-        ++order, 
-        Width.SHORT, 
+        ++order,
+        Width.SHORT,
         "Read Timeout"
     ).define(
         AUTO_CREATE_INDICES_AT_START_CONFIG,
@@ -373,7 +447,6 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
     );
   }
 
-
   public boolean secured() {
     SecurityProtocol securityProtocol = securityProtocol();
     return SecurityProtocol.SSL.equals(securityProtocol);
@@ -381,6 +454,42 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
 
   private SecurityProtocol securityProtocol() {
     return SecurityProtocol.valueOf(getString(ELASTICSEARCH_SECURITY_PROTOCOL_CONFIG));
+  }
+
+  public boolean isBasicProxyConfigured() {
+    return !getString(PROXY_HOST_CONFIG).isEmpty();
+  }
+
+  public boolean isProxyWithAuthenticationConfigured() {
+    return isBasicProxyConfigured()
+        && !getString(PROXY_USERNAME_CONFIG).isEmpty()
+        && getPassword(PROXY_PASSWORD_CONFIG) != null;
+  }
+
+  private void validateProxyConfigs() {
+    String username = getString(PROXY_USERNAME_CONFIG);
+    Password password = getPassword(PROXY_PASSWORD_CONFIG);
+
+    if (!isBasicProxyConfigured()) {
+      if (!username.isEmpty() || password != null) {
+        throw new ConfigException(
+            String.format(
+                "%s and %s cannot be set without %s.",
+                PROXY_USERNAME_CONFIG,
+                PROXY_PASSWORD_CONFIG,
+                PROXY_HOST_CONFIG
+            )
+        );
+      }
+    } else {
+      if (username.isEmpty() ^ password == null) {
+        throw new ConfigException(
+            String.format(
+                "Both %s and %s must be set.", PROXY_PASSWORD_CONFIG, PROXY_PASSWORD_CONFIG
+            )
+        );
+      }
+    }
   }
 
   private static void addConversionConfigs(ConfigDef configDef) {
@@ -504,6 +613,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
 
   public ElasticsearchSinkConnectorConfig(Map<String, String> props) {
     super(CONFIG, props);
+    validateProxyConfigs();
   }
 
   public Map<String, Object> sslConfigs() {

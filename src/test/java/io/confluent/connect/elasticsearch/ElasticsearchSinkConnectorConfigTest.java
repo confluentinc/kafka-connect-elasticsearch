@@ -1,5 +1,6 @@
 package io.confluent.connect.elasticsearch;
 
+import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.config.types.Password;
 import org.junit.Assert;
 import org.junit.Before;
@@ -8,8 +9,13 @@ import org.junit.Test;
 import java.util.HashMap;
 import java.util.Map;
 
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.PROXY_HOST_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.PROXY_PASSWORD_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.PROXY_PORT_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.PROXY_USERNAME_CONFIG;
 import static junit.framework.TestCase.assertTrue;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 
 public class ElasticsearchSinkConnectorConfigTest {
 
@@ -93,5 +99,45 @@ public class ElasticsearchSinkConnectorConfigTest {
     props.put("elastic.security.protocol", SecurityProtocol.PLAINTEXT.name());
     props.put("connection.url", "https://host:9999");
     assertFalse(new ElasticsearchSinkConnectorConfig(props).secured());
+  }
+
+  @Test
+  public void shouldAcceptValidBasicProxy() {
+    props.put(PROXY_HOST_CONFIG, "proxy host");
+    ElasticsearchSinkConnectorConfig config = new ElasticsearchSinkConnectorConfig(props);
+    assertNotNull(config);
+    assertTrue(config.isBasicProxyConfigured());
+    assertFalse(config.isProxyWithAuthenticationConfigured());
+  }
+
+  @Test
+  public void shouldAcceptValidProxyWithAuthentication() {
+    props.put(PROXY_HOST_CONFIG, "proxy host");
+    props.put(PROXY_USERNAME_CONFIG, "username");
+    props.put(PROXY_PASSWORD_CONFIG, "password");
+    ElasticsearchSinkConnectorConfig config = new ElasticsearchSinkConnectorConfig(props);
+    assertNotNull(config);
+    assertTrue(config.isBasicProxyConfigured());
+    assertTrue(config.isProxyWithAuthenticationConfigured());
+  }
+
+  @Test(expected = ConfigException.class)
+  public void shouldNotAllowInvalidProxyPort() {
+    props.put(PROXY_PORT_CONFIG, "-666");
+    ElasticsearchSinkConnectorConfig config = new ElasticsearchSinkConnectorConfig(props);
+  }
+
+  @Test(expected = ConfigException.class)
+  public void shouldNotAllowProxyCredentialsWithoutProxy() {
+    props.put(PROXY_USERNAME_CONFIG, "username");
+    props.put(PROXY_PASSWORD_CONFIG, "password");
+    ElasticsearchSinkConnectorConfig config = new ElasticsearchSinkConnectorConfig(props);
+  }
+
+  @Test(expected = ConfigException.class)
+  public void shouldNotAllowPartialProxyCredentials() {
+    props.put(PROXY_HOST_CONFIG, "proxy host");
+    props.put(PROXY_USERNAME_CONFIG, "username");
+    ElasticsearchSinkConnectorConfig config = new ElasticsearchSinkConnectorConfig(props);
   }
 }
