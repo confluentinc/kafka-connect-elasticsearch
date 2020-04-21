@@ -43,6 +43,8 @@ import io.searchbox.indices.CreateIndex;
 import io.searchbox.indices.IndicesExists;
 import io.searchbox.indices.mapping.GetMapping;
 import io.searchbox.indices.mapping.PutMapping;
+import io.searchbox.params.Parameters;
+
 import java.io.IOException;
 import org.apache.http.HttpHost;
 import org.apache.http.auth.AuthScope;
@@ -50,7 +52,6 @@ import org.apache.http.auth.Credentials;
 import org.apache.http.client.CredentialsProvider;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.errors.ConnectException;
-import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 import org.mockito.ArgumentCaptor;
@@ -373,6 +374,15 @@ public class JestElasticsearchClientTest {
     assertEquals(idx.key.id, ba.getId());
     assertEquals(idx.key.type, ba.getType());
     assertEquals("{\"doc\":" + idx.payload + ", \"doc_as_upsert\":true}", ba.getData(null));
+    // create
+    client.setWriteMethod(JestElasticsearchClient.WriteMethod.CREATE);
+    ba = client.toBulkableAction(idx);
+    assertNotNull(ba);
+    assertSame(Index.class, ba.getClass());
+    assertEquals(idx.key.index, ba.getIndex());
+    assertEquals(idx.key.id, ba.getId());
+    assertEquals(idx.key.type, ba.getType());
+    assertThat(Collections.singleton("create"), is(ba.getParameter(Parameters.OP_TYPE)));
   }
 
   private BulkResult createBulkResultFailure(String exception) {

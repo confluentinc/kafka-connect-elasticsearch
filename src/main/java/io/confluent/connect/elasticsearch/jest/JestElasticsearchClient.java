@@ -50,6 +50,7 @@ import io.searchbox.indices.DeleteIndex;
 import io.searchbox.indices.IndicesExists;
 import io.searchbox.indices.Refresh;
 import io.searchbox.indices.mapping.PutMapping;
+import io.searchbox.params.Parameters;
 import org.apache.http.HttpHost;
 import org.apache.kafka.common.config.ConfigDef;
 import org.apache.http.conn.ssl.SSLConnectionSocketFactory;
@@ -470,9 +471,20 @@ public class JestElasticsearchClient implements ElasticsearchClient {
     if (record.payload == null) {
       return toDeleteRequest(record);
     }
-    return writeMethod == WriteMethod.INSERT
-            ? toIndexRequest(record)
-            : toUpdateRequest(record);
+    switch (writeMethod) {
+      case INSERT:
+        return toIndexRequest(record);
+      case UPSERT:
+        return toUpdateRequest(record);
+      case CREATE:
+        return toCreateRequest(record);
+      default:
+        throw new RuntimeException(String.format(
+                "Unknown value for %s enum: %s",
+                WriteMethod.class.getSimpleName(),
+                writeMethod
+            ));
+    }
   }
 
   private Delete toDeleteRequest(IndexableRecord record) {
@@ -503,6 +515,15 @@ public class JestElasticsearchClient implements ElasticsearchClient {
         .type(record.key.type)
         .id(record.key.id)
         .build();
+  }
+
+  private Index toCreateRequest(IndexableRecord record) {
+    Index.Builder req = new Index.Builder(record.payload)
+        .index(record.key.index)
+        .type(record.key.type)
+        .id(record.key.id);
+    req.setParameter(Parameters.OP_TYPE, "create");
+    return req.build();
   }
 
   public BulkResponse executeBulk(BulkRequest bulk) throws IOException {
@@ -579,6 +600,7 @@ public class JestElasticsearchClient implements ElasticsearchClient {
   public enum WriteMethod {
     INSERT,
     UPSERT,
+    CREATE,
     ;
 
     public static final WriteMethod DEFAULT = INSERT;
@@ -593,13 +615,14 @@ public class JestElasticsearchClient implements ElasticsearchClient {
       // Overridden here so that ConfigDef.toEnrichedRst shows possible values correctly
       @Override
       public String toString() {
-        return "One of " + INSERT.toString() + " or " + UPSERT.toString();
+        return "One of " + INSERT.toString() + ", " + UPSERT.toString() + " or " 
+                + CREATE.toString();
       }
 
     };
 
     public static String[] names() {
-      return new String[] {INSERT.toString(), UPSERT.toString()};
+      return new String[] {INSERT.toString(), UPSERT.toString(), CREATE.toString()};
     }
 
     public static WriteMethod forValue(String value) {
