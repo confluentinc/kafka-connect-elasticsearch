@@ -61,6 +61,7 @@ import org.apache.http.nio.conn.ssl.SSLIOSessionStrategy;
 import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.config.types.Password;
 import org.apache.kafka.common.network.Mode;
+import org.apache.kafka.common.security.ssl.DefaultSslEngineFactory;
 import org.apache.kafka.common.security.ssl.SslFactory;
 import org.apache.kafka.common.utils.SystemTime;
 import org.apache.kafka.common.utils.Time;
@@ -269,7 +270,8 @@ public class JestElasticsearchClient implements ElasticsearchClient {
                                             ElasticsearchSinkConnectorConfig config) {
     SslFactory kafkaSslFactory = new SslFactory(Mode.CLIENT, null, false);
     kafkaSslFactory.configure(config.sslConfigs());
-    SSLContext sslContext = kafkaSslFactory.sslEngineBuilder().sslContext();
+    SSLContext sslContext = ((DefaultSslEngineFactory)kafkaSslFactory.sslEngineFactory())
+        .sslContext();
 
     // Sync calls
     SSLConnectionSocketFactory sslSocketFactory = new SSLConnectionSocketFactory(sslContext,
