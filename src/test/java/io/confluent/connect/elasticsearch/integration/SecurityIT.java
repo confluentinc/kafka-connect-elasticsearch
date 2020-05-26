@@ -88,8 +88,8 @@ public class SecurityIT {
    * Certificates are generated with src/test/resources/certs/generate_certificates.sh
    */
   @Test
-  public void testSecureConnection() throws Throwable {
-    // Use 'localhost' here because that's the IP address the certificates allow
+  public void testSecureConnectionVerifiedHostname() throws Throwable {
+    // Use 'localhost' here because that's the hostname the certificates allow
     final String address = container.getConnectionUrl();
     log.info("Creating connector for {}", address);
 
@@ -104,6 +104,35 @@ public class SecurityIT {
     props.put("elastic.https.ssl.key.password", container.getKeyPassword());
     props.put("elastic.https.ssl.truststore.location", container.getTruststorePath());
     props.put("elastic.https.ssl.truststore.password", container.getTruststorePassword());
+
+    testSecureConnection(props);
+  }
+
+  @Test
+  public void testSecureConnectionHostnameVerificationDisabled() throws Throwable {
+    // Use an IP address that is not in self-signed cert and disable hostname verification
+    String address = container.getConnectionUrl();
+    address = address.replace("localhost", "127.0.0.1");
+    log.info("Creating connector for {}", address);
+
+    connect.kafka().createTopic(KAFKA_TOPIC, 1);
+
+    // Start connector
+    Map<String, String> props = getProps();
+    props.put("connection.url", address);
+    props.put("elastic.security.protocol", "SSL");
+    props.put("elastic.https.ssl.keystore.location", container.getKeystorePath());
+    props.put("elastic.https.ssl.keystore.password", container.getKeystorePassword());
+    props.put("elastic.https.ssl.key.password", container.getKeyPassword());
+    props.put("elastic.https.ssl.truststore.location", container.getTruststorePath());
+    props.put("elastic.https.ssl.truststore.password", container.getTruststorePassword());
+
+    props.put("elastic.https.ssl.endpoint.identification.algorithm", "");
+
+    testSecureConnection(props);
+  }
+
+  private void testSecureConnection(Map<String, String> props) throws Throwable {
     connect.configureConnector(CONNECTOR_NAME, props);
     waitForCondition(() -> {
       ConnectorStateInfo info = connect.connectorStatus(CONNECTOR_NAME);

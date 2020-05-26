@@ -25,6 +25,8 @@ import java.util.Map;
 
 import static io.confluent.connect.elasticsearch.DataConverter.BehaviorOnNullValues;
 import static io.confluent.connect.elasticsearch.bulk.BulkProcessor.BehaviorOnMalformedDoc;
+import static org.apache.http.util.TextUtils.isBlank;
+import static org.apache.kafka.common.config.SslConfigs.SSL_ENDPOINT_IDENTIFICATION_ALGORITHM_CONFIG;
 import static org.apache.kafka.common.config.SslConfigs.addClientSslSupport;
 
 public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
@@ -454,6 +456,12 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
     ConfigDef sslConfigDef = new ConfigDef();
     addClientSslSupport(sslConfigDef);
     return sslConfigDef.parse(originalsWithPrefix(CONNECTION_SSL_CONFIG_PREFIX));
+  }
+
+  public boolean shouldDisableHostnameVerification() {
+    String sslEndpointIdentificationAlgorithm = getString(
+            CONNECTION_SSL_CONFIG_PREFIX + SSL_ENDPOINT_IDENTIFICATION_ALGORITHM_CONFIG);
+    return isBlank(sslEndpointIdentificationAlgorithm);
   }
 
   public static void main(String[] args) {

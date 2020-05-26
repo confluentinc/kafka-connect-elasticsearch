@@ -3,8 +3,6 @@ instances:
     dns:
       - elasticsearch
       - localhost
-    ip:
-      - ipAddress
   - name: kibana
     dns:
       - kibana
