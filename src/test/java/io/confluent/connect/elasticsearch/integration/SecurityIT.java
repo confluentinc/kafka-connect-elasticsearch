@@ -8,10 +8,9 @@ import io.searchbox.core.Search;
 import org.apache.kafka.connect.json.JsonConverter;
 import org.apache.kafka.connect.runtime.SinkConnectorConfig;
 import org.apache.kafka.connect.runtime.rest.entities.ConnectorStateInfo;
+import org.apache.kafka.connect.runtime.rest.errors.ConnectRestException;
 import org.junit.After;
-import org.junit.AfterClass;
 import org.junit.Before;
-import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.apache.kafka.connect.util.clusters.EmbeddedConnectCluster;
@@ -35,34 +34,25 @@ public class SecurityIT {
 
   protected static ElasticsearchContainer container;
 
-  private EmbeddedConnectCluster connect;
+  EmbeddedConnectCluster connect;
 
   private static final String MESSAGE_KEY = "message-key";
   private static final String MESSAGE_VAL = "{ \"schema\": { \"type\": \"map\", \"keys\": "
       + "{ \"type\" : \"string\" }, \"values\": { \"type\" : \"int32\" } }, "
       + "\"payload\": { \"key1\": 12, \"key2\": 15} }";
   private static final String CONNECTOR_NAME = "elastic-sink";
-  private static final String KAFKA_TOPIC = "test-elasticsearch-sink";
+  static final String KAFKA_TOPIC = "test-elasticsearch-sink";
   private static final String TYPE_NAME = "kafka-connect";
   private static final int TASKS_MAX = 1;
   private static final int NUM_MSG = 200;
   private static final long VERIFY_TIMEOUT_MS = TimeUnit.MINUTES.toMillis(2);
 
-  @BeforeClass
-  public static void setupBeforeAll() {
-
+  @Before
+  public void setup() throws IOException {
     // Relevant and available docker images for elastic can be found at https://www.docker.elastic.co
     container = ElasticsearchContainer.fromSystemProperties().withSslEnabled(true);
     container.start();
-  }
 
-  @AfterClass
-  public static void teardownAfterAll() {
-    container.close();
-  }
-
-  @Before
-  public void setup() throws IOException {
     connect = new EmbeddedConnectCluster.Builder().name("elastic-sink-cluster").build();
     connect.start();
   }
@@ -70,9 +60,10 @@ public class SecurityIT {
   @After
   public void close() {
     connect.stop();
+    container.close();
   }
 
-  private Map<String, String> getProps () {
+  Map<String, String> getProps () {
     Map<String, String> props = new HashMap<>();
     props.put(CONNECTOR_CLASS_CONFIG, ElasticsearchSinkConnector.class.getName());
     props.put(SinkConnectorConfig.TOPICS_CONFIG, KAFKA_TOPIC);
@@ -85,17 +76,17 @@ public class SecurityIT {
 
   /**
    * Run test against docker image running Elasticsearch.
-   * Certificates are generated with src/test/resources/certs/generate_certificates.sh
+   * Certificates are generated in src/test/resources/ssl/start-elasticsearch.sh
    */
   @Test
-  public void testSecureConnection() throws Throwable {
-    // Use 'localhost' here because that's the IP address the certificates allow
-    final String address = container.getConnectionUrl();
+  public void testSecureConnectionVerifiedHostname() throws Throwable {
+    // Use IP address here because that's what the certificates allow
+    String address = container.getConnectionUrl();
+    address = address.replace(container.getContainerIpAddress(), container.hostMachineIpAddress());
     log.info("Creating connector for {}", address);
 
     connect.kafka().createTopic(KAFKA_TOPIC, 1);
 
-    // Start connector
     Map<String, String> props = getProps();
     props.put("connection.url", address);
     props.put("elastic.security.protocol", "SSL");
@@ -104,10 +95,20 @@ public class SecurityIT {
     props.put("elastic.https.ssl.key.password", container.getKeyPassword());
     props.put("elastic.https.ssl.truststore.location", container.getTruststorePath());
     props.put("elastic.https.ssl.truststore.password", container.getTruststorePassword());
+
+    // Start connector
+    testSecureConnection(props);
+  }
+
+  void testSecureConnection(Map<String, String> props) throws Throwable {
     connect.configureConnector(CONNECTOR_NAME, props);
     waitForCondition(() -> {
-      ConnectorStateInfo info = connect.connectorStatus(CONNECTOR_NAME);
-      return info != null && info.tasks() != null && info.tasks().size() == 1;
+      try {
+        ConnectorStateInfo info = connect.connectorStatus(CONNECTOR_NAME);
+        return info != null && info.tasks() != null && info.tasks().size() == 1;
+      } catch (ConnectRestException e) {
+        return false;
+      }
     }, "Timed out waiting for connector task to start");
 
     for (int i=0; i<NUM_MSG; i++){
