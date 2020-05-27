@@ -18,6 +18,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.net.Inet4Address;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -81,7 +82,8 @@ public class SecurityIT {
   @Test
   public void testSecureConnectionVerifiedHostname() throws Throwable {
     // Use 'localhost' here because that's the hostname the certificates allow
-    final String address = container.getConnectionUrl();
+    String address = container.getConnectionUrl();
+    address = address.replace(container.getContainerIpAddress(), "localhost");
     log.info("Creating connector for {}", address);
 
     connect.kafka().createTopic(KAFKA_TOPIC, 1);
@@ -103,7 +105,7 @@ public class SecurityIT {
   public void testSecureConnectionHostnameVerificationDisabled() throws Throwable {
     // Use an IP address that is not in self-signed cert
     String address = container.getConnectionUrl();
-    address = address.replace("localhost", "127.0.0.1");
+    address = address.replace(container.getContainerIpAddress(), Inet4Address.getLocalHost().getHostAddress());
     log.info("Creating connector for {}", address);
 
     connect.kafka().createTopic(KAFKA_TOPIC, 1);
