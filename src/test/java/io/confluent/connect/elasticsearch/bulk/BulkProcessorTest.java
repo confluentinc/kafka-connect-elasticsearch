@@ -29,8 +29,11 @@ import java.util.List;
 import java.util.Queue;
 import java.util.concurrent.ExecutionException;
 
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.containsString;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -409,5 +412,40 @@ public class BulkProcessorTest {
         fail(e.getMessage());
       }
     }
+  }
+
+  @Test
+  public void farmerTaskPropogatesException() {
+    final int maxBufferedRecords = 100;
+    final int maxInFlightBatches = 5;
+    final int batchSize = 2;
+    final int lingerMs = 5;
+    final int maxRetries = 3;
+    final int retryBackoffMs = 1;
+    final BehaviorOnMalformedDoc behaviorOnMalformedDoc = BehaviorOnMalformedDoc.DEFAULT;
+
+    final String errorInfo = "an unretriable error";
+    client.expect(Arrays.asList(42, 43), BulkResponse.failure(false, errorInfo));
+
+    final BulkProcessor<Integer, ?> bulkProcessor = new BulkProcessor<>(
+            Time.SYSTEM,
+            client,
+            maxBufferedRecords,
+            maxInFlightBatches,
+            batchSize,
+            lingerMs,
+            maxRetries,
+            retryBackoffMs,
+            behaviorOnMalformedDoc
+    );
+
+    final int addTimeoutMs = 10;
+    bulkProcessor.add(42, addTimeoutMs);
+    bulkProcessor.add(43, addTimeoutMs);
+
+    Runnable farmer = bulkProcessor.farmerTask();
+    ConnectException e = assertThrows(
+            ConnectException.class, () -> farmer.run());
+    assertThat(e.getMessage(), containsString(errorInfo));
   }
 }
