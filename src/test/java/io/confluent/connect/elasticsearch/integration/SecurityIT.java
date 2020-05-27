@@ -18,7 +18,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.net.Inet4Address;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -35,14 +34,14 @@ public class SecurityIT {
 
   protected static ElasticsearchContainer container;
 
-  private EmbeddedConnectCluster connect;
+  EmbeddedConnectCluster connect;
 
   private static final String MESSAGE_KEY = "message-key";
   private static final String MESSAGE_VAL = "{ \"schema\": { \"type\": \"map\", \"keys\": "
       + "{ \"type\" : \"string\" }, \"values\": { \"type\" : \"int32\" } }, "
       + "\"payload\": { \"key1\": 12, \"key2\": 15} }";
   private static final String CONNECTOR_NAME = "elastic-sink";
-  private static final String KAFKA_TOPIC = "test-elasticsearch-sink";
+  static final String KAFKA_TOPIC = "test-elasticsearch-sink";
   private static final String TYPE_NAME = "kafka-connect";
   private static final int TASKS_MAX = 1;
   private static final int NUM_MSG = 200;
@@ -64,7 +63,7 @@ public class SecurityIT {
     container.close();
   }
 
-  private Map<String, String> getProps () {
+  Map<String, String> getProps () {
     Map<String, String> props = new HashMap<>();
     props.put(CONNECTOR_CLASS_CONFIG, ElasticsearchSinkConnector.class.getName());
     props.put(SinkConnectorConfig.TOPICS_CONFIG, KAFKA_TOPIC);
@@ -81,9 +80,9 @@ public class SecurityIT {
    */
   @Test
   public void testSecureConnectionVerifiedHostname() throws Throwable {
-    // Use 'localhost' here because that's the hostname the certificates allow
+    // Use IP address here because that's what the certificates allow
     String address = container.getConnectionUrl();
-    address = address.replace(container.getContainerIpAddress(), "localhost");
+    address = address.replace(container.getContainerIpAddress(), container.hostMachineIpAddress());
     log.info("Creating connector for {}", address);
 
     connect.kafka().createTopic(KAFKA_TOPIC, 1);
@@ -101,32 +100,7 @@ public class SecurityIT {
     testSecureConnection(props);
   }
 
-  @Test
-  public void testSecureConnectionHostnameVerificationDisabled() throws Throwable {
-    // Use an IP address that is not in self-signed cert
-    String address = container.getConnectionUrl();
-    address = address.replace(container.getContainerIpAddress(), Inet4Address.getLocalHost().getHostAddress());
-    log.info("Creating connector for {}", address);
-
-    connect.kafka().createTopic(KAFKA_TOPIC, 1);
-
-    Map<String, String> props = getProps();
-    props.put("connection.url", address);
-    props.put("elastic.security.protocol", "SSL");
-    props.put("elastic.https.ssl.keystore.location", container.getKeystorePath());
-    props.put("elastic.https.ssl.keystore.password", container.getKeystorePassword());
-    props.put("elastic.https.ssl.key.password", container.getKeyPassword());
-    props.put("elastic.https.ssl.truststore.location", container.getTruststorePath());
-    props.put("elastic.https.ssl.truststore.password", container.getTruststorePassword());
-
-    // disable hostname verification
-    props.put("elastic.https.ssl.endpoint.identification.algorithm", "");
-
-    // Start connector
-    testSecureConnection(props);
-  }
-
-  private void testSecureConnection(Map<String, String> props) throws Throwable {
+  void testSecureConnection(Map<String, String> props) throws Throwable {
     connect.configureConnector(CONNECTOR_NAME, props);
     waitForCondition(() -> {
       try {

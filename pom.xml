@@ -179,9 +179,6 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-failsafe-plugin</artifactId>
                 <version>3.0.0-M3</version>
-                <configuration>
-                    <skipITs>true</skipITs>
-                </configuration>
             </plugin>
             <plugin>
                 <groupId>io.confluent</groupId>
@@ -332,7 +329,15 @@
                         <artifactId>maven-failsafe-plugin</artifactId>
                         <version>3.0.0-M3</version>
                         <configuration>
-                            <skipITs>false</skipITs>
+                            <excludes>
+                                <!--
+                                The jenkins container is only accessible through its DOCKER_HOST IP
+                                address. This makes it hard to test both hostname verification
+                                enabled and disabled cases with the same cert. So, disable this IT
+                                in jenkins and only test the enabled case in SecurityIT.
+                                -->
+                                <exclude>**/HostnameVerificationDisabledIT.java</exclude>
+                            </excludes>
                         </configuration>
                     </plugin>
                 </plugins>
