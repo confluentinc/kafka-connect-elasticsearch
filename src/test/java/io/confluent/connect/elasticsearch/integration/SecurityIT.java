@@ -8,10 +8,9 @@ import io.searchbox.core.Search;
 import org.apache.kafka.connect.json.JsonConverter;
 import org.apache.kafka.connect.runtime.SinkConnectorConfig;
 import org.apache.kafka.connect.runtime.rest.entities.ConnectorStateInfo;
+import org.apache.kafka.connect.runtime.rest.errors.ConnectRestException;
 import org.junit.After;
-import org.junit.AfterClass;
 import org.junit.Before;
-import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.apache.kafka.connect.util.clusters.EmbeddedConnectCluster;
@@ -48,21 +47,12 @@ public class SecurityIT {
   private static final int NUM_MSG = 200;
   private static final long VERIFY_TIMEOUT_MS = TimeUnit.MINUTES.toMillis(2);
 
-  @BeforeClass
-  public static void setupBeforeAll() {
-
+  @Before
+  public void setup() throws IOException {
     // Relevant and available docker images for elastic can be found at https://www.docker.elastic.co
     container = ElasticsearchContainer.fromSystemProperties().withSslEnabled(true);
     container.start();
-  }
 
-  @AfterClass
-  public static void teardownAfterAll() {
-    container.close();
-  }
-
-  @Before
-  public void setup() throws IOException {
     connect = new EmbeddedConnectCluster.Builder().name("elastic-sink-cluster").build();
     connect.start();
   }
@@ -70,6 +60,7 @@ public class SecurityIT {
   @After
   public void close() {
     connect.stop();
+    container.close();
   }
 
   private Map<String, String> getProps () {
@@ -85,7 +76,7 @@ public class SecurityIT {
 
   /**
    * Run test against docker image running Elasticsearch.
-   * Certificates are generated with src/test/resources/certs/generate_certificates.sh
+   * Certificates are generated in src/test/resources/ssl/start-elasticsearch.sh
    */
   @Test
   public void testSecureConnectionVerifiedHostname() throws Throwable {
@@ -95,7 +86,6 @@ public class SecurityIT {
 
     connect.kafka().createTopic(KAFKA_TOPIC, 1);
 
-    // Start connector
     Map<String, String> props = getProps();
     props.put("connection.url", address);
     props.put("elastic.security.protocol", "SSL");
@@ -105,19 +95,19 @@ public class SecurityIT {
     props.put("elastic.https.ssl.truststore.location", container.getTruststorePath());
     props.put("elastic.https.ssl.truststore.password", container.getTruststorePassword());
 
+    // Start connector
     testSecureConnection(props);
   }
 
   @Test
   public void testSecureConnectionHostnameVerificationDisabled() throws Throwable {
-    // Use an IP address that is not in self-signed cert and disable hostname verification
+    // Use an IP address that is not in self-signed cert
     String address = container.getConnectionUrl();
     address = address.replace("localhost", "127.0.0.1");
     log.info("Creating connector for {}", address);
 
     connect.kafka().createTopic(KAFKA_TOPIC, 1);
 
-    // Start connector
     Map<String, String> props = getProps();
     props.put("connection.url", address);
     props.put("elastic.security.protocol", "SSL");
@@ -127,16 +117,22 @@ public class SecurityIT {
     props.put("elastic.https.ssl.truststore.location", container.getTruststorePath());
     props.put("elastic.https.ssl.truststore.password", container.getTruststorePassword());
 
+    // disable hostname verification
     props.put("elastic.https.ssl.endpoint.identification.algorithm", "");
 
+    // Start connector
     testSecureConnection(props);
   }
 
   private void testSecureConnection(Map<String, String> props) throws Throwable {
     connect.configureConnector(CONNECTOR_NAME, props);
     waitForCondition(() -> {
-      ConnectorStateInfo info = connect.connectorStatus(CONNECTOR_NAME);
-      return info != null && info.tasks() != null && info.tasks().size() == 1;
+      try {
+        ConnectorStateInfo info = connect.connectorStatus(CONNECTOR_NAME);
+        return info != null && info.tasks() != null && info.tasks().size() == 1;
+      } catch (ConnectRestException e) {
+        return false;
+      }
     }, "Timed out waiting for connector task to start");
 
     for (int i=0; i<NUM_MSG; i++){
