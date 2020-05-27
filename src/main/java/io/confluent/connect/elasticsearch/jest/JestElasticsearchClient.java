@@ -50,6 +50,7 @@ import io.searchbox.indices.DeleteIndex;
 import io.searchbox.indices.IndicesExists;
 import io.searchbox.indices.Refresh;
 import io.searchbox.indices.mapping.PutMapping;
+import javax.net.ssl.HostnameVerifier;
 import org.apache.http.HttpHost;
 import org.apache.http.auth.AuthScope;
 import org.apache.http.auth.UsernamePasswordCredentials;
@@ -273,14 +274,17 @@ public class JestElasticsearchClient implements ElasticsearchClient {
     SSLContext sslContext = ((DefaultSslEngineFactory)kafkaSslFactory.sslEngineFactory())
         .sslContext();
 
+    HostnameVerifier hostnameVerifier = config.shouldDisableHostnameVerification()
+            ? (hostname, session) -> true
+            : SSLConnectionSocketFactory.getDefaultHostnameVerifier();
+
     // Sync calls
-    SSLConnectionSocketFactory sslSocketFactory = new SSLConnectionSocketFactory(sslContext,
-        SSLConnectionSocketFactory.getDefaultHostnameVerifier());
+    SSLConnectionSocketFactory sslSocketFactory = new SSLConnectionSocketFactory(
+            sslContext, hostnameVerifier);
     builder.sslSocketFactory(sslSocketFactory);
 
     // Async calls
-    SSLIOSessionStrategy sessionStrategy = new SSLIOSessionStrategy(sslContext,
-        SSLConnectionSocketFactory.getDefaultHostnameVerifier());
+    SSLIOSessionStrategy sessionStrategy = new SSLIOSessionStrategy(sslContext, hostnameVerifier);
     builder.httpsIOSessionStrategy(sessionStrategy);
   }
 
