@@ -461,7 +461,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
     String sslEndpointIdentificationAlgorithm = getString(
             CONNECTION_SSL_CONFIG_PREFIX + SSL_ENDPOINT_IDENTIFICATION_ALGORITHM_CONFIG);
     return sslEndpointIdentificationAlgorithm != null
-            && !sslEndpointIdentificationAlgorithm.isEmpty();
+            && sslEndpointIdentificationAlgorithm.isEmpty();
   }
 
   public static void main(String[] args) {
