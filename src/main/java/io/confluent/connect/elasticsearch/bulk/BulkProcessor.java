@@ -140,8 +140,8 @@ public class BulkProcessor<R, B> {
           List<Future<BulkResponse>> unfinishedFutures = new ArrayList<>();
           for (Future<BulkResponse> f : futures) {
             if (f.isDone()) {
-              log.debug("Bulk request completed with status {}", f.get());
-              f.get();
+              BulkResponse resp = f.get();
+              log.debug("Bulk request completed with status {}", resp);
             } else {
               unfinishedFutures.add(f);
             }
