@@ -167,7 +167,10 @@ public class BulkProcessor<R, B> {
       wait(Math.max(0, lingerMs - elapsedMs));
     }
     // at this point, either stopRequested or canSubmit
-    return stopRequested ? Futures.immediateFuture(null) : submitBatch();
+    return stopRequested
+            ? Futures.immediateFuture(
+                    BulkResponse.failure(false, "request not submitted during shutdown"))
+            : submitBatch();
   }
 
   private synchronized Future<BulkResponse> submitBatch() {
