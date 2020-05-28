@@ -416,10 +416,10 @@ public class BulkProcessor<R, B> {
                       + "will attempt retry after {} ms. Failure reason: {}",
                       batchId, batch.size(), attempts, maxAttempts, sleepTimeMs, e.getMessage());
             time.sleep(sleepTimeMs);
-            if (Thread.currentThread().isInterrupted()) {
+            if (Thread.interrupted()) {
               log.error(
-                      "Shutdown interrupted batch {} of {} records after total of {} attempt(s)",
-                      batchId, batch.size(), attempts, e);
+                      "Shutdown interrupted batch {} of {} records after attempt {}/{}",
+                      batchId, batch.size(), attempts, maxAttempts, e);
               throw e;
             }
           } else {
