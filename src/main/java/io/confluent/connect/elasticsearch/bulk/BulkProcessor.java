@@ -140,7 +140,7 @@ public class BulkProcessor<R, B> {
           List<Future<BulkResponse>> unfinishedFutures = new ArrayList<>();
           for (Future<BulkResponse> f : futures) {
             if (f.isDone()) {
-              log.debug("Calling get on completed future");
+              log.debug("Bulk request completed with status {}", f.get());
               f.get();
             } else {
               unfinishedFutures.add(f);
