@@ -415,6 +415,12 @@ public class BulkProcessor<R, B> {
                       + "will attempt retry after {} ms. Failure reason: {}",
                       batchId, batch.size(), attempts, maxAttempts, sleepTimeMs, e.getMessage());
             time.sleep(sleepTimeMs);
+            if (Thread.interrupted()) {
+              log.error(
+                      "Retrying batch {} of {} records interrupted after attempt {}/{}",
+                      batchId, batch.size(), attempts, maxAttempts, e);
+              throw e;
+            }
           } else {
             log.error("Failed to execute batch {} of {} records after total of {} attempt(s)",
                     batchId, batch.size(), attempts, e);
