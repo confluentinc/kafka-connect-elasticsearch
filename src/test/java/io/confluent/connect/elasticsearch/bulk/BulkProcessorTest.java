@@ -38,6 +38,9 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import static io.confluent.connect.elasticsearch.bulk.BulkProcessor.BehaviorOnMalformedDoc;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.mock;
 
 public class BulkProcessorTest {
 
@@ -447,5 +450,44 @@ public class BulkProcessorTest {
     ConnectException e = assertThrows(
             ConnectException.class, () -> farmer.run());
     assertThat(e.getMessage(), containsString(errorInfo));
+  }
+
+  @Test
+  public void terminateRetriesWhenInterruptedInSleep() throws Exception {
+    final int maxBufferedRecords = 100;
+    final int maxInFlightBatches = 5;
+    final int batchSize = 2;
+    final int lingerMs = 5;
+    final int maxRetries = 3;
+    final int retryBackoffMs = 1;
+    final BehaviorOnMalformedDoc behaviorOnMalformedDoc = BehaviorOnMalformedDoc.DEFAULT;
+
+    Time mockTime = mock(Time.class);
+    doAnswer(invocation -> {
+      Thread.currentThread().interrupt();
+      return null;
+    }).when(mockTime).sleep(anyLong());
+
+    client.expect(Arrays.asList(42, 43), BulkResponse.failure(true, "a retriable error"));
+
+    final BulkProcessor<Integer, ?> bulkProcessor = new BulkProcessor<>(
+            mockTime,
+            client,
+            maxBufferedRecords,
+            maxInFlightBatches,
+            batchSize,
+            lingerMs,
+            maxRetries,
+            retryBackoffMs,
+            behaviorOnMalformedDoc
+    );
+
+    final int addTimeoutMs = 10;
+    bulkProcessor.add(42, addTimeoutMs);
+    bulkProcessor.add(43, addTimeoutMs);
+
+    ExecutionException e = assertThrows(ExecutionException.class,
+            () -> bulkProcessor.submitBatchWhenReady().get());
+    assertThat(e.getMessage(), containsString("a retriable error"));
   }
 }
