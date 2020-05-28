@@ -18,6 +18,7 @@ package io.confluent.connect.elasticsearch.bulk;
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig;
 import io.confluent.connect.elasticsearch.LogContext;
 import io.confluent.connect.elasticsearch.RetryUtil;
+
 import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.connect.errors.ConnectException;
@@ -30,6 +31,8 @@ import java.util.Deque;
 import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.Callable;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -123,21 +126,36 @@ public class BulkProcessor<R, B> {
     };
   }
 
-  private Runnable farmerTask() {
-    return new Runnable() {
-      @Override
-      public void run() {
-        try (LogContext context = logContext.create("Farmer1")) {
-          log.debug("Starting farmer task thread");
-          try {
-            while (!stopRequested) {
-              submitBatchWhenReady();
+  // visible for testing
+  Runnable farmerTask() {
+    return () -> {
+      try (LogContext context = logContext.create("Farmer1")) {
+        log.debug("Starting farmer task");
+        try {
+          List<Future<BulkResponse>> futures = new ArrayList<>();
+          while (!stopRequested) {
+            // submitBatchWhenReady waits for lingerMs so we won't spin here unnecessarily
+            futures.add(submitBatchWhenReady());
+
+            // after we submit, look at any previous futures that were completed and call get() on
+            // them so that exceptions are propagated.
+            List<Future<BulkResponse>> unfinishedFutures = new ArrayList<>();
+            for (Future<BulkResponse> f : futures) {
+              if (f.isDone()) {
+                BulkResponse resp = f.get();
+                log.debug("Bulk request completed with status {}", resp);
+              } else {
+                unfinishedFutures.add(f);
+              }
             }
-          } catch (InterruptedException e) {
-            throw new ConnectException(e);
+            log.debug("Processing next batch with {} outstanding batch requests in flight",
+                    unfinishedFutures.size());
+            futures = unfinishedFutures;
           }
-          log.debug("Finished farmer task thread");
+        } catch (InterruptedException | ExecutionException e) {
+          throw new ConnectException(e);
         }
+        log.debug("Finished farmer task");
       }
     };
   }
@@ -151,8 +169,12 @@ public class BulkProcessor<R, B> {
       // conditions hence the wait(0) in that case
       wait(Math.max(0, lingerMs - elapsedMs));
     }
+
     // at this point, either stopRequested or canSubmit
-    return stopRequested ? null : submitBatch();
+    return stopRequested
+            ? CompletableFuture.completedFuture(
+                    BulkResponse.failure(false, "request not submitted during shutdown"))
+            : submitBatch();
   }
 
   private synchronized Future<BulkResponse> submitBatch() {
@@ -445,6 +467,12 @@ public class BulkProcessor<R, B> {
                       + "will attempt retry after {} ms. Failure reason: {}",
                       batchId, batch.size(), attempts, maxAttempts, sleepTimeMs, e.getMessage());
             time.sleep(sleepTimeMs);
+            if (Thread.interrupted()) {
+              log.error(
+                      "Retrying batch {} of {} records interrupted after attempt {}/{}",
+                      batchId, batch.size(), attempts, maxAttempts, e);
+              throw e;
+            }
           } else {
             log.error("Failed to execute batch {} of {} records after total of {} attempt(s)",
                     batchId, batch.size(), attempts, e);
