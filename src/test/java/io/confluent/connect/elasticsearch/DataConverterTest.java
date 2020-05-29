@@ -296,7 +296,7 @@ public class DataConverterTest {
     converter = new DataConverter(true, BehaviorOnNullValues.IGNORE);
 
     SinkRecord sinkRecord = createSinkRecordWithValue(null);
-    assertNull(converter.convertRecord(sinkRecord, index, type, false, false));
+    assertNull(converter.convertRecord(sinkRecord, index, type, false, false, false));
   }
 
   @Test
@@ -305,7 +305,7 @@ public class DataConverterTest {
 
     SinkRecord sinkRecord = createSinkRecordWithValue(null);
     IndexableRecord expectedRecord = createIndexableRecordWithPayload(null);
-    IndexableRecord actualRecord = converter.convertRecord(sinkRecord, index, type, false, false);
+    IndexableRecord actualRecord = converter.convertRecord(sinkRecord, index, type, false, false, false);
 
     assertEquals(expectedRecord, actualRecord);
   }
@@ -316,7 +316,7 @@ public class DataConverterTest {
     key = null;
 
     SinkRecord sinkRecord = createSinkRecordWithValue(null);
-    assertNull(converter.convertRecord(sinkRecord, index, type, false, false));
+    assertNull(converter.convertRecord(sinkRecord, index, type, false, false, false));
   }
 
   @Test
@@ -325,7 +325,7 @@ public class DataConverterTest {
 
     SinkRecord sinkRecord = createSinkRecordWithValue(null);
     try {
-      converter.convertRecord(sinkRecord, index, type, false, false);
+      converter.convertRecord(sinkRecord, index, type, false, false, false);
       fail("should fail on null-valued record with behaviorOnNullValues = FAIL");
     } catch (DataException e) {
       // expected

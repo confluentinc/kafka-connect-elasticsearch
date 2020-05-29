@@ -93,6 +93,8 @@ public class ElasticsearchSinkTask extends SinkTask {
           config.getBoolean(ElasticsearchSinkConnectorConfig.DROP_INVALID_MESSAGE_CONFIG);
       boolean createIndicesAtStartTime =
           config.getBoolean(ElasticsearchSinkConnectorConfig.AUTO_CREATE_INDICES_AT_START_CONFIG);
+      boolean useEsGeneratedKey =
+          config.getBoolean(ElasticsearchSinkConnectorConfig.USE_AUTO_GENERATED_IDS);
 
       DataConverter.BehaviorOnNullValues behaviorOnNullValues =
           DataConverter.BehaviorOnNullValues.forValue(
@@ -126,6 +128,7 @@ public class ElasticsearchSinkTask extends SinkTask {
           .setType(type)
           .setIgnoreKey(ignoreKey, topicIgnoreKey)
           .setIgnoreSchema(ignoreSchema, topicIgnoreSchema)
+          .setUseEsGeneratedKey(useEsGeneratedKey)
           .setCompactMapEntries(useCompactMapEntries)
           .setTopicToIndexMap(topicToIndexMap)
           .setFlushTimoutMs(flushTimeoutMs)
