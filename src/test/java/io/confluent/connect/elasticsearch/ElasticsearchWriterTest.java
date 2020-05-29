@@ -17,7 +17,6 @@ package io.confluent.connect.elasticsearch;
 
 import com.carrotsearch.randomizedtesting.annotations.ThreadLeakScope;
 import com.fasterxml.jackson.databind.ObjectMapper;
-
 import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaBuilder;
@@ -25,7 +24,7 @@ import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.errors.DataException;
 import org.apache.kafka.connect.sink.SinkRecord;
-import org.junit.Rule;
+import org.hamcrest.MatcherAssert;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -41,9 +40,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import org.junit.rules.ExpectedException;
-
 import static io.confluent.connect.elasticsearch.DataConverter.BehaviorOnNullValues;
+import static org.hamcrest.Matchers.containsString;
 
 @ThreadLeakScope(ThreadLeakScope.Scope.NONE)
 public class ElasticsearchWriterTest extends ElasticsearchSinkTestBase {
@@ -456,6 +454,32 @@ public class ElasticsearchWriterTest extends ElasticsearchSinkTestBase {
 
     writeDataAndRefresh(nonStrictWriter, inputRecords);
     verifySearchResults(outputRecords, ignoreKey, ignoreSchema);
+  }
+
+  @Test
+  public void testDropInvalidRecordThrowsOnOtherErrors() throws Exception {
+    ignoreSchema = true;
+    Collection<SinkRecord> inputRecords = new ArrayList<>();
+
+    Schema structSchema = SchemaBuilder.struct().name("struct")
+            .field("bytes", SchemaBuilder.BYTES_SCHEMA)
+            .build();
+
+    Struct struct = new Struct(structSchema);
+    struct.put("bytes", new byte[]{42});
+
+    SinkRecord validRecord = new SinkRecord(TOPIC, PARTITION, Schema.STRING_SCHEMA, key,  structSchema, struct, 1);
+
+    inputRecords.add(validRecord);
+
+    final ElasticsearchWriter nonStrictWriter = initWriter(client, true);
+    // stop the bulk processor
+    nonStrictWriter.stop();
+
+    // try to write on a stopped writer, should throw
+    ConnectException e = assertThrows(ConnectException.class,
+            () -> nonStrictWriter.write(inputRecords));
+    MatcherAssert.assertThat(e.getMessage(), containsString("Stopping"));
   }
 
   private Collection<SinkRecord> prepareData(int numRecords) {
