@@ -51,13 +51,19 @@ import io.searchbox.indices.IndicesExists;
 import io.searchbox.indices.Refresh;
 import io.searchbox.indices.mapping.PutMapping;
 import io.searchbox.params.Parameters;
+import javax.net.ssl.HostnameVerifier;
 import org.apache.http.HttpHost;
+import org.apache.http.auth.AuthScope;
+import org.apache.http.auth.UsernamePasswordCredentials;
+import org.apache.http.client.CredentialsProvider;
+import org.apache.http.impl.client.BasicCredentialsProvider;
 import org.apache.kafka.common.config.ConfigDef;
 import org.apache.http.conn.ssl.SSLConnectionSocketFactory;
 import org.apache.http.nio.conn.ssl.SSLIOSessionStrategy;
 import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.config.types.Password;
 import org.apache.kafka.common.network.Mode;
+import org.apache.kafka.common.security.ssl.DefaultSslEngineFactory;
 import org.apache.kafka.common.security.ssl.SslFactory;
 import org.apache.kafka.common.utils.SystemTime;
 import org.apache.kafka.common.utils.Time;
@@ -73,6 +79,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import javax.net.ssl.SSLContext;
 
@@ -155,6 +162,7 @@ public class JestElasticsearchClient implements ElasticsearchClient {
               config.getLong(ElasticsearchSinkConnectorConfig.RETRY_BACKOFF_MS_CONFIG);
       this.maxRetries = config.getInt(ElasticsearchSinkConnectorConfig.MAX_RETRIES_CONFIG);
       this.timeout = config.getInt(ElasticsearchSinkConnectorConfig.READ_TIMEOUT_MS_CONFIG);
+
     } catch (IOException e) {
       throw new ConnectException(
           "Couldn't start ElasticsearchSinkTask due to connection error:",
@@ -174,13 +182,17 @@ public class JestElasticsearchClient implements ElasticsearchClient {
         ElasticsearchSinkConnectorConfig.CONNECTION_TIMEOUT_MS_CONFIG);
     final int readTimeout = config.getInt(
         ElasticsearchSinkConnectorConfig.READ_TIMEOUT_MS_CONFIG);
-
+    final int maxIdleTime = config.getInt(
+        ElasticsearchSinkConnectorConfig.MAX_CONNECTION_IDLE_TIME_MS_CONFIG);
     final String username = config.getString(
         ElasticsearchSinkConnectorConfig.CONNECTION_USERNAME_CONFIG);
     final Password password = config.getPassword(
         ElasticsearchSinkConnectorConfig.CONNECTION_PASSWORD_CONFIG);
     List<String> address = config.getList(
         ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG);
+
+    final boolean compressionEnabled = config.getBoolean(
+            ElasticsearchSinkConnectorConfig.CONNECTION_COMPRESSION_CONFIG);
 
     final int maxInFlightRequests = config.getInt(
         ElasticsearchSinkConnectorConfig.MAX_IN_FLIGHT_REQUESTS_CONFIG);
@@ -189,13 +201,17 @@ public class JestElasticsearchClient implements ElasticsearchClient {
         new HttpClientConfig.Builder(address)
             .connTimeout(connTimeout)
             .readTimeout(readTimeout)
+            .requestCompressionEnabled(compressionEnabled)
             .defaultMaxTotalConnectionPerRoute(maxInFlightRequests)
+            .maxConnectionIdleTime(maxIdleTime, TimeUnit.MILLISECONDS)
             .multiThreaded(true);
     if (username != null && password != null) {
       builder.defaultCredentials(username, password.value())
           .preemptiveAuthTargetHosts(address.stream()
               .map(addr -> HttpHost.create(addr)).collect(Collectors.toSet()));
     }
+
+    configureProxy(config, builder);
 
     if (config.secured()) {
       log.info("Using secured connection to {}", address);
@@ -206,20 +222,70 @@ public class JestElasticsearchClient implements ElasticsearchClient {
     return builder.build();
   }
 
+  private static void configureProxy(ElasticsearchSinkConnectorConfig config,
+      HttpClientConfig.Builder builder) {
+
+    if (config.isBasicProxyConfigured()) {
+      HttpHost proxy = new HttpHost(
+          config.getString(ElasticsearchSinkConnectorConfig.PROXY_HOST_CONFIG),
+          config.getInt(ElasticsearchSinkConnectorConfig.PROXY_PORT_CONFIG)
+      );
+
+      builder.proxy(proxy);
+
+      if (config.isProxyWithAuthenticationConfigured()) {
+        final String username = config.getString(
+            ElasticsearchSinkConnectorConfig.CONNECTION_USERNAME_CONFIG);
+        final Password password = config.getPassword(
+            ElasticsearchSinkConnectorConfig.CONNECTION_PASSWORD_CONFIG);
+
+        CredentialsProvider credentialsProvider = new BasicCredentialsProvider();
+        if (username != null && password != null) {
+
+          List<String> addresses = config.getList(
+              ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG);
+
+          addresses.forEach(
+              addr ->
+                  credentialsProvider.setCredentials(
+                      new AuthScope(new HttpHost(addr)),
+                      new UsernamePasswordCredentials(username, password.value())
+                  )
+          );
+        }
+
+        final String proxyUsername = config.getString(
+            ElasticsearchSinkConnectorConfig.PROXY_USERNAME_CONFIG);
+        final Password proxyPassword = config.getPassword(
+            ElasticsearchSinkConnectorConfig.PROXY_PASSWORD_CONFIG);
+        credentialsProvider.setCredentials(
+            new AuthScope(proxy),
+            new UsernamePasswordCredentials(proxyUsername, proxyPassword.value())
+        );
+
+        builder.credentialsProvider(credentialsProvider);
+      }
+    }
+  }
+
   private static void configureSslContext(HttpClientConfig.Builder builder,
                                             ElasticsearchSinkConnectorConfig config) {
     SslFactory kafkaSslFactory = new SslFactory(Mode.CLIENT, null, false);
     kafkaSslFactory.configure(config.sslConfigs());
-    SSLContext sslContext = kafkaSslFactory.sslEngineBuilder().sslContext();
+    SSLContext sslContext = ((DefaultSslEngineFactory)kafkaSslFactory.sslEngineFactory())
+        .sslContext();
+
+    HostnameVerifier hostnameVerifier = config.shouldDisableHostnameVerification()
+            ? (hostname, session) -> true
+            : SSLConnectionSocketFactory.getDefaultHostnameVerifier();
 
     // Sync calls
-    SSLConnectionSocketFactory sslSocketFactory = new SSLConnectionSocketFactory(sslContext,
-        SSLConnectionSocketFactory.getDefaultHostnameVerifier());
+    SSLConnectionSocketFactory sslSocketFactory = new SSLConnectionSocketFactory(
+            sslContext, hostnameVerifier);
     builder.sslSocketFactory(sslSocketFactory);
 
     // Async calls
-    SSLIOSessionStrategy sessionStrategy = new SSLIOSessionStrategy(sslContext,
-        SSLConnectionSocketFactory.getDefaultHostnameVerifier());
+    SSLIOSessionStrategy sessionStrategy = new SSLIOSessionStrategy(sslContext, hostnameVerifier);
     builder.httpsIOSessionStrategy(sessionStrategy);
   }
 

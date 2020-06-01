@@ -49,4 +49,12 @@ public class BulkResponse {
     return errorInfo;
   }
 
+  @Override
+  public String toString() {
+    return "BulkResponse{"
+            + "succeeded=" + succeeded
+            + ", retriable=" + retriable
+            + ", errorInfo='" + (errorInfo == null ? "" : errorInfo) + '\''
+            + '}';
+  }
 }

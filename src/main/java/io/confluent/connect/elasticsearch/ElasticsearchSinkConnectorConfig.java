@@ -22,10 +22,14 @@ import org.apache.kafka.common.config.ConfigDef.Type;
 import org.apache.kafka.common.config.ConfigDef.Width;
 
 import java.util.Map;
+import org.apache.kafka.common.config.ConfigException;
+import org.apache.kafka.common.config.types.Password;
 
 import static io.confluent.connect.elasticsearch.jest.JestElasticsearchClient.WriteMethod;
 import static io.confluent.connect.elasticsearch.DataConverter.BehaviorOnNullValues;
 import static io.confluent.connect.elasticsearch.bulk.BulkProcessor.BehaviorOnMalformedDoc;
+import static org.apache.kafka.common.config.ConfigDef.Range.between;
+import static org.apache.kafka.common.config.SslConfigs.SSL_ENDPOINT_IDENTIFICATION_ALGORITHM_CONFIG;
 import static org.apache.kafka.common.config.SslConfigs.addClientSslSupport;
 
 public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
@@ -130,7 +134,10 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
       + "All map entries with non-string keys are always written as nested documents. "
       + "Prior to 3.3.0, this connector always wrote map entries as nested documents, "
       + "so set this to ``false`` to use that older behavior.";
-
+  public static final String MAX_CONNECTION_IDLE_TIME_MS_CONFIG = "max.connection.idle.time.ms";
+  private static final String MAX_CONNECTION_IDLE_TIME_MS_CONFIG_DOC = "How long to wait "
+        + "in milliseconds before dropping an idle connection to prevent "
+        + "a read timeout.";
   public static final String CONNECTION_TIMEOUT_MS_CONFIG = "connection.timeout.ms";
   public static final String READ_TIMEOUT_MS_CONFIG = "read.timeout.ms";
   private static final String CONNECTION_TIMEOUT_MS_CONFIG_DOC = "How long to wait "
@@ -142,6 +149,13 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
       + "if any read operation times out, and will need to be restarted to resume "
       + "further operations.";
 
+  public static final String CONNECTION_COMPRESSION_CONFIG = "connection.compression";
+  private static final String CONNECTION_COMPRESSION_DOC = "Whether to use GZip compression on "
+          + "HTTP connection to ElasticSearch. Valid options are ``true`` and ``false``. "
+          + "Default is ``false``. To make this setting to work "
+          + "the ``http.compression`` setting also needs to be enabled at the Elasticsearch nodes "
+          + "or the load-balancer before using it.";
+
   public static final String BEHAVIOR_ON_NULL_VALUES_CONFIG = "behavior.on.null.values";
   private static final String BEHAVIOR_ON_NULL_VALUES_DOC = "How to handle records with a "
       + "non-null key and a null value (i.e. Kafka tombstone records). Valid options are "
@@ -150,8 +164,8 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   public static final String BEHAVIOR_ON_MALFORMED_DOCS_CONFIG = "behavior.on.malformed.documents";
   private static final String BEHAVIOR_ON_MALFORMED_DOCS_DOC = "How to handle records that "
       + "Elasticsearch rejects due to some malformation of the document itself, such as an index"
-      + " mapping conflict or a field name containing illegal characters. Valid options are "
-      + "'ignore', 'warn', and 'fail'.";
+      + " mapping conflict, a field name containing illegal characters, or a record with a missing"
+      + " id. Valid options are ignore', 'warn', and 'fail'.";
   public static final String WRITE_METHOD_CONFIG = "write.method";
   private static final String WRITE_METHOD_DOC = "Method used for writing data to Elasticsearch,"
           + " and one of " + WriteMethod.INSERT.toString() + ", " + WriteMethod.UPSERT.toString() 
@@ -183,10 +197,33 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
           + "Values can be `PLAINTEXT` or `SSL`. If `PLAINTEXT` is passed, "
           + "all configs prefixed by " + CONNECTION_SSL_CONFIG_PREFIX + " will be ignored.";
 
+  // Proxy group
+  public static final String PROXY_HOST_CONFIG = "proxy.host";
+  public static final String PROXY_HOST_DISPLAY = "Proxy Host";
+  public static final String PROXY_HOST_DOC = "The address of the proxy host to connect through. "
+      + "Supports the basic authentication scheme only.";
+  public static final String PROXY_HOST_DEFAULT = "";
+
+  public static final String PROXY_PORT_CONFIG = "proxy.port";
+  public static final String PROXY_PORT_DISPLAY = "Proxy Port";
+  public static final String PROXY_PORT_DOC = "The port of the proxy host to connect through.";
+  public static final Integer PROXY_PORT_DEFAULT = 8080;
+
+  public static final String PROXY_USERNAME_CONFIG = "proxy.username";
+  public static final String PROXY_USERNAME_DISPLAY = "Proxy Username";
+  public static final String PROXY_USERNAME_DOC = "The username for the proxy host.";
+  public static final String PROXY_USERNAME_DEFAULT = "";
+
+  public static final String PROXY_PASSWORD_CONFIG = "proxy.password";
+  public static final String PROXY_PASSWORD_DISPLAY = "Proxy Password";
+  public static final String PROXY_PASSWORD_DOC = "The password for the proxy host.";
+  public static final Password PROXY_PASSWORD_DEFAULT = null;
+
   protected static ConfigDef baseConfigDef() {
     final ConfigDef configDef = new ConfigDef();
     addConnectorConfigs(configDef);
     addConversionConfigs(configDef);
+    addProxyConfigs(configDef);
     addSecurityConfigs(configDef);
     return configDef;
   }
@@ -209,6 +246,54 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
     configDef.embed(
         CONNECTION_SSL_CONFIG_PREFIX, SSL_GROUP,
         configDef.configKeys().size() + 2, sslConfigDef
+    );
+  }
+
+  private static void addProxyConfigs(ConfigDef configDef) {
+    final String group = "Proxy";
+    int orderInGroup = 0;
+    configDef
+        .define(
+            PROXY_HOST_CONFIG,
+            Type.STRING,
+            PROXY_HOST_DEFAULT,
+            Importance.LOW,
+            PROXY_HOST_DOC,
+            group,
+            orderInGroup++,
+            Width.LONG,
+            PROXY_HOST_DISPLAY
+        ).define(
+            PROXY_PORT_CONFIG,
+            Type.INT,
+            PROXY_PORT_DEFAULT,
+            between(1, 65535),
+            Importance.LOW,
+            PROXY_PORT_DOC,
+            group,
+            orderInGroup++,
+            Width.LONG,
+            PROXY_PORT_DISPLAY
+        ).define(
+            PROXY_USERNAME_CONFIG,
+            Type.STRING,
+            PROXY_USERNAME_DEFAULT,
+            Importance.LOW,
+            PROXY_USERNAME_DOC,
+            group,
+            orderInGroup++,
+            Width.LONG,
+            PROXY_USERNAME_DISPLAY
+        ).define(
+            PROXY_PASSWORD_CONFIG,
+            Type.PASSWORD,
+            PROXY_PASSWORD_DEFAULT,
+            Importance.LOW,
+            PROXY_PASSWORD_DOC,
+            group,
+            orderInGroup++,
+            Width.LONG,
+            PROXY_PASSWORD_DISPLAY
     );
   }
 
@@ -315,7 +400,27 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
         Width.SHORT,
         "Retry Backoff (ms)"
       ).define(
-        CONNECTION_TIMEOUT_MS_CONFIG, 
+        CONNECTION_COMPRESSION_CONFIG,
+        Type.BOOLEAN,
+        false,
+        Importance.LOW,
+        CONNECTION_COMPRESSION_DOC,
+        group,
+        ++order,
+        Width.SHORT,
+        "Compression"
+      ).define(
+        MAX_CONNECTION_IDLE_TIME_MS_CONFIG,
+        Type.INT,
+        "60000",
+        Importance.LOW,
+        MAX_CONNECTION_IDLE_TIME_MS_CONFIG_DOC,
+        group,
+        ++order,
+        Width.SHORT,
+        "Max Connection Idle Time"
+    ).define(
+        CONNECTION_TIMEOUT_MS_CONFIG,
         Type.INT, 
         1000, 
         Importance.LOW, 
@@ -331,8 +436,8 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
         Importance.LOW, 
         READ_TIMEOUT_MS_CONFIG_DOC,
         group,
-        ++order, 
-        Width.SHORT, 
+        ++order,
+        Width.SHORT,
         "Read Timeout"
     ).define(
         AUTO_CREATE_INDICES_AT_START_CONFIG,
@@ -354,6 +459,42 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
 
   private SecurityProtocol securityProtocol() {
     return SecurityProtocol.valueOf(getString(ELASTICSEARCH_SECURITY_PROTOCOL_CONFIG));
+  }
+
+  public boolean isBasicProxyConfigured() {
+    return !getString(PROXY_HOST_CONFIG).isEmpty();
+  }
+
+  public boolean isProxyWithAuthenticationConfigured() {
+    return isBasicProxyConfigured()
+        && !getString(PROXY_USERNAME_CONFIG).isEmpty()
+        && getPassword(PROXY_PASSWORD_CONFIG) != null;
+  }
+
+  private void validateProxyConfigs() {
+    String username = getString(PROXY_USERNAME_CONFIG);
+    Password password = getPassword(PROXY_PASSWORD_CONFIG);
+
+    if (!isBasicProxyConfigured()) {
+      if (!username.isEmpty() || password != null) {
+        throw new ConfigException(
+            String.format(
+                "%s and %s cannot be set without %s.",
+                PROXY_USERNAME_CONFIG,
+                PROXY_PASSWORD_CONFIG,
+                PROXY_HOST_CONFIG
+            )
+        );
+      }
+    } else {
+      if (username.isEmpty() ^ password == null) {
+        throw new ConfigException(
+            String.format(
+                "Both %s and %s must be set.", PROXY_PASSWORD_CONFIG, PROXY_PASSWORD_CONFIG
+            )
+        );
+      }
+    }
   }
 
   private static void addConversionConfigs(ConfigDef configDef) {
@@ -477,12 +618,20 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
 
   public ElasticsearchSinkConnectorConfig(Map<String, String> props) {
     super(CONFIG, props);
+    validateProxyConfigs();
   }
 
   public Map<String, Object> sslConfigs() {
     ConfigDef sslConfigDef = new ConfigDef();
     addClientSslSupport(sslConfigDef);
     return sslConfigDef.parse(originalsWithPrefix(CONNECTION_SSL_CONFIG_PREFIX));
+  }
+
+  public boolean shouldDisableHostnameVerification() {
+    String sslEndpointIdentificationAlgorithm = getString(
+            CONNECTION_SSL_CONFIG_PREFIX + SSL_ENDPOINT_IDENTIFICATION_ALGORITHM_CONFIG);
+    return sslEndpointIdentificationAlgorithm != null
+            && sslEndpointIdentificationAlgorithm.isEmpty();
   }
 
   public static void main(String[] args) {

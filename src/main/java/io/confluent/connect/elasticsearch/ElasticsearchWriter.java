@@ -286,23 +286,14 @@ public class ElasticsearchWriter {
       String index,
       boolean ignoreKey,
       boolean ignoreSchema) {
-
+    IndexableRecord record = null;
     try {
-      IndexableRecord record = converter.convertRecord(
-          sinkRecord,
-          index,
-          type,
-          ignoreKey,
-          ignoreSchema);
-      if (record != null) {
-        log.trace(
-            "Adding record from topic/partition/offset {}/{}/{} to bulk processor",
-            sinkRecord.topic(),
-            sinkRecord.kafkaPartition(),
-            sinkRecord.kafkaOffset()
-        );
-        bulkProcessor.add(record, flushTimeoutMs);
-      }
+      record = converter.convertRecord(
+              sinkRecord,
+              index,
+              type,
+              ignoreKey,
+              ignoreSchema);
     } catch (ConnectException convertException) {
       if (dropInvalidMessage) {
         log.error(
@@ -316,6 +307,15 @@ public class ElasticsearchWriter {
       } else {
         throw convertException;
       }
+    }
+    if (record != null) {
+      log.trace(
+              "Adding record from topic/partition/offset {}/{}/{} to bulk processor",
+              sinkRecord.topic(),
+              sinkRecord.kafkaPartition(),
+              sinkRecord.kafkaOffset()
+      );
+      bulkProcessor.add(record, flushTimeoutMs);
     }
   }
 
