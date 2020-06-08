@@ -67,6 +67,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
@@ -96,6 +97,7 @@ public class JestElasticsearchClient implements ElasticsearchClient {
   private WriteMethod writeMethod = WriteMethod.DEFAULT;
 
   private final Set<String> indexCache = new HashSet<>();
+  private Map<String, Object> indexParams = new HashMap<>();
 
   private int maxRetries;
   private long retryBackoffMs;
@@ -154,6 +156,7 @@ public class JestElasticsearchClient implements ElasticsearchClient {
               config.getLong(ElasticsearchSinkConnectorConfig.RETRY_BACKOFF_MS_CONFIG);
       this.maxRetries = config.getInt(ElasticsearchSinkConnectorConfig.MAX_RETRIES_CONFIG);
       this.timeout = config.getInt(ElasticsearchSinkConnectorConfig.READ_TIMEOUT_MS_CONFIG);
+      this.indexParams = config.indexParams;
     } catch (IOException e) {
       throw new ConnectException(
           "Couldn't start ElasticsearchSinkTask due to connection error:",
@@ -465,6 +468,10 @@ public class JestElasticsearchClient implements ElasticsearchClient {
     for (IndexableRecord record : batch) {
       builder.addAction(toBulkableAction(record));
     }
+    indexParams.forEach((k, v) -> {
+      LOG.warn(String.format("createBulkRequest indexParam: %s:%s", k, v));
+      builder.setParameter(k, v);
+    });
     return new JestBulkRequest(builder.build());
   }
 
@@ -496,17 +503,26 @@ public class JestElasticsearchClient implements ElasticsearchClient {
     if (record.version != null) {
       req.setParameter("version_type", "external").setParameter("version", record.version);
     }
+    indexParams.forEach((k, v) -> {
+      LOG.warn(String.format("toIndexRequest indexParam: %s:%s", k, v));
+      req.setParameter(k, v);
+    });
     return req.build();
   }
 
   private Update toUpdateRequest(IndexableRecord record) {
     String payload = "{\"doc\":" + record.payload
         + ", \"doc_as_upsert\":true}";
-    return new Update.Builder(payload)
+    Update.Builder req = new Update.Builder(payload)
         .index(record.key.index)
         .type(record.key.type)
-        .id(record.key.id)
-        .build();
+        .id(record.key.id);
+
+    indexParams.forEach((k, v) -> {
+      LOG.warn(String.format("toUpdateRequest indexParam: %s:%s", k, v));
+      req.setParameter(k, v);
+    });
+    return req.build();
   }
 
   public BulkResponse executeBulk(BulkRequest bulk) throws IOException {

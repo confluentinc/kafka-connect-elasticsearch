@@ -186,6 +186,10 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
           + "Values can be `PLAINTEXT` or `SSL`. If `PLAINTEXT` is passed, "
           + "all configs prefixed by " + CONNECTION_SSL_CONFIG_PREFIX + " will be ignored.";
 
+  public static final String ELASTICSEARCH_INDEX_PARAM_PREFIX = "elasticsearch.index.param.";
+
+  public final Map<String, Object> indexParams;
+
   protected static ConfigDef baseConfigDef() {
     final ConfigDef configDef = new ConfigDef();
     addConnectorConfigs(configDef);
@@ -490,6 +494,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
 
   public ElasticsearchSinkConnectorConfig(Map<String, String> props) {
     super(CONFIG, props);
+    indexParams = originalsWithPrefix(ELASTICSEARCH_INDEX_PARAM_PREFIX);
   }
 
   public Map<String, Object> sslConfigs() {
