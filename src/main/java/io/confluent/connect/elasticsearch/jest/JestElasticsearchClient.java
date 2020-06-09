@@ -469,7 +469,6 @@ public class JestElasticsearchClient implements ElasticsearchClient {
       builder.addAction(toBulkableAction(record));
     }
     indexParams.forEach((k, v) -> {
-      LOG.warn(String.format("createBulkRequest indexParam: %s:%s", k, v));
       builder.setParameter(k, v);
     });
     return new JestBulkRequest(builder.build());
@@ -504,7 +503,6 @@ public class JestElasticsearchClient implements ElasticsearchClient {
       req.setParameter("version_type", "external").setParameter("version", record.version);
     }
     indexParams.forEach((k, v) -> {
-      LOG.warn(String.format("toIndexRequest indexParam: %s:%s", k, v));
       req.setParameter(k, v);
     });
     return req.build();
@@ -519,7 +517,6 @@ public class JestElasticsearchClient implements ElasticsearchClient {
         .id(record.key.id);
 
     indexParams.forEach((k, v) -> {
-      LOG.warn(String.format("toUpdateRequest indexParam: %s:%s", k, v));
       req.setParameter(k, v);
     });
     return req.build();
