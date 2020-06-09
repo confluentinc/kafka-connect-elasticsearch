@@ -21,6 +21,7 @@ import org.apache.kafka.common.config.ConfigDef.Importance;
 import org.apache.kafka.common.config.ConfigDef.Type;
 import org.apache.kafka.common.config.ConfigDef.Width;
 
+import java.util.Collections;
 import java.util.Map;
 
 import static io.confluent.connect.elasticsearch.jest.JestElasticsearchClient.WriteMethod;
@@ -494,7 +495,8 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
 
   public ElasticsearchSinkConnectorConfig(Map<String, String> props) {
     super(CONFIG, props);
-    indexParams = originalsWithPrefix(ELASTICSEARCH_INDEX_PARAM_PREFIX);
+    indexParams = Collections.unmodifiableMap(
+        originalsWithPrefix(ELASTICSEARCH_INDEX_PARAM_PREFIX));
   }
 
   public Map<String, Object> sslConfigs() {
