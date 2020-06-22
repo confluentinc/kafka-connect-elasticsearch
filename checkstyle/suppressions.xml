@@ -9,7 +9,7 @@
     <!-- switch statements on types exceed maximum complexity -->
     <suppress
             checks="(CyclomaticComplexity)"
-            files="(JestElasticsearchClient|Mapping).java"
+            files="(JestElasticsearchClient|Mapping|BulkProcessor).java"
     />
 
     <!-- TODO: Undecided if this is too much -->
