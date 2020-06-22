@@ -139,6 +139,13 @@ public class ElasticsearchSinkTask extends SinkTask {
           .setBehaviorOnNullValues(behaviorOnNullValues)
           .setBehaviorOnMalformedDoc(behaviorOnMalformedDoc);
 
+      try {
+        // may be null if DLQ not enabled
+        builder.setErrantRecordReporter(context.errantRecordReporter());
+      } catch (NoClassDefFoundError e) {
+        // Will occur in Connect runtimes earlier than 2.6
+      }
+
       this.createIndicesAtStartTime = createIndicesAtStartTime;
 
       writer = builder.build();
