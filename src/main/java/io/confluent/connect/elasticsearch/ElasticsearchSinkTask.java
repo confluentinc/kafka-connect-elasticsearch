@@ -140,10 +140,15 @@ public class ElasticsearchSinkTask extends SinkTask {
           .setBehaviorOnMalformedDoc(behaviorOnMalformedDoc);
 
       try {
+        if (context.errantRecordReporter() == null) {
+          log.info("Errant record reporter not configured.");
+        }
+
         // may be null if DLQ not enabled
         builder.setErrantRecordReporter(context.errantRecordReporter());
       } catch (NoClassDefFoundError e) {
         // Will occur in Connect runtimes earlier than 2.6
+        log.warn("AK versions prior to 2.6 do not support the errant record reporter");
       }
 
       this.createIndicesAtStartTime = createIndicesAtStartTime;

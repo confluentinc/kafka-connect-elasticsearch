@@ -23,7 +23,6 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedList;
@@ -42,6 +41,7 @@ import static org.junit.Assert.fail;
 import static io.confluent.connect.elasticsearch.bulk.BulkProcessor.BehaviorOnMalformedDoc;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
@@ -429,7 +429,7 @@ public class BulkProcessorTest {
       }
     }
 
-    verify(reporter, times(4)).report(sinkRecord(), any());
+    verify(reporter, times(4)).report(eq(sinkRecord()), any());
   }
 
   @Test
