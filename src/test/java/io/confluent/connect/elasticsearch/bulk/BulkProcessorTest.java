@@ -81,7 +81,7 @@ public class BulkProcessorTest {
     }
 
     @Override
-    public BulkResponse execute(List<Integer> request) throws IOException {
+    public BulkResponse execute(List<Integer> request) {
       final Expectation expectation;
       try {
         expectation = expectQ.remove();
@@ -259,7 +259,7 @@ public class BulkProcessorTest {
   }
 
   @Test
-  public void retriableErrorsHitMaxRetries() throws InterruptedException, ExecutionException {
+  public void retriableErrorsHitMaxRetries() throws InterruptedException {
     final int maxBufferedRecords = 100;
     final int maxInFlightBatches = 5;
     final int batchSize = 2;
@@ -337,7 +337,7 @@ public class BulkProcessorTest {
   }
 
   @Test
-  public void failOnMalformedDoc() throws InterruptedException {
+  public void failOnMalformedDoc() {
     final int maxBufferedRecords = 100;
     final int maxInFlightBatches = 5;
     final int batchSize = 2;
@@ -380,7 +380,7 @@ public class BulkProcessorTest {
   }
 
   @Test
-  public void ignoreOrWarnOnMalformedDoc() throws InterruptedException {
+  public void ignoreOrWarnOnMalformedDoc() {
     final int maxBufferedRecords = 100;
     final int maxInFlightBatches = 5;
     final int batchSize = 2;
@@ -429,7 +429,7 @@ public class BulkProcessorTest {
       }
     }
 
-    verify(reporter, times(4)).report(any(), any());
+    verify(reporter, times(4)).report(sinkRecord(), any());
   }
 
   @Test
@@ -469,7 +469,7 @@ public class BulkProcessorTest {
   }
 
   @Test
-  public void terminateRetriesWhenInterruptedInSleep() throws Exception {
+  public void terminateRetriesWhenInterruptedInSleep() {
     final int maxBufferedRecords = 100;
     final int maxInFlightBatches = 5;
     final int batchSize = 2;

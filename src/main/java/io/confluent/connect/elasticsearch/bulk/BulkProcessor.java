@@ -19,7 +19,6 @@ import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig;
 import io.confluent.connect.elasticsearch.LogContext;
 import io.confluent.connect.elasticsearch.RetryUtil;
 
-import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.common.utils.Time;
@@ -78,7 +77,7 @@ public class BulkProcessor<R, B> {
   // shared state, synchronized on (this), may be part of wait() conditions so need notifyAll() on
   // changes
   private final Deque<R> unsentRecords;
-  private final Map<R, SinkRecord> recordMap;
+  private final ConcurrentHashMap<R, SinkRecord> recordMap;
   private int inFlightRecords = 0;
   private final LogContext logContext = new LogContext();
 
@@ -459,21 +458,22 @@ public class BulkProcessor<R, B> {
                   System.currentTimeMillis() - startTime
               );
             }
-            batch.forEach(r -> recordMap.remove(r));
             return bulkRsp;
           } else if (responseContainsMalformedDocError(bulkRsp)) {
             retriable = bulkRsp.isRetriable();
             handleMalformedDoc(bulkRsp);
-            for (R record : batch) {
-              SinkRecord original = recordMap.get(record);
-              if (original != null && reporter != null) {
-                reporter.report(
-                    original,
-                    new ConnectException("Bulk request failed: " + bulkRsp.getErrorInfo())
-                );
+            if (reporter != null) {
+              for (R record : batch) {
+                SinkRecord original = recordMap.get(record);
+                if (original != null) {
+                  reporter.report(
+                      original,
+                      new ConnectException("Bulk request failed: " + bulkRsp.getErrorInfo())
+                  );
+                }
               }
             }
-            batch.forEach(r -> recordMap.remove(r));
+            recordMap.keySet().removeAll(batch);
             return bulkRsp;
           } else {
             // for all other errors, throw the error up
