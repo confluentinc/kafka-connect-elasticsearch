@@ -468,7 +468,9 @@ public class BulkProcessor<R, B> {
                 if (original != null) {
                   reporter.report(
                       original,
-                      new ConnectException("Bulk request failed: " + bulkRsp.getErrorInfo())
+                      new NoStackTraceConnectException(
+                          "Bulk request failed: " + bulkRsp.getErrorInfo()
+                      )
                   );
                 }
               }
@@ -613,6 +615,18 @@ public class BulkProcessor<R, B> {
     @Override
     public String toString() {
       return name().toLowerCase(Locale.ROOT);
+    }
+  }
+
+  public static class NoStackTraceConnectException extends RuntimeException {
+
+    public NoStackTraceConnectException(String message) {
+      super(message);
+    }
+
+    @Override
+    public synchronized Throwable fillInStackTrace() {
+      return this;
     }
   }
 }
