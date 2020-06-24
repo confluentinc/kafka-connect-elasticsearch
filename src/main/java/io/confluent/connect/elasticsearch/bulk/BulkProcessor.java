@@ -468,7 +468,7 @@ public class BulkProcessor<R, B> {
                 if (original != null) {
                   reporter.report(
                       original,
-                      new NoStackTraceConnectException(
+                      new ReportingException(
                           "Bulk request failed: " + bulkRsp.getErrorInfo()
                       )
                   );
@@ -618,12 +618,22 @@ public class BulkProcessor<R, B> {
     }
   }
 
-  public static class NoStackTraceConnectException extends RuntimeException {
+  /**
+   * Exception that swallows the stack trace used for reporting errors from Elasticsearch
+   * (mapper_parser_exception, illegal_argument_exception, and action_request_validation_exception)
+   * resulting from bad records using the AK 2.6 reporter DLQ interface.
+   */
+  public static class ReportingException extends RuntimeException {
 
-    public NoStackTraceConnectException(String message) {
+    public ReportingException(String message) {
       super(message);
     }
 
+    /**
+     * This method is overriden to swallow the stack trace.
+     *
+     * @return Throwable
+     */
     @Override
     public synchronized Throwable fillInStackTrace() {
       return this;
