@@ -91,7 +91,7 @@ public class ElasticsearchSinkTask extends SinkTask {
           config.getInt(ElasticsearchSinkConnectorConfig.MAX_RETRIES_CONFIG);
       boolean dropInvalidMessage =
           config.getBoolean(ElasticsearchSinkConnectorConfig.DROP_INVALID_MESSAGE_CONFIG);
-      boolean createIndicesAtStartTime =
+      final boolean createIndicesAtStartTime =
           config.getBoolean(ElasticsearchSinkConnectorConfig.AUTO_CREATE_INDICES_AT_START_CONFIG);
 
       DataConverter.BehaviorOnNullValues behaviorOnNullValues =
@@ -138,6 +138,18 @@ public class ElasticsearchSinkTask extends SinkTask {
           .setDropInvalidMessage(dropInvalidMessage)
           .setBehaviorOnNullValues(behaviorOnNullValues)
           .setBehaviorOnMalformedDoc(behaviorOnMalformedDoc);
+
+      try {
+        if (context.errantRecordReporter() == null) {
+          log.info("Errant record reporter not configured.");
+        }
+
+        // may be null if DLQ not enabled
+        builder.setErrantRecordReporter(context.errantRecordReporter());
+      } catch (NoClassDefFoundError e) {
+        // Will occur in Connect runtimes earlier than 2.6
+        log.warn("AK versions prior to 2.6 do not support the errant record reporter");
+      }
 
       this.createIndicesAtStartTime = createIndicesAtStartTime;
 

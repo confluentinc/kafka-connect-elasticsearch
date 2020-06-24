@@ -15,12 +15,15 @@
 
 package io.confluent.connect.elasticsearch;
 
+import static org.mockito.Mockito.mock;
+
 import com.carrotsearch.randomizedtesting.annotations.ThreadLeakScope;
 
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.sink.SinkRecord;
+import org.apache.kafka.connect.sink.SinkTaskContext;
 import org.elasticsearch.action.ActionFuture;
 import org.elasticsearch.action.ActionRequest;
 import org.elasticsearch.action.ActionRequestValidationException;
@@ -68,6 +71,7 @@ public class ElasticsearchSinkTaskTest extends ElasticsearchSinkTestBase {
     Map<String, String> props = createProps();
 
     ElasticsearchSinkTask task = new ElasticsearchSinkTask();
+    task.initialize(mock(SinkTaskContext.class));
     task.start(props, client);
     task.open(new HashSet<>(Arrays.asList(TOPIC_PARTITION, TOPIC_PARTITION2, TOPIC_PARTITION3)));
 
@@ -99,6 +103,7 @@ public class ElasticsearchSinkTaskTest extends ElasticsearchSinkTestBase {
     Map<String, String> props = createProps();
 
     ElasticsearchSinkTask task = new ElasticsearchSinkTask();
+    task.initialize(mock(SinkTaskContext.class));
 
     String key = "key";
     Schema schema = createSchema();
@@ -132,6 +137,7 @@ public class ElasticsearchSinkTaskTest extends ElasticsearchSinkTestBase {
     props.put(ElasticsearchSinkConnectorConfig.AUTO_CREATE_INDICES_AT_START_CONFIG, "false");
 
     ElasticsearchSinkTask task = new ElasticsearchSinkTask();
+    task.initialize(mock(SinkTaskContext.class));
 
     String key = "key";
     Schema schema = createSchema();

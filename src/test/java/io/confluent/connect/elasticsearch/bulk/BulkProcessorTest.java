@@ -15,12 +15,14 @@
 package io.confluent.connect.elasticsearch.bulk;
 
 import org.apache.kafka.common.utils.Time;
+import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.errors.ConnectException;
+import org.apache.kafka.connect.sink.ErrantRecordReporter;
+import org.apache.kafka.connect.sink.SinkRecord;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedList;
@@ -37,9 +39,13 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import static io.confluent.connect.elasticsearch.bulk.BulkProcessor.BehaviorOnMalformedDoc;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 
 public class BulkProcessorTest {
 
@@ -75,7 +81,7 @@ public class BulkProcessorTest {
     }
 
     @Override
-    public BulkResponse execute(List<Integer> request) throws IOException {
+    public BulkResponse execute(List<Integer> request) {
       final Expectation expectation;
       try {
         expectation = expectQ.remove();
@@ -120,22 +126,23 @@ public class BulkProcessorTest {
         lingerMs,
         maxRetries,
         retryBackoffMs,
-        behaviorOnMalformedDoc
+        behaviorOnMalformedDoc,
+        null
     );
 
     final int addTimeoutMs = 10;
-    bulkProcessor.add(1, addTimeoutMs);
-    bulkProcessor.add(2, addTimeoutMs);
-    bulkProcessor.add(3, addTimeoutMs);
-    bulkProcessor.add(4, addTimeoutMs);
-    bulkProcessor.add(5, addTimeoutMs);
-    bulkProcessor.add(6, addTimeoutMs);
-    bulkProcessor.add(7, addTimeoutMs);
-    bulkProcessor.add(8, addTimeoutMs);
-    bulkProcessor.add(9, addTimeoutMs);
-    bulkProcessor.add(10, addTimeoutMs);
-    bulkProcessor.add(11, addTimeoutMs);
-    bulkProcessor.add(12, addTimeoutMs);
+    bulkProcessor.add(1, sinkRecord(), addTimeoutMs);
+    bulkProcessor.add(2, sinkRecord(), addTimeoutMs);
+    bulkProcessor.add(3, sinkRecord(), addTimeoutMs);
+    bulkProcessor.add(4, sinkRecord(), addTimeoutMs);
+    bulkProcessor.add(5, sinkRecord(), addTimeoutMs);
+    bulkProcessor.add(6, sinkRecord(), addTimeoutMs);
+    bulkProcessor.add(7, sinkRecord(), addTimeoutMs);
+    bulkProcessor.add(8, sinkRecord(), addTimeoutMs);
+    bulkProcessor.add(9, sinkRecord(), addTimeoutMs);
+    bulkProcessor.add(10, sinkRecord(), addTimeoutMs);
+    bulkProcessor.add(11, sinkRecord(), addTimeoutMs);
+    bulkProcessor.add(12, sinkRecord(), addTimeoutMs);
 
     client.expect(Arrays.asList(1, 2, 3, 4, 5), BulkResponse.success());
     client.expect(Arrays.asList(6, 7, 8, 9, 10), BulkResponse.success());
@@ -164,7 +171,8 @@ public class BulkProcessorTest {
         lingerMs,
         maxRetries,
         retryBackoffMs,
-        behaviorOnMalformedDoc
+        behaviorOnMalformedDoc,
+        null
     );
 
     client.expect(Arrays.asList(1, 2, 3), BulkResponse.success());
@@ -172,9 +180,9 @@ public class BulkProcessorTest {
     bulkProcessor.start();
 
     final int addTimeoutMs = 10;
-    bulkProcessor.add(1, addTimeoutMs);
-    bulkProcessor.add(2, addTimeoutMs);
-    bulkProcessor.add(3, addTimeoutMs);
+    bulkProcessor.add(1, sinkRecord(), addTimeoutMs);
+    bulkProcessor.add(2, sinkRecord(), addTimeoutMs);
+    bulkProcessor.add(3, sinkRecord(), addTimeoutMs);
 
     assertFalse(client.expectationsMet());
 
@@ -201,15 +209,16 @@ public class BulkProcessorTest {
         lingerMs,
         maxRetries,
         retryBackoffMs,
-        behaviorOnMalformedDoc
+        behaviorOnMalformedDoc,
+        null
     );
 
     final int addTimeoutMs = 10;
-    bulkProcessor.add(42, addTimeoutMs);
+    bulkProcessor.add(42, sinkRecord(), addTimeoutMs);
     assertEquals(1, bulkProcessor.bufferedRecords());
     try {
       // BulkProcessor not started, so this add should timeout & throw
-      bulkProcessor.add(43, addTimeoutMs);
+      bulkProcessor.add(43, sinkRecord(), addTimeoutMs);
       fail();
     } catch (ConnectException good) {
     }
@@ -238,18 +247,19 @@ public class BulkProcessorTest {
         lingerMs,
         maxRetries,
         retryBackoffMs,
-        behaviorOnMalformedDoc
+        behaviorOnMalformedDoc,
+        null
     );
 
     final int addTimeoutMs = 10;
-    bulkProcessor.add(42, addTimeoutMs);
-    bulkProcessor.add(43, addTimeoutMs);
+    bulkProcessor.add(42, sinkRecord(), addTimeoutMs);
+    bulkProcessor.add(43, sinkRecord(), addTimeoutMs);
 
     assertTrue(bulkProcessor.submitBatchWhenReady().get().succeeded);
   }
 
   @Test
-  public void retriableErrorsHitMaxRetries() throws InterruptedException, ExecutionException {
+  public void retriableErrorsHitMaxRetries() throws InterruptedException {
     final int maxBufferedRecords = 100;
     final int maxInFlightBatches = 5;
     final int batchSize = 2;
@@ -272,12 +282,13 @@ public class BulkProcessorTest {
         lingerMs,
         maxRetries,
         retryBackoffMs,
-        behaviorOnMalformedDoc
+        behaviorOnMalformedDoc,
+        null
     );
 
     final int addTimeoutMs = 10;
-    bulkProcessor.add(42, addTimeoutMs);
-    bulkProcessor.add(43, addTimeoutMs);
+    bulkProcessor.add(42, sinkRecord(), addTimeoutMs);
+    bulkProcessor.add(43, sinkRecord(), addTimeoutMs);
 
     try {
       bulkProcessor.submitBatchWhenReady().get();
@@ -309,12 +320,13 @@ public class BulkProcessorTest {
         lingerMs,
         maxRetries,
         retryBackoffMs,
-        behaviorOnMalformedDoc
+        behaviorOnMalformedDoc,
+        null
     );
 
     final int addTimeoutMs = 10;
-    bulkProcessor.add(42, addTimeoutMs);
-    bulkProcessor.add(43, addTimeoutMs);
+    bulkProcessor.add(42, sinkRecord(), addTimeoutMs);
+    bulkProcessor.add(43, sinkRecord(), addTimeoutMs);
 
     try {
       bulkProcessor.submitBatchWhenReady().get();
@@ -325,7 +337,7 @@ public class BulkProcessorTest {
   }
 
   @Test
-  public void failOnMalformedDoc() throws InterruptedException {
+  public void failOnMalformedDoc() {
     final int maxBufferedRecords = 100;
     final int maxInFlightBatches = 5;
     final int batchSize = 2;
@@ -348,13 +360,14 @@ public class BulkProcessorTest {
         lingerMs,
         maxRetries,
         retryBackoffMs,
-        behaviorOnMalformedDoc
+        behaviorOnMalformedDoc,
+        null
     );
 
     bulkProcessor.start();
 
-    bulkProcessor.add(42, 1);
-    bulkProcessor.add(43, 1);
+    bulkProcessor.add(42, sinkRecord(),1);
+    bulkProcessor.add(43, sinkRecord(), 1);
 
     try {
       final int flushTimeoutMs = 1000;
@@ -367,13 +380,14 @@ public class BulkProcessorTest {
   }
 
   @Test
-  public void ignoreOrWarnOnMalformedDoc() throws InterruptedException {
+  public void ignoreOrWarnOnMalformedDoc() {
     final int maxBufferedRecords = 100;
     final int maxInFlightBatches = 5;
     final int batchSize = 2;
     final int lingerMs = 5;
     final int maxRetries = 3;
     final int retryBackoffMs = 1;
+    final ErrantRecordReporter reporter = mock(ErrantRecordReporter.class);
 
     // Test both IGNORE and WARN options
     // There is no difference in logic between IGNORE and WARN, except for the logging.
@@ -398,13 +412,14 @@ public class BulkProcessorTest {
           lingerMs,
           maxRetries,
           retryBackoffMs,
-          behaviorOnMalformedDoc
+          behaviorOnMalformedDoc,
+          reporter
       );
 
       bulkProcessor.start();
 
-      bulkProcessor.add(42, 1);
-      bulkProcessor.add(43, 1);
+      bulkProcessor.add(42, sinkRecord(), 1);
+      bulkProcessor.add(43, sinkRecord(), 1);
 
       try {
         final int flushTimeoutMs = 1000;
@@ -413,6 +428,8 @@ public class BulkProcessorTest {
         fail(e.getMessage());
       }
     }
+
+    verify(reporter, times(4)).report(eq(sinkRecord()), any());
   }
 
   @Test
@@ -437,12 +454,13 @@ public class BulkProcessorTest {
             lingerMs,
             maxRetries,
             retryBackoffMs,
-            behaviorOnMalformedDoc
+            behaviorOnMalformedDoc,
+        null
     );
 
     final int addTimeoutMs = 10;
-    bulkProcessor.add(42, addTimeoutMs);
-    bulkProcessor.add(43, addTimeoutMs);
+    bulkProcessor.add(42, sinkRecord(), addTimeoutMs);
+    bulkProcessor.add(43, sinkRecord(), addTimeoutMs);
 
     Runnable farmer = bulkProcessor.farmerTask();
     ConnectException e = assertThrows(
@@ -451,7 +469,7 @@ public class BulkProcessorTest {
   }
 
   @Test
-  public void terminateRetriesWhenInterruptedInSleep() throws Exception {
+  public void terminateRetriesWhenInterruptedInSleep() {
     final int maxBufferedRecords = 100;
     final int maxInFlightBatches = 5;
     final int batchSize = 2;
@@ -477,15 +495,20 @@ public class BulkProcessorTest {
             lingerMs,
             maxRetries,
             retryBackoffMs,
-            behaviorOnMalformedDoc
+            behaviorOnMalformedDoc,
+            null
     );
 
     final int addTimeoutMs = 10;
-    bulkProcessor.add(42, addTimeoutMs);
-    bulkProcessor.add(43, addTimeoutMs);
+    bulkProcessor.add(42, sinkRecord(), addTimeoutMs);
+    bulkProcessor.add(43, sinkRecord(), addTimeoutMs);
 
     ExecutionException e = assertThrows(ExecutionException.class,
             () -> bulkProcessor.submitBatchWhenReady().get());
     assertThat(e.getMessage(), containsString("a retriable error"));
+  }
+
+  private static SinkRecord sinkRecord() {
+    return new SinkRecord("topic", 0, Schema.STRING_SCHEMA, "key", Schema.INT32_SCHEMA, 0, 0L);
   }
 }

@@ -19,9 +19,12 @@ import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig;
 import io.confluent.connect.elasticsearch.LogContext;
 import io.confluent.connect.elasticsearch.RetryUtil;
 
+import java.util.concurrent.ConcurrentHashMap;
 import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.connect.errors.ConnectException;
+import org.apache.kafka.connect.sink.ErrantRecordReporter;
+import org.apache.kafka.connect.sink.SinkRecord;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -60,6 +63,7 @@ public class BulkProcessor<R, B> {
   private final int maxRetries;
   private final long retryBackoffMs;
   private final BehaviorOnMalformedDoc behaviorOnMalformedDoc;
+  private final ErrantRecordReporter reporter;
 
   private final Thread farmer;
   private final ExecutorService executor;
@@ -73,6 +77,7 @@ public class BulkProcessor<R, B> {
   // shared state, synchronized on (this), may be part of wait() conditions so need notifyAll() on
   // changes
   private final Deque<R> unsentRecords;
+  private final ConcurrentHashMap<R, SinkRecord> recordMap;
   private int inFlightRecords = 0;
   private final LogContext logContext = new LogContext();
 
@@ -85,7 +90,8 @@ public class BulkProcessor<R, B> {
       long lingerMs,
       int maxRetries,
       long retryBackoffMs,
-      BehaviorOnMalformedDoc behaviorOnMalformedDoc
+      BehaviorOnMalformedDoc behaviorOnMalformedDoc,
+      ErrantRecordReporter reporter
   ) {
     this.time = time;
     this.bulkClient = bulkClient;
@@ -95,8 +101,10 @@ public class BulkProcessor<R, B> {
     this.maxRetries = maxRetries;
     this.retryBackoffMs = retryBackoffMs;
     this.behaviorOnMalformedDoc = behaviorOnMalformedDoc;
+    this.reporter = reporter;
 
     unsentRecords = new ArrayDeque<>(maxBufferedRecords);
+    recordMap = new ConcurrentHashMap<>(maxBufferedRecords);
 
     final ThreadFactory threadFactory = makeThreadFactory();
     farmer = threadFactory.newThread(farmerTask());
@@ -303,7 +311,7 @@ public class BulkProcessor<R, B> {
    * <p>If any task has failed prior to or while blocked in the add, or if the timeout expires
    * while blocked, {@link ConnectException} will be thrown.
    */
-  public synchronized void add(R record, long timeoutMs) {
+  public synchronized void add(R record, SinkRecord original, long timeoutMs) {
     throwIfTerminal();
 
     int numBufferedRecords = bufferedRecords();
@@ -336,6 +344,7 @@ public class BulkProcessor<R, B> {
     }
 
     unsentRecords.addLast(record);
+    recordMap.put(record, original);
     notifyAll();
   }
 
@@ -453,6 +462,20 @@ public class BulkProcessor<R, B> {
           } else if (responseContainsMalformedDocError(bulkRsp)) {
             retriable = bulkRsp.isRetriable();
             handleMalformedDoc(bulkRsp);
+            if (reporter != null) {
+              for (R record : batch) {
+                SinkRecord original = recordMap.get(record);
+                if (original != null) {
+                  reporter.report(
+                      original,
+                      new ReportingException(
+                          "Bulk request failed: " + bulkRsp.getErrorInfo()
+                      )
+                  );
+                }
+              }
+            }
+            recordMap.keySet().removeAll(batch);
             return bulkRsp;
           } else {
             // for all other errors, throw the error up
@@ -592,6 +615,28 @@ public class BulkProcessor<R, B> {
     @Override
     public String toString() {
       return name().toLowerCase(Locale.ROOT);
+    }
+  }
+
+  /**
+   * Exception that swallows the stack trace used for reporting errors from Elasticsearch
+   * (mapper_parser_exception, illegal_argument_exception, and action_request_validation_exception)
+   * resulting from bad records using the AK 2.6 reporter DLQ interface.
+   */
+  public static class ReportingException extends RuntimeException {
+
+    public ReportingException(String message) {
+      super(message);
+    }
+
+    /**
+     * This method is overriden to swallow the stack trace.
+     *
+     * @return Throwable
+     */
+    @Override
+    public synchronized Throwable fillInStackTrace() {
+      return this;
     }
   }
 }
