@@ -40,7 +40,7 @@ public class ElasticsearchSinkTaskIT extends ElasticsearchIntegrationTestBase {
 
   @Before
   public void beforeEach() {
-    MDC.put("connector.context", "[MyConnector|task2] ");
+    MDC.put("connector.context", "[MyConnector|task1] ");
     Map<String, String> props = createProps();
     task.start(props, client);
   }

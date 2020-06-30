@@ -41,7 +41,7 @@ public class ElasticsearchSinkTaskDeletesIT extends ElasticsearchIntegrationTest
 
   @Before
   public void beforeEach() {
-    MDC.put("connector.context", "[MyConnector|task1] ");
+    MDC.put("connector.context", "[MyConnector|task2] ");
     Map<String, String> props = createProps();
     task.start(props, client);
   }
