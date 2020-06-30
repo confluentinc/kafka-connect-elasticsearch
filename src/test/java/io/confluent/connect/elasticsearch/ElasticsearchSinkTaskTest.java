@@ -17,6 +17,8 @@ package io.confluent.connect.elasticsearch;
 
 import com.carrotsearch.randomizedtesting.annotations.ThreadLeakScope;
 
+import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.Struct;
@@ -38,6 +40,8 @@ import java.util.Map;
 import java.util.Collection;
 import java.util.ArrayList;
 import java.util.Collections;
+
+import static org.junit.Assert.assertEquals;
 
 
 @ThreadLeakScope(ThreadLeakScope.Scope.NONE)
@@ -88,6 +92,56 @@ public class ElasticsearchSinkTaskTest extends ElasticsearchSinkTestBase {
     refresh();
 
     verifySearchResults(records, true, false);
+  }
+
+  @Test
+  public void testVersionedDeletes() throws Exception {
+    InternalTestCluster cluster = ESIntegTestCase.internalCluster();
+    cluster.ensureAtLeastNumDataNodes(3);
+    int numOfRecords = 100;
+    Map<String, String> props = createProps();
+    props.put(ElasticsearchSinkConnectorConfig.KEY_IGNORE_CONFIG, "false");
+    props.put(ElasticsearchSinkConnectorConfig.MAX_IN_FLIGHT_REQUESTS_CONFIG, Integer.toString(numOfRecords));
+    props.put(ElasticsearchSinkConnectorConfig.BATCH_SIZE_CONFIG, "1");
+    props.put(ElasticsearchSinkConnectorConfig.LINGER_MS_CONFIG, "1");
+    props.put(ElasticsearchSinkConnectorConfig.BEHAVIOR_ON_NULL_VALUES_CONFIG, "delete");
+
+    ElasticsearchSinkTask task = new ElasticsearchSinkTask();
+    task.start(props, client);
+    task.open(new HashSet<>(Arrays.asList(TOPIC_PARTITION, TOPIC_PARTITION2, TOPIC_PARTITION3)));
+
+    String key = "key";
+    Schema schema = createSchema();
+    Struct record = createRecord(schema);
+
+    Collection<SinkRecord> records = new ArrayList<>();
+    for (int i = 0; i < numOfRecords - 1 ; i++) {
+      if (i % 2 == 0) {
+        SinkRecord sinkRecord = new SinkRecord(TOPIC, PARTITION, Schema.STRING_SCHEMA, key, schema, null, i);
+        records.add(sinkRecord);
+      } else {
+        record.put("message", Integer.toString(i));
+        SinkRecord sinkRecord = new SinkRecord(TOPIC, PARTITION, Schema.STRING_SCHEMA, key, schema, record, i);
+        records.add(sinkRecord);
+      }
+    }
+    record.put("message", Integer.toString(numOfRecords));
+    SinkRecord sinkRecord = new SinkRecord(TOPIC, PARTITION, Schema.STRING_SCHEMA, key, schema, record, numOfRecords);
+    records.add(sinkRecord);
+
+    task.put(records);
+    task.flush(null);
+
+    refresh();
+
+    final JsonObject result = client.search("", TOPIC, null);
+    final JsonArray rawHits = result.getAsJsonObject("hits").getAsJsonArray("hits");
+    assertEquals(1, rawHits.size());
+    String message = rawHits
+            .get(0).getAsJsonObject()
+            .get("_source").getAsJsonObject()
+            .get("message").getAsString();
+    assertEquals("100", message);
   }
 
   @Test
