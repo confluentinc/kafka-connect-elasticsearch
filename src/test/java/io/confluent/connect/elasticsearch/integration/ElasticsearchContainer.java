@@ -117,6 +117,7 @@ public class ElasticsearchContainer
     this.imageName = imageName;
     withSharedMemorySize(TWO_GIGABYTES);
     withLogConsumer(this::containerLog);
+    withCreateContainerCmdModifier(cmd -> cmd.withName("elastic-search"));
   }
 
   public ElasticsearchContainer withSslEnabled(boolean enable) {
