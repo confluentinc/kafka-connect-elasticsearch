@@ -487,8 +487,9 @@ public class JestElasticsearchClient implements ElasticsearchClient {
     Delete.Builder req = new Delete.Builder(record.key.id)
         .index(record.key.index)
         .type(record.key.type);
-
-    // TODO: Should version information be set here?
+    if (record.version != null) {
+      req.setParameter("version_type", "external").setParameter("version", record.version);
+    }
     return req.build();
   }
 
