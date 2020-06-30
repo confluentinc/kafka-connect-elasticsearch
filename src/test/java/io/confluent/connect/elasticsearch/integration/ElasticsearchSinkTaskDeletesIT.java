@@ -67,7 +67,7 @@ public class ElasticsearchSinkTaskDeletesIT extends ElasticsearchIntegrationTest
   }
 
   @Test
-  public void testPutAndFlush() throws Exception {
+  public void testVersionedDeletes() throws Exception {
 
     task.open(new HashSet<>(Arrays.asList(TOPIC_PARTITION, TOPIC_PARTITION2, TOPIC_PARTITION3)));
 
