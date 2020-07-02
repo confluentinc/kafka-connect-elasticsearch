@@ -69,7 +69,6 @@ public class ElasticsearchSinkConnectorIT extends BaseConnectorIT {
   @After
   public void close() {
     stopConnect();
-    tearDownEScontainer();
     stopEScontainer();
   }
 

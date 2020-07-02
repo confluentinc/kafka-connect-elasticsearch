@@ -5,9 +5,7 @@
 package io.confluent.connect.elasticsearch.integration;
 
 import io.confluent.common.utils.IntegrationTest;
-import io.confluent.connect.elasticsearch.DataConverter;
 import io.confluent.connect.elasticsearch.ElasticsearchClient;
-import io.confluent.connect.elasticsearch.DataConverter.BehaviorOnNullValues;
 import io.confluent.connect.elasticsearch.jest.JestElasticsearchClient;
 
 import org.apache.kafka.clients.consumer.ConsumerRecords;
@@ -63,24 +61,6 @@ public abstract class BaseConnectorIT {
   public void setUp() {
     log.info("Attempting to connect to {}", container.getConnectionUrl());
     client = new JestElasticsearchClient(container.getConnectionUrl());
-  }
-  
-  public void tearDownEScontainer() {
-    try {
-      client.deleteAll();
-    } catch (IOException ex) {
-      // IGNORE in case of error
-    } catch (java.lang.IllegalStateException illegalStateException) {
-      // IGNORED for now until we can fix
-      // this issue https://stackoverflow.com/questions/25889925
-      // Issue looks to be a race condition with the close method on httpcore 4.4 in shared
-      // environments like test could be. Need more research, but for now it can be ignored
-      // as this is only for the tear down of the test.
-    }
-    if (client != null) {
-      client.close();
-    }
-    client = null;
   }
   
   /**
@@ -153,7 +133,7 @@ public abstract class BaseConnectorIT {
 
   protected void verifySearchResults(ConsumerRecords<byte[], byte[]> records, String index) throws IOException {
     final JsonObject result = client.search("", index, null);
-    final int recordsInserted =result.getAsJsonObject("hits").getAsJsonObject("total").get("value").getAsInt();
+    final int recordsInserted = result.getAsJsonObject("hits").getAsJsonObject("total").get("value").getAsInt();
     assertEquals(records.count(), recordsInserted);
   }
 }
