@@ -8,7 +8,6 @@ import io.confluent.common.utils.IntegrationTest;
 import io.confluent.connect.elasticsearch.ElasticsearchClient;
 import io.confluent.connect.elasticsearch.jest.JestElasticsearchClient;
 
-import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.connect.runtime.AbstractStatus;
 import org.apache.kafka.connect.runtime.rest.entities.ConnectorStateInfo;
 import org.apache.kafka.connect.util.clusters.EmbeddedConnectCluster;
@@ -18,9 +17,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.google.gson.JsonObject;
+import org.testcontainers.containers.DockerComposeContainer;
 
 import static org.junit.Assert.assertEquals;
 
+import java.io.File;
 import java.io.IOException;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
@@ -32,7 +33,11 @@ public abstract class BaseConnectorIT {
 
   protected static final long CONSUME_MAX_DURATION_MS = TimeUnit.SECONDS.toMillis(300);
   protected static final long CONNECTOR_STARTUP_DURATION_MS = TimeUnit.SECONDS.toMillis(300);
-  
+  protected static final String KAFKA_TOPIC = "topic";
+  protected static final String CONNECTOR_NAME = "elasticsearch-sink-connector";
+
+  protected static final String MAX_TASKS = "1";
+
   protected EmbeddedConnectCluster connect;
   protected static ElasticsearchContainer container;
   protected ElasticsearchClient client;
@@ -52,6 +57,20 @@ public abstract class BaseConnectorIT {
     // Relevant and available docker images for elastic can be found at https://www.docker.elastic.co
     container = ElasticsearchContainer.fromSystemProperties();
     container.start();
+  }
+
+  protected static DockerComposeContainer pumbaPauseContainer;
+  protected void startPumbaPauseContainer() {
+    pumbaPauseContainer =
+        new DockerComposeContainer(new File("src/test/docker/configA/pumba-pause-compose.yml"));
+    pumbaPauseContainer.start();
+  }
+
+  protected static DockerComposeContainer pumbaDelayContainer;
+  protected void startPumbaDelayContainer() {
+    pumbaDelayContainer =
+        new DockerComposeContainer(new File("src/test/docker/configA/pumba-delay-compose.yml"));
+    pumbaDelayContainer.start();
   }
 
   public void stopEScontainer() {
@@ -131,9 +150,9 @@ public abstract class BaseConnectorIT {
     }
   }
 
-  protected void verifySearchResults(ConsumerRecords<byte[], byte[]> records, String index) throws IOException {
+  protected void assertRecordsCount(int numRecords, String index) throws IOException {
     final JsonObject result = client.search("", index, null);
     final int recordsInserted = result.getAsJsonObject("hits").getAsJsonObject("total").get("value").getAsInt();
-    assertEquals(records.count(), recordsInserted);
+    assertEquals(numRecords, recordsInserted);
   }
 }

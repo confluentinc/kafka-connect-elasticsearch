@@ -22,47 +22,36 @@ import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.testcontainers.containers.DockerComposeContainer;
 
-import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
 
-import static org.apache.kafka.connect.runtime.ConnectorConfig.*;
+import static org.apache.kafka.connect.runtime.ConnectorConfig.CONNECTOR_CLASS_CONFIG;
+import static org.apache.kafka.connect.runtime.ConnectorConfig.TASKS_MAX_CONFIG;
 
 @Category(IntegrationTest.class)
-public class ElasticsearchSinkConnectorIT extends BaseConnectorIT {
+public class ElasticSearchSinkConnectorIT extends BaseConnectorIT {
 
-  private static final String KAFKA_TOPIC = "topic";
+  private static final Logger log = LoggerFactory.getLogger(ElasticSearchSinkConnectorIT.class);
 
-  private static final Logger log = LoggerFactory.getLogger(ElasticsearchSinkConnectorIT.class);
-
-  private static final String CONNECTOR_NAME = "elasticsearch-sink-connector";
-  private static final int NUM_RECORDS = 100;
-  private static final int MAX_TASKS = 1;
-
+  private static final int NUM_RECORDS = 10000;
   private final ElasticsearchIntegrationTestBase util = new ElasticsearchIntegrationTestBase();
-
   private final JsonConverter converterWithSchemaEnabled = new JsonConverter();
-
-  public static DockerComposeContainer pumbaContainer;
-  private void startPumbaContainer() {
-    pumbaContainer =
-        new DockerComposeContainer(new File("src/test/docker/configA/pumba-docker-compose.yml"));
-    pumbaContainer.start();
-  }
+  Map<String, String> props;
 
   @Before
   public void setup() throws IOException {
+    startConnect();
+    connect.kafka().createTopic(KAFKA_TOPIC, 1);
     Map<String, String> config = new HashMap<>();
     config.put(JsonConverterConfig.SCHEMAS_CACHE_SIZE_CONFIG, "100");
     config.put(ConverterConfig.TYPE_CONFIG, ConverterType.KEY.getName());
     converterWithSchemaEnabled.configure(config);
     converterWithSchemaEnabled.close();
     startEScontainer();
-    startConnect();
+    props = getSinkConnectorProperties();
     setUp();
   }
 
@@ -73,8 +62,7 @@ public class ElasticsearchSinkConnectorIT extends BaseConnectorIT {
   }
 
   @Test
-  public void testElasticsearchConnectorSuccess() throws Throwable {
-    connect.kafka().createTopic(KAFKA_TOPIC, 1);
+  public void testSuccess() throws Throwable {
     sendTestDataToKafka();
     ConsumerRecords<byte[], byte[]> totalRecords = connect.kafka().consume(
         NUM_RECORDS,
@@ -83,7 +71,7 @@ public class ElasticsearchSinkConnectorIT extends BaseConnectorIT {
     log.info("Number of records added in kafka {}", totalRecords.count());
 
     // Configure Connector and wait some specific time to start the connector.
-    connect.configureConnector(CONNECTOR_NAME, getSinkConnectorProperties());
+    connect.configureConnector(CONNECTOR_NAME, props);
     waitForConnectorToStart(CONNECTOR_NAME, Integer.valueOf(MAX_TASKS));
 
     // Wait Connector to write data into elastic-search
@@ -92,26 +80,12 @@ public class ElasticsearchSinkConnectorIT extends BaseConnectorIT {
         Integer.valueOf(MAX_TASKS),
         KAFKA_TOPIC,
         NUM_RECORDS);
-    verifySearchResults(totalRecords, KAFKA_TOPIC);
-
-    sendTestDataToKafka();
-    totalRecords = connect.kafka().consume(
-        NUM_RECORDS * 2,
-        CONSUME_MAX_DURATION_MS,
-        KAFKA_TOPIC);
-    // Wait Connector to write data into elastic-search
-    waitConnectorToWriteDataIntoElasticsearch(
-        CONNECTOR_NAME,
-        Integer.valueOf(MAX_TASKS),
-        KAFKA_TOPIC,
-        NUM_RECORDS * 2);
-    verifySearchResults(totalRecords, KAFKA_TOPIC);
+    assertRecordsCount(NUM_RECORDS, KAFKA_TOPIC);
   }
 
   @Test
-  public void testElasticsearchConnectorUnavailable() throws Throwable {
-    startPumbaContainer();
-    connect.kafka().createTopic(KAFKA_TOPIC, 1);
+  public void testForElasticSearchServerUnavailability() throws Throwable {
+    startPumbaPauseContainer();
     sendTestDataToKafka();
     ConsumerRecords<byte[], byte[]> totalRecords = connect.kafka().consume(
         NUM_RECORDS,
@@ -120,7 +94,7 @@ public class ElasticsearchSinkConnectorIT extends BaseConnectorIT {
     log.info("Number of records added in kafka {}", totalRecords.count());
 
     // Configure Connector and wait some specific time to start the connector.
-    connect.configureConnector(CONNECTOR_NAME, getSinkConnectorProperties());
+    connect.configureConnector(CONNECTOR_NAME, props);
     waitForConnectorToStart(CONNECTOR_NAME, Integer.valueOf(MAX_TASKS));
 
     // Wait Connector to write data into elastic-search
@@ -129,21 +103,32 @@ public class ElasticsearchSinkConnectorIT extends BaseConnectorIT {
         Integer.valueOf(MAX_TASKS),
         KAFKA_TOPIC,
         NUM_RECORDS);
-    verifySearchResults(totalRecords, KAFKA_TOPIC);
+    assertRecordsCount(NUM_RECORDS, KAFKA_TOPIC);
+    pumbaPauseContainer.close();
+  }
 
+  @Test
+  public void testForElasticSearchServerDelay() throws Throwable {
+    startPumbaDelayContainer();
     sendTestDataToKafka();
-    totalRecords = connect.kafka().consume(
-        NUM_RECORDS * 2,
+    ConsumerRecords<byte[], byte[]> totalRecords = connect.kafka().consume(
+        NUM_RECORDS,
         CONSUME_MAX_DURATION_MS,
         KAFKA_TOPIC);
+    log.info("Number of records added in kafka {}", totalRecords.count());
+
+    // Configure Connector and wait some specific time to start the connector.
+    connect.configureConnector(CONNECTOR_NAME, props);
+    waitForConnectorToStart(CONNECTOR_NAME, Integer.valueOf(MAX_TASKS));
+
     // Wait Connector to write data into elastic-search
     waitConnectorToWriteDataIntoElasticsearch(
         CONNECTOR_NAME,
         Integer.valueOf(MAX_TASKS),
         KAFKA_TOPIC,
-        NUM_RECORDS * 2);
-    verifySearchResults(totalRecords, KAFKA_TOPIC);
-    pumbaContainer.close();
+        NUM_RECORDS);
+    assertRecordsCount(NUM_RECORDS, KAFKA_TOPIC);
+    pumbaDelayContainer.close();
   }
 
   private void sendTestDataToKafka() {
@@ -170,10 +155,10 @@ public class ElasticsearchSinkConnectorIT extends BaseConnectorIT {
   }
 
   private Map<String, String> getSinkConnectorProperties() {
-    Map<String, String> props = new HashMap<>();
+    props = new HashMap<>();
     props.put(SinkConnectorConfig.TOPICS_CONFIG, KAFKA_TOPIC);
     props.put(CONNECTOR_CLASS_CONFIG, ElasticsearchSinkConnector.class.getName());
-    props.put(TASKS_MAX_CONFIG, Integer.toString(MAX_TASKS));
+    props.put(TASKS_MAX_CONFIG, MAX_TASKS);
     props.put(ElasticsearchSinkConnectorConfig.TYPE_NAME_CONFIG, "kafka-connect");
     props.put(ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG, container.getConnectionUrl());
     props.put(ElasticsearchSinkConnectorConfig.KEY_IGNORE_CONFIG, "true");
