@@ -4,10 +4,14 @@
 
 package io.confluent.connect.elasticsearch.integration;
 
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
 import io.confluent.common.utils.IntegrationTest;
 import io.confluent.connect.elasticsearch.ElasticsearchClient;
 import io.confluent.connect.elasticsearch.jest.JestElasticsearchClient;
 
+import org.apache.kafka.connect.data.Schema;
+import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.runtime.AbstractStatus;
 import org.apache.kafka.connect.runtime.rest.entities.ConnectorStateInfo;
 import org.apache.kafka.connect.util.clusters.EmbeddedConnectCluster;
@@ -23,7 +27,9 @@ import static org.junit.Assert.assertEquals;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.Map;
 import java.util.Optional;
+import java.util.TreeMap;
 import java.util.concurrent.TimeUnit;
 
 @Category(IntegrationTest.class)
@@ -37,6 +43,13 @@ public abstract class BaseConnectorIT {
   protected static final String CONNECTOR_NAME = "elasticsearch-sink-connector";
 
   protected static final String MAX_TASKS = "1";
+
+  protected static final Schema SCHEMA = SchemaBuilder.struct().name("com.example.Person")
+      .field("userId", Schema.OPTIONAL_INT32_SCHEMA)
+      .field("firstName", Schema.STRING_SCHEMA)
+      .field("lastName", Schema.STRING_SCHEMA)
+      .field("message", Schema.STRING_SCHEMA)
+      .build();
 
   protected EmbeddedConnectCluster connect;
   protected static ElasticsearchContainer container;
@@ -150,9 +163,27 @@ public abstract class BaseConnectorIT {
     }
   }
 
-  protected void assertRecordsCount(int numRecords, String index) throws IOException {
-    final JsonObject result = client.search("", index, null);
-    final int recordsInserted = result.getAsJsonObject("hits").getAsJsonObject("total").get("value").getAsInt();
-    assertEquals(numRecords, recordsInserted);
+  protected void assertRecordsCountAndContent(int numRecords, String index) throws IOException {
+    String query = "{ \"size\" : " + numRecords + "}";
+    final JsonObject result = client.search(query, index, null);
+    final JsonArray jsonArray = result.getAsJsonObject("hits").getAsJsonArray("hits");
+    int id = 0;
+    // Collecting records in ascending order of 'userId'
+    TreeMap<Integer , JsonObject> map = new TreeMap<>();
+    for (JsonElement element : jsonArray) {
+      JsonObject jsonObject = element.getAsJsonObject().get("_source").getAsJsonObject();
+      Integer userId = jsonObject.get("userId").getAsInt();
+      map.put(userId, jsonObject);
+    }
+    // Assert actual data in ElasticSearch
+    for (Map.Entry<Integer, JsonObject> obj : map.entrySet()) {
+      assertEquals(id++, obj.getValue().get("userId").getAsInt());
+      assertEquals("Alex", obj.getValue().get("firstName").getAsString());
+      assertEquals("Smith", obj.getValue().get("lastName").getAsString());
+      assertEquals("ElasticSearch message", obj.getValue().get("message").getAsString());
+    }
+    // Assert records count in ElasticSearch
+    assertEquals(id, jsonArray.size());
+    assertEquals(id, numRecords);
   }
 }

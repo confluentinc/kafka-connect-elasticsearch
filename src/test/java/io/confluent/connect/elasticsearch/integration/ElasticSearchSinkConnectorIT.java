@@ -37,8 +37,6 @@ public class ElasticSearchSinkConnectorIT extends BaseConnectorIT {
   private static final Logger log = LoggerFactory.getLogger(ElasticSearchSinkConnectorIT.class);
 
   private static final int NUM_RECORDS = 10000;
-  private final ElasticsearchIntegrationTestBase util = new ElasticsearchIntegrationTestBase();
-  private final JsonConverter converterWithSchemaEnabled = new JsonConverter();
   Map<String, String> props;
 
   @Before
@@ -48,8 +46,6 @@ public class ElasticSearchSinkConnectorIT extends BaseConnectorIT {
     Map<String, String> config = new HashMap<>();
     config.put(JsonConverterConfig.SCHEMAS_CACHE_SIZE_CONFIG, "100");
     config.put(ConverterConfig.TYPE_CONFIG, ConverterType.KEY.getName());
-    converterWithSchemaEnabled.configure(config);
-    converterWithSchemaEnabled.close();
     startEScontainer();
     props = getSinkConnectorProperties();
     setUp();
@@ -63,7 +59,7 @@ public class ElasticSearchSinkConnectorIT extends BaseConnectorIT {
 
   @Test
   public void testSuccess() throws Throwable {
-    sendTestDataToKafka();
+    sendTestDataToKafka(NUM_RECORDS);
     ConsumerRecords<byte[], byte[]> totalRecords = connect.kafka().consume(
         NUM_RECORDS,
         CONSUME_MAX_DURATION_MS,
@@ -80,13 +76,13 @@ public class ElasticSearchSinkConnectorIT extends BaseConnectorIT {
         Integer.valueOf(MAX_TASKS),
         KAFKA_TOPIC,
         NUM_RECORDS);
-    assertRecordsCount(NUM_RECORDS, KAFKA_TOPIC);
+    assertRecordsCountAndContent(NUM_RECORDS, KAFKA_TOPIC);
   }
 
   @Test
   public void testForElasticSearchServerUnavailability() throws Throwable {
     startPumbaPauseContainer();
-    sendTestDataToKafka();
+    sendTestDataToKafka(NUM_RECORDS);
     ConsumerRecords<byte[], byte[]> totalRecords = connect.kafka().consume(
         NUM_RECORDS,
         CONSUME_MAX_DURATION_MS,
@@ -103,14 +99,14 @@ public class ElasticSearchSinkConnectorIT extends BaseConnectorIT {
         Integer.valueOf(MAX_TASKS),
         KAFKA_TOPIC,
         NUM_RECORDS);
-    assertRecordsCount(NUM_RECORDS, KAFKA_TOPIC);
+    assertRecordsCountAndContent(NUM_RECORDS, KAFKA_TOPIC);
     pumbaPauseContainer.close();
   }
 
   @Test
   public void testForElasticSearchServerDelay() throws Throwable {
     startPumbaDelayContainer();
-    sendTestDataToKafka();
+    sendTestDataToKafka(NUM_RECORDS);
     ConsumerRecords<byte[], byte[]> totalRecords = connect.kafka().consume(
         NUM_RECORDS,
         CONSUME_MAX_DURATION_MS,
@@ -127,31 +123,31 @@ public class ElasticSearchSinkConnectorIT extends BaseConnectorIT {
         Integer.valueOf(MAX_TASKS),
         KAFKA_TOPIC,
         NUM_RECORDS);
-    assertRecordsCount(NUM_RECORDS, KAFKA_TOPIC);
+    assertRecordsCountAndContent(NUM_RECORDS, KAFKA_TOPIC);
     pumbaDelayContainer.close();
   }
 
-  private void sendTestDataToKafka() {
-    String key = "key";
-    Schema schema = util.createSchema();
-    Struct record = util.createRecord(schema);
-    byte[] value = converterWithSchemaEnabled.fromConnectData(KAFKA_TOPIC, record.schema(), record);
-
-    produceRecordsToKafkaTopic(key, value, NUM_RECORDS);
+  private void sendTestDataToKafka(int numRecords) throws InterruptedException {
+    for (int i = 0; i < numRecords; i++) {
+      String value = getTestKafkaRecord(KAFKA_TOPIC, SCHEMA, i);
+      connect.kafka().produce(KAFKA_TOPIC, null, value);
+    }
   }
 
-  private void produceRecordsToKafkaTopic(String key, byte[] value, long numberOfRecords) {
-    // Send records to Kafka
-    for (int i = 0; i < numberOfRecords; i++) {
-      String valueString = new String(value, StandardCharsets.UTF_8);
-      //log.debug("Sending message {} with topic {} to Kafka broker {}", kafkaTopic, valueString);
-      connect.kafka().produce(KAFKA_TOPIC, key, valueString);
-      try {
-        Thread.sleep(10);
-      } catch (InterruptedException e) {
-        e.printStackTrace();
-      }
-    }
+  private String getTestKafkaRecord(String topic, Schema schema, int i) {
+    final Struct struct = new Struct(schema)
+        .put("userId", i)
+        .put("firstName", "Alex")
+        .put("lastName", "Smith")
+        .put("message", "ElasticSearch message");
+    JsonConverter jsonConverter = new JsonConverter();
+    Map<String, String> config = new HashMap<>();
+    config.put(JsonConverterConfig.SCHEMAS_CACHE_SIZE_CONFIG, "100");
+    config.put(ConverterConfig.TYPE_CONFIG, ConverterType.VALUE.getName());
+    config.put(JsonConverterConfig.SCHEMAS_ENABLE_CONFIG, "true");
+    jsonConverter.configure(config);
+    byte[] raw = jsonConverter.fromConnectData(topic, schema, struct);
+    return new String(raw, StandardCharsets.UTF_8);
   }
 
   private Map<String, String> getSinkConnectorProperties() {
