@@ -44,11 +44,11 @@ public class ElasticSearchSinkConnectorIT extends BaseConnectorIT {
   public void setup() {
     startConnect();
     connect.kafka().createTopic(KAFKA_TOPIC, 1);
-    Map<String, String> config = new HashMap<>();
-    config.put(JsonConverterConfig.SCHEMAS_CACHE_SIZE_CONFIG, "100");
-    config.put(ConverterConfig.TYPE_CONFIG, ConverterType.VALUE.getName());
-    config.put(JsonConverterConfig.SCHEMAS_ENABLE_CONFIG, "true");
-    jsonConverter.configure(config);
+    Map<String, String> converterConfig = new HashMap<>();
+    converterConfig.put(JsonConverterConfig.SCHEMAS_CACHE_SIZE_CONFIG, "100");
+    converterConfig.put(ConverterConfig.TYPE_CONFIG, ConverterType.VALUE.getName());
+    converterConfig.put(JsonConverterConfig.SCHEMAS_ENABLE_CONFIG, "true");
+    jsonConverter.configure(converterConfig);
     startEScontainer();
     props = getSinkConnectorProperties();
     setUp();
