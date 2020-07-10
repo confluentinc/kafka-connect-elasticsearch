@@ -37,15 +37,18 @@ public class ElasticSearchSinkConnectorIT extends BaseConnectorIT {
   private static final Logger log = LoggerFactory.getLogger(ElasticSearchSinkConnectorIT.class);
 
   private static final int NUM_RECORDS = 10000;
-  Map<String, String> props;
+  private Map<String, String> props;
+  private JsonConverter jsonConverter = new JsonConverter();
 
   @Before
-  public void setup() throws IOException {
+  public void setup() {
     startConnect();
     connect.kafka().createTopic(KAFKA_TOPIC, 1);
     Map<String, String> config = new HashMap<>();
     config.put(JsonConverterConfig.SCHEMAS_CACHE_SIZE_CONFIG, "100");
-    config.put(ConverterConfig.TYPE_CONFIG, ConverterType.KEY.getName());
+    config.put(ConverterConfig.TYPE_CONFIG, ConverterType.VALUE.getName());
+    config.put(JsonConverterConfig.SCHEMAS_ENABLE_CONFIG, "true");
+    jsonConverter.configure(config);
     startEScontainer();
     props = getSinkConnectorProperties();
     setUp();
@@ -140,12 +143,6 @@ public class ElasticSearchSinkConnectorIT extends BaseConnectorIT {
         .put("firstName", "Alex")
         .put("lastName", "Smith")
         .put("message", "ElasticSearch message");
-    JsonConverter jsonConverter = new JsonConverter();
-    Map<String, String> config = new HashMap<>();
-    config.put(JsonConverterConfig.SCHEMAS_CACHE_SIZE_CONFIG, "100");
-    config.put(ConverterConfig.TYPE_CONFIG, ConverterType.VALUE.getName());
-    config.put(JsonConverterConfig.SCHEMAS_ENABLE_CONFIG, "true");
-    jsonConverter.configure(config);
     byte[] raw = jsonConverter.fromConnectData(topic, schema, struct);
     return new String(raw, StandardCharsets.UTF_8);
   }
