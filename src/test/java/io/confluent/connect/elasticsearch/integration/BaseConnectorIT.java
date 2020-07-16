@@ -38,6 +38,7 @@ public abstract class BaseConnectorIT {
   private static final Logger log = LoggerFactory.getLogger(BaseConnectorIT.class);
 
   protected static final long CONSUME_MAX_DURATION_MS = TimeUnit.SECONDS.toMillis(300);
+  protected static final long FAILURE_DURATION_MS = TimeUnit.SECONDS.toMillis(300);
   protected static final long CONNECTOR_STARTUP_DURATION_MS = TimeUnit.SECONDS.toMillis(300);
   protected static final String KAFKA_TOPIC = "topic";
   protected static final String CONNECTOR_NAME = "elasticsearch-sink-connector";
@@ -94,6 +95,11 @@ public abstract class BaseConnectorIT {
     log.info("Attempting to connect to {}", container.getConnectionUrl());
     client = new JestElasticsearchClient(container.getConnectionUrl());
   }
+
+  public void setUp(Map<String, String> props) {
+    log.info("Attempting to connect to {}", "container.getConnectionUrl()");
+    client = new JestElasticsearchClient(props);
+  }
   
   /**
    * Wait up to {@link #CONNECTOR_STARTUP_DURATION_MS maximum time limit} for the connector with the given
@@ -134,7 +140,7 @@ public abstract class BaseConnectorIT {
     }
   }
 
-  protected long waitConnectorToWriteDataIntoElasticsearch(String connectorName, int numTasks, String index, int numberOfRecords) throws InterruptedException {
+  protected long waitForConnectorToWriteDataIntoES(String connectorName, int numTasks, String index, int numberOfRecords) throws InterruptedException {
     TestUtils.waitForCondition(
         () -> assertRecordsCountInElasticsearch(connectorName, numTasks, index, numberOfRecords).orElse(false),
         CONSUME_MAX_DURATION_MS,
@@ -161,6 +167,25 @@ public abstract class BaseConnectorIT {
       log.warn("Could not check connector state info, will retry shortly ...");
       return Optional.empty();
     }
+  }
+
+  protected long waitForConnectorTaskToFail() throws InterruptedException {
+    TestUtils.waitForCondition(
+        () -> assertConnectorTaskFailure().orElse(false),
+        FAILURE_DURATION_MS,
+        "Task did not fail in specified time."
+    );
+    return System.currentTimeMillis();
+  }
+
+  protected Optional<Boolean> assertConnectorTaskFailure() {
+    ConnectorStateInfo info = connect.connectorStatus(CONNECTOR_NAME);
+    boolean result = info != null
+        && info.tasks().stream().allMatch(s -> s.state().equals(AbstractStatus.State.RUNNING.toString()));
+    if (!info.tasks().iterator().next().state().equals(AbstractStatus.State.RUNNING.toString())) {
+      log.warn("Connector task status: {}", info.tasks().iterator().next().state());
+    }
+    return Optional.of(!result);
   }
 
   protected void assertRecordsCountAndContent(int numRecords, String index) throws IOException {

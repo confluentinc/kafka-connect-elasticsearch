@@ -46,7 +46,7 @@ public class ElasticsearchContainer
   /**
    * Default Elasticsearch version.
    */
-  public static final String DEFAULT_ES_VERSION = "7.0.0";
+  public static final String DEFAULT_ES_VERSION = "7.5.0";
 
   /**
    * Default Elasticsearch port.
@@ -115,6 +115,8 @@ public class ElasticsearchContainer
   public ElasticsearchContainer(String imageName) {
     super(imageName);
     this.imageName = imageName;
+    withEnv("ELASTIC_PASSWORD", ELASTIC_PASSWORD);
+    withEnv("xpack.security.enabled", String.valueOf(true));
     withSharedMemorySize(TWO_GIGABYTES);
     withLogConsumer(this::containerLog);
     withCreateContainerCmdModifier(cmd -> cmd.withName("elastic-search"));
