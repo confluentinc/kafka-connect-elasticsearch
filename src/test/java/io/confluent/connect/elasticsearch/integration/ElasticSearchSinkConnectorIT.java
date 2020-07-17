@@ -83,7 +83,7 @@ public class ElasticSearchSinkConnectorIT extends BaseConnectorIT {
     connect.configureConnector(CONNECTOR_NAME, props);
     waitForConnectorToStart(CONNECTOR_NAME, Integer.valueOf(MAX_TASKS));
 
-    // Wait Connector to write data into elastic-search
+    // Wait Connector to write data into elasticsearch
     waitForConnectorToWriteDataIntoES(
         CONNECTOR_NAME,
         Integer.valueOf(MAX_TASKS),
@@ -94,6 +94,7 @@ public class ElasticSearchSinkConnectorIT extends BaseConnectorIT {
 
   @Test
   public void testForElasticSearchServerUnavailability() throws InterruptedException, IOException {
+    // Pause all running processes within target container('es-container')
     startPumbaPauseContainer();
     sendTestDataToKafka(0, NUM_RECORDS);
     ConsumerRecords<byte[], byte[]> totalRecords = connect.kafka().consume(
@@ -106,7 +107,7 @@ public class ElasticSearchSinkConnectorIT extends BaseConnectorIT {
     connect.configureConnector(CONNECTOR_NAME, props);
     waitForConnectorToStart(CONNECTOR_NAME, Integer.valueOf(MAX_TASKS));
 
-    // Wait Connector to write data into elastic-search
+    // Wait Connector to write data into elasticsearch
     waitForConnectorToWriteDataIntoES(
         CONNECTOR_NAME,
         Integer.valueOf(MAX_TASKS),
@@ -118,6 +119,7 @@ public class ElasticSearchSinkConnectorIT extends BaseConnectorIT {
 
   @Test
   public void testForElasticSearchServerDelay() throws InterruptedException, IOException {
+    // Delay egress traffic for specified container('es-container')
     startPumbaDelayContainer();
     sendTestDataToKafka(0, NUM_RECORDS);
     ConsumerRecords<byte[], byte[]> totalRecords = connect.kafka().consume(
@@ -130,7 +132,7 @@ public class ElasticSearchSinkConnectorIT extends BaseConnectorIT {
     connect.configureConnector(CONNECTOR_NAME, props);
     waitForConnectorToStart(CONNECTOR_NAME, Integer.valueOf(MAX_TASKS));
 
-    // Wait Connector to write data into elastic-search
+    // Wait Connector to write data into elasticsearch
     waitForConnectorToWriteDataIntoES(
         CONNECTOR_NAME,
         Integer.valueOf(MAX_TASKS),
@@ -154,7 +156,7 @@ public class ElasticSearchSinkConnectorIT extends BaseConnectorIT {
     connect.configureConnector(CONNECTOR_NAME, props);
     waitForConnectorToStart(CONNECTOR_NAME, Integer.valueOf(MAX_TASKS));
 
-    // Wait Connector to write data into elastic-search
+    // Wait Connector to write data into elasticsearch
     waitForConnectorToWriteDataIntoES(
         CONNECTOR_NAME,
         Integer.valueOf(MAX_TASKS),
@@ -203,7 +205,7 @@ public class ElasticSearchSinkConnectorIT extends BaseConnectorIT {
     connect.configureConnector(CONNECTOR_NAME, props);
     waitForConnectorToStart(CONNECTOR_NAME, Integer.valueOf(MAX_TASKS));
 
-    // Wait Connector to write data into elastic-search
+    // Wait Connector to write data into elasticsearch
     waitForConnectorToWriteDataIntoES(
         CONNECTOR_NAME,
         Integer.valueOf(MAX_TASKS),

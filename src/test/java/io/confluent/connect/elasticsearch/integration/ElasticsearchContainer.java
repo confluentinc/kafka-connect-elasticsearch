@@ -119,7 +119,7 @@ public class ElasticsearchContainer
     withEnv("xpack.security.enabled", String.valueOf(true));
     withSharedMemorySize(TWO_GIGABYTES);
     withLogConsumer(this::containerLog);
-    withCreateContainerCmdModifier(cmd -> cmd.withName("elastic-search"));
+    withCreateContainerCmdModifier(cmd -> cmd.withName("es-container"));
   }
 
   public ElasticsearchContainer withSslEnabled(boolean enable) {

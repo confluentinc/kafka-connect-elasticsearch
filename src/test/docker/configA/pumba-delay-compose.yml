@@ -6,5 +6,5 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     # Github link: https://github.com/alexei-led/pumba
-    # Delay egress traffic for specified container('elastic-search')
-    command: "--log-level debug --interval 5s netem --tc-image gaiadocker/iproute2 --duration 1s delay elastic-search"
+    # Delay egress traffic for specified container('es-container')
+    command: "--log-level debug --interval 5s netem --tc-image gaiadocker/iproute2 --duration 1s delay es-container"

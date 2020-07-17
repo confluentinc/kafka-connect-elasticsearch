@@ -208,7 +208,6 @@ public abstract class BaseConnectorIT {
       assertEquals("ElasticSearch message", obj.getValue().get("message").getAsString());
     }
     // Assert records count in ElasticSearch
-    assertEquals(id, jsonArray.size());
-    assertEquals(id, numRecords);
+    assertEquals(numRecords, jsonArray.size());
   }
 }
