@@ -53,7 +53,7 @@ public class SecurityIT {
   public static void setupBeforeAll() {
 
     // Relevant and available docker images for elastic can be found at https://www.docker.elastic.co
-    container = ElasticsearchContainer.fromSystemProperties("7.0.0").withSslEnabled(true);
+    container = ElasticsearchContainer.fromSystemProperties().withSslEnabled(true);
     container.start();
   }
 

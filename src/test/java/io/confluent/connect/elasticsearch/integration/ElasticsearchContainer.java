@@ -46,7 +46,7 @@ public class ElasticsearchContainer
   /**
    * Default Elasticsearch version.
    */
-  public static final String DEFAULT_ES_VERSION = "7.5.0";
+  public static final String DEFAULT_ES_VERSION = "7.8.0";
 
   /**
    * Default Elasticsearch port.
@@ -92,29 +92,6 @@ public class ElasticsearchContainer
         "elasticsearch.version",
         "ELASTICSEARCH_VERSION",
         DEFAULT_ES_VERSION
-    );
-    return new ElasticsearchContainer(imageName + ":" + version);
-  }
-
-  /**
-   * Create an {@link ElasticsearchContainer} using the image name specified in the
-   * {@code elasticsearch.image} system property or {@code ELASTICSEARCH_IMAGE} environment
-   * variable, or defaulting to {@link #DEFAULT_DOCKER_IMAGE_NAME}, and the version specified in
-   * the {@code elasticsearch.version} system property, {@code ELASTICSEARCH_VERSION} environment
-   * variable, or defaulting to specified version.
-   *
-   * @return the unstarted container; never null
-   */
-  public static ElasticsearchContainer fromSystemProperties(String esVersion) {
-    String imageName = getSystemOrEnvProperty(
-        "elasticsearch.image",
-        "ELASTICSEARCH_IMAGE",
-        DEFAULT_DOCKER_IMAGE_NAME
-    );
-    String version = getSystemOrEnvProperty(
-        "elasticsearch.version",
-        "ELASTICSEARCH_VERSION",
-        esVersion
     );
     return new ElasticsearchContainer(imageName + ":" + version);
   }

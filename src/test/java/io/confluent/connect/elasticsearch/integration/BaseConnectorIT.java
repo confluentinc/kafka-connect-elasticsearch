@@ -87,7 +87,7 @@ public abstract class BaseConnectorIT {
     pumbaDelayContainer.start();
   }
 
-  public void stopEScontainer() {
+  public void stopESContainer() {
     container.close();
   }
 
@@ -144,7 +144,7 @@ public abstract class BaseConnectorIT {
     TestUtils.waitForCondition(
         () -> assertRecordsCountInElasticsearch(connectorName, numTasks, index, numberOfRecords).orElse(false),
         CONSUME_MAX_DURATION_MS,
-        "Either writing into table has not started or row count did not matched."
+        "Either writing into index has not started or row count did not matched."
     );
     return System.currentTimeMillis();
   }
@@ -181,15 +181,15 @@ public abstract class BaseConnectorIT {
   protected Optional<Boolean> assertConnectorTaskFailure() {
     ConnectorStateInfo info = connect.connectorStatus(CONNECTOR_NAME);
     boolean result = info != null
-        && info.tasks().stream().allMatch(s -> s.state().equals(AbstractStatus.State.RUNNING.toString()));
-    if (!info.tasks().iterator().next().state().equals(AbstractStatus.State.RUNNING.toString())) {
+        && info.tasks().stream().allMatch(s -> s.state().equals(AbstractStatus.State.FAILED.toString()));
+    if (info.tasks().iterator().next().state().equals(AbstractStatus.State.FAILED.toString())) {
       log.info("Connector task status: {}", info.tasks().iterator().next().state());
     }
-    return Optional.of(!result);
+    return Optional.of(result);
   }
 
-  protected void assertRecordsCountAndContent(int numRecords, String index) throws IOException {
-    String query = "{ \"size\" : " + numRecords + "}";
+  protected void assertRecordsCountAndContent(int size, int numRecords, String index) throws IOException {
+    String query = "{ \"size\" : " + size + "}";
     final JsonObject result = client.search(query, index, null);
     final JsonArray jsonArray = result.getAsJsonObject("hits").getAsJsonArray("hits");
     int id = 0;

@@ -67,7 +67,7 @@ public class ElasticSearchSinkConnectorIT extends BaseConnectorIT {
   @After
   public void close() {
     stopConnect();
-    stopEScontainer();
+    stopESContainer();
   }
 
   @Test
@@ -89,7 +89,7 @@ public class ElasticSearchSinkConnectorIT extends BaseConnectorIT {
         Integer.valueOf(MAX_TASKS),
         KAFKA_TOPIC,
         NUM_RECORDS);
-    assertRecordsCountAndContent(NUM_RECORDS, KAFKA_TOPIC);
+    assertRecordsCountAndContent(NUM_RECORDS, NUM_RECORDS, KAFKA_TOPIC);
   }
 
   @Test
@@ -112,7 +112,7 @@ public class ElasticSearchSinkConnectorIT extends BaseConnectorIT {
         Integer.valueOf(MAX_TASKS),
         KAFKA_TOPIC,
         NUM_RECORDS);
-    assertRecordsCountAndContent(NUM_RECORDS, KAFKA_TOPIC);
+    assertRecordsCountAndContent(NUM_RECORDS, NUM_RECORDS, KAFKA_TOPIC);
     pumbaPauseContainer.close();
   }
 
@@ -136,15 +136,16 @@ public class ElasticSearchSinkConnectorIT extends BaseConnectorIT {
         Integer.valueOf(MAX_TASKS),
         KAFKA_TOPIC,
         NUM_RECORDS);
-    assertRecordsCountAndContent(NUM_RECORDS, KAFKA_TOPIC);
+    assertRecordsCountAndContent(NUM_RECORDS, NUM_RECORDS, KAFKA_TOPIC);
     pumbaDelayContainer.close();
   }
 
   @Test
   public void testCredentialChange() throws InterruptedException, IOException {
-    sendTestDataToKafka(0, NUM_RECORDS);
+    int numRecords = 50;
+    sendTestDataToKafka(0, numRecords);
     ConsumerRecords<byte[], byte[]> totalRecords = connect.kafka().consume(
-        NUM_RECORDS,
+        numRecords,
         CONSUME_MAX_DURATION_MS,
         KAFKA_TOPIC);
     log.info("Number of records added in kafka {}", totalRecords.count());
@@ -158,45 +159,42 @@ public class ElasticSearchSinkConnectorIT extends BaseConnectorIT {
         CONNECTOR_NAME,
         Integer.valueOf(MAX_TASKS),
         KAFKA_TOPIC,
-        NUM_RECORDS);
-    assertRecordsCountAndContent(NUM_RECORDS, KAFKA_TOPIC);
+        numRecords);
+    assertRecordsCountAndContent(numRecords, numRecords, KAFKA_TOPIC);
 
-    int status = changeESpassword("elastic", "elastic1");
+    int status = changeESPassword("elastic", "elastic1");
     Assert.assertEquals(200, status);
 
-    sendTestDataToKafka(NUM_RECORDS, NUM_RECORDS);
+    sendTestDataToKafka(numRecords, numRecords);
     totalRecords = connect.kafka().consume(
-        NUM_RECORDS * 2,
+        numRecords * 2,
         CONSUME_MAX_DURATION_MS,
         KAFKA_TOPIC);
     log.info("Number of records added in kafka {}", totalRecords.count());
     // Refresh ES client with new credential at test level to perform search operation
     refreshESClient();
     // Second batch of records should not be entertained due to credential change
-    waitForConnectorToWriteDataIntoES(
-        CONNECTOR_NAME,
-        Integer.valueOf(MAX_TASKS),
-        KAFKA_TOPIC,
-        NUM_RECORDS);
-    assertRecordsCountAndContent(NUM_RECORDS, KAFKA_TOPIC);
+    assertRecordsCountAndContent(numRecords * 2, numRecords, KAFKA_TOPIC);
     // Task must fail after credential change.
     waitForConnectorTaskToFail();
   }
 
   @Test
   public void testPermissionChange() throws InterruptedException, IOException {
-    int status = createUserWithPermission(
+    // Two batch of records to be processed
+    int numRecords = 50;
+    int status = createOrUpdateUserWithPermission(
         "test_user",
         "test_password",
         "superuser");
     Assert.assertEquals(200, status);
 
-    // Run the connector with dummy user
+    // Run the connector with test user
     props.put(ElasticsearchSinkConnectorConfig.CONNECTION_USERNAME_CONFIG, "test_user");
     props.put(ElasticsearchSinkConnectorConfig.CONNECTION_PASSWORD_CONFIG, "test_password");
-    sendTestDataToKafka(0, NUM_RECORDS);
+    sendTestDataToKafka(0, numRecords);
     ConsumerRecords<byte[], byte[]> totalRecords = connect.kafka().consume(
-        NUM_RECORDS,
+        numRecords,
         CONSUME_MAX_DURATION_MS,
         KAFKA_TOPIC);
     log.info("Number of records added in kafka {}", totalRecords.count());
@@ -210,35 +208,30 @@ public class ElasticSearchSinkConnectorIT extends BaseConnectorIT {
         CONNECTOR_NAME,
         Integer.valueOf(MAX_TASKS),
         KAFKA_TOPIC,
-        NUM_RECORDS);
-    assertRecordsCountAndContent(NUM_RECORDS, KAFKA_TOPIC);
+        numRecords);
+    assertRecordsCountAndContent(numRecords, numRecords, KAFKA_TOPIC);
 
-    // Update the 'dummy_user' with read permissions
-    status = createUserWithPermission(
+    // Update the 'test_user' with read permissions
+    status = createOrUpdateUserWithPermission(
         "test_user",
         "test_password",
         "monitoring_user");
     Assert.assertEquals(200, status);
 
-    sendTestDataToKafka(NUM_RECORDS, NUM_RECORDS);
+    sendTestDataToKafka(numRecords, numRecords);
     totalRecords = connect.kafka().consume(
-        NUM_RECORDS * 2,
+        numRecords * 2,
         CONSUME_MAX_DURATION_MS,
         KAFKA_TOPIC);
     log.info("Number of records added in kafka {}", totalRecords.count());
 
     // Second batch of records should not be entertained due to change in permissions
-    waitForConnectorToWriteDataIntoES(
-        CONNECTOR_NAME,
-        Integer.valueOf(MAX_TASKS),
-        KAFKA_TOPIC,
-        NUM_RECORDS);
-    assertRecordsCountAndContent(NUM_RECORDS, KAFKA_TOPIC);
+    assertRecordsCountAndContent(numRecords * 2, numRecords, KAFKA_TOPIC);
     // Task must fail after permission change.
     waitForConnectorTaskToFail();
   }
 
-  private int createUserWithPermission(String username, String password, String role) throws IOException {
+  private int createOrUpdateUserWithPermission(String username, String password, String role) throws IOException {
     try (CloseableHttpClient client = HttpClients.createDefault()) {
       String url = container.getConnectionUrl() + "/_xpack/security/user/" + username + "?pretty";
       String userPermission = (Strings.isNullOrEmpty(role)) ? "[]" : "[\"" + role + "\"]";
@@ -257,7 +250,7 @@ public class ElasticSearchSinkConnectorIT extends BaseConnectorIT {
     }
   }
 
-  private int changeESpassword(String oldPassword, String newPassword) throws IOException {
+  private int changeESPassword(String oldPassword, String newPassword) throws IOException {
     try (CloseableHttpClient client = HttpClients.createDefault()) {
       String url = container.getConnectionUrl() + "/_security/user/elastic/_password?pretty";
       String body = "{\"password\" : \"" + newPassword + "\"}";
