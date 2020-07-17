@@ -183,7 +183,7 @@ public abstract class BaseConnectorIT {
     boolean result = info != null
         && info.tasks().stream().allMatch(s -> s.state().equals(AbstractStatus.State.RUNNING.toString()));
     if (!info.tasks().iterator().next().state().equals(AbstractStatus.State.RUNNING.toString())) {
-      log.warn("Connector task status: {}", info.tasks().iterator().next().state());
+      log.info("Connector task status: {}", info.tasks().iterator().next().state());
     }
     return Optional.of(!result);
   }

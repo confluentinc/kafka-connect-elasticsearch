@@ -23,6 +23,7 @@ import org.apache.kafka.connect.json.JsonConverterConfig;
 import org.apache.kafka.connect.runtime.SinkConnectorConfig;
 import org.apache.kafka.connect.storage.ConverterConfig;
 import org.apache.kafka.connect.storage.ConverterType;
+import org.elasticsearch.common.Strings;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -182,28 +183,102 @@ public class ElasticSearchSinkConnectorIT extends BaseConnectorIT {
     waitForConnectorTaskToFail();
   }
 
-  private void refreshESClient() {
-    props.put(ElasticsearchSinkConnectorConfig.CONNECTION_USERNAME_CONFIG, "elastic");
-    props.put(ElasticsearchSinkConnectorConfig.CONNECTION_PASSWORD_CONFIG, "elastic1");
-    super.setUp(props);
+  @Test
+  public void testPermissionChange() throws InterruptedException, IOException {
+    int status = createUserWithPermission(
+        "test_user",
+        "test_password",
+        "superuser");
+    Assert.assertEquals(200, status);
+
+    // Run the connector with dummy user
+    props.put(ElasticsearchSinkConnectorConfig.CONNECTION_USERNAME_CONFIG, "test_user");
+    props.put(ElasticsearchSinkConnectorConfig.CONNECTION_PASSWORD_CONFIG, "test_password");
+    sendTestDataToKafka(0, NUM_RECORDS);
+    ConsumerRecords<byte[], byte[]> totalRecords = connect.kafka().consume(
+        NUM_RECORDS,
+        CONSUME_MAX_DURATION_MS,
+        KAFKA_TOPIC);
+    log.info("Number of records added in kafka {}", totalRecords.count());
+
+    // Configure Connector and wait some specific time to start the connector.
+    connect.configureConnector(CONNECTOR_NAME, props);
+    waitForConnectorToStart(CONNECTOR_NAME, Integer.valueOf(MAX_TASKS));
+
+    // Wait Connector to write data into elastic-search
+    waitForConnectorToWriteDataIntoES(
+        CONNECTOR_NAME,
+        Integer.valueOf(MAX_TASKS),
+        KAFKA_TOPIC,
+        NUM_RECORDS);
+    assertRecordsCountAndContent(NUM_RECORDS, KAFKA_TOPIC);
+
+    // Update the 'dummy_user' with read permissions
+    status = createUserWithPermission(
+        "test_user",
+        "test_password",
+        "monitoring_user");
+    Assert.assertEquals(200, status);
+
+    sendTestDataToKafka(NUM_RECORDS, NUM_RECORDS);
+    totalRecords = connect.kafka().consume(
+        NUM_RECORDS * 2,
+        CONSUME_MAX_DURATION_MS,
+        KAFKA_TOPIC);
+    log.info("Number of records added in kafka {}", totalRecords.count());
+
+    // Second batch of records should not be entertained due to change in permissions
+    waitForConnectorToWriteDataIntoES(
+        CONNECTOR_NAME,
+        Integer.valueOf(MAX_TASKS),
+        KAFKA_TOPIC,
+        NUM_RECORDS);
+    assertRecordsCountAndContent(NUM_RECORDS, KAFKA_TOPIC);
+    // Task must fail after permission change.
+    waitForConnectorTaskToFail();
   }
 
-  private int changeESpassword(String oldPassword, String newPassword) throws IOException {
+  private int createUserWithPermission(String username, String password, String role) throws IOException {
     try (CloseableHttpClient client = HttpClients.createDefault()) {
-      String body = "{\"password\" : \"" + newPassword + "\"}";
-      String url = container.getConnectionUrl() + "/_security/user/elastic/_password?pretty";
+      String url = container.getConnectionUrl() + "/_xpack/security/user/" + username + "?pretty";
+      String userPermission = (Strings.isNullOrEmpty(role)) ? "[]" : "[\"" + role + "\"]";
+      String body = "{\"password\" : \"" + password + "\",\"roles\" : " + userPermission + "}";
+      String authStr = "elastic:elastic";
+      String authHeader = Base64.getEncoder().encodeToString((authStr).getBytes());
       HttpPost httpPost = new HttpPost(url);
       StringEntity requestEntity = new StringEntity(
           body,
           ContentType.APPLICATION_JSON);
       httpPost.setEntity(requestEntity);
-      String authStr = "elastic:" + oldPassword;
-      String authHeader = Base64.getEncoder().encodeToString((authStr).getBytes());
       httpPost.setHeader(HttpHeaders.AUTHORIZATION, "Basic " + authHeader);
       httpPost.setHeader("Content-type", "application/json");
       HttpResponse response = client.execute(httpPost);
       return response.getStatusLine().getStatusCode();
     }
+  }
+
+  private int changeESpassword(String oldPassword, String newPassword) throws IOException {
+    try (CloseableHttpClient client = HttpClients.createDefault()) {
+      String url = container.getConnectionUrl() + "/_security/user/elastic/_password?pretty";
+      String body = "{\"password\" : \"" + newPassword + "\"}";
+      String authStr = "elastic:" + oldPassword;
+      String authHeader = Base64.getEncoder().encodeToString((authStr).getBytes());
+      HttpPost httpPost = new HttpPost(url);
+      StringEntity requestEntity = new StringEntity(
+          body,
+          ContentType.APPLICATION_JSON);
+      httpPost.setEntity(requestEntity);
+      httpPost.setHeader(HttpHeaders.AUTHORIZATION, "Basic " + authHeader);
+      httpPost.setHeader("Content-type", "application/json");
+      HttpResponse response = client.execute(httpPost);
+      return response.getStatusLine().getStatusCode();
+    }
+  }
+
+  private void refreshESClient() {
+    props.put(ElasticsearchSinkConnectorConfig.CONNECTION_USERNAME_CONFIG, "elastic");
+    props.put(ElasticsearchSinkConnectorConfig.CONNECTION_PASSWORD_CONFIG, "elastic1");
+    super.setUp(props);
   }
 
   private void sendTestDataToKafka(int startIndex, int numRecords) {
