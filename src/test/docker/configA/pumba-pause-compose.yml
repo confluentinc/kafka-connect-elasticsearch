@@ -5,4 +5,6 @@ services:
     container_name: pumba
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+    # Github link: https://github.com/alexei-led/pumba
+    # Pause all running processes within target container('elastic-search')
     command: "--log-level debug --interval 30s pause --duration 5s elastic-search"
