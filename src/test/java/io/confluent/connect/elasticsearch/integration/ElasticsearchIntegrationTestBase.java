@@ -22,6 +22,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import io.confluent.connect.elasticsearch.DataConverter;
 import io.confluent.connect.elasticsearch.ElasticsearchClient;
+import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig;
 import io.confluent.connect.elasticsearch.IndexableRecord;
 import io.confluent.connect.elasticsearch.jest.JestElasticsearchClient;
 import java.io.IOException;
@@ -73,7 +74,12 @@ public class ElasticsearchIntegrationTestBase {
   @Before
   public void setUp() {
     log.info("Attempting to connect to {}", container.getConnectionUrl());
-    client = new JestElasticsearchClient(container.getConnectionUrl());
+    Map<String, String> props = new HashMap<>();
+    props.put(ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG, container.getConnectionUrl());
+    props.put(ElasticsearchSinkConnectorConfig.CONNECTION_USERNAME_CONFIG, "elastic");
+    props.put(ElasticsearchSinkConnectorConfig.CONNECTION_PASSWORD_CONFIG, "elastic");
+    props.put(ElasticsearchSinkConnectorConfig.TYPE_NAME_CONFIG, TYPE);
+    client = new JestElasticsearchClient(props);
     converter = new DataConverter(true, BehaviorOnNullValues.IGNORE);
   }
 
