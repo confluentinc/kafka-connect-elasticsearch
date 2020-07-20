@@ -178,6 +178,11 @@ public class JestElasticsearchClient implements ElasticsearchClient {
       LOG.warn("Couldn't get Elasticsearch version, result is null");
       return defaultVersion;
     }
+    if (!result.has("nodes")) {
+      LOG.error("Couldn't get Elasticsearch version (result is has no nodes); "
+              + "assuming {}, result: {}", defaultVersion, result);
+      return defaultVersion;
+    }
 
     checkForError(result);
 
