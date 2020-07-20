@@ -46,7 +46,7 @@ public class SecurityIT {
   private static final String TYPE_NAME = "kafka-connect";
   private static final int TASKS_MAX = 1;
   private static final int NUM_MSG = 200;
-  private static final long VERIFY_TIMEOUT_MS = TimeUnit.MINUTES.toMillis(5);
+  private static final long VERIFY_TIMEOUT_MS = TimeUnit.MINUTES.toMillis(10);
 
   @Before
   public void setup() throws IOException {
