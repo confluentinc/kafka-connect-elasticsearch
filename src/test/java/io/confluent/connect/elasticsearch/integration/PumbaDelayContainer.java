@@ -22,7 +22,7 @@ public class PumbaDelayContainer extends GenericContainer<PumbaDelayContainer> {
 
   public PumbaDelayContainer(String dockerImageName) {
     super(dockerImageName);
-    this.logger().info("Starting an Pumba pause container using [{}]", dockerImageName);
+    this.logger().info("Starting an Pumba delay container using [{}]", dockerImageName);
     this.setCommand(PUMBA_PAUSE_COMMAND);
     this.addFileSystemBind("/var/run/docker.sock", "/var/run/docker.sock", BindMode.READ_WRITE);
     this.withCreateContainerCmdModifier(cmd -> cmd.withName("pumba"));
