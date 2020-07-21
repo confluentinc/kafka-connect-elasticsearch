@@ -21,7 +21,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.google.gson.JsonObject;
-import org.testcontainers.containers.DockerComposeContainer;
 
 import static org.junit.Assert.assertEquals;
 
@@ -73,17 +72,15 @@ public abstract class BaseConnectorIT {
     container.start();
   }
 
-  protected static DockerComposeContainer pumbaPauseContainer;
+  protected static PumbaPauseContainer pumbaPauseContainer;
   protected void startPumbaPauseContainer() {
-    pumbaPauseContainer =
-        new DockerComposeContainer(new File("src/test/docker/configA/pumba-pause-compose.yml"));
+    pumbaPauseContainer = new PumbaPauseContainer();
     pumbaPauseContainer.start();
   }
 
-  protected static DockerComposeContainer pumbaDelayContainer;
+  protected static PumbaDelayContainer pumbaDelayContainer;
   protected void startPumbaDelayContainer() {
-    pumbaDelayContainer =
-        new DockerComposeContainer(new File("src/test/docker/configA/pumba-delay-compose.yml"));
+    pumbaDelayContainer = new PumbaDelayContainer();
     pumbaDelayContainer.start();
   }
 
