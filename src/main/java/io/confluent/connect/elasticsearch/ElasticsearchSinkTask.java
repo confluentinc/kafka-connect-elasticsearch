@@ -146,7 +146,7 @@ public class ElasticsearchSinkTask extends SinkTask {
 
         // may be null if DLQ not enabled
         builder.setErrantRecordReporter(context.errantRecordReporter());
-      } catch (NoClassDefFoundError e) {
+      } catch (NoClassDefFoundError | NoSuchMethodError e) {
         // Will occur in Connect runtimes earlier than 2.6
         log.warn("AK versions prior to 2.6 do not support the errant record reporter");
       }
