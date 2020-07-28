@@ -94,7 +94,7 @@ public class ElasticSearchSinkConnectorIT extends BaseConnectorIT {
 
   @Test
   public void testForElasticSearchServerUnavailability() throws InterruptedException, IOException {
-    // Pause all running processes within target container('es-container')
+    // Pause all processes that is running  within target container('es-container')
     startPumbaPauseContainer();
     sendTestDataToKafka(0, NUM_RECORDS);
     ConsumerRecords<byte[], byte[]> totalRecords = connect.kafka().consume(
