@@ -96,6 +96,29 @@ public class ElasticsearchContainer
     return new ElasticsearchContainer(imageName + ":" + version);
   }
 
+  /**
+   * Create an {@link ElasticsearchContainer} using the image name specified in the
+   * {@code elasticsearch.image} system property or {@code ELASTICSEARCH_IMAGE} environment
+   * variable, or defaulting to {@link #DEFAULT_DOCKER_IMAGE_NAME}, and the version specified in
+   * the {@code elasticsearch.version} system property, {@code ELASTICSEARCH_VERSION} environment
+   * variable, or defaulting to specified version.
+   *
+   * @return the unstarted container; never null
+   */
+  public static ElasticsearchContainer fromSystemProperties(String esVersion) {
+    String imageName = getSystemOrEnvProperty(
+        "elasticsearch.image",
+        "ELASTICSEARCH_IMAGE",
+        DEFAULT_DOCKER_IMAGE_NAME
+    );
+    String version = getSystemOrEnvProperty(
+        "elasticsearch.version",
+        "ELASTICSEARCH_VERSION",
+        esVersion
+    );
+    return new ElasticsearchContainer(imageName + ":" + version);
+  }
+
   private static final String KEY_PASSWORD = "asdfasdf";
   private static final String ELASTIC_PASSWORD = "elastic";
   private static final String KEYSTORE_PASSWORD = KEY_PASSWORD;
