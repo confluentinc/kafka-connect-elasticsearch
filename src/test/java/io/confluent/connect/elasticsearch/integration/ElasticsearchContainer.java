@@ -9,11 +9,8 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.InetAddress;
-import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.net.URL;
-import java.net.UnknownHostException;
 import java.time.Duration;
 import java.util.concurrent.Future;
 
@@ -92,29 +89,6 @@ public class ElasticsearchContainer
         "elasticsearch.version",
         "ELASTICSEARCH_VERSION",
         DEFAULT_ES_VERSION
-    );
-    return new ElasticsearchContainer(imageName + ":" + version);
-  }
-
-  /**
-   * Create an {@link ElasticsearchContainer} using the image name specified in the
-   * {@code elasticsearch.image} system property or {@code ELASTICSEARCH_IMAGE} environment
-   * variable, or defaulting to {@link #DEFAULT_DOCKER_IMAGE_NAME}, and the version specified in
-   * the {@code elasticsearch.version} system property, {@code ELASTICSEARCH_VERSION} environment
-   * variable, or defaulting to specified version.
-   *
-   * @return the unstarted container; never null
-   */
-  public static ElasticsearchContainer fromSystemProperties(String esVersion) {
-    String imageName = getSystemOrEnvProperty(
-        "elasticsearch.image",
-        "ELASTICSEARCH_IMAGE",
-        DEFAULT_DOCKER_IMAGE_NAME
-    );
-    String version = getSystemOrEnvProperty(
-        "elasticsearch.version",
-        "ELASTICSEARCH_VERSION",
-        esVersion
     );
     return new ElasticsearchContainer(imageName + ":" + version);
   }
