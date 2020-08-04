@@ -113,8 +113,8 @@ public class ElasticSearchSinkConnectorIT extends BaseConnectorIT {
         Integer.valueOf(MAX_TASKS),
         KAFKA_TOPIC,
         NUM_RECORDS);
-    assertRecordsCountAndContent(NUM_RECORDS, NUM_RECORDS, KAFKA_TOPIC);
     pumbaPauseContainer.close();
+    assertRecordsCountAndContent(NUM_RECORDS, NUM_RECORDS, KAFKA_TOPIC);
   }
 
   @Test
@@ -138,8 +138,8 @@ public class ElasticSearchSinkConnectorIT extends BaseConnectorIT {
         Integer.valueOf(MAX_TASKS),
         KAFKA_TOPIC,
         NUM_RECORDS);
-    assertRecordsCountAndContent(NUM_RECORDS, NUM_RECORDS, KAFKA_TOPIC);
     pumbaDelayContainer.close();
+    assertRecordsCountAndContent(NUM_RECORDS, NUM_RECORDS, KAFKA_TOPIC);
   }
 
   @Test
