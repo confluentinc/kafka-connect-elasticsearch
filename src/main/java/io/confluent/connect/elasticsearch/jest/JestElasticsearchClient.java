@@ -193,7 +193,29 @@ public class JestElasticsearchClient implements ElasticsearchClient {
                                             ElasticsearchSinkConnectorConfig config) {
     SslFactory kafkaSslFactory = new SslFactory(Mode.CLIENT, null, false);
     kafkaSslFactory.configure(config.sslConfigs());
-    SSLContext sslContext = kafkaSslFactory.sslContext();
+
+    Object ss;
+    try {
+      // try pre AK 2.6 version first
+      ss = SslFactory.class.getDeclaredMethod("sslEngineBuilder").invoke(kafkaSslFactory);
+      log.trace("Using AK 2.6+ SslFactory.");
+    } catch (Exception e) {
+      // must be running AK 2.6+
+      log.trace("AK 2.6+ SslFactory not found. Trying AK 2.6<.");
+      try {
+        ss = SslFactory.class.getDeclaredMethod("sslEngineFactory").invoke(kafkaSslFactory);
+        log.trace("Using AK 2.6< SslFactory.");
+      } catch (Exception ex) {
+          throw new ConnectException("Failed to find methods for SslFactory.", ex);
+      }
+    }
+
+    SSLContext sslContext;
+    try {
+      sslContext = (SSLContext) ss.getClass().getDeclaredMethod("sslContext").invoke(ss);
+    } catch (Exception e) {
+      throw new ConnectException("Could not create SSLContext.", e);
+    }
 
     HostnameVerifier hostnameVerifier = config.shouldDisableHostnameVerification()
             ? (hostname, session) -> true
