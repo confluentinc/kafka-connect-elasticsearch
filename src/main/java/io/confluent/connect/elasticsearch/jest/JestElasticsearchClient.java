@@ -194,27 +194,38 @@ public class JestElasticsearchClient implements ElasticsearchClient {
     SslFactory kafkaSslFactory = new SslFactory(Mode.CLIENT, null, false);
     kafkaSslFactory.configure(config.sslConfigs());
 
-    Object ss;
-    try {
-      // try pre AK 2.6 version first
-      ss = SslFactory.class.getDeclaredMethod("sslEngineBuilder").invoke(kafkaSslFactory);
-      log.trace("Using AK 2.6+ SslFactory.");
-    } catch (Exception e) {
-      // must be running AK 2.6+
-      log.trace("AK 2.6+ SslFactory not found. Trying AK 2.6<.");
-      try {
-        ss = SslFactory.class.getDeclaredMethod("sslEngineFactory").invoke(kafkaSslFactory);
-        log.trace("Using AK 2.6< SslFactory.");
-      } catch (Exception ex) {
-          throw new ConnectException("Failed to find methods for SslFactory.", ex);
-      }
-    }
-
     SSLContext sslContext;
     try {
-      sslContext = (SSLContext) ss.getClass().getDeclaredMethod("sslContext").invoke(ss);
+      // try AK <= 2.2 first
+      sslContext =
+          (SSLContext) SslFactory.class.getDeclaredMethod("sslContext").invoke(kafkaSslFactory);
+      log.trace("Using AK 2.2< SslFactory.");
     } catch (Exception e) {
-      throw new ConnectException("Could not create SSLContext.", e);
+      // must be running AK 2.3+
+      log.trace("Could not find SslFactory::sslContext. Trying AK 2.3+ APIs.");
+
+      Object ss;
+      try {
+        // try AK <= 2.6 second
+        ss = SslFactory.class.getDeclaredMethod("sslEngineBuilder").invoke(kafkaSslFactory);
+        log.trace("Using AK 2.6< SslFactory.");
+
+      } catch (Exception ex) {
+        // must be running AK 2.6+
+        log.trace("AK 2.6< SslFactory not found. Trying AK 2.6+.");
+        try {
+          ss = SslFactory.class.getDeclaredMethod("sslEngineFactory").invoke(kafkaSslFactory);
+          log.trace("Using AK 2.6+ SslFactory.");
+        } catch (Exception exc) {
+          throw new ConnectException("Failed to find methods for SslFactory.", exc);
+        }
+      }
+
+      try {
+        sslContext = (SSLContext) ss.getClass().getDeclaredMethod("sslContext").invoke(ss);
+      } catch (Exception ex) {
+        throw new ConnectException("Could not create SSLContext.", ex);
+      }
     }
 
     HostnameVerifier hostnameVerifier = config.shouldDisableHostnameVerification()
