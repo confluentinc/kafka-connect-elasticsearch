@@ -199,30 +199,35 @@ public class JestElasticsearchClient implements ElasticsearchClient {
       // try AK <= 2.2 first
       sslContext =
           (SSLContext) SslFactory.class.getDeclaredMethod("sslContext").invoke(kafkaSslFactory);
-      log.trace("Using AK 2.2< SslFactory.");
+      log.debug("Using AK 2.2 SslFactory methods.");
     } catch (Exception e) {
       // must be running AK 2.3+
-      log.trace("Could not find SslFactory::sslContext. Trying AK 2.3+ APIs.");
+      log.debug("Could not find AK 2.2 SslFactory methods. Trying AK 2.3+ methods for SslFactory.");
 
-      Object ss;
+      Object sslEngine;
       try {
         // try AK <= 2.6 second
-        ss = SslFactory.class.getDeclaredMethod("sslEngineBuilder").invoke(kafkaSslFactory);
-        log.trace("Using AK 2.6< SslFactory.");
+        sslEngine = SslFactory.class.getDeclaredMethod("sslEngineBuilder").invoke(kafkaSslFactory);
+        log.debug("Using AK 2.2-2.5 SslFactory methods.");
 
       } catch (Exception ex) {
         // must be running AK 2.6+
-        log.trace("AK 2.6< SslFactory not found. Trying AK 2.6+.");
+        log.debug(
+            "Could not find Ak 2.3-2.5 methods for SslFactory."
+                + " Trying AK 2.6+ methods for SslFactory."
+        );
         try {
-          ss = SslFactory.class.getDeclaredMethod("sslEngineFactory").invoke(kafkaSslFactory);
-          log.trace("Using AK 2.6+ SslFactory.");
+          sslEngine =
+              SslFactory.class.getDeclaredMethod("sslEngineFactory").invoke(kafkaSslFactory);
+          log.debug("Using AK 2.6+ SslFactory methods.");
         } catch (Exception exc) {
           throw new ConnectException("Failed to find methods for SslFactory.", exc);
         }
       }
 
       try {
-        sslContext = (SSLContext) ss.getClass().getDeclaredMethod("sslContext").invoke(ss);
+        sslContext =
+            (SSLContext) sslEngine.getClass().getDeclaredMethod("sslContext").invoke(sslEngine);
       } catch (Exception ex) {
         throw new ConnectException("Could not create SSLContext.", ex);
       }
