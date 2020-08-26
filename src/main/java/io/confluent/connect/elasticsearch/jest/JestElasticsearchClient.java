@@ -193,7 +193,45 @@ public class JestElasticsearchClient implements ElasticsearchClient {
                                             ElasticsearchSinkConnectorConfig config) {
     SslFactory kafkaSslFactory = new SslFactory(Mode.CLIENT, null, false);
     kafkaSslFactory.configure(config.sslConfigs());
-    SSLContext sslContext = kafkaSslFactory.sslContext();
+
+    SSLContext sslContext;
+    try {
+      // try AK <= 2.2 first
+      sslContext =
+          (SSLContext) SslFactory.class.getDeclaredMethod("sslContext").invoke(kafkaSslFactory);
+      log.debug("Using AK 2.2 SslFactory methods.");
+    } catch (Exception e) {
+      // must be running AK 2.3+
+      log.debug("Could not find AK 2.2 SslFactory methods. Trying AK 2.3+ methods for SslFactory.");
+
+      Object sslEngine;
+      try {
+        // try AK <= 2.6 second
+        sslEngine = SslFactory.class.getDeclaredMethod("sslEngineBuilder").invoke(kafkaSslFactory);
+        log.debug("Using AK 2.2-2.5 SslFactory methods.");
+
+      } catch (Exception ex) {
+        // must be running AK 2.6+
+        log.debug(
+            "Could not find Ak 2.3-2.5 methods for SslFactory."
+                + " Trying AK 2.6+ methods for SslFactory."
+        );
+        try {
+          sslEngine =
+              SslFactory.class.getDeclaredMethod("sslEngineFactory").invoke(kafkaSslFactory);
+          log.debug("Using AK 2.6+ SslFactory methods.");
+        } catch (Exception exc) {
+          throw new ConnectException("Failed to find methods for SslFactory.", exc);
+        }
+      }
+
+      try {
+        sslContext =
+            (SSLContext) sslEngine.getClass().getDeclaredMethod("sslContext").invoke(sslEngine);
+      } catch (Exception ex) {
+        throw new ConnectException("Could not create SSLContext.", ex);
+      }
+    }
 
     HostnameVerifier hostnameVerifier = config.shouldDisableHostnameVerification()
             ? (hostname, session) -> true
