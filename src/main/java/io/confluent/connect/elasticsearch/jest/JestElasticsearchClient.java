@@ -36,6 +36,7 @@ import io.searchbox.client.JestClient;
 import io.searchbox.client.JestClientFactory;
 import io.searchbox.client.JestResult;
 import io.searchbox.client.config.HttpClientConfig;
+import io.searchbox.client.config.exception.CouldNotConnectException;
 import io.searchbox.cluster.NodesInfo;
 import io.searchbox.core.Bulk;
 import io.searchbox.core.BulkResult;
@@ -52,6 +53,7 @@ import io.searchbox.indices.Refresh;
 import io.searchbox.indices.mapping.PutMapping;
 import javax.net.ssl.HostnameVerifier;
 import org.apache.http.HttpHost;
+import org.apache.http.NoHttpResponseException;
 import org.apache.http.auth.AuthScope;
 import org.apache.http.auth.UsernamePasswordCredentials;
 import org.apache.http.client.CredentialsProvider;
@@ -62,7 +64,6 @@ import org.apache.http.nio.conn.ssl.SSLIOSessionStrategy;
 import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.config.types.Password;
 import org.apache.kafka.common.network.Mode;
-import org.apache.kafka.common.security.ssl.DefaultSslEngineFactory;
 import org.apache.kafka.common.security.ssl.SslFactory;
 import org.apache.kafka.common.utils.SystemTime;
 import org.apache.kafka.common.utils.Time;
@@ -154,13 +155,13 @@ public class JestElasticsearchClient implements ElasticsearchClient {
       ElasticsearchSinkConnectorConfig config = new ElasticsearchSinkConnectorConfig(props);
       factory.setHttpClientConfig(getClientConfig(config));
       this.client = factory.getObject();
-      this.version = getServerVersion();
       this.writeMethod = WriteMethod.forValue(
               config.getString(ElasticsearchSinkConnectorConfig.WRITE_METHOD_CONFIG));
       this.retryBackoffMs =
               config.getLong(ElasticsearchSinkConnectorConfig.RETRY_BACKOFF_MS_CONFIG);
       this.maxRetries = config.getInt(ElasticsearchSinkConnectorConfig.MAX_RETRIES_CONFIG);
       this.timeout = config.getInt(ElasticsearchSinkConnectorConfig.READ_TIMEOUT_MS_CONFIG);
+      this.version = getServerVersion();
 
     } catch (IOException e) {
       throw new ConnectException(
@@ -339,7 +340,7 @@ public class JestElasticsearchClient implements ElasticsearchClient {
     Version defaultVersion = Version.ES_V6;
 
     NodesInfo info = new NodesInfo.Builder().addCleanApiParameter("version").build();
-    JsonObject result = client.execute(info).getJsonObject();
+    JsonObject result = getServerInfo(info);
     if (result == null) {
       LOG.warn("Couldn't get Elasticsearch version (result is null); assuming {}", defaultVersion);
       return defaultVersion;
@@ -398,6 +399,32 @@ public class JestElasticsearchClient implements ElasticsearchClient {
       log.info("Detected unexpected Elasticsearch version {}, using {}", esVersion, version);
     }
     return version;
+  }
+
+  private JsonObject getServerInfo(NodesInfo info) throws IOException {
+    JsonObject result = null;
+    boolean connectionSuccess = false;
+    int retryAttempts = 1;
+    final int maxRetryAttempts = maxRetries + 1;
+    while (!connectionSuccess) {
+      try {
+        result = client.execute(info).getJsonObject();
+        connectionSuccess = true;
+      } catch (CouldNotConnectException | NoHttpResponseException ex) {
+        if (retryAttempts < maxRetryAttempts) {
+          long sleepTimeMs = RetryUtil.computeRandomRetryWaitTimeInMillis(retryAttempts,
+              retryBackoffMs);
+          log.info("Failed to create connection to the ElasticSearch with attempt {}/{}, "
+                  + "will attempt retry after {} ms. Failure reason: {}",
+              retryAttempts, maxRetryAttempts, sleepTimeMs, ex.getMessage());
+          time.sleep(sleepTimeMs);
+        } else {
+          throw ex;
+        }
+        retryAttempts++;
+      }
+    }
+    return result;
   }
 
   private void checkForError(JsonObject result) {
