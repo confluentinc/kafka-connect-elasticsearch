@@ -47,4 +47,9 @@ public class IndexableRecord {
   public int hashCode() {
     return Objects.hash(key, version, payload);
   }
+
+  @Override
+  public String toString() {
+    return String.format("%s/payload{%s}/version{%s}", key, payload, version);
+  }
 }

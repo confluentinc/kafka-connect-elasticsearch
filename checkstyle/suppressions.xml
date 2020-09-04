@@ -21,7 +21,7 @@
     <!-- TODO: Pass some parameters in common config object? -->
     <suppress
             checks="(ParameterNumber)"
-            files="(ElasticsearchWriter).java"
+            files="(ElasticsearchWriter|BulkProcessor).java"
     />
 
     <suppress

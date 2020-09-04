@@ -54,6 +54,11 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   public static final String BATCH_SIZE_CONFIG = "batch.size";
   private static final String BATCH_SIZE_DOC =
       "The number of records to process as a batch when writing to Elasticsearch.";
+  public static final String MAX_BATCH_BYTES_CONFIG = "max.batch.bytes";
+  private static final String MAX_BATCH_BYTES_DOC =
+      "The maximum number of bytes to process as a batch when writing to Elasticsearch."
+      + "This configuration will enable size-based batching of records irrespective of the"
+      + " records count under ``" + BATCH_SIZE_CONFIG + "`` configuration." ;
   public static final String MAX_IN_FLIGHT_REQUESTS_CONFIG = "max.in.flight.requests";
   private static final String MAX_IN_FLIGHT_REQUESTS_DOC =
       "The maximum number of indexing requests that can be in-flight to Elasticsearch before "
@@ -335,6 +340,16 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
         ++order,
         Width.SHORT,
         "Batch Size"
+    ).define(
+        MAX_BATCH_BYTES_CONFIG,
+        Type.LONG,
+        null,
+        Importance.MEDIUM,
+        MAX_BATCH_BYTES_DOC,
+        group,
+        ++order,
+        Width.SHORT,
+        "Maximum Batch Size in Bytes"
     ).define(
         MAX_IN_FLIGHT_REQUESTS_CONFIG,
         Type.INT,

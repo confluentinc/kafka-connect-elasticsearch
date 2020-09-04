@@ -67,6 +67,7 @@ public class ElasticsearchWriter {
       int maxBufferedRecords,
       int maxInFlightRequests,
       int batchSize,
+      Long maxBatchBytes,
       long lingerMs,
       int maxRetries,
       long retryBackoffMs,
@@ -93,6 +94,7 @@ public class ElasticsearchWriter {
         maxBufferedRecords,
         maxInFlightRequests,
         batchSize,
+        maxBatchBytes,
         lingerMs,
         maxRetries,
         retryBackoffMs,
@@ -116,6 +118,7 @@ public class ElasticsearchWriter {
     private int maxBufferedRecords;
     private int maxInFlightRequests;
     private int batchSize;
+    private Long maxBatchBytes;
     private long lingerMs;
     private int maxRetry;
     private long retryBackoffMs;
@@ -175,6 +178,11 @@ public class ElasticsearchWriter {
       return this;
     }
 
+    public Builder setMaxBatchBytes(Long maxBatchBytes) {
+      this.maxBatchBytes = maxBatchBytes;
+      return this;
+    }
+
     public Builder setLingerMs(long lingerMs) {
       this.lingerMs = lingerMs;
       return this;
@@ -231,6 +239,7 @@ public class ElasticsearchWriter {
           maxBufferedRecords,
           maxInFlightRequests,
           batchSize,
+          maxBatchBytes,
           lingerMs,
           maxRetry,
           retryBackoffMs,

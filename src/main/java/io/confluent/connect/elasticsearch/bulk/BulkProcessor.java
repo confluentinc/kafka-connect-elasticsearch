@@ -59,6 +59,7 @@ public class BulkProcessor<R, B> {
   private final BulkClient<R, B> bulkClient;
   private final int maxBufferedRecords;
   private final int batchSize;
+  private final Long maxBatchBytes;
   private final long lingerMs;
   private final int maxRetries;
   private final long retryBackoffMs;
@@ -87,6 +88,7 @@ public class BulkProcessor<R, B> {
       int maxBufferedRecords,
       int maxInFlightRequests,
       int batchSize,
+      Long maxBatchBytes,
       long lingerMs,
       int maxRetries,
       long retryBackoffMs,
@@ -97,6 +99,7 @@ public class BulkProcessor<R, B> {
     this.bulkClient = bulkClient;
     this.maxBufferedRecords = maxBufferedRecords;
     this.batchSize = batchSize;
+    this.maxBatchBytes = maxBatchBytes;
     this.lingerMs = lingerMs;
     this.maxRetries = maxRetries;
     this.retryBackoffMs = retryBackoffMs;
@@ -188,15 +191,27 @@ public class BulkProcessor<R, B> {
   private synchronized Future<BulkResponse> submitBatch() {
     final int numUnsentRecords = unsentRecords.size();
     assert numUnsentRecords > 0;
-    final int batchableSize = Math.min(batchSize, numUnsentRecords);
-    final List<R> batch = new ArrayList<>(batchableSize);
-    for (int i = 0; i < batchableSize; i++) {
-      batch.add(unsentRecords.removeFirst());
+    final List<R> batch;
+    if (isSizeBasedBatchingEnabled()) {
+      batch = new ArrayList<>();
+      long batchBytes = 0;
+      R record = unsentRecords.getFirst();
+      while (record != null && (batchBytes + record.toString().length()) <= maxBatchBytes) {
+        batch.add(unsentRecords.removeFirst());
+        batchBytes += record.toString().length();
+        record = unsentRecords.peekFirst();
+      }
+    } else {
+      final int batchableSize = Math.min(batchSize, numUnsentRecords);
+      batch = new ArrayList<>(batchableSize);
+      for (int i = 0; i < batchableSize; i++) {
+        batch.add(unsentRecords.removeFirst());
+      }
     }
-    inFlightRecords += batchableSize;
+    inFlightRecords += batch.size();
     log.debug(
         "Submitting batch of {} records; {} unsent and {} total in-flight records",
-        batchableSize,
+        batch.size(),
         numUnsentRecords,
         inFlightRecords
     );
@@ -212,8 +227,30 @@ public class BulkProcessor<R, B> {
    * </ul>
    */
   private synchronized boolean canSubmit(long elapsedMs) {
-    return !unsentRecords.isEmpty()
-           && (flushRequested || elapsedMs >= lingerMs || unsentRecords.size() >= batchSize);
+    return !unsentRecords.isEmpty() && (flushRequested || elapsedMs >= lingerMs || isBatchReady());
+  }
+
+  private boolean isBatchReady() {
+    if (isSizeBasedBatchingEnabled()) {
+      long totalSize = 0;
+      for (R record : unsentRecords) {
+        if (totalSize >= maxBatchBytes) {
+          return true;
+        }
+        totalSize += record.toString().getBytes().length;
+      }
+      if (totalSize >= maxBatchBytes) {
+        return true;
+      } else {
+        return false;
+      }
+    } else {
+      return unsentRecords.size() >= batchSize;
+    }
+  }
+
+  private boolean isSizeBasedBatchingEnabled() {
+    return maxBatchBytes != null;
   }
 
   /**
