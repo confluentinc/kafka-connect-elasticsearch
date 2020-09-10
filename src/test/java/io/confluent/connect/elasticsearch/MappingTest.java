@@ -15,12 +15,12 @@
 
 package io.confluent.connect.elasticsearch;
 
-import com.fasterxml.jackson.databind.node.NumericNode;
-import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.fasterxml.jackson.databind.node.TextNode;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.google.gson.JsonObject;
 
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.util.HashMap;
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Field;
@@ -28,103 +28,94 @@ import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
-import org.elasticsearch.test.ESIntegTestCase;
-import org.elasticsearch.test.InternalTestCluster;
+import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.junit.Test;
 
-import static io.confluent.connect.elasticsearch.DataConverter.BehaviorOnNullValues;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConstants.KEYWORD_TYPE;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConstants.TEXT_TYPE;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
+import static io.confluent.connect.elasticsearch.Mapping.KEYWORD_TYPE;
+import static io.confluent.connect.elasticsearch.Mapping.KEY_FIELD;
+import static io.confluent.connect.elasticsearch.Mapping.TEXT_TYPE;
+import static io.confluent.connect.elasticsearch.Mapping.VALUE_FIELD;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
 
-public class MappingTest extends ElasticsearchSinkTestBase {
-
-  private static final String INDEX = "kafka-connect";
-  private static final String TYPE = "kafka-connect-type";
+public class MappingTest {
 
   @Test
-  @SuppressWarnings("unchecked")
-  public void testMapping() throws Exception {
-    InternalTestCluster cluster = ESIntegTestCase.internalCluster();
-    cluster.ensureAtLeastNumDataNodes(1);
-
-    createIndex(INDEX);
-    Schema schema = createSchema();
-    Mapping.createMapping(client, INDEX, TYPE, schema);
-
-    JsonObject mapping = Mapping.getMapping(client, INDEX, TYPE);
-    assertNotNull(mapping);
-    verifyMapping(schema, mapping);
+  public void testBuildMapping() throws IOException {
+    JsonObject result = runTest(createSchema());
+    verifyMapping(createSchema(), result);
   }
 
   @Test
-  @SuppressWarnings("unchecked")
-  public void testStringMappingForES6() throws Exception {
-    ElasticsearchClient client = mock(ElasticsearchClient.class);
-    when(client.getVersion()).thenReturn(ElasticsearchClient.Version.ES_V6);
+  public void testBuildMappingForString() throws IOException {
+    Schema schema = SchemaBuilder.struct()
+        .name("record")
+        .field("string", Schema.STRING_SCHEMA)
+        .build();
 
-    Schema schema = SchemaBuilder.struct().name("textRecord")
-            .field("string", Schema.STRING_SCHEMA)
-            .build();
-    ObjectNode mapping = (ObjectNode) Mapping.inferMapping(client, schema);
-    ObjectNode properties = mapping.with("properties");
-    ObjectNode string = properties.with("string");
-    TextNode stringType = (TextNode) string.get("type");
-    ObjectNode fields = string.with("fields");
-    ObjectNode keyword = fields.with("keyword");
-    TextNode keywordType = (TextNode) keyword.get("type");
-    NumericNode ignoreAbove = (NumericNode) keyword.get("ignore_above");
+    JsonObject result = runTest(schema);
+    JsonObject string = result.getAsJsonObject("properties").getAsJsonObject("string");
+    JsonObject keyword = string.getAsJsonObject("fields").getAsJsonObject("keyword");
 
-    assertEquals(TEXT_TYPE, stringType.asText());
-    assertEquals(KEYWORD_TYPE, keywordType.asText());
-    assertEquals(256, ignoreAbove.asInt());
+    assertEquals(TEXT_TYPE, string.get("type").getAsString());
+    assertEquals(KEYWORD_TYPE, keyword.get("type").getAsString());
+    assertEquals(256, keyword.get("ignore_above").getAsInt());
   }
 
   @Test
-  public void testInferMapping() throws Exception {
-
-    Schema stringSchema = SchemaBuilder
+  public void testBuildMappingSetsDefaultValue() throws IOException {
+    Schema schema = SchemaBuilder
         .struct()
         .name("record")
-        .field("foo", SchemaBuilder.string().defaultValue("0").build())
-        .build();
-    JsonNode stringMapping = Mapping.inferMapping(client, stringSchema);
-
-    assertNull(stringMapping.get("properties").get("foo").get("null_value"));
-
-    Schema intSchema =SchemaBuilder
-        .struct()
-        .name("record")
-        .field("foo", SchemaBuilder.int32().defaultValue(0).build())
+        .field("int", SchemaBuilder.int32().defaultValue(0).build())
         .build();
 
-    JsonNode intMapping = Mapping.inferMapping(client, intSchema);
-    assertNotNull(intMapping.get("properties").get("foo").get("null_value"));
-    assertEquals(0, intMapping.get("properties").get("foo").get("null_value").asInt());
-  }
+    JsonObject result = runTest(schema);
 
-  @Test
-  public void testInferMappingDefaultDate()  {
-    java.util.Date expected = new java.util.Date();
-
-    Schema dateSchema = SchemaBuilder
-        .struct()
-        .name("record")
-        .field("foo", Date.builder().defaultValue(expected).build())
-        .build();
-
-    JsonNode dateMapping = Mapping.inferMapping(client, dateSchema);
-    assertNotNull(dateMapping.get("properties").get("foo").get("null_value"));
     assertEquals(
-        expected.getTime(),
-        dateMapping.get("properties").get("foo").get("null_value").asLong()
+        0,
+        result.getAsJsonObject("properties").getAsJsonObject("int").get("null_value").getAsInt()
     );
   }
 
-  protected Schema createSchema() {
-    Schema structSchema = createInnerSchema();
-    return SchemaBuilder.struct().name("record")
+  @Test
+  public void testBuildMappingSetsDefaultValueForDate() throws IOException {
+    java.util.Date expected = new java.util.Date();
+    Schema schema = SchemaBuilder
+        .struct()
+        .name("record")
+        .field("date", Date.builder().defaultValue(expected).build())
+        .build();
+
+    JsonObject result = runTest(schema);
+
+    assertEquals(
+        expected.getTime(),
+        result.getAsJsonObject("properties").getAsJsonObject("date").get("null_value").getAsLong()
+    );
+  }
+
+  @Test
+  public void testBuildMappingSetsNoDefaultValueForStrings() throws IOException {
+    Schema schema = SchemaBuilder
+        .struct()
+        .name("record")
+        .field("string", SchemaBuilder.string().defaultValue("0").build())
+        .build();
+
+    JsonObject result = runTest(schema);
+
+    assertNull(result.getAsJsonObject("properties").getAsJsonObject("string").get("null_value"));
+  }
+
+  private Schema createSchema() {
+    return createSchemaBuilder("record")
+        .field("struct", createSchemaBuilder("inner").build())
+        .build();
+  }
+
+  private SchemaBuilder createSchemaBuilder(String name) {
+    return SchemaBuilder.struct().name(name)
         .field("boolean", Schema.BOOLEAN_SCHEMA)
         .field("bytes", Schema.BYTES_SCHEMA)
         .field("int8", Schema.INT8_SCHEMA)
@@ -135,37 +126,21 @@ public class MappingTest extends ElasticsearchSinkTestBase {
         .field("float64", Schema.FLOAT64_SCHEMA)
         .field("string", Schema.STRING_SCHEMA)
         .field("array", SchemaBuilder.array(Schema.STRING_SCHEMA).build())
-        .field("map", SchemaBuilder.map(Schema.STRING_SCHEMA, Schema.STRING_SCHEMA).build())
-        .field("struct", structSchema)
+        .field("map", SchemaBuilder.map(Schema.STRING_SCHEMA, Schema.INT32_SCHEMA).build())
         .field("decimal", Decimal.schema(2))
         .field("date", Date.SCHEMA)
         .field("time", Time.SCHEMA)
-        .field("timestamp", Timestamp.SCHEMA)
-        .build();
+        .field("timestamp", Timestamp.SCHEMA);
   }
 
-  private Schema createInnerSchema() {
-    return SchemaBuilder.struct().name("inner")
-        .field("boolean", Schema.BOOLEAN_SCHEMA)
-        .field("bytes", Schema.BYTES_SCHEMA)
-        .field("int8", Schema.INT8_SCHEMA)
-        .field("int16", Schema.INT16_SCHEMA)
-        .field("int32", Schema.INT32_SCHEMA)
-        .field("int64", Schema.INT64_SCHEMA)
-        .field("float32", Schema.FLOAT32_SCHEMA)
-        .field("float64", Schema.FLOAT64_SCHEMA)
-        .field("string", Schema.STRING_SCHEMA)
-        .field("array", SchemaBuilder.array(Schema.STRING_SCHEMA).build())
-        .field("map", SchemaBuilder.map(Schema.STRING_SCHEMA, Schema.STRING_SCHEMA).build())
-        .field("decimal", Decimal.schema(2))
-        .field("date", Date.SCHEMA)
-        .field("time", Time.SCHEMA)
-        .field("timestamp", Timestamp.SCHEMA)
-        .build();
+  private static JsonObject runTest(Schema schema) throws IOException {
+    XContentBuilder builder = Mapping.buildMapping(schema);
+    builder.flush();
+    ByteArrayOutputStream stream = (ByteArrayOutputStream) builder.getOutputStream();
+    return  (JsonObject) JsonParser.parseString(stream.toString());
   }
 
-  @SuppressWarnings("unchecked")
-  private void verifyMapping(Schema schema, JsonObject mapping) throws Exception {
+  private void verifyMapping(Schema schema, JsonObject mapping) {
     String schemaName = schema.name();
     Object type = mapping.get("type");
     if (schemaName != null) {
@@ -173,15 +148,15 @@ public class MappingTest extends ElasticsearchSinkTestBase {
         case Date.LOGICAL_NAME:
         case Time.LOGICAL_NAME:
         case Timestamp.LOGICAL_NAME:
-          assertEquals("\"" + ElasticsearchSinkConnectorConstants.DATE_TYPE + "\"", type.toString());
+          assertEquals("\"" + Mapping.DATE_TYPE + "\"", type.toString());
           return;
         case Decimal.LOGICAL_NAME:
-          assertEquals("\"" + ElasticsearchSinkConnectorConstants.DOUBLE_TYPE + "\"", type.toString());
+          assertEquals("\"" + Mapping.DOUBLE_TYPE + "\"", type.toString());
           return;
       }
     }
 
-    DataConverter converter = new DataConverter(true, BehaviorOnNullValues.IGNORE);
+    DataConverter converter = new DataConverter(new ElasticsearchSinkConnectorConfig(ElasticsearchSinkConnectorConfigTest.addNecessaryProps(new HashMap<>())));
     Schema.Type schemaType = schema.type();
     switch (schemaType) {
       case ARRAY:
@@ -190,8 +165,8 @@ public class MappingTest extends ElasticsearchSinkTestBase {
       case MAP:
         Schema newSchema = converter.preProcessSchema(schema);
         JsonObject mapProperties = mapping.get("properties").getAsJsonObject();
-        verifyMapping(newSchema.keySchema(), mapProperties.get(ElasticsearchSinkConnectorConstants.MAP_KEY).getAsJsonObject());
-        verifyMapping(newSchema.valueSchema(), mapProperties.get(ElasticsearchSinkConnectorConstants.MAP_VALUE).getAsJsonObject());
+        verifyMapping(newSchema.keySchema(), mapProperties.get(KEY_FIELD).getAsJsonObject());
+        verifyMapping(newSchema.valueSchema(), mapProperties.get(VALUE_FIELD).getAsJsonObject());
         break;
       case STRUCT:
         JsonObject properties = mapping.get("properties").getAsJsonObject();
@@ -200,7 +175,7 @@ public class MappingTest extends ElasticsearchSinkTestBase {
         }
         break;
       default:
-        assertEquals("\"" + Mapping.getElasticsearchType(client, schemaType) + "\"", type.toString());
+        assertEquals("\"" + Mapping.getElasticsearchType(schemaType) + "\"", type.toString());
     }
   }
 }

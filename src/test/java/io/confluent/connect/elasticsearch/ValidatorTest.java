@@ -18,14 +18,11 @@ package io.confluent.connect.elasticsearch;
 
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BATCH_SIZE_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_PASSWORD_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_USERNAME_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.FLUSH_TIMEOUT_MS_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_KEY_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_KEY_TOPICS_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_SCHEMA_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_SCHEMA_TOPICS_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.LINGER_MS_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.MAX_BUFFERED_RECORDS_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.MAX_IN_FLIGHT_REQUESTS_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.PROXY_HOST_CONFIG;
@@ -33,11 +30,10 @@ import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfi
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.PROXY_USERNAME_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.SECURITY_PROTOCOL_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.SSL_CONFIG_PREFIX;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.TYPE_NAME_CONFIG;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
-import java.util.HashMap;
+import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.SecurityProtocol;
 import java.util.Map;
 import org.apache.kafka.common.config.Config;
 import org.apache.kafka.common.config.ConfigValue;
@@ -52,9 +48,7 @@ public class ValidatorTest {
 
   @Before
   public void setup() {
-    props = new HashMap<>();
-    props.put(TYPE_NAME_CONFIG, "type");
-    props.put(CONNECTION_URL_CONFIG, "localhost:8080");
+    props = ElasticsearchSinkConnectorConfigTest.addNecessaryProps(props);
   }
 
   @Test
@@ -124,27 +118,6 @@ public class ValidatorTest {
     validator = new Validator(props);
 
     result = validator.validate();
-    assertNoErrors(result);
-  }
-
-  @Test
-  public void testInvalidLingerMs() {
-    props.put(LINGER_MS_CONFIG, "1001");
-    props.put(FLUSH_TIMEOUT_MS_CONFIG, "1000");
-    validator = new Validator(props);
-
-    Config result = validator.validate();
-    assertHasErrorMessage(result, LINGER_MS_CONFIG, "can not be larger than");
-    assertHasErrorMessage(result, FLUSH_TIMEOUT_MS_CONFIG, "can not be larger than");
-  }
-
-  @Test
-  public void testValidLingerMs() {
-    props.put(LINGER_MS_CONFIG, "999");
-    props.put(FLUSH_TIMEOUT_MS_CONFIG, "1000");
-    validator = new Validator(props);
-
-    Config result = validator.validate();
     assertNoErrors(result);
   }
 

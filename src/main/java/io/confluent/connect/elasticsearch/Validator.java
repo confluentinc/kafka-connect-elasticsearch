@@ -19,12 +19,10 @@ package io.confluent.connect.elasticsearch;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BATCH_SIZE_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_PASSWORD_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_USERNAME_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.FLUSH_TIMEOUT_MS_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_KEY_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_KEY_TOPICS_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_SCHEMA_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_SCHEMA_TOPICS_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.LINGER_MS_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.MAX_BUFFERED_RECORDS_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.MAX_IN_FLIGHT_REQUESTS_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.PROXY_HOST_CONFIG;
@@ -33,6 +31,7 @@ import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfi
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.SECURITY_PROTOCOL_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.SSL_CONFIG_PREFIX;
 
+import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.SecurityProtocol;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
@@ -67,7 +66,6 @@ public class Validator {
 
     validateCredentials();
     validateIgnoreConfigs();
-    validateLingerMs();
     validateMaxBufferedRecords();
     validateProxy();
     validateSsl();
@@ -102,17 +100,6 @@ public class Validator {
       );
       addErrorMessage(IGNORE_SCHEMA_CONFIG, errorMessage);
       addErrorMessage(IGNORE_SCHEMA_TOPICS_CONFIG, errorMessage);
-    }
-  }
-
-  private void validateLingerMs() {
-    if (config.lingerMs() > config.flushTimeoutMs()) {
-      String errorMessage = String.format(
-          "'%s' (%d) can not be larger than '%s' (%d).",
-          LINGER_MS_CONFIG, config.lingerMs(), FLUSH_TIMEOUT_MS_CONFIG, config.flushTimeoutMs()
-      );
-      addErrorMessage(LINGER_MS_CONFIG, errorMessage);
-      addErrorMessage(FLUSH_TIMEOUT_MS_CONFIG, errorMessage);
     }
   }
 

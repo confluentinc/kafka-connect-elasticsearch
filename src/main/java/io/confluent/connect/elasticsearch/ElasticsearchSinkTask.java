@@ -15,135 +15,191 @@
 
 package io.confluent.connect.elasticsearch;
 
-import io.confluent.connect.elasticsearch.jest.JestElasticsearchClient;
+import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BehaviorOnNullValues;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
-import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.connect.errors.ConnectException;
+import org.apache.kafka.connect.errors.DataException;
+import org.apache.kafka.connect.sink.ErrantRecordReporter;
 import org.apache.kafka.connect.sink.SinkRecord;
 import org.apache.kafka.connect.sink.SinkTask;
+import org.elasticsearch.action.DocWriteRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.Map;
-import java.util.concurrent.TimeUnit;
+import java.util.Set;
 
 public class ElasticsearchSinkTask extends SinkTask {
 
   private static final Logger log = LoggerFactory.getLogger(ElasticsearchSinkTask.class);
-  private volatile ElasticsearchWriter writer;
-  private ElasticsearchClient client;
 
-  @Override
-  public String version() {
-    return Version.getVersion();
-  }
+  private DataConverter converter;
+  private ElasticsearchClient client;
+  private ElasticsearchSinkConnectorConfig config;
+  private ErrantRecordReporter reporter;
+  private Set<String> existingMappings;
+  private Set<String> indexCache;
 
   @Override
   public void start(Map<String, String> props) {
     start(props, null);
   }
 
-  @SuppressWarnings("deprecation")
-  // public for testing
-  public void start(Map<String, String> props, ElasticsearchClient client) {
+  // visible for testing
+  protected void start(Map<String, String> props, ElasticsearchClient client) {
+    log.info("Starting ElasticsearchSinkTask.");
+
+    this.config = new ElasticsearchSinkConnectorConfig(props);
+    this.converter = new DataConverter(config);
+    this.existingMappings = new HashSet<>();
+    this.indexCache = new HashSet<>();
+
+    this.reporter = null;
     try {
-      log.info("Starting ElasticsearchSinkTask");
-
-      ElasticsearchSinkConnectorConfig config = new ElasticsearchSinkConnectorConfig(props);
-
-      // Calculate the maximum possible backoff time ...
-      long maxRetryBackoffMs =
-          RetryUtil.computeRetryWaitTimeInMillis(config.maxRetries(), config.retryBackoffMs());
-      if (maxRetryBackoffMs > RetryUtil.MAX_RETRY_TIME_MS) {
-        log.warn("This connector uses exponential backoff with jitter for retries, "
-                + "and using '{}={}' and '{}={}' results in an impractical but possible maximum "
-                + "backoff time greater than {} hours.",
-            ElasticsearchSinkConnectorConfig.MAX_RETRIES_CONFIG, config.maxRetries(),
-            ElasticsearchSinkConnectorConfig.RETRY_BACKOFF_MS_CONFIG, config.retryBackoffMs(),
-            TimeUnit.MILLISECONDS.toHours(maxRetryBackoffMs));
+      if (context.errantRecordReporter() == null) {
+        log.info("Errant record reporter not configured.");
       }
 
-      if (client != null) {
-        this.client = client;
-      } else {
-        this.client = new JestElasticsearchClient(props);
-      }
-
-      ElasticsearchWriter.Builder builder = new ElasticsearchWriter.Builder(this.client)
-          .setType(config.type())
-          .setIgnoreKey(config.ignoreKey(), config.ignoreKeyTopics())
-          .setIgnoreSchema(config.ignoreSchema(), config.ignoreSchemaTopics())
-          .setCompactMapEntries(config.useCompactMapEntries())
-          .setFlushTimoutMs(config.flushTimeoutMs())
-          .setMaxBufferedRecords(config.maxBufferedRecords())
-          .setMaxInFlightRequests(config.maxInFlightRequests())
-          .setBatchSize(config.batchSize())
-          .setLingerMs(config.lingerMs())
-          .setRetryBackoffMs(config.retryBackoffMs())
-          .setMaxRetry(config.maxRetries())
-          .setDropInvalidMessage(config.dropInvalidMessage())
-          .setBehaviorOnNullValues(config.behaviorOnNullValues())
-          .setBehaviorOnMalformedDoc(config.behaviorOnMalformedDoc());
-
-      try {
-        if (context.errantRecordReporter() == null) {
-          log.info("Errant record reporter not configured.");
-        }
-
-        // may be null if DLQ not enabled
-        builder.setErrantRecordReporter(context.errantRecordReporter());
-      } catch (NoClassDefFoundError | NoSuchMethodError e) {
-        // Will occur in Connect runtimes earlier than 2.6
-        log.warn("AK versions prior to 2.6 do not support the errant record reporter");
-      }
-
-      writer = builder.build();
-      writer.start();
-      log.info(
-          "Started ElasticsearchSinkTask, will {} records with null values ('{}')",
-          config.behaviorOnNullValues().name(),
-          ElasticsearchSinkConnectorConfig.BEHAVIOR_ON_NULL_VALUES_CONFIG
-      );
-    } catch (ConfigException e) {
-      throw new ConnectException(
-          "Couldn't start ElasticsearchSinkTask due to configuration error:",
-          e
-      );
+      // may be null if DLQ not enabled
+      reporter = context.errantRecordReporter();
+    } catch (NoClassDefFoundError | NoSuchMethodError e) {
+      // Will occur in Connect runtimes earlier than 2.6
+      log.warn("AK versions prior to 2.6 do not support the errant record reporter.");
     }
+
+    this.client = client != null ? client : new ElasticsearchClient(config, reporter);
+
+    log.info("Started ElasticsearchSinkTask.");
   }
 
   @Override
   public void put(Collection<SinkRecord> records) throws ConnectException {
-    log.debug("Putting {} records to Elasticsearch", records.size());
-    writer.write(records);
+    log.debug("Putting {} records to Elasticsearch.", records.size());
+    for (SinkRecord record : records) {
+      if (shouldSkipRecord(record)) {
+        log.trace("Ignoring sink {} with null value.", recordString(record));
+        reportBadRecord(record, new ConnectException("Cannot write null valued record."));
+        continue;
+      }
+
+      log.trace("Writing {} to Elasticsearch.", recordString(record));
+
+      String index = convertTopicToIndexName(record.topic());
+      checkIndex(index);
+      checkMapping(record);
+      tryWriteRecord(record);
+    }
   }
 
   @Override
   public void flush(Map<TopicPartition, OffsetAndMetadata> offsets) {
-    if (writer != null) {
-      log.debug("Flushing data to Elasticsearch with the following offsets: {}", offsets);
-      writer.flush();
-    } else {
-      log.debug("Could not flush data to Elasticsearch because ESWriter already closed.");
+    log.debug("Flushing data to Elasticsearch with the following offsets: {}", offsets);
+    try {
+      client.flush();
+    } catch (IllegalStateException e) {
+      log.debug("Tried to flush data to Elasticsearch, but BulkProcessor is already closed.");
     }
   }
 
   @Override
-  public void close(Collection<TopicPartition> partitions) {
-    log.debug("Closing the task for topic partitions: {}", partitions);
+  public void stop() {
+    log.debug("Stopping Elasticsearch client.");
+    client.close();
+    log.debug("Stopped Elasticsearch client.");
   }
 
   @Override
-  public void stop() throws ConnectException {
-    log.info("Stopping ElasticsearchSinkTask");
-    if (writer != null) {
-      writer.stop();
-      writer = null;
+  public String version() {
+    return Version.getVersion();
+  }
+
+  private void checkIndex(String index) {
+    if (!indexCache.contains(index)) {
+      log.info("Creating index {}.", index);
+      client.createIndex(index);
+      indexCache.add(index);
     }
-    if (client != null) {
-      client.close();
+  }
+
+  private void checkMapping(SinkRecord record) {
+    String index = convertTopicToIndexName(record.topic());
+    if (!config.shouldIgnoreSchema(record.topic()) && !existingMappings.contains(index)) {
+      if (!client.hasMapping(index)) {
+        client.createMapping(index, record.valueSchema());
+      }
+      log.debug("Locally caching mapping for index '{}'", index);
+      existingMappings.add(index);
     }
+  }
+
+  /**
+   * Returns the converted index name from a given topic name. Elasticsearch accepts:
+   * <ul>
+   *   <li>all lowercase</li>
+   *   <li>less than 256 bytes</li>
+   *   <li>does not start with - or _</li>
+   *   <li>is not . or ..</li>
+   * </ul>
+   * (<a href="https://github.com/elastic/elasticsearch/issues/29420">ref</a>_.)
+   */
+  private String convertTopicToIndexName(String topic) {
+    String index = topic.toLowerCase();
+    if (index.length() > 255) {
+      index = index.substring(0, 255);
+    }
+
+    if (index.startsWith("-") || index.startsWith("_")) {
+      index = index.substring(1);
+    }
+
+    if (index.equals(".") || index.equals("..")) {
+      index = index.replace(".", "dot");
+      log.warn("Elasticsearch cannot have indices named {}. Index will be named {}.", topic, index);
+    }
+
+    log.trace("Topic '{}' was translated to index '{}'.", topic, index);
+    return index;
+  }
+
+  private void reportBadRecord(SinkRecord record, Throwable error) {
+    if (reporter != null) {
+      reporter.report(record, error);
+    }
+  }
+
+  private boolean shouldSkipRecord(SinkRecord record) {
+    return record.value() == null && config.behaviorOnNullValues() == BehaviorOnNullValues.IGNORE;
+  }
+
+  private void tryWriteRecord(SinkRecord sinkRecord) {
+    DocWriteRequest<?> record = null;
+    try {
+      record = converter.convertRecord(sinkRecord, convertTopicToIndexName(sinkRecord.topic()));
+    } catch (DataException convertException) {
+      reportBadRecord(sinkRecord, convertException);
+
+      if (config.dropInvalidMessage()) {
+        log.error("Can't convert {}.", recordString(sinkRecord), convertException);
+      } else {
+        throw convertException;
+      }
+    }
+
+    if (record != null) {
+      log.trace("Adding {} to bulk processor.", recordString(sinkRecord));
+      client.index(sinkRecord, record);
+    }
+  }
+
+  private static String recordString(SinkRecord record) {
+    return String.format(
+        "record from topic=%s partition=%s offset=%s",
+        record.topic(),
+        record.kafkaPartition(),
+        record.kafkaOffset()
+    );
   }
 }
