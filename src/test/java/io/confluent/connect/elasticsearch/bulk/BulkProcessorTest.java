@@ -112,53 +112,7 @@ public class BulkProcessorTest {
     final int maxBufferedRecords = 100;
     final int maxInFlightBatches = 5;
     final int batchSize = 5;
-    final int lingerMs = 5;
-    final int maxRetries = 0;
-    final int retryBackoffMs = 0;
-    final BehaviorOnMalformedDoc behaviorOnMalformedDoc = BehaviorOnMalformedDoc.DEFAULT;
-
-    final BulkProcessor<Integer, ?> bulkProcessor = new BulkProcessor<>(
-        Time.SYSTEM,
-        client,
-        maxBufferedRecords,
-        maxInFlightBatches,
-        batchSize,
-        null,
-        lingerMs,
-        maxRetries,
-        retryBackoffMs,
-        behaviorOnMalformedDoc,
-        null
-    );
-
-    final int addTimeoutMs = 10;
-    bulkProcessor.add(1, sinkRecord(), addTimeoutMs);
-    bulkProcessor.add(2, sinkRecord(), addTimeoutMs);
-    bulkProcessor.add(3, sinkRecord(), addTimeoutMs);
-    bulkProcessor.add(4, sinkRecord(), addTimeoutMs);
-    bulkProcessor.add(5, sinkRecord(), addTimeoutMs);
-    bulkProcessor.add(6, sinkRecord(), addTimeoutMs);
-    bulkProcessor.add(7, sinkRecord(), addTimeoutMs);
-    bulkProcessor.add(8, sinkRecord(), addTimeoutMs);
-    bulkProcessor.add(9, sinkRecord(), addTimeoutMs);
-    bulkProcessor.add(10, sinkRecord(), addTimeoutMs);
-    bulkProcessor.add(11, sinkRecord(), addTimeoutMs);
-    bulkProcessor.add(12, sinkRecord(), addTimeoutMs);
-
-    client.expect(Arrays.asList(1, 2, 3, 4, 5), BulkResponse.success());
-    client.expect(Arrays.asList(6, 7, 8, 9, 10), BulkResponse.success());
-    client.expect(Arrays.asList(11, 12), BulkResponse.success()); // batch not full, but upon linger timeout
-    assertTrue(bulkProcessor.submitBatchWhenReady().get().succeeded);
-    assertTrue(bulkProcessor.submitBatchWhenReady().get().succeeded);
-    assertTrue(bulkProcessor.submitBatchWhenReady().get().succeeded);
-  }
-
-  @Test
-  public void enableSizeBasedBatching() throws InterruptedException, ExecutionException {
-    final int maxBufferedRecords = 100;
-    final int maxInFlightBatches = 5;
-    final int batchSize = 1;
-    final Long maxBatchBytes = (long) 5;
+    final long maxBatchBytes = 10 * 1024;
     final int lingerMs = 5;
     final int maxRetries = 0;
     final int retryBackoffMs = 0;
@@ -193,6 +147,44 @@ public class BulkProcessorTest {
     bulkProcessor.add(12, sinkRecord(), addTimeoutMs);
 
     client.expect(Arrays.asList(1, 2, 3, 4, 5), BulkResponse.success());
+    client.expect(Arrays.asList(6, 7, 8, 9, 10), BulkResponse.success());
+    client.expect(Arrays.asList(11, 12), BulkResponse.success()); // batch not full, but upon linger timeout
+    assertTrue(bulkProcessor.submitBatchWhenReady().get().succeeded);
+    assertTrue(bulkProcessor.submitBatchWhenReady().get().succeeded);
+    assertTrue(bulkProcessor.submitBatchWhenReady().get().succeeded);
+  }
+
+  @Test
+  public void enableSizeBasedBatching() throws InterruptedException, ExecutionException {
+    final int maxBufferedRecords = 100;
+    final int maxInFlightBatches = 5;
+    final int batchSize = 5;
+    final long maxBatchBytes = 5;
+    final int lingerMs = 1;
+    final int maxRetries = 0;
+    final int retryBackoffMs = 0;
+    final BehaviorOnMalformedDoc behaviorOnMalformedDoc = BehaviorOnMalformedDoc.DEFAULT;
+
+    final BulkProcessor<Integer, ?> bulkProcessor = new BulkProcessor<>(
+        Time.SYSTEM,
+        client,
+        maxBufferedRecords,
+        maxInFlightBatches,
+        batchSize,
+        maxBatchBytes,
+        lingerMs,
+        maxRetries,
+        retryBackoffMs,
+        behaviorOnMalformedDoc,
+        null
+    );
+
+    final int addTimeoutMs = 10;
+    for (int i = 1; i <= 12; i++) {
+      bulkProcessor.add(i, sinkRecord(), addTimeoutMs);
+    }
+
+    client.expect(Arrays.asList(1, 2, 3, 4, 5), BulkResponse.success());
     client.expect(Arrays.asList(6, 7, 8, 9), BulkResponse.success());
     client.expect(Arrays.asList(10, 11), BulkResponse.success());
     client.expect(Arrays.asList(12), BulkResponse.success()); // batch not full, but upon linger timeout
@@ -207,6 +199,7 @@ public class BulkProcessorTest {
     final int maxBufferedRecords = 100;
     final int maxInFlightBatches = 5;
     final int batchSize = 5;
+    final long maxBatchBytes = 10 * 1024;
     final int lingerMs = 100000; // super high on purpose to make sure flush is what's causing the request
     final int maxRetries = 0;
     final int retryBackoffMs = 0;
@@ -218,7 +211,7 @@ public class BulkProcessorTest {
         maxBufferedRecords,
         maxInFlightBatches,
         batchSize,
-        null,
+        maxBatchBytes,
         lingerMs,
         maxRetries,
         retryBackoffMs,
@@ -246,6 +239,7 @@ public class BulkProcessorTest {
     final int maxBufferedRecords = 1;
     final int maxInFlightBatches = 1;
     final int batchSize = 1;
+    final long maxBatchBytes = 10 * 1024;
     final int lingerMs = 10;
     final int maxRetries = 0;
     final int retryBackoffMs = 0;
@@ -257,7 +251,7 @@ public class BulkProcessorTest {
         maxBufferedRecords,
         maxInFlightBatches,
         batchSize,
-        null,
+        maxBatchBytes,
         lingerMs,
         maxRetries,
         retryBackoffMs,
@@ -281,6 +275,7 @@ public class BulkProcessorTest {
     final int maxBufferedRecords = 100;
     final int maxInFlightBatches = 5;
     final int batchSize = 2;
+    final long maxBatchBytes = 10 * 1024;
     final int lingerMs = 5;
     final int maxRetries = 3;
     final int retryBackoffMs = 1;
@@ -296,7 +291,7 @@ public class BulkProcessorTest {
         maxBufferedRecords,
         maxInFlightBatches,
         batchSize,
-        null,
+        maxBatchBytes,
         lingerMs,
         maxRetries,
         retryBackoffMs,
@@ -316,6 +311,7 @@ public class BulkProcessorTest {
     final int maxBufferedRecords = 100;
     final int maxInFlightBatches = 5;
     final int batchSize = 2;
+    final long maxBatchBytes = 10 * 1024;
     final int lingerMs = 5;
     final int maxRetries = 2;
     final int retryBackoffMs = 1;
@@ -332,7 +328,7 @@ public class BulkProcessorTest {
         maxBufferedRecords,
         maxInFlightBatches,
         batchSize,
-        null,
+        maxBatchBytes,
         lingerMs,
         maxRetries,
         retryBackoffMs,
@@ -357,6 +353,7 @@ public class BulkProcessorTest {
     final int maxBufferedRecords = 100;
     final int maxInFlightBatches = 5;
     final int batchSize = 2;
+    final long maxBatchBytes = 10 * 1024;
     final int lingerMs = 5;
     final int maxRetries = 3;
     final int retryBackoffMs = 1;
@@ -371,7 +368,7 @@ public class BulkProcessorTest {
         maxBufferedRecords,
         maxInFlightBatches,
         batchSize,
-        null,
+        maxBatchBytes,
         lingerMs,
         maxRetries,
         retryBackoffMs,
@@ -396,6 +393,7 @@ public class BulkProcessorTest {
     final int maxBufferedRecords = 100;
     final int maxInFlightBatches = 5;
     final int batchSize = 2;
+    final long maxBatchBytes = 10 * 1024;
     final int lingerMs = 5;
     final int maxRetries = 3;
     final int retryBackoffMs = 1;
@@ -412,7 +410,7 @@ public class BulkProcessorTest {
         maxBufferedRecords,
         maxInFlightBatches,
         batchSize,
-        null,
+        maxBatchBytes,
         lingerMs,
         maxRetries,
         retryBackoffMs,
@@ -440,6 +438,7 @@ public class BulkProcessorTest {
     final int maxBufferedRecords = 100;
     final int maxInFlightBatches = 5;
     final int batchSize = 2;
+    final long maxBatchBytes = 10 * 1024;
     final int lingerMs = 5;
     final int maxRetries = 3;
     final int retryBackoffMs = 1;
@@ -465,7 +464,7 @@ public class BulkProcessorTest {
           maxBufferedRecords,
           maxInFlightBatches,
           batchSize,
-          null,
+          maxBatchBytes,
           lingerMs,
           maxRetries,
           retryBackoffMs,
@@ -494,6 +493,7 @@ public class BulkProcessorTest {
     final int maxBufferedRecords = 100;
     final int maxInFlightBatches = 5;
     final int batchSize = 2;
+    final long maxBatchBytes = 10 * 1024;
     final int lingerMs = 5;
     final int maxRetries = 3;
     final int retryBackoffMs = 1;
@@ -508,7 +508,7 @@ public class BulkProcessorTest {
             maxBufferedRecords,
             maxInFlightBatches,
             batchSize,
-            null,
+            maxBatchBytes,
             lingerMs,
             maxRetries,
             retryBackoffMs,
@@ -531,6 +531,7 @@ public class BulkProcessorTest {
     final int maxBufferedRecords = 100;
     final int maxInFlightBatches = 5;
     final int batchSize = 2;
+    final long maxBatchBytes = 10 * 1024;
     final int lingerMs = 5;
     final int maxRetries = 3;
     final int retryBackoffMs = 1;
@@ -550,7 +551,7 @@ public class BulkProcessorTest {
             maxBufferedRecords,
             maxInFlightBatches,
             batchSize,
-            null,
+            maxBatchBytes,
             lingerMs,
             maxRetries,
             retryBackoffMs,

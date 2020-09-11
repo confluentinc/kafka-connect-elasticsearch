@@ -81,8 +81,8 @@ public class ElasticsearchSinkTask extends SinkTask {
           config.getInt(ElasticsearchSinkConnectorConfig.MAX_BUFFERED_RECORDS_CONFIG);
       int batchSize =
           config.getInt(ElasticsearchSinkConnectorConfig.BATCH_SIZE_CONFIG);
-      Long maxBatchBytes =
-          config.getLong(ElasticsearchSinkConnectorConfig.MAX_BATCH_BYTES_CONFIG);
+      long maxBatchBytes =
+          config.getLong(ElasticsearchSinkConnectorConfig.MAX_BATCH_SIZE_BYTES_CONFIG);
       long lingerMs =
           config.getLong(ElasticsearchSinkConnectorConfig.LINGER_MS_CONFIG);
       int maxInFlightRequests =
@@ -134,7 +134,7 @@ public class ElasticsearchSinkTask extends SinkTask {
           .setMaxBufferedRecords(maxBufferedRecords)
           .setMaxInFlightRequests(maxInFlightRequests)
           .setBatchSize(batchSize)
-          .setMaxBatchBytes(maxBatchBytes)
+          .setMaxBatchSizeBytes(maxBatchBytes)
           .setLingerMs(lingerMs)
           .setRetryBackoffMs(retryBackoffMs)
           .setMaxRetry(maxRetry)

@@ -540,6 +540,7 @@ public class ElasticsearchWriterTest extends ElasticsearchSinkTestBase {
         .setMaxRetry(3)
         .setDropInvalidMessage(dropInvalidMessage)
         .setBehaviorOnNullValues(behavior)
+        .setMaxBatchSizeBytes(10 * 1024 * 1024)
         .build();
     writer.start();
     writer.createIndicesForTopics(Collections.singleton(TOPIC));

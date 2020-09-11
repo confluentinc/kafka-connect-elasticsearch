@@ -9,6 +9,7 @@ import org.junit.Test;
 import java.util.HashMap;
 import java.util.Map;
 
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.MAX_BATCH_SIZE_BYTES_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.PROXY_HOST_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.PROXY_PASSWORD_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.PROXY_PORT_CONFIG;
@@ -138,6 +139,12 @@ public class ElasticsearchSinkConnectorConfigTest {
   public void shouldNotAllowPartialProxyCredentials() {
     props.put(PROXY_HOST_CONFIG, "proxy host");
     props.put(PROXY_USERNAME_CONFIG, "username");
+    ElasticsearchSinkConnectorConfig config = new ElasticsearchSinkConnectorConfig(props);
+  }
+
+  @Test(expected = ConfigException.class)
+  public void shouldNotAllowInvalidBatchSize() {
+    props.put(MAX_BATCH_SIZE_BYTES_CONFIG, Long.toString(30 * 1024 * 1024));
     ElasticsearchSinkConnectorConfig config = new ElasticsearchSinkConnectorConfig(props);
   }
 }

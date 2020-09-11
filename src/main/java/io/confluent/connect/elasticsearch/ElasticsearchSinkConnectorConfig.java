@@ -54,11 +54,11 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   public static final String BATCH_SIZE_CONFIG = "batch.size";
   private static final String BATCH_SIZE_DOC =
       "The number of records to process as a batch when writing to Elasticsearch.";
-  public static final String MAX_BATCH_BYTES_CONFIG = "max.batch.bytes";
-  private static final String MAX_BATCH_BYTES_DOC =
-      "The maximum number of bytes to process as a batch when writing to Elasticsearch."
-      + "This configuration will enable size-based batching of records irrespective of the"
-      + " records count under ``" + BATCH_SIZE_CONFIG + "`` configuration." ;
+  public static final String MAX_BATCH_SIZE_BYTES_CONFIG = "max.batch.size.bytes";
+  private static final String MAX_BATCH_SIZE_BYTES_DOC =
+      "The maximum size(in bytes) of the bulk request to be processed by the Connector when"
+      + " writing records to Elasticsearch." ;
+  private static final long MAX_BATCH_SIZE_BYTES_DEFAULT = 10 * 1024 * 1024;
   public static final String MAX_IN_FLIGHT_REQUESTS_CONFIG = "max.in.flight.requests";
   private static final String MAX_IN_FLIGHT_REQUESTS_DOC =
       "The maximum number of indexing requests that can be in-flight to Elasticsearch before "
@@ -341,11 +341,12 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
         Width.SHORT,
         "Batch Size"
     ).define(
-        MAX_BATCH_BYTES_CONFIG,
+        MAX_BATCH_SIZE_BYTES_CONFIG,
         Type.LONG,
-        null,
+        MAX_BATCH_SIZE_BYTES_DEFAULT,
+        new MaxBatchSizeValidator(),
         Importance.MEDIUM,
-        MAX_BATCH_BYTES_DOC,
+        MAX_BATCH_SIZE_BYTES_DOC,
         group,
         ++order,
         Width.SHORT,
@@ -647,5 +648,24 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
 
   public static void main(String[] args) {
     System.out.println(CONFIG.toEnrichedRst());
+  }
+
+  private static class MaxBatchSizeValidator implements ConfigDef.Validator {
+    @Override
+    public void ensureValid(String config, Object value) {
+      long minBytes = 0;
+      long maxBytes = 25 * 1024 * 1024;
+      long bytes = (long) value;
+      if (!(minBytes < bytes && maxBytes >= bytes)) {
+        throw new ConfigException(
+            String.format(
+                "The value for `%s` must be in between `%s` to `%s` bytes.",
+                config,
+                minBytes,
+                maxBytes
+            )
+        );
+      }
+    }
   }
 }
