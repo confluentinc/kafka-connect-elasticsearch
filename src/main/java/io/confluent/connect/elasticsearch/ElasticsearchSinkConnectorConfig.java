@@ -58,7 +58,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   private static final String MAX_BATCH_SIZE_BYTES_DOC =
       "The maximum size(in bytes) of the bulk request to be processed by the Connector when"
       + " writing records to Elasticsearch." ;
-  private static final long MAX_BATCH_SIZE_BYTES_DEFAULT = 10 * 1024 * 1024;
+  private static final long MAX_BATCH_SIZE_BYTES_DEFAULT = 15 * 1024 * 1024;
   public static final String MAX_IN_FLIGHT_REQUESTS_CONFIG = "max.in.flight.requests";
   private static final String MAX_IN_FLIGHT_REQUESTS_DOC =
       "The maximum number of indexing requests that can be in-flight to Elasticsearch before "
@@ -653,10 +653,10 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   private static class MaxBatchSizeValidator implements ConfigDef.Validator {
     @Override
     public void ensureValid(String config, Object value) {
-      long minBytes = 0;
+      long minBytes = 1 * 1024 * 1024;
       long maxBytes = 25 * 1024 * 1024;
       long bytes = (long) value;
-      if (!(minBytes < bytes && maxBytes >= bytes)) {
+      if (!(minBytes <= bytes && maxBytes >= bytes)) {
         throw new ConfigException(
             String.format(
                 "The value for `%s` must be in between `%s` to `%s` bytes.",

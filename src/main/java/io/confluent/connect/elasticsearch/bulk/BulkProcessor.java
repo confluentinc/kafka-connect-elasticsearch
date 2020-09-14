@@ -59,7 +59,7 @@ public class BulkProcessor<R, B> {
   private final BulkClient<R, B> bulkClient;
   private final int maxBufferedRecords;
   private final int batchSize;
-  private final long maxBatchBytes;
+  private final long maxBatchSizeBytes;
   private final long lingerMs;
   private final int maxRetries;
   private final long retryBackoffMs;
@@ -88,7 +88,7 @@ public class BulkProcessor<R, B> {
       int maxBufferedRecords,
       int maxInFlightRequests,
       int batchSize,
-      long maxBatchBytes,
+      long maxBatchSizeBytes,
       long lingerMs,
       int maxRetries,
       long retryBackoffMs,
@@ -99,7 +99,7 @@ public class BulkProcessor<R, B> {
     this.bulkClient = bulkClient;
     this.maxBufferedRecords = maxBufferedRecords;
     this.batchSize = batchSize;
-    this.maxBatchBytes = maxBatchBytes;
+    this.maxBatchSizeBytes = maxBatchSizeBytes;
     this.lingerMs = lingerMs;
     this.maxRetries = maxRetries;
     this.retryBackoffMs = retryBackoffMs;
@@ -192,13 +192,13 @@ public class BulkProcessor<R, B> {
     final int numUnsentRecords = unsentRecords.size();
     assert numUnsentRecords > 0;
     final List<R> batch = new ArrayList<>();
-    long batchBytes = 0;
+    long batchSizeBytes = 0;
     int countBatchRecords = 0;
     R record = unsentRecords.getFirst();
-    while (record != null && (batchBytes + record.toString().length()) <= maxBatchBytes
+    while (record != null && (batchSizeBytes + record.toString().length()) <= maxBatchSizeBytes
         && countBatchRecords + 1 <= batchSize) {
       batch.add(unsentRecords.removeFirst());
-      batchBytes += record.toString().length();
+      batchSizeBytes += record.toString().length();
       record = unsentRecords.peekFirst();
       countBatchRecords++;
     }
@@ -222,19 +222,22 @@ public class BulkProcessor<R, B> {
    */
   private synchronized boolean canSubmit(long elapsedMs) {
     return !unsentRecords.isEmpty()
-        && (flushRequested || elapsedMs >= lingerMs
-        || unsentRecords.size() >= batchSize || isSizeBasedBatchReady());
+        && (flushRequested || elapsedMs >= lingerMs || isBatchReady());
   }
 
-  private boolean isSizeBasedBatchReady() {
+  private boolean isBatchReady() {
+    return (unsentRecords.size() >= batchSize || isBatchReadyBySize());
+  }
+
+  private boolean isBatchReadyBySize() {
     long totalSize = 0;
     for (R record : unsentRecords) {
-      if (totalSize >= maxBatchBytes) {
+      if (totalSize >= maxBatchSizeBytes) {
         return true;
       }
       totalSize += record.toString().length();
     }
-    if (totalSize >= maxBatchBytes) {
+    if (totalSize >= maxBatchSizeBytes) {
       return true;
     } else {
       return false;
