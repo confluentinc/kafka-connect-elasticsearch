@@ -12,6 +12,7 @@
 
     <groupId>io.confluent</groupId>
     <artifactId>kafka-connect-elasticsearch</artifactId>
+    <version>10.0.0-SNAPSHOT</version>
     <packaging>jar</packaging>
     <name>kafka-connect-elasticsearch</name>
     <organization>
@@ -198,7 +199,7 @@
                         </goals>
                         <configuration>
                             <title>Kafka Connect Elasticsearch</title>
-                            <documentationUrl>https://docs.confluent.io/${project.version}/connect/connect-elasticsearch/docs/index.html</documentationUrl>
+                            <documentationUrl>https://docs.confluent.io/${confluent.version}/connect/connect-elasticsearch/docs/index.html</documentationUrl>
                             <description>
                                 The Elasticsearch connector allows moving data from Kafka to Elasticsearch 2.x, 5.x, 6.x, and 7.x. It writes data from a topic in Kafka to an index in Elasticsearch and all data for a topic have the same type.
 
@@ -218,10 +219,6 @@
                             <ownerName>Confluent, Inc.</ownerName>
                             <ownerUrl>https://confluent.io/</ownerUrl>
                             <ownerLogo>logos/confluent.png</ownerLogo>
-
-                            <dockerNamespace>confluentinc</dockerNamespace>
-                            <dockerName>cp-kafka-connect</dockerName>
-                            <dockerTag>${project.version}</dockerTag>
 
                             <componentTypes>
                                 <componentType>sink</componentType>
@@ -372,7 +369,7 @@
                                         <argument>-l ${project.build.directory}/${project.build.finalName}-package/share/doc/kafka-connect-elasticsearch/licenses</argument>
                                         <argument>-n ${project.build.directory}/${project.build.finalName}-package/share/doc/kafka-connect-elasticsearch/notices</argument>
                                         <argument>-t ${project.name}</argument>
-                                        <argument>-x licenses-${project.version}.jar</argument>
+                                        <argument>-x licenses-${confluent.version}.jar</argument>
                                     </arguments>
                                 </configuration>
                                 <phase>package</phase>
@@ -393,7 +390,7 @@
                             <dependency>
                                 <groupId>io.confluent</groupId>
                                 <artifactId>licenses</artifactId>
-                                <version>${project.version}</version>
+                                <version>${confluent.version}</version>
                             </dependency>
                         </dependencies>
                     </plugin>
@@ -422,7 +419,7 @@
                                         <argument>-l ${project.basedir}/licenses</argument>
                                         <argument>-n ${project.basedir}/notices</argument>
                                         <argument>-t ${project.name}</argument>
-                                        <argument>-x licenses-${project.version}.jar</argument>
+                                        <argument>-x licenses-${confluent.version}.jar</argument>
                                     </arguments>
                                 </configuration>
                                 <phase>package</phase>
@@ -443,7 +440,7 @@
                             <dependency>
                                 <groupId>io.confluent</groupId>
                                 <artifactId>licenses</artifactId>
-                                <version>${project.version}</version>
+                                <version>${confluent.version}</version>
                             </dependency>
                         </dependencies>
                     </plugin>
