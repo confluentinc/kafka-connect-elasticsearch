@@ -646,10 +646,6 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
             && sslEndpointIdentificationAlgorithm.isEmpty();
   }
 
-  public static void main(String[] args) {
-    System.out.println(CONFIG.toEnrichedRst());
-  }
-
   private static class MaxBatchSizeValidator implements ConfigDef.Validator {
     @Override
     public void ensureValid(String config, Object value) {
@@ -667,5 +663,9 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
         );
       }
     }
+  }
+
+  public static void main(String[] args) {
+    System.out.println(CONFIG.toEnrichedRst());
   }
 }

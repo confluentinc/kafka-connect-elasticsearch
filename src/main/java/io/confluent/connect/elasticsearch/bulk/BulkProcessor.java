@@ -78,6 +78,7 @@ public class BulkProcessor<R, B> {
   // shared state, synchronized on (this), may be part of wait() conditions so need notifyAll() on
   // changes
   private final Deque<R> unsentRecords;
+  private long unsentRecordsSizeBytes;
   private final ConcurrentHashMap<R, SinkRecord> recordMap;
   private int inFlightRecords = 0;
   private final LogContext logContext = new LogContext();
@@ -107,6 +108,7 @@ public class BulkProcessor<R, B> {
     this.reporter = reporter;
 
     unsentRecords = new ArrayDeque<>(maxBufferedRecords);
+    unsentRecordsSizeBytes = 0;
     recordMap = new ConcurrentHashMap<>(maxBufferedRecords);
 
     final ThreadFactory threadFactory = makeThreadFactory();
@@ -197,15 +199,19 @@ public class BulkProcessor<R, B> {
     R record = unsentRecords.getFirst();
     while (record != null && (batchSizeBytes + record.toString().length()) <= maxBatchSizeBytes
         && countBatchRecords + 1 <= batchSize) {
-      batch.add(unsentRecords.removeFirst());
-      batchSizeBytes += record.toString().length();
+      record = unsentRecords.removeFirst();
+      long recordSizeBytes = record.toString().length();
+      batch.add(record);
+      unsentRecordsSizeBytes -= recordSizeBytes;
+      batchSizeBytes += recordSizeBytes;
       record = unsentRecords.peekFirst();
       countBatchRecords++;
     }
     inFlightRecords += countBatchRecords;
     log.debug(
-        "Submitting batch of {} records; {} unsent and {} total in-flight records",
+        "Submitting batch of {} records {} bytes; {} unsent and {} total in-flight records",
         countBatchRecords,
+        batchSizeBytes,
         numUnsentRecords,
         inFlightRecords
     );
@@ -222,26 +228,14 @@ public class BulkProcessor<R, B> {
    */
   private synchronized boolean canSubmit(long elapsedMs) {
     return !unsentRecords.isEmpty()
-        && (flushRequested || elapsedMs >= lingerMs || isBatchReady());
+        && (flushRequested || elapsedMs >= lingerMs || hasEnoughrecords());
   }
 
-  private boolean isBatchReady() {
-    return (unsentRecords.size() >= batchSize || isBatchReadyBySize());
-  }
-
-  private boolean isBatchReadyBySize() {
-    long totalSize = 0;
-    for (R record : unsentRecords) {
-      if (totalSize >= maxBatchSizeBytes) {
-        return true;
-      }
-      totalSize += record.toString().length();
-    }
-    if (totalSize >= maxBatchSizeBytes) {
-      return true;
-    } else {
-      return false;
-    }
+  /*
+   * This method signifies that queue has enough records to create another batch.
+   */
+  private boolean hasEnoughrecords() {
+    return (unsentRecords.size() >= batchSize || unsentRecordsSizeBytes >= maxBatchSizeBytes);
   }
 
   /**
@@ -372,6 +366,7 @@ public class BulkProcessor<R, B> {
     }
 
     unsentRecords.addLast(record);
+    unsentRecordsSizeBytes += record.toString().length();
     recordMap.put(record, original);
     notifyAll();
   }
