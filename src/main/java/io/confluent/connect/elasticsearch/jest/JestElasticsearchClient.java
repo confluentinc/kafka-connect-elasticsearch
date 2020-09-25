@@ -416,7 +416,7 @@ public class JestElasticsearchClient implements ElasticsearchClient {
               retryBackoffMs);
           log.info("Failed to create connection to the ElasticSearch with attempt {}/{}, "
                   + "will attempt retry after {} ms. Failure reason: {}",
-              retryAttempts, maxRetryAttempts, sleepTimeMs, ex.getMessage());
+              retryAttempts, maxRetryAttempts, sleepTimeMs, ex);
           time.sleep(sleepTimeMs);
         } else {
           throw ex;
