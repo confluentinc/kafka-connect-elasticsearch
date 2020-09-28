@@ -17,16 +17,12 @@ package io.confluent.connect.elasticsearch.integration;
 
 import static org.junit.Assert.assertNotNull;
 
-import com.google.gson.JsonObject;
 import io.confluent.common.utils.IntegrationTest;
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig;
 import io.confluent.connect.elasticsearch.ElasticsearchSinkTask;
-import io.confluent.connect.elasticsearch.Mapping;
-import io.confluent.connect.elasticsearch.TestUtils;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -43,7 +39,7 @@ public class ElasticsearchSinkTaskIT extends ElasticsearchIntegrationTestBase {
     Map<String, String> props = new HashMap<>();
     props.put(ElasticsearchSinkConnectorConfig.TYPE_NAME_CONFIG, TYPE);
     props.put(ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG, "localhost");
-    props.put(ElasticsearchSinkConnectorConfig.KEY_IGNORE_CONFIG, "true");
+    props.put(ElasticsearchSinkConnectorConfig.IGNORE_KEY_CONFIG, "true");
     return props;
   }
 
