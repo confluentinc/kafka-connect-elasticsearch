@@ -150,6 +150,7 @@ public class BulkProcessorTest {
     assertTrue(bulkProcessor.submitBatchWhenReady().get().succeeded);
     assertTrue(bulkProcessor.submitBatchWhenReady().get().succeeded);
     assertTrue(bulkProcessor.submitBatchWhenReady().get().succeeded);
+    assertTrue(bulkProcessor.recordMap.isEmpty());
   }
 
   @Test
@@ -188,6 +189,7 @@ public class BulkProcessorTest {
 
     final int flushTimeoutMs = 100;
     bulkProcessor.flush(flushTimeoutMs);
+    assertTrue(bulkProcessor.recordMap.isEmpty());
   }
 
   @Test
@@ -222,6 +224,7 @@ public class BulkProcessorTest {
       fail();
     } catch (ConnectException good) {
     }
+    assertEquals(1, bulkProcessor.recordMap.size());
   }
 
   @Test
@@ -256,6 +259,7 @@ public class BulkProcessorTest {
     bulkProcessor.add(43, sinkRecord(), addTimeoutMs);
 
     assertTrue(bulkProcessor.submitBatchWhenReady().get().succeeded);
+    assertTrue(bulkProcessor.recordMap.isEmpty());
   }
 
   @Test
@@ -295,6 +299,7 @@ public class BulkProcessorTest {
       fail();
     } catch (ExecutionException e) {
       assertTrue(e.getCause().getMessage().contains(errorInfo));
+      assertTrue(bulkProcessor.recordMap.isEmpty());
     }
   }
 
@@ -333,6 +338,7 @@ public class BulkProcessorTest {
       fail();
     } catch (ExecutionException e) {
       assertTrue(e.getCause().getMessage().contains(errorInfo));
+      assertTrue(bulkProcessor.recordMap.isEmpty());
     }
   }
 
@@ -376,6 +382,7 @@ public class BulkProcessorTest {
     } catch(ConnectException e) {
       // expected
       assertTrue(e.getMessage().contains("mapper_parsing_exception"));
+      assertTrue(bulkProcessor.recordMap.isEmpty());
     }
   }
 
@@ -427,9 +434,11 @@ public class BulkProcessorTest {
       } catch (ConnectException e) {
         fail(e.getMessage());
       }
+      assertTrue(bulkProcessor.recordMap.isEmpty());
     }
 
     verify(reporter, times(4)).report(eq(sinkRecord()), any());
+
   }
 
   @Test
@@ -506,6 +515,7 @@ public class BulkProcessorTest {
     ExecutionException e = assertThrows(ExecutionException.class,
             () -> bulkProcessor.submitBatchWhenReady().get());
     assertThat(e.getMessage(), containsString("a retriable error"));
+    assertTrue(bulkProcessor.recordMap.isEmpty());
   }
 
   private static SinkRecord sinkRecord() {

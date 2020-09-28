@@ -77,7 +77,7 @@ public class BulkProcessor<R, B> {
   // shared state, synchronized on (this), may be part of wait() conditions so need notifyAll() on
   // changes
   private final Deque<R> unsentRecords;
-  private final ConcurrentHashMap<R, SinkRecord> recordMap;
+  protected final ConcurrentHashMap<R, SinkRecord> recordMap; // visible for tests
   private int inFlightRecords = 0;
   private final LogContext logContext = new LogContext();
 
@@ -438,6 +438,7 @@ public class BulkProcessor<R, B> {
             batch.size(),
             e
         );
+        recordMap.keySet().removeAll(batch);
         throw e;
       }
       final int maxAttempts = maxRetries + 1;
@@ -458,6 +459,7 @@ public class BulkProcessor<R, B> {
                   System.currentTimeMillis() - startTime
               );
             }
+            recordMap.keySet().removeAll(batch);
             return bulkRsp;
           } else if (responseContainsMalformedDocError(bulkRsp)) {
             retriable = bulkRsp.isRetriable();
@@ -494,11 +496,13 @@ public class BulkProcessor<R, B> {
               log.error(
                       "Retrying batch {} of {} records interrupted after attempt {}/{}",
                       batchId, batch.size(), attempts, maxAttempts, e);
+              recordMap.keySet().removeAll(batch);
               throw e;
             }
           } else {
             log.error("Failed to execute batch {} of {} records after total of {} attempt(s)",
                     batchId, batch.size(), attempts, e);
+            recordMap.keySet().removeAll(batch);
             throw e;
           }
         }
@@ -623,6 +627,7 @@ public class BulkProcessor<R, B> {
    * (mapper_parser_exception, illegal_argument_exception, and action_request_validation_exception)
    * resulting from bad records using the AK 2.6 reporter DLQ interface.
    */
+  @SuppressWarnings("serial")
   public static class ReportingException extends RuntimeException {
 
     public ReportingException(String message) {
