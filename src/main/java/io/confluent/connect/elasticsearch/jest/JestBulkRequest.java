@@ -15,18 +15,25 @@
 
 package io.confluent.connect.elasticsearch.jest;
 
+import io.confluent.connect.elasticsearch.IndexableRecord;
+import io.confluent.connect.elasticsearch.Key;
 import io.confluent.connect.elasticsearch.bulk.BulkRequest;
 import io.searchbox.core.Bulk;
+import java.util.List;
 
 public class JestBulkRequest implements BulkRequest {
 
   private final Bulk bulk;
+  private final List<IndexableRecord> records;
 
-  public JestBulkRequest(Bulk bulk) {
+  public JestBulkRequest(Bulk bulk, List<IndexableRecord> records) {
     this.bulk = bulk;
+    this.records = records;
   }
 
   public Bulk getBulk() {
     return bulk;
   }
+
+  public List<IndexableRecord> records() { return records; }
 }

@@ -39,6 +39,7 @@ import io.searchbox.client.config.HttpClientConfig;
 import io.searchbox.cluster.NodesInfo;
 import io.searchbox.core.Bulk;
 import io.searchbox.core.BulkResult;
+import io.searchbox.core.BulkResult.BulkResultItem;
 import io.searchbox.core.Delete;
 import io.searchbox.core.DocumentResult;
 import io.searchbox.core.Index;
@@ -50,6 +51,8 @@ import io.searchbox.indices.DeleteIndex;
 import io.searchbox.indices.IndicesExists;
 import io.searchbox.indices.Refresh;
 import io.searchbox.indices.mapping.PutMapping;
+import java.util.HashMap;
+import java.util.function.Function;
 import javax.net.ssl.HostnameVerifier;
 import org.apache.http.HttpHost;
 import org.apache.http.auth.AuthScope;
@@ -568,7 +571,7 @@ public class JestElasticsearchClient implements ElasticsearchClient {
     for (IndexableRecord record : batch) {
       builder.addAction(toBulkableAction(record));
     }
-    return new JestBulkRequest(builder.build());
+    return new JestBulkRequest(builder.build(), batch);
   }
 
   // visible for testing
@@ -650,7 +653,26 @@ public class JestElasticsearchClient implements ElasticsearchClient {
 
     final String errorInfo = errors.isEmpty() ? result.getErrorMessage() : errors.toString();
 
-    return BulkResponse.failure(retriable, errorInfo);
+    Map<IndexableRecord, BulkResultItem> failedResponses = new HashMap<>();
+    List<BulkResultItem> items = result.getItems();
+    for (int i = 0; i < items.size() && i < ((JestBulkRequest) bulk).records().size() ; i++) {
+      BulkResultItem item = items.get(i);
+      IndexableRecord record = ((JestBulkRequest) bulk).records().get(i);
+      if (item.error != null && item.id.equals(record.key.id)) {
+        // sanity check matching IDs
+        failedResponses.put(record, item);
+      }
+    }
+
+    if (items.size() != ((JestBulkRequest) bulk).records().size()) {
+      log.error(
+          "Elasticsearch bulk response size ({}) does not correspond to records sent ({})",
+          ((JestBulkRequest) bulk).records().size(),
+          items.size()
+      );
+    }
+
+    return BulkResponse.failure(retriable, errorInfo, failedResponses);
   }
 
   // For testing purposes

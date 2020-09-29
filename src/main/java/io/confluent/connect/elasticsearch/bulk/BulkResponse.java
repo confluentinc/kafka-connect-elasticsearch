@@ -15,26 +15,43 @@
 
 package io.confluent.connect.elasticsearch.bulk;
 
+import io.confluent.connect.elasticsearch.IndexableRecord;
+import io.searchbox.core.BulkResult.BulkResultItem;
+import java.util.Collections;
+import java.util.Map;
+
 public class BulkResponse {
 
-  private static final BulkResponse SUCCESS_RESPONSE = new BulkResponse(true, false, "");
+  private static final BulkResponse SUCCESS_RESPONSE =
+      new BulkResponse(true, false, "", Collections.emptyMap());
 
   public final boolean succeeded;
   public final boolean retriable;
   public final String errorInfo;
+  public final Map<IndexableRecord, BulkResultItem> failedRecords;
 
-  private BulkResponse(boolean succeeded, boolean retriable, String errorInfo) {
+  private BulkResponse(
+      boolean succeeded,
+      boolean retriable,
+      String errorInfo,
+      Map<IndexableRecord, BulkResultItem> failedRecords
+  ) {
     this.succeeded = succeeded;
     this.retriable = retriable;
     this.errorInfo = errorInfo;
+    this.failedRecords = failedRecords;
   }
 
   public static BulkResponse success() {
     return SUCCESS_RESPONSE;
   }
 
-  public static BulkResponse failure(boolean retriable, String errorInfo) {
-    return new BulkResponse(false, retriable, errorInfo);
+  public static BulkResponse failure(
+      boolean retriable,
+      String errorInfo,
+      Map<IndexableRecord, BulkResultItem> failedRecords
+  ) {
+    return new BulkResponse(false, retriable, errorInfo, failedRecords);
   }
 
   public boolean isSucceeded() {

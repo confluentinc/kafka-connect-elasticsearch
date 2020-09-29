@@ -19,6 +19,8 @@ import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig;
 import io.confluent.connect.elasticsearch.LogContext;
 import io.confluent.connect.elasticsearch.RetryUtil;
 
+import io.searchbox.core.BulkResult.BulkResultItem;
+import java.util.Collections;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import org.apache.kafka.common.config.ConfigDef;
@@ -184,7 +186,12 @@ public class BulkProcessor<R, B> {
     // at this point, either stopRequested or canSubmit
     return stopRequested
             ? CompletableFuture.completedFuture(
-                    BulkResponse.failure(false, "request not submitted during shutdown"))
+                    BulkResponse.failure(
+                        false,
+                        "request not submitted during shutdown",
+                        Collections.emptyMap()
+                    )
+            )
             : submitBatch();
   }
 
@@ -484,12 +491,11 @@ public class BulkProcessor<R, B> {
             if (reporter != null) {
               for (R record : batch) {
                 SinkRecord original = recordsToReportOnError.get(record);
-                if (original != null) {
+                BulkResultItem result = bulkRsp.failedRecords.get(record);
+                String error = result != null ? result.error : null;
+                if (original != null && error != null) {
                   reporter.report(
-                      original,
-                      new ReportingException(
-                          "Bulk request failed: " + bulkRsp.getErrorInfo()
-                      )
+                      original, new ReportingException("Bulk request failed: " + error)
                   );
                 }
               }
