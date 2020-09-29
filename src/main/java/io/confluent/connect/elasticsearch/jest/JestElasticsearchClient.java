@@ -127,7 +127,7 @@ public class JestElasticsearchClient implements ElasticsearchClient {
     try {
       ElasticsearchSinkConnectorConfig config = new ElasticsearchSinkConnectorConfig(props);
 
-      Set<String> addresses = config.urls();
+      Set<String> addresses = config.connectionUrls();
       HttpClientConfig.Builder builder = new HttpClientConfig.Builder(addresses)
           .connTimeout(config.connectionTimeoutMs())
           .readTimeout(config.readTimeoutMs())

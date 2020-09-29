@@ -500,6 +500,10 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
     return getInt(CONNECTION_TIMEOUT_MS_CONFIG);
   }
 
+  public Set<String> connectionUrls() {
+    return new HashSet<>(getList(CONNECTION_URL_CONFIG));
+  }
+
   public boolean createIndicesAtStart() {
     return getBoolean(CREATE_INDICES_AT_START_CONFIG);
   }
@@ -563,10 +567,6 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
 
   public String type() {
     return getString(TYPE_NAME_CONFIG);
-  }
-
-  public Set<String> urls() {
-    return new HashSet<>(getList(CONNECTION_URL_CONFIG));
   }
 
   public String username() {
