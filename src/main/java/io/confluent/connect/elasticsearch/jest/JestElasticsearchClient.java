@@ -49,7 +49,6 @@ import io.searchbox.indices.Refresh;
 import io.searchbox.indices.mapping.PutMapping;
 import org.apache.http.HttpHost;
 import org.apache.kafka.common.config.ConfigException;
-import org.apache.kafka.common.config.types.Password;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.slf4j.Logger;
@@ -126,26 +125,18 @@ public class JestElasticsearchClient implements ElasticsearchClient {
   protected JestElasticsearchClient(Map<String, String> props, JestClientFactory factory) {
     try {
       ElasticsearchSinkConnectorConfig config = new ElasticsearchSinkConnectorConfig(props);
-      final int connTimeout = config.getInt(
-          ElasticsearchSinkConnectorConfig.CONNECTION_TIMEOUT_MS_CONFIG);
-      final int readTimeout = config.getInt(
-          ElasticsearchSinkConnectorConfig.READ_TIMEOUT_MS_CONFIG);
 
-      final String username = config.getString(
-          ElasticsearchSinkConnectorConfig.CONNECTION_USERNAME_CONFIG);
-      final Password password = config.getPassword(
-          ElasticsearchSinkConnectorConfig.CONNECTION_PASSWORD_CONFIG);
-
-      List<String> address =
-          config.getList(ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG);
-      HttpClientConfig.Builder builder = new HttpClientConfig.Builder(address)
-          .connTimeout(connTimeout)
-          .readTimeout(readTimeout)
+      Set<String> addresses = config.connectionUrls();
+      HttpClientConfig.Builder builder = new HttpClientConfig.Builder(addresses)
+          .connTimeout(config.connectionTimeoutMs())
+          .readTimeout(config.readTimeoutMs())
           .multiThreaded(true);
-      if (username != null && password != null) {
-        builder.defaultCredentials(username, password.value())
-            .preemptiveAuthTargetHosts(address.stream()
-                .map(addr -> HttpHost.create(addr)).collect(Collectors.toSet()));
+      if (config.isAuthenticatedConnection()) {
+        builder
+            .defaultCredentials(config.username(), config.password().value())
+            .preemptiveAuthTargetHosts(
+                addresses.stream().map(addr -> HttpHost.create(addr)).collect(Collectors.toSet())
+          );
       }
       HttpClientConfig httpClientConfig = builder.build();
       factory.setHttpClientConfig(httpClientConfig);

@@ -406,10 +406,6 @@ public class DataConverter {
       return result;
     }
 
-    public static BehaviorOnNullValues forValue(String value) {
-      return valueOf(value.toUpperCase(Locale.ROOT));
-    }
-
     @Override
     public String toString() {
       return name().toLowerCase(Locale.ROOT);

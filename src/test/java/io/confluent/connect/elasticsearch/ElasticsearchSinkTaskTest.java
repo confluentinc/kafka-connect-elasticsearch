@@ -22,11 +22,8 @@ import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.sink.SinkRecord;
 import org.elasticsearch.action.ActionFuture;
-import org.elasticsearch.action.ActionRequest;
-import org.elasticsearch.action.ActionRequestValidationException;
 import org.elasticsearch.action.admin.indices.exists.indices.IndicesExistsRequest;
 import org.elasticsearch.action.admin.indices.exists.indices.IndicesExistsResponse;
-import org.elasticsearch.action.index.IndexRequest;
 import org.elasticsearch.test.ESIntegTestCase;
 import org.elasticsearch.test.InternalTestCluster;
 import org.junit.Test;
@@ -56,7 +53,7 @@ public class ElasticsearchSinkTaskTest extends ElasticsearchSinkTestBase {
     Map<String, String> props = new HashMap<>();
     props.put(ElasticsearchSinkConnectorConfig.TYPE_NAME_CONFIG, TYPE);
     props.put(ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG, "localhost");
-    props.put(ElasticsearchSinkConnectorConfig.KEY_IGNORE_CONFIG, "true");
+    props.put(ElasticsearchSinkConnectorConfig.IGNORE_KEY_CONFIG, "true");
     return props;
   }
 
@@ -128,7 +125,7 @@ public class ElasticsearchSinkTaskTest extends ElasticsearchSinkTestBase {
     cluster.ensureAtLeastNumDataNodes(3);
     Map<String, String> props = createProps();
 
-    props.put(ElasticsearchSinkConnectorConfig.AUTO_CREATE_INDICES_AT_START_CONFIG, "false");
+    props.put(ElasticsearchSinkConnectorConfig.CREATE_INDICES_AT_START_CONFIG, "false");
 
     ElasticsearchSinkTask task = new ElasticsearchSinkTask();
 
