@@ -20,6 +20,7 @@ import io.confluent.connect.elasticsearch.LogContext;
 import io.confluent.connect.elasticsearch.RetryUtil;
 
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.connect.errors.ConnectException;
@@ -77,7 +78,7 @@ public class BulkProcessor<R, B> {
   // shared state, synchronized on (this), may be part of wait() conditions so need notifyAll() on
   // changes
   private final Deque<R> unsentRecords;
-  protected final ConcurrentHashMap<R, SinkRecord> recordsToReportOnError; // visible for tests
+  protected final ConcurrentMap<R, SinkRecord> recordsToReportOnError; // visible for tests
   private int inFlightRecords = 0;
   private final LogContext logContext = new LogContext();
 
@@ -106,7 +107,7 @@ public class BulkProcessor<R, B> {
     unsentRecords = new ArrayDeque<>(maxBufferedRecords);
     recordsToReportOnError = reporter != null
         ? new ConcurrentHashMap<>(maxBufferedRecords)
-        : new ConcurrentHashMap<>();
+        : null;
 
     final ThreadFactory threadFactory = makeThreadFactory();
     farmer = threadFactory.newThread(farmerTask());
@@ -346,10 +347,7 @@ public class BulkProcessor<R, B> {
     }
 
     unsentRecords.addLast(record);
-    if (reporter != null) {
-      // avoid unnecessary operations if not using the reporter
-      recordsToReportOnError.put(record, original);
-    }
+    addRecordToReport(record, original);
     notifyAll();
   }
 
@@ -382,6 +380,20 @@ public class BulkProcessor<R, B> {
       flushRequested = false;
     }
     log.debug("Flushed bulk processor (total time={} ms)", time.milliseconds() - flushStartTimeMs);
+  }
+
+  private void addRecordToReport(R record, SinkRecord original) {
+    if (reporter != null) {
+      // avoid unnecessary operations if not using the reporter
+      recordsToReportOnError.put(record, original);
+    }
+  }
+
+  private void removeReportedRecords(List<R> batch) {
+    if (reporter != null) {
+      // avoid unnecessary operations if not using the reporter
+      recordsToReportOnError.keySet().removeAll(batch);
+    }
   }
 
   private static final class BulkProcessorThread extends Thread {
@@ -443,7 +455,7 @@ public class BulkProcessor<R, B> {
             batch.size(),
             e
         );
-        recordsToReportOnError.keySet().removeAll(batch);
+        removeReportedRecords(batch);
         throw e;
       }
       final int maxAttempts = maxRetries + 1;
@@ -464,7 +476,7 @@ public class BulkProcessor<R, B> {
                   System.currentTimeMillis() - startTime
               );
             }
-            recordsToReportOnError.keySet().removeAll(batch);
+            removeReportedRecords(batch);
             return bulkRsp;
           } else if (responseContainsMalformedDocError(bulkRsp)) {
             retriable = bulkRsp.isRetriable();
@@ -482,7 +494,7 @@ public class BulkProcessor<R, B> {
                 }
               }
             }
-            recordsToReportOnError.keySet().removeAll(batch);
+            removeReportedRecords(batch);
             return bulkRsp;
           } else {
             // for all other errors, throw the error up
@@ -501,13 +513,13 @@ public class BulkProcessor<R, B> {
               log.error(
                       "Retrying batch {} of {} records interrupted after attempt {}/{}",
                       batchId, batch.size(), attempts, maxAttempts, e);
-              recordsToReportOnError.keySet().removeAll(batch);
+              removeReportedRecords(batch);
               throw e;
             }
           } else {
             log.error("Failed to execute batch {} of {} records after total of {} attempt(s)",
                     batchId, batch.size(), attempts, e);
-            recordsToReportOnError.keySet().removeAll(batch);
+            removeReportedRecords(batch);
             throw e;
           }
         }
