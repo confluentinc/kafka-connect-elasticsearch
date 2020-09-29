@@ -20,6 +20,7 @@ import io.confluent.connect.elasticsearch.LogContext;
 import io.confluent.connect.elasticsearch.RetryUtil;
 
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.connect.errors.ConnectException;
@@ -77,7 +78,7 @@ public class BulkProcessor<R, B> {
   // shared state, synchronized on (this), may be part of wait() conditions so need notifyAll() on
   // changes
   private final Deque<R> unsentRecords;
-  private final ConcurrentHashMap<R, SinkRecord> recordMap;
+  protected final ConcurrentMap<R, SinkRecord> recordsToReportOnError; // visible for tests
   private int inFlightRecords = 0;
   private final LogContext logContext = new LogContext();
 
@@ -104,7 +105,9 @@ public class BulkProcessor<R, B> {
     this.reporter = reporter;
 
     unsentRecords = new ArrayDeque<>(maxBufferedRecords);
-    recordMap = new ConcurrentHashMap<>(maxBufferedRecords);
+    recordsToReportOnError = reporter != null
+        ? new ConcurrentHashMap<>(maxBufferedRecords)
+        : null;
 
     final ThreadFactory threadFactory = makeThreadFactory();
     farmer = threadFactory.newThread(farmerTask());
@@ -344,7 +347,7 @@ public class BulkProcessor<R, B> {
     }
 
     unsentRecords.addLast(record);
-    recordMap.put(record, original);
+    addRecordToReport(record, original);
     notifyAll();
   }
 
@@ -377,6 +380,20 @@ public class BulkProcessor<R, B> {
       flushRequested = false;
     }
     log.debug("Flushed bulk processor (total time={} ms)", time.milliseconds() - flushStartTimeMs);
+  }
+
+  private void addRecordToReport(R record, SinkRecord original) {
+    if (reporter != null) {
+      // avoid unnecessary operations if not using the reporter
+      recordsToReportOnError.put(record, original);
+    }
+  }
+
+  private void removeReportedRecords(List<R> batch) {
+    if (reporter != null) {
+      // avoid unnecessary operations if not using the reporter
+      recordsToReportOnError.keySet().removeAll(batch);
+    }
   }
 
   private static final class BulkProcessorThread extends Thread {
@@ -438,6 +455,7 @@ public class BulkProcessor<R, B> {
             batch.size(),
             e
         );
+        removeReportedRecords(batch);
         throw e;
       }
       final int maxAttempts = maxRetries + 1;
@@ -458,13 +476,14 @@ public class BulkProcessor<R, B> {
                   System.currentTimeMillis() - startTime
               );
             }
+            removeReportedRecords(batch);
             return bulkRsp;
           } else if (responseContainsMalformedDocError(bulkRsp)) {
             retriable = bulkRsp.isRetriable();
             handleMalformedDoc(bulkRsp);
             if (reporter != null) {
               for (R record : batch) {
-                SinkRecord original = recordMap.get(record);
+                SinkRecord original = recordsToReportOnError.get(record);
                 if (original != null) {
                   reporter.report(
                       original,
@@ -475,7 +494,7 @@ public class BulkProcessor<R, B> {
                 }
               }
             }
-            recordMap.keySet().removeAll(batch);
+            removeReportedRecords(batch);
             return bulkRsp;
           } else {
             // for all other errors, throw the error up
@@ -494,11 +513,13 @@ public class BulkProcessor<R, B> {
               log.error(
                       "Retrying batch {} of {} records interrupted after attempt {}/{}",
                       batchId, batch.size(), attempts, maxAttempts, e);
+              removeReportedRecords(batch);
               throw e;
             }
           } else {
             log.error("Failed to execute batch {} of {} records after total of {} attempt(s)",
                     batchId, batch.size(), attempts, e);
+            removeReportedRecords(batch);
             throw e;
           }
         }
@@ -619,10 +640,12 @@ public class BulkProcessor<R, B> {
   }
 
   /**
-   * Exception that swallows the stack trace used for reporting errors from Elasticsearch
+   * Exception that hides the stack trace used for reporting errors from Elasticsearch
    * (mapper_parser_exception, illegal_argument_exception, and action_request_validation_exception)
-   * resulting from bad records using the AK 2.6 reporter DLQ interface.
+   * resulting from bad records using the AK 2.6 reporter DLQ interface because the error did not
+   * come from that line due to multithreading.
    */
+  @SuppressWarnings("serial")
   public static class ReportingException extends RuntimeException {
 
     public ReportingException(String message) {
