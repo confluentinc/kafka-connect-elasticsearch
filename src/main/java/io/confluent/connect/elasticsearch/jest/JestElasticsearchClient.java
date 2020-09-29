@@ -53,7 +53,6 @@ import org.apache.http.HttpHost;
 import org.apache.http.conn.ssl.SSLConnectionSocketFactory;
 import org.apache.http.nio.conn.ssl.SSLIOSessionStrategy;
 import org.apache.kafka.common.config.ConfigException;
-import org.apache.kafka.common.config.types.Password;
 import org.apache.kafka.common.network.Mode;
 import org.apache.kafka.common.security.ssl.SslFactory;
 import org.apache.kafka.connect.data.Schema;
@@ -152,38 +151,26 @@ public class JestElasticsearchClient implements ElasticsearchClient {
   // Visible for Testing
   public static HttpClientConfig getClientConfig(Map<String, String> props) {
     ElasticsearchSinkConnectorConfig config = new ElasticsearchSinkConnectorConfig(props);
-    final int connTimeout = config.getInt(
-        ElasticsearchSinkConnectorConfig.CONNECTION_TIMEOUT_MS_CONFIG);
-    final int readTimeout = config.getInt(
-        ElasticsearchSinkConnectorConfig.READ_TIMEOUT_MS_CONFIG);
 
-    final String username = config.getString(
-        ElasticsearchSinkConnectorConfig.CONNECTION_USERNAME_CONFIG);
-    final Password password = config.getPassword(
-        ElasticsearchSinkConnectorConfig.CONNECTION_PASSWORD_CONFIG);
-    List<String> address = config.getList(
-        ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG);
-
-    final int maxInFlightRequests = config.getInt(
-        ElasticsearchSinkConnectorConfig.MAX_IN_FLIGHT_REQUESTS_CONFIG);
-
+    Set<String> addresses = config.connectionUrls();
     HttpClientConfig.Builder builder =
-        new HttpClientConfig.Builder(address)
-            .connTimeout(connTimeout)
-            .readTimeout(readTimeout)
-            .defaultMaxTotalConnectionPerRoute(maxInFlightRequests)
+        new HttpClientConfig.Builder(addresses)
+            .connTimeout(config.connectionTimeoutMs())
+            .readTimeout(config.readTimeoutMs())
+            .defaultMaxTotalConnectionPerRoute(config.maxInFlightRequests())
             .multiThreaded(true);
-    if (username != null && password != null) {
-      builder.defaultCredentials(username, password.value())
-          .preemptiveAuthTargetHosts(address.stream()
-              .map(addr -> HttpHost.create(addr)).collect(Collectors.toSet()));
+    if (config.isAuthenticatedConnection()) {
+      builder.defaultCredentials(config.username(), config.password().value())
+          .preemptiveAuthTargetHosts(
+              addresses.stream().map(addr -> HttpHost.create(addr)).collect(Collectors.toSet())
+        );
     }
 
     if (config.secured()) {
-      log.info("Using secured connection to {}", address);
+      log.info("Using secured connection to {}", addresses);
       configureSslContext(builder, config);
     } else {
-      log.info("Using unsecured connection to {}", address);
+      log.info("Using unsecured connection to {}", addresses);
     }
 
     return builder.build();
