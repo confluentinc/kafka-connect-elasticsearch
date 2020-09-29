@@ -29,6 +29,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Queue;
 import java.util.concurrent.ExecutionException;
+import org.testcontainers.shaded.okio.Sink;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.containsString;
@@ -44,6 +45,7 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
@@ -116,6 +118,7 @@ public class BulkProcessorTest {
     final int maxRetries = 0;
     final int retryBackoffMs = 0;
     final BehaviorOnMalformedDoc behaviorOnMalformedDoc = BehaviorOnMalformedDoc.DEFAULT;
+    final ErrantRecordReporter reporter = mock(ErrantRecordReporter.class);
 
     final BulkProcessor<Integer, ?> bulkProcessor = new BulkProcessor<>(
         Time.SYSTEM,
@@ -127,7 +130,7 @@ public class BulkProcessorTest {
         maxRetries,
         retryBackoffMs,
         behaviorOnMalformedDoc,
-        null
+        reporter
     );
 
     final int addTimeoutMs = 10;
@@ -150,7 +153,8 @@ public class BulkProcessorTest {
     assertTrue(bulkProcessor.submitBatchWhenReady().get().succeeded);
     assertTrue(bulkProcessor.submitBatchWhenReady().get().succeeded);
     assertTrue(bulkProcessor.submitBatchWhenReady().get().succeeded);
-    assertTrue(bulkProcessor.recordMap.isEmpty());
+    assertTrue(bulkProcessor.recordsToReportOnError.isEmpty());
+    verify(reporter, never()).report(eq(sinkRecord()), any());
   }
 
   @Test
@@ -162,6 +166,7 @@ public class BulkProcessorTest {
     final int maxRetries = 0;
     final int retryBackoffMs = 0;
     final BehaviorOnMalformedDoc behaviorOnMalformedDoc = BehaviorOnMalformedDoc.DEFAULT;
+    final ErrantRecordReporter reporter = mock(ErrantRecordReporter.class);
 
     final BulkProcessor<Integer, ?> bulkProcessor = new BulkProcessor<>(
         Time.SYSTEM,
@@ -173,7 +178,7 @@ public class BulkProcessorTest {
         maxRetries,
         retryBackoffMs,
         behaviorOnMalformedDoc,
-        null
+        reporter
     );
 
     client.expect(Arrays.asList(1, 2, 3), BulkResponse.success());
@@ -189,7 +194,8 @@ public class BulkProcessorTest {
 
     final int flushTimeoutMs = 100;
     bulkProcessor.flush(flushTimeoutMs);
-    assertTrue(bulkProcessor.recordMap.isEmpty());
+    assertTrue(bulkProcessor.recordsToReportOnError.isEmpty());
+    verify(reporter, never()).report(eq(sinkRecord()), any());
   }
 
   @Test
@@ -201,6 +207,7 @@ public class BulkProcessorTest {
     final int maxRetries = 0;
     final int retryBackoffMs = 0;
     final BehaviorOnMalformedDoc behaviorOnMalformedDoc = BehaviorOnMalformedDoc.DEFAULT;
+    final ErrantRecordReporter reporter = mock(ErrantRecordReporter.class);
 
     final BulkProcessor<Integer, ?> bulkProcessor = new BulkProcessor<>(
         Time.SYSTEM,
@@ -212,7 +219,7 @@ public class BulkProcessorTest {
         maxRetries,
         retryBackoffMs,
         behaviorOnMalformedDoc,
-        null
+        reporter
     );
 
     final int addTimeoutMs = 10;
@@ -224,7 +231,8 @@ public class BulkProcessorTest {
       fail();
     } catch (ConnectException good) {
     }
-    assertEquals(1, bulkProcessor.recordMap.size());
+    assertEquals(1, bulkProcessor.recordsToReportOnError.size());
+    verify(reporter, never()).report(eq(sinkRecord()), any());
   }
 
   @Test
@@ -236,6 +244,7 @@ public class BulkProcessorTest {
     final int maxRetries = 3;
     final int retryBackoffMs = 1;
     final BehaviorOnMalformedDoc behaviorOnMalformedDoc = BehaviorOnMalformedDoc.DEFAULT;
+    final ErrantRecordReporter reporter = mock(ErrantRecordReporter.class);
 
     client.expect(Arrays.asList(42, 43), BulkResponse.failure(true, "a retiable error"));
     client.expect(Arrays.asList(42, 43), BulkResponse.failure(true, "a retriable error again"));
@@ -251,7 +260,7 @@ public class BulkProcessorTest {
         maxRetries,
         retryBackoffMs,
         behaviorOnMalformedDoc,
-        null
+        reporter
     );
 
     final int addTimeoutMs = 10;
@@ -259,7 +268,8 @@ public class BulkProcessorTest {
     bulkProcessor.add(43, sinkRecord(), addTimeoutMs);
 
     assertTrue(bulkProcessor.submitBatchWhenReady().get().succeeded);
-    assertTrue(bulkProcessor.recordMap.isEmpty());
+    assertTrue(bulkProcessor.recordsToReportOnError.isEmpty());
+    verify(reporter, never()).report(eq(sinkRecord()), any());
   }
 
   @Test
@@ -272,6 +282,7 @@ public class BulkProcessorTest {
     final int retryBackoffMs = 1;
     final String errorInfo = "a final retriable error again";
     final BehaviorOnMalformedDoc behaviorOnMalformedDoc = BehaviorOnMalformedDoc.DEFAULT;
+    final ErrantRecordReporter reporter = mock(ErrantRecordReporter.class);
 
     client.expect(Arrays.asList(42, 43), BulkResponse.failure(true, "a retiable error"));
     client.expect(Arrays.asList(42, 43), BulkResponse.failure(true, "a retriable error again"));
@@ -287,7 +298,7 @@ public class BulkProcessorTest {
         maxRetries,
         retryBackoffMs,
         behaviorOnMalformedDoc,
-        null
+        reporter
     );
 
     final int addTimeoutMs = 10;
@@ -299,7 +310,8 @@ public class BulkProcessorTest {
       fail();
     } catch (ExecutionException e) {
       assertTrue(e.getCause().getMessage().contains(errorInfo));
-      assertTrue(bulkProcessor.recordMap.isEmpty());
+      assertTrue(bulkProcessor.recordsToReportOnError.isEmpty());
+      verify(reporter, never()).report(eq(sinkRecord()), any());
     }
   }
 
@@ -312,6 +324,7 @@ public class BulkProcessorTest {
     final int maxRetries = 3;
     final int retryBackoffMs = 1;
     final BehaviorOnMalformedDoc behaviorOnMalformedDoc = BehaviorOnMalformedDoc.DEFAULT;
+    final ErrantRecordReporter reporter = mock(ErrantRecordReporter.class);
 
     final String errorInfo = "an unretriable error";
     client.expect(Arrays.asList(42, 43), BulkResponse.failure(false, errorInfo));
@@ -326,7 +339,7 @@ public class BulkProcessorTest {
         maxRetries,
         retryBackoffMs,
         behaviorOnMalformedDoc,
-        null
+        reporter
     );
 
     final int addTimeoutMs = 10;
@@ -338,7 +351,8 @@ public class BulkProcessorTest {
       fail();
     } catch (ExecutionException e) {
       assertTrue(e.getCause().getMessage().contains(errorInfo));
-      assertTrue(bulkProcessor.recordMap.isEmpty());
+      assertTrue(bulkProcessor.recordsToReportOnError.isEmpty());
+      verify(reporter, never()).report(eq(sinkRecord()), any());
     }
   }
 
@@ -351,6 +365,7 @@ public class BulkProcessorTest {
     final int maxRetries = 3;
     final int retryBackoffMs = 1;
     final BehaviorOnMalformedDoc behaviorOnMalformedDoc = BehaviorOnMalformedDoc.FAIL;
+    final ErrantRecordReporter reporter = mock(ErrantRecordReporter.class);
 
     final String errorInfo = " [{\"type\":\"mapper_parsing_exception\",\"reason\":\"failed to parse\"," +
         "\"caused_by\":{\"type\":\"illegal_argument_exception\",\"reason\":\"object\n" +
@@ -367,7 +382,7 @@ public class BulkProcessorTest {
         maxRetries,
         retryBackoffMs,
         behaviorOnMalformedDoc,
-        null
+        reporter
     );
 
     bulkProcessor.start();
@@ -382,7 +397,8 @@ public class BulkProcessorTest {
     } catch(ConnectException e) {
       // expected
       assertTrue(e.getMessage().contains("mapper_parsing_exception"));
-      assertTrue(bulkProcessor.recordMap.isEmpty());
+      assertTrue(bulkProcessor.recordsToReportOnError.isEmpty());
+      verify(reporter, never()).report(eq(sinkRecord()), any());
     }
   }
 
@@ -434,7 +450,7 @@ public class BulkProcessorTest {
       } catch (ConnectException e) {
         fail(e.getMessage());
       }
-      assertTrue(bulkProcessor.recordMap.isEmpty());
+      assertTrue(bulkProcessor.recordsToReportOnError.isEmpty());
     }
 
     verify(reporter, times(4)).report(eq(sinkRecord()), any());
@@ -450,6 +466,7 @@ public class BulkProcessorTest {
     final int maxRetries = 3;
     final int retryBackoffMs = 1;
     final BehaviorOnMalformedDoc behaviorOnMalformedDoc = BehaviorOnMalformedDoc.DEFAULT;
+    final ErrantRecordReporter reporter = mock(ErrantRecordReporter.class);
 
     final String errorInfo = "an unretriable error";
     client.expect(Arrays.asList(42, 43), BulkResponse.failure(false, errorInfo));
@@ -464,7 +481,7 @@ public class BulkProcessorTest {
             maxRetries,
             retryBackoffMs,
             behaviorOnMalformedDoc,
-        null
+            reporter
     );
 
     final int addTimeoutMs = 10;
@@ -486,6 +503,7 @@ public class BulkProcessorTest {
     final int maxRetries = 3;
     final int retryBackoffMs = 1;
     final BehaviorOnMalformedDoc behaviorOnMalformedDoc = BehaviorOnMalformedDoc.DEFAULT;
+    final ErrantRecordReporter reporter = mock(ErrantRecordReporter.class);
 
     Time mockTime = mock(Time.class);
     doAnswer(invocation -> {
@@ -505,7 +523,7 @@ public class BulkProcessorTest {
             maxRetries,
             retryBackoffMs,
             behaviorOnMalformedDoc,
-            null
+            reporter
     );
 
     final int addTimeoutMs = 10;
@@ -515,7 +533,46 @@ public class BulkProcessorTest {
     ExecutionException e = assertThrows(ExecutionException.class,
             () -> bulkProcessor.submitBatchWhenReady().get());
     assertThat(e.getMessage(), containsString("a retriable error"));
-    assertTrue(bulkProcessor.recordMap.isEmpty());
+    assertTrue(bulkProcessor.recordsToReportOnError.isEmpty());
+    verify(reporter, never()).report(eq(sinkRecord()), any());
+  }
+
+  @Test
+  public void testNullReporter() {
+    final int maxBufferedRecords = 100;
+    final int maxInFlightBatches = 5;
+    final int batchSize = 2;
+    final int lingerMs = 5;
+    final int maxRetries = 3;
+    final int retryBackoffMs = 1;
+    final BehaviorOnMalformedDoc behaviorOnMalformedDoc = BehaviorOnMalformedDoc.DEFAULT;
+
+    client.expect(Arrays.asList(42, 43), BulkResponse.success());
+
+    final BulkProcessor<Integer, ?> bulkProcessor = new BulkProcessor<>(
+        Time.SYSTEM,
+        client,
+        maxBufferedRecords,
+        maxInFlightBatches,
+        batchSize,
+        lingerMs,
+        maxRetries,
+        retryBackoffMs,
+        behaviorOnMalformedDoc,
+        null
+    );
+
+    bulkProcessor.start();
+
+    final int addTimeoutMs = 10;
+    bulkProcessor.add(42, sinkRecord(), addTimeoutMs);
+    bulkProcessor.add(43, sinkRecord(), addTimeoutMs);
+
+    assertEquals(2, bulkProcessor.bufferedRecords());
+    assertTrue(bulkProcessor.recordsToReportOnError.isEmpty());
+
+    bulkProcessor.flush(1000);
+    assertEquals(0, bulkProcessor.bufferedRecords());
   }
 
   private static SinkRecord sinkRecord() {
