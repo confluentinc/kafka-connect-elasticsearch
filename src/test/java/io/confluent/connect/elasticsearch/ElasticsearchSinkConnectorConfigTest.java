@@ -1,7 +1,8 @@
 package io.confluent.connect.elasticsearch;
 
+import static org.junit.Assert.assertEquals;
+
 import org.apache.kafka.common.config.types.Password;
-import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -20,20 +21,14 @@ public class ElasticsearchSinkConnectorConfigTest {
     props = new HashMap<>();
     props.put(ElasticsearchSinkConnectorConfig.TYPE_NAME_CONFIG, ElasticsearchSinkTestBase.TYPE);
     props.put(ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG, "localhost");
-    props.put(ElasticsearchSinkConnectorConfig.KEY_IGNORE_CONFIG, "true");
+    props.put(ElasticsearchSinkConnectorConfig.IGNORE_KEY_CONFIG, "true");
   }
 
   @Test
   public void testDefaultHttpTimeoutsConfig() {
     ElasticsearchSinkConnectorConfig config = new ElasticsearchSinkConnectorConfig(props);
-    Assert.assertEquals(
-        config.getInt(ElasticsearchSinkConnectorConfig.READ_TIMEOUT_MS_CONFIG),
-        (Integer) 3000
-    );
-    Assert.assertEquals(
-        config.getInt(ElasticsearchSinkConnectorConfig.CONNECTION_TIMEOUT_MS_CONFIG),
-        (Integer) 1000
-    );
+    assertEquals(config.readTimeoutMs(), 3000);
+    assertEquals(config.connectionTimeoutMs(), 1000);
   }
 
   @Test
@@ -41,14 +36,8 @@ public class ElasticsearchSinkConnectorConfigTest {
     props.put(ElasticsearchSinkConnectorConfig.READ_TIMEOUT_MS_CONFIG, "10000");
     props.put(ElasticsearchSinkConnectorConfig.CONNECTION_TIMEOUT_MS_CONFIG, "15000");
     ElasticsearchSinkConnectorConfig config = new ElasticsearchSinkConnectorConfig(props);
-    Assert.assertEquals(
-        config.getInt(ElasticsearchSinkConnectorConfig.READ_TIMEOUT_MS_CONFIG),
-        (Integer) 10000
-    );
-    Assert.assertEquals(
-        config.getInt(ElasticsearchSinkConnectorConfig.CONNECTION_TIMEOUT_MS_CONFIG),
-        (Integer) 15000
-    );
+    assertEquals(config.readTimeoutMs(), 10000);
+    assertEquals(config.connectionTimeoutMs(), 15000);
   }
 
   @Test
@@ -59,17 +48,17 @@ public class ElasticsearchSinkConnectorConfigTest {
     props.put("elastic.https.ssl.truststore.password", "opensesame2");
     ElasticsearchSinkConnectorConfig config = new ElasticsearchSinkConnectorConfig(props);
     Map<String, Object> sslConfigs = config.sslConfigs();
-    Assert.assertTrue(sslConfigs.size() > 0);
-    Assert.assertEquals(
+    assertTrue(sslConfigs.size() > 0);
+    assertEquals(
         new Password("opensesame"),
         sslConfigs.get("ssl.keystore.password")
     );
-    Assert.assertEquals(
+    assertEquals(
         new Password("opensesame2"),
         sslConfigs.get("ssl.truststore.password")
     );
-    Assert.assertEquals("/path", sslConfigs.get("ssl.keystore.location"));
-    Assert.assertEquals("/path2", sslConfigs.get("ssl.truststore.location"));
+    assertEquals("/path", sslConfigs.get("ssl.keystore.location"));
+    assertEquals("/path2", sslConfigs.get("ssl.truststore.location"));
   }
 
   @Test
