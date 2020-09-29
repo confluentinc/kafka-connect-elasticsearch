@@ -52,7 +52,6 @@ import io.searchbox.indices.IndicesExists;
 import io.searchbox.indices.Refresh;
 import io.searchbox.indices.mapping.PutMapping;
 import java.util.HashMap;
-import java.util.function.Function;
 import javax.net.ssl.HostnameVerifier;
 import org.apache.http.HttpHost;
 import org.apache.http.auth.AuthScope;
