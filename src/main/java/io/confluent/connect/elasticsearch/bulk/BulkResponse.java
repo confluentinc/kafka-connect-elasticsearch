@@ -30,6 +30,13 @@ public class BulkResponse {
   public final String errorInfo;
   public final Map<IndexableRecord, BulkResultItem> failedRecords;
 
+  /**
+   * Creates a BulkResponse.
+   * @param succeeded whether the bulk request was successful or not.
+   * @param retriable whether the bulk request should be retried.
+   * @param errorInfo the error string
+   * @param failedRecords map of failed records and their results. Never null.
+   */
   private BulkResponse(
       boolean succeeded,
       boolean retriable,
@@ -46,6 +53,13 @@ public class BulkResponse {
     return SUCCESS_RESPONSE;
   }
 
+  /**
+   * Creates a failed BulkResponse.
+   * @param retriable whether the error is retriable
+   * @param errorInfo the error string
+   * @param failedRecords map of failed records and their results. Never null.
+   * @return
+   */
   public static BulkResponse failure(
       boolean retriable,
       String errorInfo,

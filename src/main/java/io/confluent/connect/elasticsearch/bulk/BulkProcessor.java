@@ -493,7 +493,7 @@ public class BulkProcessor<R, B> {
                 SinkRecord original = recordsToReportOnError.get(record);
                 BulkResultItem result = bulkRsp.failedRecords.get(record);
                 String error = result != null ? result.error : null;
-                if (original != null && error != null) {
+                if (error != null && original != null) {
                   reporter.report(
                       original, new ReportingException("Bulk request failed: " + error)
                   );

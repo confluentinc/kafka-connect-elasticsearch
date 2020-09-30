@@ -52,6 +52,7 @@ import io.searchbox.indices.IndicesExists;
 import io.searchbox.indices.Refresh;
 import io.searchbox.indices.mapping.PutMapping;
 import java.util.HashMap;
+import java.util.Objects;
 import javax.net.ssl.HostnameVerifier;
 import org.apache.http.HttpHost;
 import org.apache.http.auth.AuthScope;
@@ -654,16 +655,17 @@ public class JestElasticsearchClient implements ElasticsearchClient {
 
     Map<IndexableRecord, BulkResultItem> failedResponses = new HashMap<>();
     List<BulkResultItem> items = result.getItems();
-    for (int i = 0; i < items.size() && i < ((JestBulkRequest) bulk).records().size() ; i++) {
+    List<IndexableRecord> records = ((JestBulkRequest) bulk).records();
+    for (int i = 0; i < items.size() && i < records.size() ; i++) {
       BulkResultItem item = items.get(i);
-      IndexableRecord record = ((JestBulkRequest) bulk).records().get(i);
-      if (item.error != null && item.id.equals(record.key.id)) {
+      IndexableRecord record = records.get(i);
+      if (item.error != null && Objects.equals(item.id, record.key.id)) {
         // sanity check matching IDs
         failedResponses.put(record, item);
       }
     }
 
-    if (items.size() != ((JestBulkRequest) bulk).records().size()) {
+    if (items.size() != records.size()) {
       log.error(
           "Elasticsearch bulk response size ({}) does not correspond to records sent ({})",
           ((JestBulkRequest) bulk).records().size(),
