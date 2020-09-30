@@ -168,7 +168,8 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
       + " id. Valid options are ignore', 'warn', and 'fail'.";
   public static final String WRITE_METHOD_CONFIG = "write.method";
   private static final String WRITE_METHOD_DOC = "Method used for writing data to Elasticsearch,"
-          + " and one of " + WriteMethod.INSERT.toString() + " or " + WriteMethod.UPSERT.toString()
+          + " and one of " + WriteMethod.INSERT.toString() + ", " + WriteMethod.UPSERT.toString() 
+          + " or " + WriteMethod.CREATE.toString()
           + ". The default method is " + WriteMethod.INSERT.toString() + ", in which the "
           + "connector constructs a document from the record value and inserts that document "
           + "into Elasticsearch, completely replacing any existing document with the same ID; "
@@ -178,7 +179,10 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
           + "only those fields present in the record value. The " + WriteMethod.UPSERT.toString()
           + " method may require additional time and resources of Elasticsearch, so consider "
           + "increasing the " + FLUSH_TIMEOUT_MS_CONFIG + ", " + READ_TIMEOUT_MS_CONFIG
-          + ", and decrease " + BATCH_SIZE_CONFIG + " configuration properties.";
+          + ", and decrease " + BATCH_SIZE_CONFIG + " configuration properties. The " 
+          + WriteMethod.CREATE.toString() + " will create a new document if one with the "
+          + "specified id does not yet exist, and does nothing if a document with the same id "
+          + "already exists.";
 
   public static final String CONNECTION_SSL_CONFIG_PREFIX = "elastic.https.";
 
