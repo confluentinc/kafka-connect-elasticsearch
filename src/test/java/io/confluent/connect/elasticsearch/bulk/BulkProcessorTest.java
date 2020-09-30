@@ -14,6 +14,17 @@
  */
 package io.confluent.connect.elasticsearch.bulk;
 
+import com.google.gson.Gson;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
+import io.confluent.connect.elasticsearch.IndexableRecord;
+import io.confluent.connect.elasticsearch.Key;
+import io.searchbox.client.JestResult;
+import io.searchbox.core.BulkResult;
+import io.searchbox.core.BulkResult.BulkResultItem;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
 import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.errors.ConnectException;
@@ -29,7 +40,6 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Queue;
 import java.util.concurrent.ExecutionException;
-import org.testcontainers.shaded.okio.Sink;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.containsString;
@@ -52,6 +62,9 @@ import static org.mockito.Mockito.verify;
 
 public class BulkProcessorTest {
 
+  private static final String INDEX = "topic";
+  private static final String TYPE = "type";
+
   private static class Expectation {
     final List<Integer> request;
     final BulkResponse response;
@@ -62,15 +75,15 @@ public class BulkProcessorTest {
     }
   }
 
-  private static final class Client implements BulkClient<Integer, List<Integer>> {
+  private static final class Client implements BulkClient<IndexableRecord, List<Integer>> {
     private final Queue<Expectation> expectQ = new LinkedList<>();
     private volatile boolean executeMetExpectations = true;
 
     @Override
-    public List<Integer> bulkRequest(List<Integer> batch) {
+    public List<Integer> bulkRequest(List<IndexableRecord> batch) {
       List<Integer> ids = new ArrayList<>(batch.size());
-      for (Integer id : batch) {
-        ids.add(id);
+      for (IndexableRecord id : batch) {
+        ids.add(Integer.valueOf(id.key.id));
       }
       return ids;
     }
@@ -121,7 +134,7 @@ public class BulkProcessorTest {
     final BehaviorOnMalformedDoc behaviorOnMalformedDoc = BehaviorOnMalformedDoc.DEFAULT;
     final ErrantRecordReporter reporter = mock(ErrantRecordReporter.class);
 
-    final BulkProcessor<Integer, ?> bulkProcessor = new BulkProcessor<>(
+    final BulkProcessor<IndexableRecord, ?> bulkProcessor = new BulkProcessor<>(
         Time.SYSTEM,
         client,
         maxBufferedRecords,
@@ -135,18 +148,9 @@ public class BulkProcessorTest {
     );
 
     final int addTimeoutMs = 10;
-    bulkProcessor.add(1, sinkRecord(), addTimeoutMs);
-    bulkProcessor.add(2, sinkRecord(), addTimeoutMs);
-    bulkProcessor.add(3, sinkRecord(), addTimeoutMs);
-    bulkProcessor.add(4, sinkRecord(), addTimeoutMs);
-    bulkProcessor.add(5, sinkRecord(), addTimeoutMs);
-    bulkProcessor.add(6, sinkRecord(), addTimeoutMs);
-    bulkProcessor.add(7, sinkRecord(), addTimeoutMs);
-    bulkProcessor.add(8, sinkRecord(), addTimeoutMs);
-    bulkProcessor.add(9, sinkRecord(), addTimeoutMs);
-    bulkProcessor.add(10, sinkRecord(), addTimeoutMs);
-    bulkProcessor.add(11, sinkRecord(), addTimeoutMs);
-    bulkProcessor.add(12, sinkRecord(), addTimeoutMs);
+    for (int i = 1; i < 13; i++) {
+      bulkProcessor.add(indexableRecord(i), sinkRecord(), addTimeoutMs);
+    }
 
     client.expect(Arrays.asList(1, 2, 3, 4, 5), BulkResponse.success());
     client.expect(Arrays.asList(6, 7, 8, 9, 10), BulkResponse.success());
@@ -169,7 +173,7 @@ public class BulkProcessorTest {
     final BehaviorOnMalformedDoc behaviorOnMalformedDoc = BehaviorOnMalformedDoc.DEFAULT;
     final ErrantRecordReporter reporter = mock(ErrantRecordReporter.class);
 
-    final BulkProcessor<Integer, ?> bulkProcessor = new BulkProcessor<>(
+    final BulkProcessor<IndexableRecord, ?> bulkProcessor = new BulkProcessor<>(
         Time.SYSTEM,
         client,
         maxBufferedRecords,
@@ -187,9 +191,9 @@ public class BulkProcessorTest {
     bulkProcessor.start();
 
     final int addTimeoutMs = 10;
-    bulkProcessor.add(1, sinkRecord(), addTimeoutMs);
-    bulkProcessor.add(2, sinkRecord(), addTimeoutMs);
-    bulkProcessor.add(3, sinkRecord(), addTimeoutMs);
+    bulkProcessor.add(indexableRecord(1), sinkRecord(), addTimeoutMs);
+    bulkProcessor.add(indexableRecord(2), sinkRecord(), addTimeoutMs);
+    bulkProcessor.add(indexableRecord(3), sinkRecord(), addTimeoutMs);
 
     assertFalse(client.expectationsMet());
 
@@ -210,7 +214,7 @@ public class BulkProcessorTest {
     final BehaviorOnMalformedDoc behaviorOnMalformedDoc = BehaviorOnMalformedDoc.DEFAULT;
     final ErrantRecordReporter reporter = mock(ErrantRecordReporter.class);
 
-    final BulkProcessor<Integer, ?> bulkProcessor = new BulkProcessor<>(
+    final BulkProcessor<IndexableRecord, ?> bulkProcessor = new BulkProcessor<>(
         Time.SYSTEM,
         client,
         maxBufferedRecords,
@@ -224,11 +228,11 @@ public class BulkProcessorTest {
     );
 
     final int addTimeoutMs = 10;
-    bulkProcessor.add(42, sinkRecord(), addTimeoutMs);
+    bulkProcessor.add(indexableRecord(42), sinkRecord(), addTimeoutMs);
     assertEquals(1, bulkProcessor.bufferedRecords());
     try {
       // BulkProcessor not started, so this add should timeout & throw
-      bulkProcessor.add(43, sinkRecord(), addTimeoutMs);
+      bulkProcessor.add(indexableRecord(43), sinkRecord(), addTimeoutMs);
       fail();
     } catch (ConnectException good) {
     }
@@ -247,11 +251,11 @@ public class BulkProcessorTest {
     final BehaviorOnMalformedDoc behaviorOnMalformedDoc = BehaviorOnMalformedDoc.DEFAULT;
     final ErrantRecordReporter reporter = mock(ErrantRecordReporter.class);
 
-    client.expect(Arrays.asList(42, 43), BulkResponse.failure(true, "a retiable error"));
-    client.expect(Arrays.asList(42, 43), BulkResponse.failure(true, "a retriable error again"));
+    client.expect(Arrays.asList(42, 43), BulkResponse.failure(true, "a retiable error", getFailedRecords(42, 43)));
+    client.expect(Arrays.asList(42, 43), BulkResponse.failure(true, "a retriable error again", getFailedRecords(42, 43)));
     client.expect(Arrays.asList(42, 43), BulkResponse.success());
 
-    final BulkProcessor<Integer, ?> bulkProcessor = new BulkProcessor<>(
+    final BulkProcessor<IndexableRecord, ?> bulkProcessor = new BulkProcessor<>(
         Time.SYSTEM,
         client,
         maxBufferedRecords,
@@ -265,8 +269,8 @@ public class BulkProcessorTest {
     );
 
     final int addTimeoutMs = 10;
-    bulkProcessor.add(42, sinkRecord(), addTimeoutMs);
-    bulkProcessor.add(43, sinkRecord(), addTimeoutMs);
+    bulkProcessor.add(indexableRecord(42), sinkRecord(), addTimeoutMs);
+    bulkProcessor.add(indexableRecord(43), sinkRecord(), addTimeoutMs);
 
     assertTrue(bulkProcessor.submitBatchWhenReady().get().succeeded);
     assertTrue(bulkProcessor.recordsToReportOnError.isEmpty());
@@ -285,11 +289,11 @@ public class BulkProcessorTest {
     final BehaviorOnMalformedDoc behaviorOnMalformedDoc = BehaviorOnMalformedDoc.DEFAULT;
     final ErrantRecordReporter reporter = mock(ErrantRecordReporter.class);
 
-    client.expect(Arrays.asList(42, 43), BulkResponse.failure(true, "a retiable error"));
-    client.expect(Arrays.asList(42, 43), BulkResponse.failure(true, "a retriable error again"));
-    client.expect(Arrays.asList(42, 43), BulkResponse.failure(true, errorInfo));
+    client.expect(Arrays.asList(42, 43), BulkResponse.failure(true, "a retriable error", getFailedRecords(42, 43)));
+    client.expect(Arrays.asList(42, 43), BulkResponse.failure(true, "a retriable error again", getFailedRecords(42, 43)));
+    client.expect(Arrays.asList(42, 43), BulkResponse.failure(true, errorInfo, getFailedRecords(42, 43)));
 
-    final BulkProcessor<Integer, ?> bulkProcessor = new BulkProcessor<>(
+    final BulkProcessor<IndexableRecord, ?> bulkProcessor = new BulkProcessor<>(
         Time.SYSTEM,
         client,
         maxBufferedRecords,
@@ -303,8 +307,8 @@ public class BulkProcessorTest {
     );
 
     final int addTimeoutMs = 10;
-    bulkProcessor.add(42, sinkRecord(), addTimeoutMs);
-    bulkProcessor.add(43, sinkRecord(), addTimeoutMs);
+    bulkProcessor.add(indexableRecord(42), sinkRecord(), addTimeoutMs);
+    bulkProcessor.add(indexableRecord(43), sinkRecord(), addTimeoutMs);
 
     try {
       bulkProcessor.submitBatchWhenReady().get();
@@ -328,9 +332,9 @@ public class BulkProcessorTest {
     final ErrantRecordReporter reporter = mock(ErrantRecordReporter.class);
 
     final String errorInfo = "an unretriable error";
-    client.expect(Arrays.asList(42, 43), BulkResponse.failure(false, errorInfo));
+    client.expect(Arrays.asList(42, 43), BulkResponse.failure(false, errorInfo, getFailedRecords(42, 43)));
 
-    final BulkProcessor<Integer, ?> bulkProcessor = new BulkProcessor<>(
+    final BulkProcessor<IndexableRecord, ?> bulkProcessor = new BulkProcessor<>(
         Time.SYSTEM,
         client,
         maxBufferedRecords,
@@ -344,8 +348,8 @@ public class BulkProcessorTest {
     );
 
     final int addTimeoutMs = 10;
-    bulkProcessor.add(42, sinkRecord(), addTimeoutMs);
-    bulkProcessor.add(43, sinkRecord(), addTimeoutMs);
+    bulkProcessor.add(indexableRecord(42), sinkRecord(), addTimeoutMs);
+    bulkProcessor.add(indexableRecord(43), sinkRecord(), addTimeoutMs);
 
     try {
       bulkProcessor.submitBatchWhenReady().get();
@@ -371,9 +375,9 @@ public class BulkProcessorTest {
     final String errorInfo = " [{\"type\":\"mapper_parsing_exception\",\"reason\":\"failed to parse\"," +
         "\"caused_by\":{\"type\":\"illegal_argument_exception\",\"reason\":\"object\n" +
         " field starting or ending with a [.] makes object resolution ambiguous: [avjpz{{.}}wjzse{{..}}gal9d]\"}}]";
-    client.expect(Arrays.asList(42, 43), BulkResponse.failure(false, errorInfo));
+    client.expect(Arrays.asList(42, 43), BulkResponse.failure(false, errorInfo, getFailedRecords(42, 43)));
 
-    final BulkProcessor<Integer, ?> bulkProcessor = new BulkProcessor<>(
+    final BulkProcessor<IndexableRecord, ?> bulkProcessor = new BulkProcessor<>(
         Time.SYSTEM,
         client,
         maxBufferedRecords,
@@ -388,8 +392,8 @@ public class BulkProcessorTest {
 
     bulkProcessor.start();
 
-    bulkProcessor.add(42, sinkRecord(),1);
-    bulkProcessor.add(43, sinkRecord(), 1);
+    bulkProcessor.add(indexableRecord(42), sinkRecord(),1);
+    bulkProcessor.add(indexableRecord(43), sinkRecord(), 1);
 
     try {
       final int flushTimeoutMs = 1000;
@@ -425,9 +429,9 @@ public class BulkProcessorTest {
       final String errorInfo = " [{\"type\":\"mapper_parsing_exception\",\"reason\":\"failed to parse\"," +
           "\"caused_by\":{\"type\":\"illegal_argument_exception\",\"reason\":\"object\n" +
           " field starting or ending with a [.] makes object resolution ambiguous: [avjpz{{.}}wjzse{{..}}gal9d]\"}}]";
-      client.expect(Arrays.asList(42, 43), BulkResponse.failure(false, errorInfo));
+      client.expect(Arrays.asList(42, 43), BulkResponse.failure(false, errorInfo, getFailedRecords(42, 43)));
 
-      final BulkProcessor<Integer, ?> bulkProcessor = new BulkProcessor<>(
+      final BulkProcessor<IndexableRecord, ?> bulkProcessor = new BulkProcessor<>(
           Time.SYSTEM,
           client,
           maxBufferedRecords,
@@ -442,8 +446,8 @@ public class BulkProcessorTest {
 
       bulkProcessor.start();
 
-      bulkProcessor.add(42, sinkRecord(), 1);
-      bulkProcessor.add(43, sinkRecord(), 1);
+      bulkProcessor.add(indexableRecord(42), sinkRecord(), 1);
+      bulkProcessor.add(indexableRecord(43), sinkRecord(), 1);
 
       try {
         final int flushTimeoutMs = 1000;
@@ -470,9 +474,9 @@ public class BulkProcessorTest {
     final ErrantRecordReporter reporter = mock(ErrantRecordReporter.class);
 
     final String errorInfo = "an unretriable error";
-    client.expect(Arrays.asList(42, 43), BulkResponse.failure(false, errorInfo));
+    client.expect(Arrays.asList(42, 43), BulkResponse.failure(false, errorInfo, getFailedRecords(42, 43)));
 
-    final BulkProcessor<Integer, ?> bulkProcessor = new BulkProcessor<>(
+    final BulkProcessor<IndexableRecord, ?> bulkProcessor = new BulkProcessor<>(
             Time.SYSTEM,
             client,
             maxBufferedRecords,
@@ -486,8 +490,8 @@ public class BulkProcessorTest {
     );
 
     final int addTimeoutMs = 10;
-    bulkProcessor.add(42, sinkRecord(), addTimeoutMs);
-    bulkProcessor.add(43, sinkRecord(), addTimeoutMs);
+    bulkProcessor.add(indexableRecord(42), sinkRecord(), addTimeoutMs);
+    bulkProcessor.add(indexableRecord(43), sinkRecord(), addTimeoutMs);
 
     Runnable farmer = bulkProcessor.farmerTask();
     ConnectException e = assertThrows(
@@ -512,9 +516,9 @@ public class BulkProcessorTest {
       return null;
     }).when(mockTime).sleep(anyLong());
 
-    client.expect(Arrays.asList(42, 43), BulkResponse.failure(true, "a retriable error"));
+    client.expect(Arrays.asList(42, 43), BulkResponse.failure(true, "a retriable error", getFailedRecords(42, 43)));
 
-    final BulkProcessor<Integer, ?> bulkProcessor = new BulkProcessor<>(
+    final BulkProcessor<IndexableRecord, ?> bulkProcessor = new BulkProcessor<>(
             mockTime,
             client,
             maxBufferedRecords,
@@ -528,8 +532,8 @@ public class BulkProcessorTest {
     );
 
     final int addTimeoutMs = 10;
-    bulkProcessor.add(42, sinkRecord(), addTimeoutMs);
-    bulkProcessor.add(43, sinkRecord(), addTimeoutMs);
+    bulkProcessor.add(indexableRecord(42), sinkRecord(), addTimeoutMs);
+    bulkProcessor.add(indexableRecord(43), sinkRecord(), addTimeoutMs);
 
     ExecutionException e = assertThrows(ExecutionException.class,
             () -> bulkProcessor.submitBatchWhenReady().get());
@@ -550,7 +554,7 @@ public class BulkProcessorTest {
 
     client.expect(Arrays.asList(42, 43), BulkResponse.success());
 
-    final BulkProcessor<Integer, ?> bulkProcessor = new BulkProcessor<>(
+    final BulkProcessor<IndexableRecord, ?> bulkProcessor = new BulkProcessor<>(
         Time.SYSTEM,
         client,
         maxBufferedRecords,
@@ -566,8 +570,8 @@ public class BulkProcessorTest {
     bulkProcessor.start();
 
     final int addTimeoutMs = 10;
-    bulkProcessor.add(42, sinkRecord(), addTimeoutMs);
-    bulkProcessor.add(43, sinkRecord(), addTimeoutMs);
+    bulkProcessor.add(indexableRecord(42), sinkRecord(), addTimeoutMs);
+    bulkProcessor.add(indexableRecord(43), sinkRecord(), addTimeoutMs);
 
     assertEquals(2, bulkProcessor.bufferedRecords());
     assertNull(bulkProcessor.recordsToReportOnError);
@@ -576,7 +580,95 @@ public class BulkProcessorTest {
     assertEquals(0, bulkProcessor.bufferedRecords());
   }
 
+  @Test
+  public void reportOnlyFailedRecords() {
+    final int maxBufferedRecords = 100;
+    final int maxInFlightBatches = 5;
+    final int batchSize = 2;
+    final int lingerMs = 5;
+    final int maxRetries = 3;
+    final int retryBackoffMs = 1;
+    final BehaviorOnMalformedDoc behaviorOnMalformedDoc = BehaviorOnMalformedDoc.IGNORE;
+    final ErrantRecordReporter reporter = mock(ErrantRecordReporter.class);
+
+    final String errorInfo = " [{\"type\":\"mapper_parsing_exception\",\"reason\":\"failed to parse\"," +
+        "\"caused_by\":{\"type\":\"illegal_argument_exception\",\"reason\":\"object\n" +
+        " field starting or ending with a [.] makes object resolution ambiguous: [avjpz{{.}}wjzse{{..}}gal9d]\"}}]";
+    client.expect(Arrays.asList(42, 43), BulkResponse.failure(false, errorInfo, getFailedRecords(42)));
+
+    final BulkProcessor<IndexableRecord, ?> bulkProcessor = new BulkProcessor<>(
+        Time.SYSTEM,
+        client,
+        maxBufferedRecords,
+        maxInFlightBatches,
+        batchSize,
+        lingerMs,
+        maxRetries,
+        retryBackoffMs,
+        behaviorOnMalformedDoc,
+        reporter
+    );
+
+    bulkProcessor.start();
+
+    bulkProcessor.add(indexableRecord(42), sinkRecord(), 1);
+    bulkProcessor.add(indexableRecord(43), sinkRecord(), 1);
+
+    try {
+      final int flushTimeoutMs = 1000;
+      bulkProcessor.flush(flushTimeoutMs);
+    } catch (ConnectException e) {
+      fail(e.getMessage());
+    }
+
+    assertTrue(bulkProcessor.recordsToReportOnError.isEmpty());
+    verify(reporter, times(1)).report(eq(sinkRecord()), any());
+  }
+
+  private static IndexableRecord indexableRecord(int id) {
+    return new IndexableRecord(new Key(INDEX, TYPE, String.valueOf(id)), String.valueOf(id), null);
+  }
+
   private static SinkRecord sinkRecord() {
-    return new SinkRecord("topic", 0, Schema.STRING_SCHEMA, "key", Schema.INT32_SCHEMA, 0, 0L);
+    return new SinkRecord(INDEX, 0, Schema.STRING_SCHEMA, "key", Schema.INT32_SCHEMA, 0, 0L);
+  }
+
+  private static Map<IndexableRecord, BulkResultItem> getFailedRecords(Integer... ids) {
+    JestResult jestResult = new JestResult(new Gson());
+    JsonObject result = new JsonObject();
+    JsonArray array = new JsonArray();
+
+    for (Integer id : ids) {
+      JsonObject error = new JsonObject();
+      error.addProperty("type", "awful error");
+      error.addProperty("reason", "you write bad code");
+
+      JsonObject values = new JsonObject();
+      values.addProperty("_index", INDEX);
+      values.addProperty("_type", TYPE);
+      values.addProperty("_id", id.toString());
+      values.addProperty("status", 404);
+      values.addProperty("version", 0);
+      values.add("error", error);
+
+      JsonObject bulkItemResult = new JsonObject();
+      bulkItemResult.add("operation", values);
+
+      array.add(bulkItemResult);
+    }
+
+    result.add("items", array);
+
+    jestResult.setJsonObject(result);
+
+    Map<IndexableRecord, BulkResultItem> failedRecords = new HashMap<>();
+    BulkResult bulkResult = new BulkResult(jestResult);
+    List<BulkResultItem> items = bulkResult.getFailedItems();
+    for (int i = 0; i < ids.length; i++) {
+      Integer id = ids[i];
+      failedRecords.put(indexableRecord(id), items.get(i));
+    }
+
+    return failedRecords;
   }
 }
