@@ -446,8 +446,20 @@ public class BulkProcessorTest {
     bulkProcessor.add(43, addTimeoutMs);
 
     Runnable farmer = bulkProcessor.farmerTask();
-    ConnectException e = assertThrows(
-            ConnectException.class, () -> farmer.run());
+    ConnectException e = assertThrows(ConnectException.class, () -> {
+        farmer.run();
+        // There's a small race condition in the farmer task where a failure on a batch thread
+        // causes the stopRequested flag of the BulkProcessor to get set, and subsequently checked
+        // on the farmer task thread, before the batch thread has time to actually complete and
+        // throw an exception. When this happens, the invocation of farmer::run does not throw an
+        // exception. However, we can still verify that a batch failed and that the bulk processor
+        // is in the expected state by invoking BulkProcessor::throwIfFailed, which throws the first
+        // error encountered on any batch thread. Even if the aforementioned race condition occurs,
+        // the error should still have been captured by the bulk processor and if it is not present
+        // by this point, it is a legitimate sign of a bug in the processor instead of a benign race
+        // condition that just makes testing a little more complicated.
+        bulkProcessor.throwIfFailed();
+    });
     assertThat(e.getMessage(), containsString(errorInfo));
   }
 
