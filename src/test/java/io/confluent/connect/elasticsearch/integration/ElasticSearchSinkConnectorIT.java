@@ -300,7 +300,7 @@ public class ElasticSearchSinkConnectorIT extends BaseConnectorIT {
     props.put(TASKS_MAX_CONFIG, MAX_TASKS);
     props.put(ElasticsearchSinkConnectorConfig.TYPE_NAME_CONFIG, "kafka-connect");
     props.put(ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG, container.getConnectionUrl());
-    props.put(ElasticsearchSinkConnectorConfig.KEY_IGNORE_CONFIG, "true");
+    props.put(ElasticsearchSinkConnectorConfig.IGNORE_KEY_CONFIG, "true");
     props.put(ElasticsearchSinkConnectorConfig.MAX_RETRIES_CONFIG, "10");
     props.put("value.converter", JsonConverter.class.getName());
     props.put(ElasticsearchSinkConnectorConfig.CONNECTION_USERNAME_CONFIG, "elastic");

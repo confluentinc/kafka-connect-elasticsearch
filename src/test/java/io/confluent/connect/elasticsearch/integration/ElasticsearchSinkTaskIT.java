@@ -15,6 +15,8 @@
 
 package io.confluent.connect.elasticsearch.integration;
 
+import static org.mockito.Mockito.mock;
+
 import io.confluent.common.utils.IntegrationTest;
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig;
 import io.confluent.connect.elasticsearch.ElasticsearchSinkTask;
@@ -27,6 +29,7 @@ import java.util.Map;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.sink.SinkRecord;
+import org.apache.kafka.connect.sink.SinkTaskContext;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -42,6 +45,7 @@ public class ElasticsearchSinkTaskIT extends ElasticsearchIntegrationTestBase {
   public void beforeEach() {
     MDC.put("connector.context", "[MyConnector|task1] ");
     Map<String, String> props = createProps();
+    task.initialize(mock(SinkTaskContext.class));
     task.start(props, client);
   }
 
@@ -59,7 +63,7 @@ public class ElasticsearchSinkTaskIT extends ElasticsearchIntegrationTestBase {
     props.put(ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG, container.getConnectionUrl());
     props.put(ElasticsearchSinkConnectorConfig.CONNECTION_USERNAME_CONFIG, "elastic");
     props.put(ElasticsearchSinkConnectorConfig.CONNECTION_PASSWORD_CONFIG, "elastic");
-    props.put(ElasticsearchSinkConnectorConfig.KEY_IGNORE_CONFIG, "true");
+    props.put(ElasticsearchSinkConnectorConfig.IGNORE_KEY_CONFIG, "true");
     return props;
   }
 

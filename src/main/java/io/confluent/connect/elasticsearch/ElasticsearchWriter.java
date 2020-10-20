@@ -18,6 +18,7 @@ package io.confluent.connect.elasticsearch;
 import io.confluent.connect.elasticsearch.bulk.BulkProcessor;
 import org.apache.kafka.common.utils.SystemTime;
 import org.apache.kafka.connect.errors.ConnectException;
+import org.apache.kafka.connect.sink.ErrantRecordReporter;
 import org.apache.kafka.connect.sink.SinkRecord;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -52,7 +53,6 @@ public class ElasticsearchWriter {
   private final DataConverter converter;
 
   private final Set<String> existingMappings;
-  private final BehaviorOnMalformedDoc behaviorOnMalformedDoc;
 
   ElasticsearchWriter(
       ElasticsearchClient client,
@@ -72,7 +72,8 @@ public class ElasticsearchWriter {
       long retryBackoffMs,
       boolean dropInvalidMessage,
       BehaviorOnNullValues behaviorOnNullValues,
-      BehaviorOnMalformedDoc behaviorOnMalformedDoc
+      BehaviorOnMalformedDoc behaviorOnMalformedDoc,
+      ErrantRecordReporter reporter
   ) {
     this.client = client;
     this.type = type;
@@ -85,7 +86,6 @@ public class ElasticsearchWriter {
     this.dropInvalidMessage = dropInvalidMessage;
     this.behaviorOnNullValues = behaviorOnNullValues;
     this.converter = new DataConverter(useCompactMapEntries, behaviorOnNullValues);
-    this.behaviorOnMalformedDoc = behaviorOnMalformedDoc;
 
     bulkProcessor = new BulkProcessor<>(
         new SystemTime(),
@@ -96,7 +96,8 @@ public class ElasticsearchWriter {
         lingerMs,
         maxRetries,
         retryBackoffMs,
-        behaviorOnMalformedDoc
+        behaviorOnMalformedDoc,
+        reporter
     );
 
     existingMappings = new HashSet<>();
@@ -121,6 +122,7 @@ public class ElasticsearchWriter {
     private boolean dropInvalidMessage;
     private BehaviorOnNullValues behaviorOnNullValues = BehaviorOnNullValues.DEFAULT;
     private BehaviorOnMalformedDoc behaviorOnMalformedDoc;
+    private ErrantRecordReporter reporter;
 
     public Builder(ElasticsearchClient client) {
       this.client = client;
@@ -210,6 +212,11 @@ public class ElasticsearchWriter {
       return this;
     }
 
+    public Builder setErrantRecordReporter(ErrantRecordReporter reporter) {
+      this.reporter = reporter;
+      return this;
+    }
+
     public ElasticsearchWriter build() {
       return new ElasticsearchWriter(
           client,
@@ -229,7 +236,8 @@ public class ElasticsearchWriter {
           retryBackoffMs,
           dropInvalidMessage,
           behaviorOnNullValues,
-          behaviorOnMalformedDoc
+          behaviorOnMalformedDoc,
+          reporter
       );
     }
   }
@@ -315,7 +323,7 @@ public class ElasticsearchWriter {
               sinkRecord.kafkaPartition(),
               sinkRecord.kafkaOffset()
       );
-      bulkProcessor.add(record, flushTimeoutMs);
+      bulkProcessor.add(record, sinkRecord, flushTimeoutMs);
     }
   }
 

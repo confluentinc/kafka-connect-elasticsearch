@@ -39,6 +39,7 @@ import io.searchbox.client.config.HttpClientConfig;
 import io.searchbox.cluster.NodesInfo;
 import io.searchbox.core.Bulk;
 import io.searchbox.core.BulkResult;
+import io.searchbox.core.BulkResult.BulkResultItem;
 import io.searchbox.core.Delete;
 import io.searchbox.core.DocumentResult;
 import io.searchbox.core.Index;
@@ -50,6 +51,8 @@ import io.searchbox.indices.DeleteIndex;
 import io.searchbox.indices.IndicesExists;
 import io.searchbox.indices.Refresh;
 import io.searchbox.indices.mapping.PutMapping;
+import java.util.HashMap;
+import java.util.Objects;
 import javax.net.ssl.HostnameVerifier;
 import org.apache.http.HttpHost;
 import org.apache.http.auth.AuthScope;
@@ -60,9 +63,7 @@ import org.apache.kafka.common.config.ConfigDef;
 import org.apache.http.conn.ssl.SSLConnectionSocketFactory;
 import org.apache.http.nio.conn.ssl.SSLIOSessionStrategy;
 import org.apache.kafka.common.config.ConfigException;
-import org.apache.kafka.common.config.types.Password;
 import org.apache.kafka.common.network.Mode;
-import org.apache.kafka.common.security.ssl.DefaultSslEngineFactory;
 import org.apache.kafka.common.security.ssl.SslFactory;
 import org.apache.kafka.common.utils.SystemTime;
 import org.apache.kafka.common.utils.Time;
@@ -155,13 +156,10 @@ public class JestElasticsearchClient implements ElasticsearchClient {
       factory.setHttpClientConfig(getClientConfig(config));
       this.client = factory.getObject();
       this.version = getServerVersion();
-      this.writeMethod = WriteMethod.forValue(
-              config.getString(ElasticsearchSinkConnectorConfig.WRITE_METHOD_CONFIG));
-      this.retryBackoffMs =
-              config.getLong(ElasticsearchSinkConnectorConfig.RETRY_BACKOFF_MS_CONFIG);
-      this.maxRetries = config.getInt(ElasticsearchSinkConnectorConfig.MAX_RETRIES_CONFIG);
-      this.timeout = config.getInt(ElasticsearchSinkConnectorConfig.READ_TIMEOUT_MS_CONFIG);
-
+      this.writeMethod = config.writeMethod();
+      this.retryBackoffMs = config.retryBackoffMs();
+      this.maxRetries = config.maxRetries();
+      this.timeout = config.readTimeoutMs();
     } catch (IOException e) {
       throw new ConnectException(
           "Couldn't start ElasticsearchSinkTask due to connection error:",
@@ -177,89 +175,59 @@ public class JestElasticsearchClient implements ElasticsearchClient {
 
   // Visible for Testing
   public static HttpClientConfig getClientConfig(ElasticsearchSinkConnectorConfig config) {
-    final int connTimeout = config.getInt(
-        ElasticsearchSinkConnectorConfig.CONNECTION_TIMEOUT_MS_CONFIG);
-    final int readTimeout = config.getInt(
-        ElasticsearchSinkConnectorConfig.READ_TIMEOUT_MS_CONFIG);
-    final int maxIdleTime = config.getInt(
-        ElasticsearchSinkConnectorConfig.MAX_CONNECTION_IDLE_TIME_MS_CONFIG);
-    final String username = config.getString(
-        ElasticsearchSinkConnectorConfig.CONNECTION_USERNAME_CONFIG);
-    final Password password = config.getPassword(
-        ElasticsearchSinkConnectorConfig.CONNECTION_PASSWORD_CONFIG);
-    List<String> address = config.getList(
-        ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG);
 
-    final boolean compressionEnabled = config.getBoolean(
-            ElasticsearchSinkConnectorConfig.CONNECTION_COMPRESSION_CONFIG);
-
-    final int maxInFlightRequests = config.getInt(
-        ElasticsearchSinkConnectorConfig.MAX_IN_FLIGHT_REQUESTS_CONFIG);
-
+    Set<String> addresses = config.connectionUrls();
     HttpClientConfig.Builder builder =
-        new HttpClientConfig.Builder(address)
-            .connTimeout(connTimeout)
-            .readTimeout(readTimeout)
-            .requestCompressionEnabled(compressionEnabled)
-            .defaultMaxTotalConnectionPerRoute(maxInFlightRequests)
-            .maxConnectionIdleTime(maxIdleTime, TimeUnit.MILLISECONDS)
+        new HttpClientConfig.Builder(addresses)
+            .connTimeout(config.connectionTimeoutMs())
+            .readTimeout(config.readTimeoutMs())
+            .requestCompressionEnabled(config.compression())
+            .defaultMaxTotalConnectionPerRoute(config.maxInFlightRequests())
+            .maxConnectionIdleTime(config.maxIdleTimeMs(), TimeUnit.MILLISECONDS)
             .multiThreaded(true);
-    if (username != null && password != null) {
-      builder.defaultCredentials(username, password.value())
-          .preemptiveAuthTargetHosts(address.stream()
-              .map(addr -> HttpHost.create(addr)).collect(Collectors.toSet()));
+    if (config.isAuthenticatedConnection()) {
+      builder.defaultCredentials(config.username(), config.password().value())
+          .preemptiveAuthTargetHosts(
+              addresses.stream().map(addr -> HttpHost.create(addr)).collect(Collectors.toSet())
+        );
     }
 
     configureProxy(config, builder);
 
     if (config.secured()) {
-      log.info("Using secured connection to {}", address);
+      log.info("Using secured connection to {}", addresses);
       configureSslContext(builder, config);
     } else {
-      log.info("Using unsecured connection to {}", address);
+      log.info("Using unsecured connection to {}", addresses);
     }
     return builder.build();
   }
 
-  private static void configureProxy(ElasticsearchSinkConnectorConfig config,
-      HttpClientConfig.Builder builder) {
+  private static void configureProxy(
+      ElasticsearchSinkConnectorConfig config,
+      HttpClientConfig.Builder builder
+  ) {
 
     if (config.isBasicProxyConfigured()) {
-      HttpHost proxy = new HttpHost(
-          config.getString(ElasticsearchSinkConnectorConfig.PROXY_HOST_CONFIG),
-          config.getInt(ElasticsearchSinkConnectorConfig.PROXY_PORT_CONFIG)
-      );
-
+      HttpHost proxy = new HttpHost(config.proxyHost(), config.proxyPort());
       builder.proxy(proxy);
 
       if (config.isProxyWithAuthenticationConfigured()) {
-        final String username = config.getString(
-            ElasticsearchSinkConnectorConfig.CONNECTION_USERNAME_CONFIG);
-        final Password password = config.getPassword(
-            ElasticsearchSinkConnectorConfig.CONNECTION_PASSWORD_CONFIG);
 
         CredentialsProvider credentialsProvider = new BasicCredentialsProvider();
-        if (username != null && password != null) {
-
-          List<String> addresses = config.getList(
-              ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG);
-
-          addresses.forEach(
+        if (config.isAuthenticatedConnection()) {
+          config.connectionUrls().forEach(
               addr ->
                   credentialsProvider.setCredentials(
                       new AuthScope(new HttpHost(addr)),
-                      new UsernamePasswordCredentials(username, password.value())
+                      new UsernamePasswordCredentials(config.username(), config.password().value())
                   )
           );
         }
 
-        final String proxyUsername = config.getString(
-            ElasticsearchSinkConnectorConfig.PROXY_USERNAME_CONFIG);
-        final Password proxyPassword = config.getPassword(
-            ElasticsearchSinkConnectorConfig.PROXY_PASSWORD_CONFIG);
         credentialsProvider.setCredentials(
             new AuthScope(proxy),
-            new UsernamePasswordCredentials(proxyUsername, proxyPassword.value())
+            new UsernamePasswordCredentials(config.proxyUsername(), config.proxyPassword().value())
         );
 
         builder.credentialsProvider(credentialsProvider);
@@ -267,12 +235,51 @@ public class JestElasticsearchClient implements ElasticsearchClient {
     }
   }
 
-  private static void configureSslContext(HttpClientConfig.Builder builder,
-                                            ElasticsearchSinkConnectorConfig config) {
+  private static void configureSslContext(
+      HttpClientConfig.Builder builder,
+      ElasticsearchSinkConnectorConfig config
+  ) {
     SslFactory kafkaSslFactory = new SslFactory(Mode.CLIENT, null, false);
     kafkaSslFactory.configure(config.sslConfigs());
-    SSLContext sslContext = ((DefaultSslEngineFactory)kafkaSslFactory.sslEngineFactory())
-        .sslContext();
+
+    SSLContext sslContext;
+    try {
+      // try AK <= 2.2 first
+      sslContext =
+          (SSLContext) SslFactory.class.getDeclaredMethod("sslContext").invoke(kafkaSslFactory);
+      log.debug("Using AK 2.2 SslFactory methods.");
+    } catch (Exception e) {
+      // must be running AK 2.3+
+      log.debug("Could not find AK 2.2 SslFactory methods. Trying AK 2.3+ methods for SslFactory.");
+
+      Object sslEngine;
+      try {
+        // try AK <= 2.6 second
+        sslEngine = SslFactory.class.getDeclaredMethod("sslEngineBuilder").invoke(kafkaSslFactory);
+        log.debug("Using AK 2.2-2.5 SslFactory methods.");
+
+      } catch (Exception ex) {
+        // must be running AK 2.6+
+        log.debug(
+            "Could not find Ak 2.3-2.5 methods for SslFactory."
+                + " Trying AK 2.6+ methods for SslFactory."
+        );
+        try {
+          sslEngine =
+              SslFactory.class.getDeclaredMethod("sslEngineFactory").invoke(kafkaSslFactory);
+          log.debug("Using AK 2.6+ SslFactory methods.");
+        } catch (Exception exc) {
+          throw new ConnectException("Failed to find methods for SslFactory.", exc);
+        }
+      }
+
+      try {
+        sslContext =
+            (SSLContext) sslEngine.getClass().getDeclaredMethod("sslContext").invoke(sslEngine);
+      } catch (Exception ex) {
+        throw new ConnectException("Could not create SSLContext.", ex);
+      }
+    }
 
     HostnameVerifier hostnameVerifier = config.shouldDisableHostnameVerification()
             ? (hostname, session) -> true
@@ -305,6 +312,11 @@ public class JestElasticsearchClient implements ElasticsearchClient {
     JsonObject result = client.execute(info).getJsonObject();
     if (result == null) {
       LOG.warn("Couldn't get Elasticsearch version (result is null); assuming {}", defaultVersion);
+      return defaultVersion;
+    }
+    if (!result.has("nodes")) {
+      LOG.warn("Couldn't get Elasticsearch version from result {} (result has no nodes). "
+          + "Assuming {}.", result, defaultVersion);
       return defaultVersion;
     }
 
@@ -527,7 +539,7 @@ public class JestElasticsearchClient implements ElasticsearchClient {
     for (IndexableRecord record : batch) {
       builder.addAction(toBulkableAction(record));
     }
-    return new JestBulkRequest(builder.build());
+    return new JestBulkRequest(builder.build(), batch);
   }
 
   // visible for testing
@@ -609,7 +621,27 @@ public class JestElasticsearchClient implements ElasticsearchClient {
 
     final String errorInfo = errors.isEmpty() ? result.getErrorMessage() : errors.toString();
 
-    return BulkResponse.failure(retriable, errorInfo);
+    Map<IndexableRecord, BulkResultItem> failedResponses = new HashMap<>();
+    List<BulkResultItem> items = result.getItems();
+    List<IndexableRecord> records = ((JestBulkRequest) bulk).records();
+    for (int i = 0; i < items.size() && i < records.size() ; i++) {
+      BulkResultItem item = items.get(i);
+      IndexableRecord record = records.get(i);
+      if (item.error != null && Objects.equals(item.id, record.key.id)) {
+        // sanity check matching IDs
+        failedResponses.put(record, item);
+      }
+    }
+
+    if (items.size() != records.size()) {
+      log.error(
+          "Elasticsearch bulk response size ({}) does not correspond to records sent ({})",
+          ((JestBulkRequest) bulk).records().size(),
+          items.size()
+      );
+    }
+
+    return BulkResponse.failure(retriable, errorInfo, failedResponses);
   }
 
   // For testing purposes
@@ -666,10 +698,6 @@ public class JestElasticsearchClient implements ElasticsearchClient {
 
     public static String[] names() {
       return new String[] {INSERT.toString(), UPSERT.toString()};
-    }
-
-    public static WriteMethod forValue(String value) {
-      return valueOf(value.toUpperCase(Locale.ROOT));
     }
 
     @Override

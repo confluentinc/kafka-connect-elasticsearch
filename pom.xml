@@ -1,17 +1,16 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<project xmlns="http://maven.apache.org/POM/4.0.0"
-         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
         <groupId>io.confluent</groupId>
         <artifactId>common</artifactId>
-        <version>6.0.0-SNAPSHOT</version>
+        <version>6.0.0</version>
     </parent>
 
     <groupId>io.confluent</groupId>
     <artifactId>kafka-connect-elasticsearch</artifactId>
+    <version>10.1.0-SNAPSHOT</version>
     <packaging>jar</packaging>
     <name>kafka-connect-elasticsearch</name>
     <organization>
@@ -47,6 +46,7 @@
         <test.containers.version>1.11.4</test.containers.version>
         <kafka.connect.maven.plugin.version>0.11.1</kafka.connect.maven.plugin.version>
         <confluent.maven.repo>http://packages.confluent.io/maven/</confluent.maven.repo>
+        <maven.release.plugin.version>2.5.3</maven.release.plugin.version>
     </properties>
 
     <repositories>
@@ -137,6 +137,12 @@
             <type>test-jar</type>
             <scope>test</scope>
         </dependency>
+        <!-- Use a repackaged version of log4j with security patches. Default log4j v1.2 is a transitive dependency of connect-runtime, but it is excluded in common/pom.xml -->
+        <dependency>
+            <groupId>io.confluent</groupId>
+            <artifactId>confluent-log4j</artifactId>
+            <scope>test</scope>
+        </dependency>
         <dependency>
             <groupId>org.apache.kafka</groupId>
             <artifactId>connect-runtime</artifactId>
@@ -191,7 +197,7 @@
                         </goals>
                         <configuration>
                             <title>Kafka Connect Elasticsearch</title>
-                            <documentationUrl>https://docs.confluent.io/${project.version}/connect/connect-elasticsearch/docs/index.html</documentationUrl>
+                            <documentationUrl>https://docs.confluent.io/${confluent.version}/connect/connect-elasticsearch/docs/index.html</documentationUrl>
                             <description>
                                 The Elasticsearch connector allows moving data from Kafka to Elasticsearch 2.x, 5.x, 6.x, and 7.x. It writes data from a topic in Kafka to an index in Elasticsearch and all data for a topic have the same type.
 
@@ -211,10 +217,6 @@
                             <ownerName>Confluent, Inc.</ownerName>
                             <ownerUrl>https://confluent.io/</ownerUrl>
                             <ownerLogo>logos/confluent.png</ownerLogo>
-
-                            <dockerNamespace>confluentinc</dockerNamespace>
-                            <dockerName>cp-kafka-connect</dockerName>
-                            <dockerTag>${project.version}</dockerTag>
 
                             <componentTypes>
                                 <componentType>sink</componentType>
@@ -294,6 +296,16 @@
                     </execution>
                 </executions>
             </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-release-plugin</artifactId>
+                <version>${maven.release.plugin.version}</version>
+                <configuration>
+                    <autoVersionSubmodules>true</autoVersionSubmodules>
+                    <remoteTagging>false</remoteTagging>
+                    <tagNameFormat>v@{project.version}</tagNameFormat>
+                </configuration>
+            </plugin>
         </plugins>
 
         <resources>
@@ -365,7 +377,7 @@
                                         <argument>-l ${project.build.directory}/${project.build.finalName}-package/share/doc/kafka-connect-elasticsearch/licenses</argument>
                                         <argument>-n ${project.build.directory}/${project.build.finalName}-package/share/doc/kafka-connect-elasticsearch/notices</argument>
                                         <argument>-t ${project.name}</argument>
-                                        <argument>-x licenses-${project.version}.jar</argument>
+                                        <argument>-x licenses-${confluent.version}.jar</argument>
                                     </arguments>
                                 </configuration>
                                 <phase>package</phase>
@@ -386,7 +398,7 @@
                             <dependency>
                                 <groupId>io.confluent</groupId>
                                 <artifactId>licenses</artifactId>
-                                <version>${project.version}</version>
+                                <version>${confluent.version}</version>
                             </dependency>
                         </dependencies>
                     </plugin>
@@ -415,7 +427,7 @@
                                         <argument>-l ${project.basedir}/licenses</argument>
                                         <argument>-n ${project.basedir}/notices</argument>
                                         <argument>-t ${project.name}</argument>
-                                        <argument>-x licenses-${project.version}.jar</argument>
+                                        <argument>-x licenses-${confluent.version}.jar</argument>
                                     </arguments>
                                 </configuration>
                                 <phase>package</phase>
@@ -436,7 +448,7 @@
                             <dependency>
                                 <groupId>io.confluent</groupId>
                                 <artifactId>licenses</artifactId>
-                                <version>${project.version}</version>
+                                <version>${confluent.version}</version>
                             </dependency>
                         </dependencies>
                     </plugin>
