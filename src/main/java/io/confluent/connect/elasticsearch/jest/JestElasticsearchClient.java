@@ -85,6 +85,8 @@ public class JestElasticsearchClient implements ElasticsearchClient {
       = "version_conflict_engine_exception";
   protected static final String ALL_FIELD_PARAM
       = "_all";
+  protected static final String RESOURCE_ALREADY_EXISTS_EXCEPTION
+      = "resource_already_exists_exception";
 
   private static final Logger LOG = LoggerFactory.getLogger(JestElasticsearchClient.class);
 
@@ -402,8 +404,11 @@ public class JestElasticsearchClient implements ElasticsearchClient {
       JestResult result = client.execute(createIndex);
       log.debug("Received response for request to create index '{}'", index);
       if (!result.isSucceeded()) {
+        boolean exists = result.getErrorMessage().contains(RESOURCE_ALREADY_EXISTS_EXCEPTION)
+            || indexExists(index);
+
         // Check if index was created by another client
-        if (!indexExists(index)) {
+        if (!exists) {
           String msg =
               result.getErrorMessage() != null ? ": " + result.getErrorMessage() : "";
           throw new ConnectException("Could not create index '" + index + "'" + msg);
