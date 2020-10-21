@@ -15,14 +15,21 @@
 
 package io.confluent.connect.elasticsearch;
 
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.common.config.ConfigDef;
+import org.apache.kafka.common.config.ConfigDef.CaseInsensitiveValidString;
 import org.apache.kafka.common.config.ConfigDef.Importance;
 import org.apache.kafka.common.config.ConfigDef.Type;
+import org.apache.kafka.common.config.ConfigDef.Validator;
 import org.apache.kafka.common.config.ConfigDef.Width;
 
 import java.util.Map;
@@ -103,7 +110,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
       + "space to be made available by completed requests as records are added. If this timeout "
       + "is exceeded the task will fail.";
   private static final String FLUSH_TIMEOUT_MS_DISPLAY = "Flush Timeout (ms)";
-  private static final int FLUSH_TIMEOUT_MS_DEFAULT = 10000;
+  private static final int FLUSH_TIMEOUT_MS_DEFAULT = (int) TimeUnit.SECONDS.toMillis(10);
 
   public static final String MAX_RETRIES_CONFIG = "max.retries";
   private static final String MAX_RETRIES_DOC =
@@ -135,7 +142,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
       + "in milliseconds before dropping an idle connection to prevent "
       + "a read timeout.";
   private static final String MAX_CONNECTION_IDLE_TIME_MS_DISPLAY = "Max Connection Idle Time";
-  private static final int MAX_CONNECTION_IDLE_TIME_MS_DEFAULT = 60000;
+  private static final int MAX_CONNECTION_IDLE_TIME_MS_DEFAULT = (int) TimeUnit.MINUTES.toMillis(1);
 
   public static final String CONNECTION_TIMEOUT_MS_CONFIG = "connection.timeout.ms";
   private static final String CONNECTION_TIMEOUT_MS_CONFIG_DOC = "How long to wait "
@@ -143,7 +150,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
       + "The task fails if the client fails to connect to the server in this "
       + "interval, and will need to be restarted.";
   private static final String CONNECTION_TIMEOUT_MS_DISPLAY = "Connection Timeout";
-  private static final int CONNECTION_TIMEOUT_MS_DEFAULT = 1000;
+  private static final int CONNECTION_TIMEOUT_MS_DEFAULT = (int) TimeUnit.SECONDS.toMillis(1);
 
   public static final String READ_TIMEOUT_MS_CONFIG = "read.timeout.ms";
   private static final String READ_TIMEOUT_MS_CONFIG_DOC = "How long to wait in "
@@ -151,7 +158,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
       + "if any read operation times out, and will need to be restarted to resume "
       + "further operations.";
   private static final String READ_TIMEOUT_MS_DISPLAY = "Read Timeout";
-  private static final int READ_TIMEOUT_MS_DEFAULT = 3000;
+  private static final int READ_TIMEOUT_MS_DEFAULT = (int) TimeUnit.SECONDS.toMillis(3);
 
   public static final String CREATE_INDICES_AT_START_CONFIG = "auto.create.indices.at.start";
   private static final String CREATE_INDICES_AT_START_DOC = "Auto create the Elasticsearch"
@@ -310,6 +317,8 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
         .define(
             CONNECTION_URL_CONFIG,
             Type.LIST,
+            ConfigDef.NO_DEFAULT_VALUE,
+            new UrlListValidator(),
             Importance.HIGH,
             CONNECTION_URL_DOC,
             CONNECTOR_GROUP,
@@ -340,6 +349,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
             BATCH_SIZE_CONFIG,
             Type.INT,
             BATCH_SIZE_DEFAULT,
+            between(1, 1000000),
             Importance.MEDIUM,
             BATCH_SIZE_DOC,
             CONNECTOR_GROUP,
@@ -350,6 +360,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
             MAX_IN_FLIGHT_REQUESTS_CONFIG,
             Type.INT,
             MAX_IN_FLIGHT_REQUESTS_DEFAULT,
+            between(1, 1000),
             Importance.MEDIUM,
             MAX_IN_FLIGHT_REQUESTS_DOC,
             CONNECTOR_GROUP,
@@ -360,6 +371,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
             MAX_BUFFERED_RECORDS_CONFIG,
             Type.INT,
             MAX_BUFFERED_RECORDS_DEFAULT,
+            between(1, Integer.MAX_VALUE),
             Importance.LOW,
             MAX_BUFFERED_RECORDS_DOC,
             CONNECTOR_GROUP,
@@ -370,6 +382,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
             LINGER_MS_CONFIG,
             Type.LONG,
             LINGER_MS_DEFAULT,
+            between(0, TimeUnit.DAYS.toMillis(7)),
             Importance.LOW,
             LINGER_MS_DOC,
             CONNECTOR_GROUP,
@@ -380,6 +393,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
             FLUSH_TIMEOUT_MS_CONFIG,
             Type.LONG,
             FLUSH_TIMEOUT_MS_DEFAULT,
+            between(TimeUnit.SECONDS.toMillis(1), Long.MAX_VALUE),
             Importance.LOW,
             FLUSH_TIMEOUT_MS_DOC,
             CONNECTOR_GROUP,
@@ -390,6 +404,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
             MAX_RETRIES_CONFIG,
             Type.INT,
             MAX_RETRIES_DEFAULT,
+            between(0, Integer.MAX_VALUE),
             Importance.LOW,
             MAX_RETRIES_DOC,
             CONNECTOR_GROUP,
@@ -400,6 +415,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
             RETRY_BACKOFF_MS_CONFIG,
             Type.LONG,
             RETRY_BACKOFF_MS_DEFAULT,
+            between(0, TimeUnit.DAYS.toMillis(1)),
             Importance.LOW,
             RETRY_BACKOFF_MS_DOC,
             CONNECTOR_GROUP,
@@ -420,6 +436,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
             MAX_CONNECTION_IDLE_TIME_MS_CONFIG,
             Type.INT,
             MAX_CONNECTION_IDLE_TIME_MS_DEFAULT,
+            between(-1, TimeUnit.DAYS.toMillis(1)),
             Importance.LOW,
             MAX_CONNECTION_IDLE_TIME_MS_CONFIG_DOC,
             CONNECTOR_GROUP,
@@ -430,6 +447,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
             CONNECTION_TIMEOUT_MS_CONFIG,
             Type.INT,
             CONNECTION_TIMEOUT_MS_DEFAULT,
+            between(0, TimeUnit.HOURS.toMillis(12)),
             Importance.LOW,
             CONNECTION_TIMEOUT_MS_CONFIG_DOC,
             CONNECTOR_GROUP,
@@ -440,6 +458,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
             READ_TIMEOUT_MS_CONFIG,
             Type.INT,
             READ_TIMEOUT_MS_DEFAULT,
+            between(0, TimeUnit.DAYS.toMillis(7)),
             Importance.LOW,
             READ_TIMEOUT_MS_CONFIG_DOC,
             CONNECTOR_GROUP,
@@ -632,6 +651,12 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
         SECURITY_PROTOCOL_CONFIG,
         Type.STRING,
         SECURITY_PROTOCOL_DEFAULT,
+        CaseInsensitiveValidString.in(
+            Arrays.stream(SecurityProtocol.values())
+                .map(SecurityProtocol::name)
+                .collect(Collectors.toList())
+                .toArray(new String[SecurityProtocol.values().length])
+        ),
         Importance.MEDIUM,
         SECURITY_PROTOCOL_DOC,
         SSL_GROUP,
@@ -671,8 +696,8 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   }
 
   public boolean shouldDisableHostnameVerification() {
-    String sslEndpointIdentificationAlgorithm = getString(
-        SSL_CONFIG_PREFIX + SSL_ENDPOINT_IDENTIFICATION_ALGORITHM_CONFIG);
+    String sslEndpointIdentificationAlgorithm =
+        getString(SSL_CONFIG_PREFIX + SSL_ENDPOINT_IDENTIFICATION_ALGORITHM_CONFIG);
     return sslEndpointIdentificationAlgorithm != null
         && sslEndpointIdentificationAlgorithm.isEmpty();
   }
@@ -843,6 +868,29 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
             )
         );
       }
+    }
+  }
+
+  private static class UrlListValidator implements Validator {
+
+    @Override
+    public void ensureValid(String name, Object value) {
+      @SuppressWarnings("unchecked")
+      List<String> urls = (List<String>) value;
+      for (String url : urls) {
+        try {
+          new URI(url);
+        } catch (URISyntaxException e) {
+          throw new ConfigException(
+              name, value, "The provided url '" + url + "' is not a valid url."
+          );
+        }
+      }
+    }
+
+    @Override
+    public String toString() {
+      return "List of valid URIs.";
     }
   }
 
