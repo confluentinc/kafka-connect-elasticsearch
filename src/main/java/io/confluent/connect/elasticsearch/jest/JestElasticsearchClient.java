@@ -75,6 +75,8 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import javax.net.ssl.SSLContext;
 
+import static org.apache.kafka.connect.runtime.ConnectorConfig.TASKS_MAX_CONFIG;
+
 public class JestElasticsearchClient implements ElasticsearchClient {
   private static final Logger log = LoggerFactory.getLogger(JestElasticsearchClient.class);
 
@@ -102,6 +104,7 @@ public class JestElasticsearchClient implements ElasticsearchClient {
   private int maxRetries;
   private long retryBackoffMs;
   private final Time time = new SystemTime();
+  private int retryOnConflict;
 
   // visible for testing
   public JestElasticsearchClient(JestClient client) {
@@ -154,6 +157,8 @@ public class JestElasticsearchClient implements ElasticsearchClient {
       this.retryBackoffMs = config.retryBackoffMs();
       this.maxRetries = config.maxRetries();
       this.timeout = config.readTimeoutMs();
+      this.retryOnConflict = Integer.parseInt(props.get(TASKS_MAX_CONFIG));
+
     } catch (IOException e) {
       throw new ConnectException(
           "Couldn't start ElasticsearchSinkTask due to connection error:",
@@ -539,11 +544,14 @@ public class JestElasticsearchClient implements ElasticsearchClient {
   private Update toUpdateRequest(IndexableRecord record) {
     String payload = "{\"doc\":" + record.payload
         + ", \"doc_as_upsert\":true}";
-    return new Update.Builder(payload)
+    Update.Builder req = new Update.Builder(payload)
         .index(record.key.index)
         .type(record.key.type)
-        .id(record.key.id)
-        .build();
+        .id(record.key.id);
+    if (retryOnConflict > 0) {
+      req.setParameter("retry_on_conflict", retryOnConflict);
+    }
+    return req.build();
   }
 
   public BulkResponse executeBulk(BulkRequest bulk) throws IOException {

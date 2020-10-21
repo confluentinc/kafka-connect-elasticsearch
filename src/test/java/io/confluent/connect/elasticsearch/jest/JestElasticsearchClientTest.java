@@ -67,6 +67,7 @@ import java.util.Map;
 import java.util.Set;
 
 import static io.confluent.connect.elasticsearch.jest.JestElasticsearchClient.RESOURCE_ALREADY_EXISTS_EXCEPTION;
+import static org.apache.kafka.connect.runtime.ConnectorConfig.TASKS_MAX_CONFIG;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.equalTo;
@@ -113,6 +114,7 @@ public class JestElasticsearchClientTest {
   @Test
   public void connectsSecurely() {
     Map<String, String> props = new HashMap<>();
+    props.put(TASKS_MAX_CONFIG, "1");
     props.put(ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG, "http://localhost:9200");
     props.put(ElasticsearchSinkConnectorConfig.CONNECTION_USERNAME_CONFIG, "elastic");
     props.put(ElasticsearchSinkConnectorConfig.CONNECTION_PASSWORD_CONFIG, "elasticpw");
@@ -133,6 +135,7 @@ public class JestElasticsearchClientTest {
   @Test
   public void compressedConnectsSecurely() {
     Map<String, String> props = new HashMap<>();
+    props.put(TASKS_MAX_CONFIG, "1");
     props.put(ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG, "http://localhost:9200");
     props.put(ElasticsearchSinkConnectorConfig.CONNECTION_USERNAME_CONFIG, "elastic");
     props.put(ElasticsearchSinkConnectorConfig.CONNECTION_PASSWORD_CONFIG, "elasticpw");
@@ -149,6 +152,7 @@ public class JestElasticsearchClientTest {
   @Test
   public void connectsSecurelyWithEmptyUsernameAndPassword() {
     Map<String, String> props = new HashMap<>();
+    props.put(TASKS_MAX_CONFIG, "1");
     props.put(ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG, "http://localhost:9200");
     props.put(ElasticsearchSinkConnectorConfig.CONNECTION_USERNAME_CONFIG, "");
     props.put(ElasticsearchSinkConnectorConfig.CONNECTION_PASSWORD_CONFIG, "");
