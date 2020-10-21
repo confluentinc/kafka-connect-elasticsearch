@@ -123,8 +123,8 @@ public class ValidatorTest {
 
   @Test
   public void testInvalidLingerMs() {
-    props.put(LINGER_MS_CONFIG, "2");
-    props.put(FLUSH_TIMEOUT_MS_CONFIG, "1");
+    props.put(LINGER_MS_CONFIG, "1001");
+    props.put(FLUSH_TIMEOUT_MS_CONFIG, "1000");
     validator = new Validator(props);
 
     Config result = validator.validate();
@@ -134,8 +134,8 @@ public class ValidatorTest {
 
   @Test
   public void testValidLingerMs() {
-    props.put(LINGER_MS_CONFIG, "1");
-    props.put(FLUSH_TIMEOUT_MS_CONFIG, "2");
+    props.put(LINGER_MS_CONFIG, "999");
+    props.put(FLUSH_TIMEOUT_MS_CONFIG, "1000");
     validator = new Validator(props);
 
     Config result = validator.validate();
