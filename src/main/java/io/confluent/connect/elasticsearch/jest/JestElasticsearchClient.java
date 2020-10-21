@@ -154,7 +154,7 @@ public class JestElasticsearchClient implements ElasticsearchClient {
       this.writeMethod = config.writeMethod();
       this.retryBackoffMs = config.retryBackoffMs();
       this.maxRetries = config.maxRetries();
-      this.timeout = config.readTimeoutMs();;
+      this.timeout = config.readTimeoutMs();
       this.retryOnConflict = config.maxInFlightRequests();
 
     } catch (IOException e) {
