@@ -546,14 +546,12 @@ public class JestElasticsearchClient implements ElasticsearchClient {
   private Update toUpdateRequest(IndexableRecord record) {
     String payload = "{\"doc\":" + record.payload
         + ", \"doc_as_upsert\":true}";
-    Update.Builder req = new Update.Builder(payload)
+    return new Update.Builder(payload)
         .index(record.key.index)
         .type(record.key.type)
-        .id(record.key.id);
-    if (retryOnConflict > 0) {
-      req.setParameter("retry_on_conflict", retryOnConflict);
-    }
-    return req.build();
+        .id(record.key.id)
+        .setParameter("retry_on_conflict", retryOnConflict)
+        .build();
   }
 
   public BulkResponse executeBulk(BulkRequest bulk) throws IOException {
