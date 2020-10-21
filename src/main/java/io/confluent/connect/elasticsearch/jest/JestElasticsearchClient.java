@@ -75,9 +75,6 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import javax.net.ssl.SSLContext;
 
-import static org.apache.kafka.connect.runtime.ConnectorConfig.TASKS_MAX_CONFIG;
-import static org.apache.kafka.connect.runtime.ConnectorConfig.TASKS_MAX_DEFAULT;
-
 public class JestElasticsearchClient implements ElasticsearchClient {
   private static final Logger log = LoggerFactory.getLogger(JestElasticsearchClient.class);
 
@@ -157,9 +154,8 @@ public class JestElasticsearchClient implements ElasticsearchClient {
       this.writeMethod = config.writeMethod();
       this.retryBackoffMs = config.retryBackoffMs();
       this.maxRetries = config.maxRetries();
-      this.timeout = config.readTimeoutMs();
-      String tasksMax = props.get(TASKS_MAX_CONFIG);
-      this.retryOnConflict = (tasksMax == null) ? TASKS_MAX_DEFAULT : Integer.parseInt(tasksMax);
+      this.timeout = config.readTimeoutMs();;
+      this.retryOnConflict = config.maxInFlightRequests();
 
     } catch (IOException e) {
       throw new ConnectException(
