@@ -67,7 +67,6 @@ import java.util.Map;
 import java.util.Set;
 
 import static io.confluent.connect.elasticsearch.jest.JestElasticsearchClient.RESOURCE_ALREADY_EXISTS_EXCEPTION;
-import static org.apache.kafka.connect.runtime.ConnectorConfig.TASKS_MAX_CONFIG;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.equalTo;
