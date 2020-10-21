@@ -35,6 +35,7 @@ import io.searchbox.client.config.HttpClientConfig;
 import io.searchbox.cluster.NodesInfo;
 import io.searchbox.core.BulkResult;
 import io.searchbox.core.Delete;
+import io.searchbox.core.DocumentResult;
 import io.searchbox.core.Index;
 import io.searchbox.core.Search;
 import io.searchbox.core.SearchResult;
@@ -65,6 +66,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import static io.confluent.connect.elasticsearch.jest.JestElasticsearchClient.RESOURCE_ALREADY_EXISTS_EXCEPTION;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.equalTo;
@@ -205,6 +207,7 @@ public class JestElasticsearchClientTest {
     JestElasticsearchClient client = new JestElasticsearchClient(jestClient);
     JestResult failure = new JestResult(new Gson());
     failure.setSucceeded(false);
+    failure.setErrorMessage("unrelated error");
     IndicesExists indicesExists = new IndicesExists.Builder(INDEX).build();
     when(jestClient.execute(indicesExists)).thenReturn(failure);
     when(jestClient.execute(argThat(isCreateIndexForTestIndex()))).thenReturn(failure);
@@ -212,6 +215,28 @@ public class JestElasticsearchClientTest {
     Set<String> indices = new HashSet<>();
     indices.add(INDEX);
     client.createIndices(indices);
+  }
+
+  @Test
+  public void createIndexAlreadyExists() throws Exception {
+    JestElasticsearchClient client = new JestElasticsearchClient(jestClient);
+    JestResult failure = new JestResult(new Gson());
+    failure.setSucceeded(false);
+    failure.setErrorMessage(RESOURCE_ALREADY_EXISTS_EXCEPTION);
+    JestResult success = new JestResult(new Gson());
+    success.setSucceeded(true);
+    IndicesExists indicesExists = new IndicesExists.Builder(INDEX).build();
+    when(jestClient.execute(indicesExists)).thenReturn(failure);
+    when(jestClient.execute(argThat(isCreateIndexForTestIndex()))).thenReturn(success);
+
+    Set<String> indices = new HashSet<>();
+    indices.add(INDEX);
+    client.createIndices(indices);
+
+    InOrder inOrder = inOrder(jestClient);
+    inOrder.verify(jestClient).execute(info);
+    inOrder.verify(jestClient).execute(indicesExists);
+    inOrder.verify(jestClient).execute(argThat(isCreateIndexForTestIndex()));
   }
 
   @Test
@@ -350,7 +375,7 @@ public class JestElasticsearchClientTest {
   public void toBulkableAction(){
     JestElasticsearchClient client = new JestElasticsearchClient(jestClient);
     IndexableRecord del = new IndexableRecord(new Key("idx", "tp", "xxx"), null, 1L);
-    BulkableAction ba = client.toBulkableAction(del);
+    BulkableAction<DocumentResult> ba = client.toBulkableAction(del);
     assertNotNull(ba);
     assertSame(Delete.class, ba.getClass());
     assertEquals(del.key.index, ba.getIndex());
