@@ -156,7 +156,6 @@ public class JestElasticsearchClient implements ElasticsearchClient {
       this.maxRetries = config.maxRetries();
       this.timeout = config.readTimeoutMs();
       this.retryOnConflict = config.maxInFlightRequests();
-
     } catch (IOException e) {
       throw new ConnectException(
           "Couldn't start ElasticsearchSinkTask due to connection error:",
