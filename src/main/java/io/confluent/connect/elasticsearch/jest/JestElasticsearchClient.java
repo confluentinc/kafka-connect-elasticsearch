@@ -110,6 +110,7 @@ public class JestElasticsearchClient implements ElasticsearchClient {
   private int maxRetries;
   private long retryBackoffMs;
   private final Time time = new SystemTime();
+  private int retryOnConflict;
 
   // visible for testing
   public JestElasticsearchClient(JestClient client) {
@@ -162,6 +163,7 @@ public class JestElasticsearchClient implements ElasticsearchClient {
       this.retryBackoffMs = config.retryBackoffMs();
       this.maxRetries = config.maxRetries();
       this.timeout = config.readTimeoutMs();
+      this.retryOnConflict = config.maxInFlightRequests();
     } catch (IOException e) {
       throw new ConnectException(
           "Couldn't start ElasticsearchSinkTask due to connection error:",
@@ -585,6 +587,7 @@ public class JestElasticsearchClient implements ElasticsearchClient {
         .index(record.key.index)
         .type(record.key.type)
         .id(record.key.id)
+        .setParameter("retry_on_conflict", retryOnConflict)
         .build();
   }
 
