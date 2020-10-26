@@ -112,7 +112,29 @@ public class ElasticsearchConnectorBaseIT extends BaseConnectorIT {
     verifySearchResults(10);
   }
 
+  protected void writeRecords(int numRecords) {
+    for (int i  = 0; i < numRecords; i++) {
+      connect.kafka().produce(TOPIC, String.valueOf(i), String.format("{\"doc_num\":%d}", i));
+    }
+  }
+
   protected void verifySearchResults(int numRecords) throws Exception {
+    waitForRecords(numRecords);
+
+    final JsonObject result = client.search("", TOPIC, null);
+    final JsonArray rawHits = result.getAsJsonObject("hits").getAsJsonArray("hits");
+
+    assertEquals(numRecords, rawHits.size());
+
+    for (int i = 0; i < rawHits.size(); ++i) {
+      final JsonObject hitData = rawHits.get(i).getAsJsonObject();
+      final JsonObject source = hitData.get("_source").getAsJsonObject();
+      assertTrue(source.has("doc_num"));
+      assertTrue(source.get("doc_num").getAsInt() < numRecords);
+    }
+  }
+
+  protected void waitForRecords(int numRecords) throws InterruptedException {
     TestUtils.waitForCondition(
         () -> {
           try {
@@ -128,23 +150,5 @@ public class ElasticsearchConnectorBaseIT extends BaseConnectorIT {
         CONSUME_MAX_DURATION_MS,
         "Sufficient amount of document were not found in ES on time."
     );
-
-    final JsonObject result = client.search("", TOPIC, null);
-    final JsonArray rawHits = result.getAsJsonObject("hits").getAsJsonArray("hits");
-
-    assertEquals(numRecords, rawHits.size());
-
-    for (int i = 0; i < rawHits.size(); ++i) {
-      final JsonObject hitData = rawHits.get(i).getAsJsonObject();
-      final JsonObject source = hitData.get("_source").getAsJsonObject();
-      assertTrue(source.has("doc_num"));
-      assertTrue(source.get("doc_num").getAsInt() < numRecords);
-    }
-  }
-
-  protected void writeRecords(int numRecords) {
-    for (int i  = 0; i < numRecords; i++) {
-      connect.kafka().produce(TOPIC, String.valueOf(i), String.format("{\"doc_num\":%d}", i));
-    }
   }
 }
