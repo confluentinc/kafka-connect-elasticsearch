@@ -15,9 +15,12 @@
 
 package io.confluent.connect.elasticsearch.integration;
 
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BEHAVIOR_ON_NULL_VALUES_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_KEY_CONFIG;
 import static org.junit.Assert.assertNotNull;
 
 import com.google.gson.JsonObject;
+import io.confluent.connect.elasticsearch.DataConverter.BehaviorOnNullValues;
 import io.confluent.connect.elasticsearch.Mapping;
 import io.confluent.connect.elasticsearch.TestUtils;
 import java.util.Collections;
@@ -34,15 +37,25 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
 
   private static Logger log = LoggerFactory.getLogger(ElasticsearchConnectorIT.class);
 
-  // TODO: test delete
-  // TODO: test upsert
-  // TODO: different data formats
-  // TODO: test compatibility
-
   @BeforeClass
   public static void setupBeforeAll() {
     container = ElasticsearchContainer.fromSystemProperties();
     container.start();
+  }
+
+  @Test
+  public void testDelete() throws Exception {
+    props.put(BEHAVIOR_ON_NULL_VALUES_CONFIG, BehaviorOnNullValues.DELETE.name());
+    props.put(IGNORE_KEY_CONFIG, "false");
+    runSimpleTest(props);
+
+    // should have 10 records at this point
+    // try deleting last one
+    int lastRecord = 9;
+    connect.kafka().produce(TOPIC, String.valueOf(lastRecord), null);
+
+    // should have one less records
+    verifySearchResults(9);
   }
 
   @Test
