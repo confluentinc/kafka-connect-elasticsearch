@@ -15,6 +15,13 @@
 
 package io.confluent.connect.elasticsearch.integration;
 
+import static org.junit.Assert.assertNotNull;
+
+import com.google.gson.JsonObject;
+import io.confluent.connect.elasticsearch.Mapping;
+import io.confluent.connect.elasticsearch.TestUtils;
+import java.util.Collections;
+import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.test.IntegrationTest;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -41,5 +48,17 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
   @Test
   public void testHappyPath() throws Exception {
     runSimpleTest(props);
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  public void testMapping() throws Exception {
+    client.createIndices(Collections.singleton(TOPIC));
+    Schema schema = TestUtils.createSchema();
+    Mapping.createMapping(client, TOPIC, TYPE, schema);
+
+    JsonObject mapping = Mapping.getMapping(client, TOPIC, TYPE);
+    assertNotNull(mapping);
+    TestUtils.verifyMapping(client, schema, mapping);
   }
 }
