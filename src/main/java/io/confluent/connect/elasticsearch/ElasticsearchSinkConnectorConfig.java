@@ -34,7 +34,6 @@ import static org.apache.kafka.common.config.SslConfigs.SSL_ENDPOINT_IDENTIFICAT
 import static org.apache.kafka.common.config.SslConfigs.addClientSslSupport;
 
 public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
-  private static final String SSL_GROUP = "Security";
 
   // Connector group
   public static final String CONNECTION_URL_CONFIG = "connection.url";
@@ -224,16 +223,20 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   private static final String BEHAVIOR_ON_MALFORMED_DOCS_DISPLAY =
       "Behavior on malformed documents";
 
-  private static final String CONNECTOR_GROUP = "Connector";
-  private static final String DATA_CONVERSION_GROUP = "Data Conversion";
+  // Ssl configs
+  public static final String SSL_CONFIG_PREFIX = "elastic.https.";
 
-  public static final String CONNECTION_SSL_CONFIG_PREFIX = "elastic.https.";
-
-  private static final String ELASTICSEARCH_SECURITY_PROTOCOL_CONFIG = "elastic.security.protocol";
-  private static final String ELASTICSEARCH_SECURITY_PROTOCOL_DOC =
+  public static final String SECURITY_PROTOCOL_CONFIG = "elastic.security.protocol";
+  private static final String SECURITY_PROTOCOL_DOC =
       "The security protocol to use when connecting to Elasticsearch. "
           + "Values can be `PLAINTEXT` or `SSL`. If `PLAINTEXT` is passed, "
-          + "all configs prefixed by " + CONNECTION_SSL_CONFIG_PREFIX + " will be ignored.";
+          + "all configs prefixed by " + SSL_CONFIG_PREFIX + " will be ignored.";
+  private static final String SECURITY_PROTOCOL_DISPLAY = "Security protocol";
+  private static final String SECURITY_PROTOCOL_DEFAULT = SecurityProtocol.PLAINTEXT.name();
+
+  private static final String CONNECTOR_GROUP = "Connector";
+  private static final String DATA_CONVERSION_GROUP = "Data Conversion";
+  private static final String SSL_GROUP = "Security";
 
   protected static ConfigDef baseConfigDef() {
     final ConfigDef configDef = new ConfigDef();
@@ -241,27 +244,6 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
     addConversionConfigs(configDef);
     addSecurityConfigs(configDef);
     return configDef;
-  }
-
-  private static void addSecurityConfigs(ConfigDef configDef) {
-    ConfigDef sslConfigDef = new ConfigDef();
-    addClientSslSupport(sslConfigDef);
-    int order = 0;
-    configDef.define(
-        ELASTICSEARCH_SECURITY_PROTOCOL_CONFIG,
-        Type.STRING,
-        SecurityProtocol.PLAINTEXT.name(),
-        Importance.MEDIUM,
-        ELASTICSEARCH_SECURITY_PROTOCOL_DOC,
-        SSL_GROUP,
-        ++order,
-        Width.SHORT,
-        "Security protocol"
-    );
-    configDef.embed(
-        CONNECTION_SSL_CONFIG_PREFIX, SSL_GROUP,
-        configDef.configKeys().size() + 2, sslConfigDef
-    );
   }
 
   private static void addConnectorConfigs(ConfigDef configDef) {
@@ -506,6 +488,26 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
     );
   }
 
+  private static void addSecurityConfigs(ConfigDef configDef) {
+    ConfigDef sslConfigDef = new ConfigDef();
+    addClientSslSupport(sslConfigDef);
+    int order = 0;
+    configDef.define(
+        SECURITY_PROTOCOL_CONFIG,
+        Type.STRING,
+        SECURITY_PROTOCOL_DEFAULT,
+        Importance.MEDIUM,
+        SECURITY_PROTOCOL_DOC,
+        SSL_GROUP,
+        ++order,
+        Width.SHORT,
+        SECURITY_PROTOCOL_DISPLAY
+    );
+    configDef.embed(
+        SSL_CONFIG_PREFIX, SSL_GROUP, configDef.configKeys().size() + 2, sslConfigDef
+    );
+  }
+
   public static final ConfigDef CONFIG = baseConfigDef();
 
   public ElasticsearchSinkConnectorConfig(Map<String, String> props) {
@@ -523,7 +525,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
 
   public boolean shouldDisableHostnameVerification() {
     String sslEndpointIdentificationAlgorithm = getString(
-        CONNECTION_SSL_CONFIG_PREFIX + SSL_ENDPOINT_IDENTIFICATION_ALGORITHM_CONFIG);
+        SSL_CONFIG_PREFIX + SSL_ENDPOINT_IDENTIFICATION_ALGORITHM_CONFIG);
     return sslEndpointIdentificationAlgorithm != null
         && sslEndpointIdentificationAlgorithm.isEmpty();
   }
@@ -607,13 +609,13 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   }
 
   private SecurityProtocol securityProtocol() {
-    return SecurityProtocol.valueOf(getString(ELASTICSEARCH_SECURITY_PROTOCOL_CONFIG));
+    return SecurityProtocol.valueOf(getString(SECURITY_PROTOCOL_CONFIG));
   }
 
   public Map<String, Object> sslConfigs() {
     ConfigDef sslConfigDef = new ConfigDef();
     addClientSslSupport(sslConfigDef);
-    return sslConfigDef.parse(originalsWithPrefix(CONNECTION_SSL_CONFIG_PREFIX));
+    return sslConfigDef.parse(originalsWithPrefix(SSL_CONFIG_PREFIX));
   }
 
   @Deprecated

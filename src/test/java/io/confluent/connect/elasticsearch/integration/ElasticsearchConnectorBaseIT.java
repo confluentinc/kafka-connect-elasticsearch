@@ -66,7 +66,7 @@ public class ElasticsearchConnectorBaseIT extends BaseConnectorIT {
     connect.kafka().createTopic(TOPIC);
 
     props = createProps();
-    client = new JestElasticsearchClient(container.getConnectionUrl());
+    client = createClient();
   }
 
   @After
@@ -74,6 +74,10 @@ public class ElasticsearchConnectorBaseIT extends BaseConnectorIT {
     stopConnect();
     client.deleteAll();
     client.close();
+  }
+
+  protected ElasticsearchClient createClient() {
+    return new JestElasticsearchClient(container.getConnectionUrl());
   }
 
   protected Map<String, String> createProps() {
