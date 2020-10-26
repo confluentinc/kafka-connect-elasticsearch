@@ -32,7 +32,8 @@ public abstract class BaseConnectorIT {
 
   private static final Logger log = LoggerFactory.getLogger(BaseConnectorIT.class);
 
-  protected static final long CONNECTOR_STARTUP_DURATION_MS = TimeUnit.SECONDS.toMillis(60);
+  protected static final long CONSUME_MAX_DURATION_MS = TimeUnit.MINUTES.toMillis(1);
+  protected static final long CONNECTOR_STARTUP_DURATION_MS = TimeUnit.MINUTES.toMillis(60);
 
   protected EmbeddedConnectCluster connect;
 

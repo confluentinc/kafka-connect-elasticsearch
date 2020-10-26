@@ -26,20 +26,19 @@ import static org.apache.kafka.connect.runtime.ConnectorConfig.TASKS_MAX_CONFIG;
 import static org.apache.kafka.connect.runtime.ConnectorConfig.VALUE_CONVERTER_CLASS_CONFIG;
 import static org.apache.kafka.connect.runtime.SinkConnectorConfig.TOPICS_CONFIG;
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
+import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
+import io.confluent.connect.elasticsearch.ElasticsearchClient;
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnector;
-import io.confluent.connect.elasticsearch.helper.ElasticsearchContainer;
-import io.confluent.connect.elasticsearch.helper.ElasticsearchHelperClient;
+import io.confluent.connect.elasticsearch.jest.JestElasticsearchClient;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
 import org.apache.kafka.connect.json.JsonConverter;
 import org.apache.kafka.connect.storage.StringConverter;
 import org.apache.kafka.test.TestUtils;
-import org.elasticsearch.ElasticsearchStatusException;
-import org.elasticsearch.search.SearchHit;
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Before;
@@ -53,7 +52,7 @@ public class ElasticsearchConnectorBaseIT extends BaseConnectorIT {
 
   protected static ElasticsearchContainer container;
 
-  protected ElasticsearchHelperClient helperClient;
+  protected ElasticsearchClient client;
   protected Map<String, String> props;
 
   @AfterClass
@@ -67,15 +66,14 @@ public class ElasticsearchConnectorBaseIT extends BaseConnectorIT {
     connect.kafka().createTopic(TOPIC);
 
     props = createProps();
-    helperClient = new ElasticsearchHelperClient(container.getConnectionUrl());
+    client = new JestElasticsearchClient(container.getConnectionUrl());
   }
 
   @After
   public void cleanup() throws IOException {
     stopConnect();
-    helperClient.deleteIndex(TOPIC);
-
-    helperClient.close();
+    client.deleteAll();
+    client.close();
   }
 
   protected Map<String, String> createProps() {
@@ -110,29 +108,33 @@ public class ElasticsearchConnectorBaseIT extends BaseConnectorIT {
     verifySearchResults(10);
   }
 
-  protected void verifySearchResults(int expectedRecords) throws Exception {
-
+  protected void verifySearchResults(int numRecords) throws Exception {
     TestUtils.waitForCondition(
         () -> {
           try {
-            return helperClient.getDocCount(TOPIC) == expectedRecords;
-          } catch (ElasticsearchStatusException e) {
-            if (e.getMessage().contains("index_not_found_exception")) {
-              return false;
-            }
+            client.refresh();
+            final JsonObject result = client.search("", TOPIC, null);
+            return result.getAsJsonObject("hits") != null
+                && result.getAsJsonObject("hits").getAsJsonArray("hits").size() == numRecords;
 
-            throw e;
+          } catch (IOException e) {
+            return false;
           }
         },
-        CONNECTOR_STARTUP_DURATION_MS,
-        "Could not find expected documents in time."
+        CONSUME_MAX_DURATION_MS,
+        "Sufficient amount of document were not found in ES on time."
     );
 
-    for (SearchHit hit : helperClient.search(TOPIC)) {
-      int id = (Integer) hit.getSourceAsMap().get("doc_num");
-      assertNotNull(id);
-      assertTrue(id < expectedRecords);
-      assertEquals(TOPIC, hit.getIndex());
+    final JsonObject result = client.search("", TOPIC, null);
+    final JsonArray rawHits = result.getAsJsonObject("hits").getAsJsonArray("hits");
+
+    assertEquals(numRecords, rawHits.size());
+
+    for (int i = 0; i < rawHits.size(); ++i) {
+      final JsonObject hitData = rawHits.get(i).getAsJsonObject();
+      final JsonObject source = hitData.get("_source").getAsJsonObject();
+      assertTrue(source.has("doc_num"));
+      assertTrue(source.get("doc_num").getAsInt() < numRecords);
     }
   }
 
