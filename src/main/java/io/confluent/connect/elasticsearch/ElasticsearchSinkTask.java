@@ -124,8 +124,12 @@ public class ElasticsearchSinkTask extends SinkTask {
 
   @Override
   public void flush(Map<TopicPartition, OffsetAndMetadata> offsets) {
-    log.trace("Flushing data to Elasticsearch with the following offsets: {}", offsets);
-    writer.flush();
+    if (writer != null) {
+      log.trace("Flushing data to Elasticsearch with the following offsets: {}", offsets);
+      writer.flush();
+    } else {
+      log.trace("Could not flush data to Elasticsearch because ESWriter already closed.");
+    }
   }
 
   @Override
@@ -138,6 +142,7 @@ public class ElasticsearchSinkTask extends SinkTask {
     log.info("Stopping ElasticsearchSinkTask.");
     if (writer != null) {
       writer.stop();
+      writer = null;
     }
     if (client != null) {
       client.close();

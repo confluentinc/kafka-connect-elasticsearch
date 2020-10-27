@@ -152,6 +152,14 @@ public class ElasticsearchSinkTaskTest extends ElasticsearchSinkTestBase {
 
   }
 
+  @Test
+  public void testStopThenFlushDoesNotThrow() {
+    ElasticsearchSinkTask task = new ElasticsearchSinkTask();
+    task.start(createProps(), client);
+    task.stop();
+    task.flush(new HashMap<>());
+  }
+
   private boolean verifyIndexExist(InternalTestCluster cluster, String ... indices) {
     ActionFuture<IndicesExistsResponse> action = cluster
         .client()
