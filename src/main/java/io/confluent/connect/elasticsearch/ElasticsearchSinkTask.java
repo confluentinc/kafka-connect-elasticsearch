@@ -35,7 +35,7 @@ import java.util.concurrent.TimeUnit;
 public class ElasticsearchSinkTask extends SinkTask {
 
   private static final Logger log = LoggerFactory.getLogger(ElasticsearchSinkTask.class);
-  private ElasticsearchWriter writer;
+  private volatile ElasticsearchWriter writer;
   private ElasticsearchClient client;
   private Boolean createIndicesAtStartTime;
 
@@ -125,10 +125,10 @@ public class ElasticsearchSinkTask extends SinkTask {
   @Override
   public void flush(Map<TopicPartition, OffsetAndMetadata> offsets) {
     if (writer != null) {
-      log.trace("Flushing data to Elasticsearch with the following offsets: {}", offsets);
+      log.debug("Flushing data to Elasticsearch with the following offsets: {}", offsets);
       writer.flush();
     } else {
-      log.trace("Could not flush data to Elasticsearch because ESWriter already closed.");
+      log.debug("Could not flush data to Elasticsearch because ESWriter already closed.");
     }
   }
 
