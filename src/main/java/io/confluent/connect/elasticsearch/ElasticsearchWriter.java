@@ -26,9 +26,7 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.util.Collections;
 import java.util.Collection;
-import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
@@ -44,8 +42,6 @@ public class ElasticsearchWriter {
   private final Set<String> ignoreKeyTopics;
   private final boolean ignoreSchema;
   private final Set<String> ignoreSchemaTopics;
-  @Deprecated
-  private final Map<String, String> topicToIndexMap;
   private final long flushTimeoutMs;
   private final BulkProcessor<IndexableRecord, ?> bulkProcessor;
   private final boolean dropInvalidMessage;
@@ -62,7 +58,6 @@ public class ElasticsearchWriter {
       Set<String> ignoreKeyTopics,
       boolean ignoreSchema,
       Set<String> ignoreSchemaTopics,
-      Map<String, String> topicToIndexMap,
       long flushTimeoutMs,
       int maxBufferedRecords,
       int maxInFlightRequests,
@@ -81,7 +76,6 @@ public class ElasticsearchWriter {
     this.ignoreKeyTopics = ignoreKeyTopics;
     this.ignoreSchema = ignoreSchema;
     this.ignoreSchemaTopics = ignoreSchemaTopics;
-    this.topicToIndexMap = topicToIndexMap;
     this.flushTimeoutMs = flushTimeoutMs;
     this.dropInvalidMessage = dropInvalidMessage;
     this.behaviorOnNullValues = behaviorOnNullValues;
@@ -111,7 +105,6 @@ public class ElasticsearchWriter {
     private Set<String> ignoreKeyTopics = Collections.emptySet();
     private boolean ignoreSchema = false;
     private Set<String> ignoreSchemaTopics = Collections.emptySet();
-    private Map<String, String> topicToIndexMap = new HashMap<>();
     private long flushTimeoutMs;
     private int maxBufferedRecords;
     private int maxInFlightRequests;
@@ -147,11 +140,6 @@ public class ElasticsearchWriter {
 
     public Builder setCompactMapEntries(boolean useCompactMapEntries) {
       this.useCompactMapEntries = useCompactMapEntries;
-      return this;
-    }
-
-    public Builder setTopicToIndexMap(Map<String, String> topicToIndexMap) {
-      this.topicToIndexMap = topicToIndexMap;
       return this;
     }
 
@@ -226,7 +214,6 @@ public class ElasticsearchWriter {
           ignoreKeyTopics,
           ignoreSchema,
           ignoreSchemaTopics,
-          topicToIndexMap,
           flushTimeoutMs,
           maxBufferedRecords,
           maxInFlightRequests,
@@ -328,13 +315,12 @@ public class ElasticsearchWriter {
   }
 
   /**
-   * Return the expected index name for a given topic, using the configured mapping or the topic
-   * name. Elasticsearch accepts only lowercase index names
+   * Return the expected index name for a given topic using the topic name. Elasticsearch accepts
+   * only lowercase index names
    * (<a href="https://github.com/elastic/elasticsearch/issues/29420">ref</a>_.
    */
   private String convertTopicToIndexName(String topic) {
-    final String indexOverride = topicToIndexMap.get(topic);
-    String index = indexOverride != null ? indexOverride : topic.toLowerCase();
+    String index = topic.toLowerCase();
     log.trace("Topic '{}' was translated as index '{}'", topic, index);
     return index;
   }
