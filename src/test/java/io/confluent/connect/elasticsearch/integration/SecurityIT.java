@@ -46,12 +46,12 @@ public class SecurityIT {
   private static final String TYPE_NAME = "kafka-connect";
   private static final int TASKS_MAX = 1;
   private static final int NUM_MSG = 200;
-  private static final long VERIFY_TIMEOUT_MS = TimeUnit.MINUTES.toMillis(2);
+  private static final long VERIFY_TIMEOUT_MS = TimeUnit.MINUTES.toMillis(10);
 
   @Before
   public void setup() throws IOException {
     // Relevant and available docker images for elastic can be found at https://www.docker.elastic.co
-    container = ElasticsearchContainer.fromSystemProperties().withSslEnabled(true);
+    container = ElasticsearchContainer.fromSystemProperties("7.0.0").withSslEnabled(true);
     container.start();
 
     connect = new EmbeddedConnectCluster.Builder().name("elastic-sink-cluster").build();

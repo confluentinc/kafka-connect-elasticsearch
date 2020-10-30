@@ -61,6 +61,8 @@ public class ElasticsearchSinkTaskIT extends ElasticsearchIntegrationTestBase {
     Map<String, String> props = new HashMap<>();
     props.put(ElasticsearchSinkConnectorConfig.TYPE_NAME_CONFIG, TYPE);
     props.put(ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG, container.getConnectionUrl());
+    props.put(ElasticsearchSinkConnectorConfig.CONNECTION_USERNAME_CONFIG, "elastic");
+    props.put(ElasticsearchSinkConnectorConfig.CONNECTION_PASSWORD_CONFIG, "elastic");
     props.put(ElasticsearchSinkConnectorConfig.IGNORE_KEY_CONFIG, "true");
     return props;
   }
