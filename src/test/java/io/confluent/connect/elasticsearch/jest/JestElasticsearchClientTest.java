@@ -322,7 +322,7 @@ public class JestElasticsearchClientTest {
   @Test
   public void searches() throws Exception {
     JestElasticsearchClient client = new JestElasticsearchClient(jestClient);
-    Search search = new Search.Builder(QUERY).addIndex(INDEX).addType(TYPE).build();
+    Search search = new Search.Builder(QUERY).addIndex(INDEX).addType(TYPE).setParameter("size", 100).build();
     JsonObject queryResult = new JsonObject();
     SearchResult result = new SearchResult(new Gson());
     result.setJsonObject(queryResult);
