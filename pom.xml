@@ -231,7 +231,7 @@
                             </tags>
 
                             <requirements>
-                                <requirement>Elasticsearch 2.x, 5.x, 6.x, o4r 7.x</requirement>
+                                <requirement>Elasticsearch 2.x, 5.x, 6.x, or 7.x</requirement>
                             </requirements>
 
                             <deliveryGuarantee>
@@ -346,9 +346,9 @@
                                 The jenkins container is only accessible through its DOCKER_HOST IP
                                 address. This makes it hard to test both hostname verification
                                 enabled and disabled cases with the same cert. So, disable this IT
-                                in jenkins and only test the enabled case in SecurityIT.
+                                in jenkins.
                                 -->
-                                <exclude>**/HostnameVerificationDisabledIT.java</exclude>
+                                <exclude>**/ElasticsearchConnectorSecureIT.java</exclude>
                             </excludes>
                         </configuration>
                     </plugin>
