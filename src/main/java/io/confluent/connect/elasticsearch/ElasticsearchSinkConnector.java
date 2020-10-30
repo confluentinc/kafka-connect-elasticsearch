@@ -15,6 +15,7 @@
 
 package io.confluent.connect.elasticsearch;
 
+import org.apache.kafka.common.config.Config;
 import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.connect.connector.Task;
@@ -73,5 +74,11 @@ public class ElasticsearchSinkConnector extends SinkConnector {
   @Override
   public ConfigDef config() {
     return ElasticsearchSinkConnectorConfig.CONFIG;
+  }
+
+  @Override
+  public Config validate(Map<String, String> connectorConfigs) {
+    Validator validator = new Validator(connectorConfigs);
+    return validator.validate();
   }
 }
