@@ -25,6 +25,7 @@ import org.testcontainers.images.RemoteDockerImage;
 import org.testcontainers.images.builder.ImageFromDockerfile;
 import org.testcontainers.images.builder.dockerfile.DockerfileBuilder;
 import org.testcontainers.shaded.org.apache.commons.io.IOUtils;
+import org.testcontainers.utility.DockerImageName;
 
 import static java.net.HttpURLConnection.HTTP_OK;
 import static java.net.HttpURLConnection.HTTP_UNAUTHORIZED;
@@ -191,7 +192,7 @@ public class ElasticsearchContainer
               .forStatusCodeMatching(status -> status == HTTP_OK || status == HTTP_UNAUTHORIZED)
               .withStartupTimeout(Duration.ofMinutes(2))
       );
-      image = new RemoteDockerImage(imageName);
+      image = new RemoteDockerImage(DockerImageName.parse(imageName));
     }
     setImage(image);
   }

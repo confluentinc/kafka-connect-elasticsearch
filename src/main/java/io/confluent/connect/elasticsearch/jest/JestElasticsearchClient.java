@@ -600,6 +600,7 @@ public class JestElasticsearchClient implements ElasticsearchClient {
       search.addType(type);
     }
 
+    search.setParameter("size", 100);
     log.info("Executing search on index '{}' (type={}): {}", index, type, query);
     final SearchResult result = client.execute(search.build());
     if (result.isSucceeded()) {
