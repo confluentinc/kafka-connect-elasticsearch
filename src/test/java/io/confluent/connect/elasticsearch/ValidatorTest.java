@@ -31,6 +31,9 @@ import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfi
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.LINGER_MS_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.MAX_BUFFERED_RECORDS_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.MAX_IN_FLIGHT_REQUESTS_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.PROXY_HOST_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.PROXY_PASSWORD_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.PROXY_USERNAME_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.TYPE_NAME_CONFIG;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -167,6 +170,46 @@ public class ValidatorTest {
     validator = new Validator(props);
 
     Config result = validator.validate();
+    assertNoErrors(result);
+  }
+
+  @Test
+  public void testInvalidProxy() {
+    props.put(PROXY_HOST_CONFIG, "");
+    props.put(PROXY_USERNAME_CONFIG, "username");
+    props.put(PROXY_PASSWORD_CONFIG, "password");
+    validator = new Validator(props);
+
+    Config result = validator.validate();
+    assertHasErrorMessage(result, PROXY_HOST_CONFIG, " must be set to use");
+    assertHasErrorMessage(result, PROXY_USERNAME_CONFIG, " must be set to use");
+    assertHasErrorMessage(result, PROXY_PASSWORD_CONFIG, " must be set to use");
+
+    props.remove(PROXY_USERNAME_CONFIG);
+
+    props.put(PROXY_HOST_CONFIG, "proxy");
+    props.put(PROXY_PASSWORD_CONFIG, "password");
+    validator = new Validator(props);
+
+    result = validator.validate();
+    assertHasErrorMessage(result, PROXY_USERNAME_CONFIG, "Either both or neither");
+    assertHasErrorMessage(result, PROXY_PASSWORD_CONFIG, "Either both or neither");
+  }
+
+  @Test
+  public void testValidProxy() {
+    props.put(PROXY_HOST_CONFIG, "proxy");
+    validator = new Validator(props);
+
+    Config result = validator.validate();
+    assertNoErrors(result);
+
+    props.put(PROXY_HOST_CONFIG, "proxy");
+    props.put(PROXY_USERNAME_CONFIG, "password");
+    props.put(PROXY_PASSWORD_CONFIG, "password");
+    validator = new Validator(props);
+
+    result = validator.validate();
     assertNoErrors(result);
   }
 
