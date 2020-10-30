@@ -334,9 +334,9 @@
                                 The jenkins container is only accessible through its DOCKER_HOST IP
                                 address. This makes it hard to test both hostname verification
                                 enabled and disabled cases with the same cert. So, disable this IT
-                                in jenkins and only test the enabled case in SecurityIT.
+                                in jenkins.
                                 -->
-                                <exclude>**/HostnameVerificationDisabledIT.java</exclude>
+                                <exclude>**/ElasticsearchConnectorSecureIT.java</exclude>
                             </excludes>
                         </configuration>
                     </plugin>
