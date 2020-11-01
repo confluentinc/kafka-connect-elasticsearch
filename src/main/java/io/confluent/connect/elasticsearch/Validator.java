@@ -27,6 +27,8 @@ import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfi
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.LINGER_MS_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.MAX_BUFFERED_RECORDS_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.MAX_IN_FLIGHT_REQUESTS_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.SECURITY_PROTOCOL_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.SSL_CONFIG_PREFIX;
 
 import java.util.List;
 import java.util.Map;
@@ -35,6 +37,7 @@ import java.util.stream.Collectors;
 import org.apache.kafka.common.config.Config;
 import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.config.ConfigValue;
+import org.apache.kafka.common.config.SslConfigs;
 
 public class Validator {
 
@@ -63,6 +66,7 @@ public class Validator {
     validateIgnoreConfigs();
     validateLingerMs();
     validateMaxBufferedRecords();
+    validateSsl();
 
     return new Config(validations);
   }
@@ -72,7 +76,7 @@ public class Validator {
     boolean onlyOneSet = config.username() != null ^ config.password() != null;
     if (onlyOneSet) {
       String errorMessage = String.format(
-          "Both %s and %s must be set.", CONNECTION_USERNAME_CONFIG, CONNECTION_PASSWORD_CONFIG
+          "Both '%s' and '%s' must be set.", CONNECTION_USERNAME_CONFIG, CONNECTION_PASSWORD_CONFIG
       );
       addErrorMessage(CONNECTION_USERNAME_CONFIG, errorMessage);
       addErrorMessage(CONNECTION_PASSWORD_CONFIG, errorMessage);
@@ -82,7 +86,7 @@ public class Validator {
   private void validateIgnoreConfigs() {
     if (config.ignoreKey() && !config.ignoreKeyTopics().isEmpty()) {
       String errorMessage = String.format(
-          "%s can not be set if %s is true.", IGNORE_KEY_TOPICS_CONFIG, IGNORE_KEY_CONFIG
+          "'%s' can not be set if '%s' is true.", IGNORE_KEY_TOPICS_CONFIG, IGNORE_KEY_CONFIG
       );
       addErrorMessage(IGNORE_KEY_CONFIG, errorMessage);
       addErrorMessage(IGNORE_KEY_TOPICS_CONFIG, errorMessage);
@@ -90,7 +94,7 @@ public class Validator {
 
     if (config.ignoreSchema() && !config.ignoreSchemaTopics().isEmpty()) {
       String errorMessage = String.format(
-          "%s can not be set if %s is true.", IGNORE_SCHEMA_TOPICS_CONFIG, IGNORE_SCHEMA_CONFIG
+          "'%s' can not be set if '%s' is true.", IGNORE_SCHEMA_TOPICS_CONFIG, IGNORE_SCHEMA_CONFIG
       );
       addErrorMessage(IGNORE_SCHEMA_CONFIG, errorMessage);
       addErrorMessage(IGNORE_SCHEMA_TOPICS_CONFIG, errorMessage);
@@ -100,7 +104,7 @@ public class Validator {
   private void validateLingerMs() {
     if (config.lingerMs() > config.flushTimeoutMs()) {
       String errorMessage = String.format(
-          "%s (%d) can not be larger than %s (%d).",
+          "'%s' (%d) can not be larger than '%s' (%d).",
           LINGER_MS_CONFIG, config.lingerMs(), FLUSH_TIMEOUT_MS_CONFIG, config.flushTimeoutMs()
       );
       addErrorMessage(LINGER_MS_CONFIG, errorMessage);
@@ -111,7 +115,7 @@ public class Validator {
   private void validateMaxBufferedRecords() {
     if (config.maxBufferedRecords() < config.batchSize() * config.maxInFlightRequests()) {
       String errorMessage = String.format(
-          "%s (%d) must be larger than or equal to %s (%d) x %s (%d).",
+          "'%s' (%d) must be larger than or equal to '%s' (%d) x %s (%d).",
           MAX_BUFFERED_RECORDS_CONFIG, config.maxBufferedRecords(),
           BATCH_SIZE_CONFIG, config.batchSize(),
           MAX_IN_FLIGHT_REQUESTS_CONFIG, config.maxInFlightRequests()
@@ -120,6 +124,34 @@ public class Validator {
       addErrorMessage(MAX_BUFFERED_RECORDS_CONFIG, errorMessage);
       addErrorMessage(BATCH_SIZE_CONFIG, errorMessage);
       addErrorMessage(MAX_IN_FLIGHT_REQUESTS_CONFIG, errorMessage);
+    }
+  }
+
+  private void validateSsl() {
+    Map<String, Object> sslConfigs = config.originalsWithPrefix(SSL_CONFIG_PREFIX);
+    if (!config.secured()) {
+      if (!sslConfigs.isEmpty()) {
+        String errorMessage = String.format(
+            "'%s' must be set to '%s' to use SSL configs.",
+            SECURITY_PROTOCOL_CONFIG,
+            SecurityProtocol.SSL
+        );
+        addErrorMessage(SECURITY_PROTOCOL_CONFIG, errorMessage);
+      }
+    } else {
+      if (sslConfigs.isEmpty()) {
+        String errorMessage = String.format(
+            "At least these SSL configs ('%s', '%s', '%s', and '%s') must be present for SSL"
+                + " support. Otherwise set '%s' to '%s'.",
+            SSL_CONFIG_PREFIX + SslConfigs.SSL_KEYSTORE_LOCATION_CONFIG,
+            SSL_CONFIG_PREFIX + SslConfigs.SSL_KEYSTORE_PASSWORD_CONFIG,
+            SSL_CONFIG_PREFIX + SslConfigs.SSL_TRUSTSTORE_LOCATION_CONFIG,
+            SSL_CONFIG_PREFIX + SslConfigs.SSL_TRUSTSTORE_PASSWORD_CONFIG,
+            SECURITY_PROTOCOL_CONFIG,
+            SecurityProtocol.PLAINTEXT
+        );
+        addErrorMessage(SECURITY_PROTOCOL_CONFIG, errorMessage);
+      }
     }
   }
 
