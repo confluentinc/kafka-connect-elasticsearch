@@ -19,6 +19,9 @@ package io.confluent.connect.elasticsearch;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BATCH_SIZE_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_PASSWORD_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG;
+
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.SECURITY_PROTOCOL_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.SSL_CONFIG_PREFIX;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_USERNAME_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.FLUSH_TIMEOUT_MS_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_KEY_CONFIG;
@@ -36,6 +39,7 @@ import java.util.HashMap;
 import java.util.Map;
 import org.apache.kafka.common.config.Config;
 import org.apache.kafka.common.config.ConfigValue;
+import org.apache.kafka.common.config.SslConfigs;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -163,6 +167,48 @@ public class ValidatorTest {
     validator = new Validator(props);
 
     Config result = validator.validate();
+    assertNoErrors(result);
+  }
+
+  @Test
+  public void testInvalidSsl() {
+    // no SSL
+    props.put(SECURITY_PROTOCOL_CONFIG, SecurityProtocol.SSL.name());
+    validator = new Validator(props);
+
+    Config result = validator.validate();
+    assertHasErrorMessage(result, SECURITY_PROTOCOL_CONFIG, "At least these SSL configs ");
+
+    // SSL
+    props.put(SECURITY_PROTOCOL_CONFIG, SecurityProtocol.PLAINTEXT.name());
+    props.put(SSL_CONFIG_PREFIX + SslConfigs.SSL_KEYSTORE_LOCATION_CONFIG, "a");
+    props.put(SSL_CONFIG_PREFIX + SslConfigs.SSL_KEYSTORE_PASSWORD_CONFIG, "b");
+    props.put(SSL_CONFIG_PREFIX + SslConfigs.SSL_TRUSTSTORE_LOCATION_CONFIG, "c");
+    props.put(SSL_CONFIG_PREFIX + SslConfigs.SSL_TRUSTSTORE_PASSWORD_CONFIG, "d");
+    validator = new Validator(props);
+
+    result = validator.validate();
+    assertHasErrorMessage(result, SECURITY_PROTOCOL_CONFIG, "to use SSL configs");
+  }
+
+  @Test
+  public void testValidSsl() {
+    // no SSL
+    props.put(SECURITY_PROTOCOL_CONFIG, SecurityProtocol.PLAINTEXT.name());
+    validator = new Validator(props);
+
+    Config result = validator.validate();
+    assertNoErrors(result);
+
+    // SSL
+    props.put(SECURITY_PROTOCOL_CONFIG, SecurityProtocol.SSL.name());
+    props.put(SSL_CONFIG_PREFIX + SslConfigs.SSL_KEYSTORE_LOCATION_CONFIG, "a");
+    props.put(SSL_CONFIG_PREFIX + SslConfigs.SSL_KEYSTORE_PASSWORD_CONFIG, "b");
+    props.put(SSL_CONFIG_PREFIX + SslConfigs.SSL_TRUSTSTORE_LOCATION_CONFIG, "c");
+    props.put(SSL_CONFIG_PREFIX + SslConfigs.SSL_TRUSTSTORE_PASSWORD_CONFIG, "d");
+    validator = new Validator(props);
+
+    result = validator.validate();
     assertNoErrors(result);
   }
 
