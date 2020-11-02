@@ -155,7 +155,6 @@ public class ElasticsearchSinkTaskTest extends ElasticsearchSinkTestBase {
   @Test
   public void testStopThenFlushDoesNotThrow() {
     ElasticsearchSinkTask task = new ElasticsearchSinkTask();
-    task.initialize(mock(SinkTaskContext.class));
     task.start(createProps(), client);
     task.stop();
     task.flush(new HashMap<>());
