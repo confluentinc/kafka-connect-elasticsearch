@@ -17,13 +17,16 @@ package io.confluent.connect.elasticsearch;
 
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.common.config.ConfigDef;
+import org.apache.kafka.common.config.ConfigDef.CaseInsensitiveValidString;
 import org.apache.kafka.common.config.ConfigDef.Importance;
 import org.apache.kafka.common.config.ConfigDef.Type;
 import org.apache.kafka.common.config.ConfigDef.Validator;
@@ -559,6 +562,12 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
         SECURITY_PROTOCOL_CONFIG,
         Type.STRING,
         SECURITY_PROTOCOL_DEFAULT,
+        CaseInsensitiveValidString.in(
+            Arrays.stream(SecurityProtocol.values())
+                .map(SecurityProtocol::name)
+                .collect(Collectors.toList())
+                .toArray(new String[SecurityProtocol.values().length])
+        ),
         Importance.MEDIUM,
         SECURITY_PROTOCOL_DOC,
         SSL_GROUP,
@@ -587,8 +596,8 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   }
 
   public boolean shouldDisableHostnameVerification() {
-    String sslEndpointIdentificationAlgorithm = getString(
-        SSL_CONFIG_PREFIX + SSL_ENDPOINT_IDENTIFICATION_ALGORITHM_CONFIG);
+    String sslEndpointIdentificationAlgorithm =
+        getString(SSL_CONFIG_PREFIX + SSL_ENDPOINT_IDENTIFICATION_ALGORITHM_CONFIG);
     return sslEndpointIdentificationAlgorithm != null
         && sslEndpointIdentificationAlgorithm.isEmpty();
   }

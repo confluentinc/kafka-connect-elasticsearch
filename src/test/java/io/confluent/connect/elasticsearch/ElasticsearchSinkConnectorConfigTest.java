@@ -4,18 +4,20 @@ import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfi
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_KEY_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.READ_TIMEOUT_MS_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.SECURITY_PROTOCOL_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.SSL_CONFIG_PREFIX;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.TYPE_NAME_CONFIG;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
+import org.apache.kafka.common.config.SslConfigs;
 import org.apache.kafka.common.config.types.Password;
 import org.junit.Before;
 import org.junit.Test;
 
 import java.util.HashMap;
 import java.util.Map;
-
-import static junit.framework.TestCase.assertTrue;
-import static org.junit.Assert.assertFalse;
 
 public class ElasticsearchSinkConnectorConfigTest {
 
@@ -47,45 +49,45 @@ public class ElasticsearchSinkConnectorConfigTest {
 
   @Test
   public void testSslConfigs() {
-    props.put("elastic.https.ssl.keystore.location", "/path");
-    props.put("elastic.https.ssl.keystore.password", "opensesame");
-    props.put("elastic.https.ssl.truststore.location", "/path2");
-    props.put("elastic.https.ssl.truststore.password", "opensesame2");
+    props.put(SSL_CONFIG_PREFIX + SslConfigs.SSL_KEYSTORE_LOCATION_CONFIG, "/path");
+    props.put(SSL_CONFIG_PREFIX + SslConfigs.SSL_KEYSTORE_PASSWORD_CONFIG, "opensesame");
+    props.put(SSL_CONFIG_PREFIX + SslConfigs.SSL_TRUSTSTORE_LOCATION_CONFIG, "/path2");
+    props.put(SSL_CONFIG_PREFIX + SslConfigs.SSL_TRUSTSTORE_PASSWORD_CONFIG, "opensesame2");
     ElasticsearchSinkConnectorConfig config = new ElasticsearchSinkConnectorConfig(props);
     Map<String, Object> sslConfigs = config.sslConfigs();
     assertTrue(sslConfigs.size() > 0);
     assertEquals(
         new Password("opensesame"),
-        sslConfigs.get("ssl.keystore.password")
+        sslConfigs.get(SslConfigs.SSL_KEYSTORE_PASSWORD_CONFIG)
     );
     assertEquals(
         new Password("opensesame2"),
-        sslConfigs.get("ssl.truststore.password")
+        sslConfigs.get(SslConfigs.SSL_TRUSTSTORE_PASSWORD_CONFIG)
     );
-    assertEquals("/path", sslConfigs.get("ssl.keystore.location"));
-    assertEquals("/path2", sslConfigs.get("ssl.truststore.location"));
+    assertEquals("/path", sslConfigs.get(SslConfigs.SSL_KEYSTORE_LOCATION_CONFIG));
+    assertEquals("/path2", sslConfigs.get(SslConfigs.SSL_TRUSTSTORE_LOCATION_CONFIG));
   }
 
   @Test
   public void testSecured() {
-    props.put("connection.url", "http://host:9999");
+    props.put(CONNECTION_URL_CONFIG, "http://host:9999");
     assertFalse(new ElasticsearchSinkConnectorConfig(props).secured());
 
-    props.put("connection.url", "https://host:9999");
+    props.put(CONNECTION_URL_CONFIG, "https://host:9999");
     assertFalse(new ElasticsearchSinkConnectorConfig(props).secured());
 
-    props.put("connection.url", "http://host1:9992,https://host:9999");
+    props.put(CONNECTION_URL_CONFIG, "http://host1:9992,https://host:9999");
     assertFalse(new ElasticsearchSinkConnectorConfig(props).secured());
 
     // Default behavior should be backwards compat
-    props.put("connection.url", "host1:9992");
+    props.put(CONNECTION_URL_CONFIG, "host1:9992");
     assertFalse(new ElasticsearchSinkConnectorConfig(props).secured());
 
-    props.put("elastic.security.protocol", SecurityProtocol.SSL.name());
+    props.put(SECURITY_PROTOCOL_CONFIG, SecurityProtocol.SSL.name());
     assertTrue(new ElasticsearchSinkConnectorConfig(props).secured());
 
-    props.put("elastic.security.protocol", SecurityProtocol.PLAINTEXT.name());
-    props.put("connection.url", "https://host:9999");
+    props.put(SECURITY_PROTOCOL_CONFIG, SecurityProtocol.PLAINTEXT.name());
+    props.put(CONNECTION_URL_CONFIG, "https://host:9999");
     assertFalse(new ElasticsearchSinkConnectorConfig(props).secured());
   }
 }
