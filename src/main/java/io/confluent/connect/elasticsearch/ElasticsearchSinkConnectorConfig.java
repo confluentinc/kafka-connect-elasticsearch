@@ -673,7 +673,6 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
 
   public ElasticsearchSinkConnectorConfig(Map<String, String> props) {
     super(CONFIG, props);
-    validateProxyConfigs();
   }
 
   public boolean isAuthenticatedConnection() {
@@ -845,30 +844,6 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
     }
 
     return map;
-  }
-
-  private void validateProxyConfigs() {
-
-    if (!isBasicProxyConfigured()) {
-      if (!proxyUsername().isEmpty() || proxyPassword() != null) {
-        throw new ConfigException(
-            String.format(
-                "%s and %s cannot be set without %s.",
-                PROXY_USERNAME_CONFIG,
-                PROXY_PASSWORD_CONFIG,
-                PROXY_HOST_CONFIG
-            )
-        );
-      }
-    } else {
-      if (proxyUsername().isEmpty() ^ proxyPassword() == null) {
-        throw new ConfigException(
-            String.format(
-                "Both %s and %s must be set.", PROXY_PASSWORD_CONFIG, PROXY_PASSWORD_CONFIG
-            )
-        );
-      }
-    }
   }
 
   private static class UrlListValidator implements Validator {

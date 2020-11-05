@@ -27,6 +27,9 @@ import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfi
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.LINGER_MS_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.MAX_BUFFERED_RECORDS_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.MAX_IN_FLIGHT_REQUESTS_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.PROXY_HOST_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.PROXY_PASSWORD_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.PROXY_USERNAME_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.SECURITY_PROTOCOL_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.SSL_CONFIG_PREFIX;
 
@@ -66,6 +69,7 @@ public class Validator {
     validateIgnoreConfigs();
     validateLingerMs();
     validateMaxBufferedRecords();
+    validateProxy();
     validateSsl();
 
     return new Config(validations);
@@ -124,6 +128,37 @@ public class Validator {
       addErrorMessage(MAX_BUFFERED_RECORDS_CONFIG, errorMessage);
       addErrorMessage(BATCH_SIZE_CONFIG, errorMessage);
       addErrorMessage(MAX_IN_FLIGHT_REQUESTS_CONFIG, errorMessage);
+    }
+  }
+
+  private void validateProxy() {
+    if (!config.isBasicProxyConfigured()) {
+      if (!config.proxyUsername().isEmpty()) {
+        String errorMessage = String.format(
+            "'%s' must be set to use '%s'.", PROXY_HOST_CONFIG, PROXY_USERNAME_CONFIG
+        );
+        addErrorMessage(PROXY_USERNAME_CONFIG, errorMessage);
+        addErrorMessage(PROXY_HOST_CONFIG, errorMessage);
+      }
+
+      if (config.proxyPassword() != null) {
+        String errorMessage = String.format(
+            "'%s' must be set to use '%s'.", PROXY_HOST_CONFIG, PROXY_PASSWORD_CONFIG
+        );
+        addErrorMessage(PROXY_PASSWORD_CONFIG, errorMessage);
+        addErrorMessage(PROXY_HOST_CONFIG, errorMessage);
+      }
+    } else {
+      boolean onlyOneSet = config.proxyUsername().isEmpty() ^ config.proxyPassword() == null;
+      if (onlyOneSet) {
+        String errorMessage = String.format(
+            "Either both or neither '%s' and '%s' can be set.",
+            PROXY_USERNAME_CONFIG,
+            PROXY_PASSWORD_CONFIG
+        );
+        addErrorMessage(PROXY_USERNAME_CONFIG, errorMessage);
+        addErrorMessage(PROXY_PASSWORD_CONFIG, errorMessage);
+      }
     }
   }
 
