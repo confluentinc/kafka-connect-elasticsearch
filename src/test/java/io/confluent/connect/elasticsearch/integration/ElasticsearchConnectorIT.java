@@ -58,8 +58,8 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
     connect.configureConnector(CONNECTOR_NAME, props);
 
     // write some more
-    writeRecords(10);
-    verifySearchResults(20);
+    writeRecords(NUM_RECORDS);
+    verifySearchResults(NUM_RECORDS * 2);
   }
 
   @Test
@@ -68,13 +68,13 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
     props.put(IGNORE_KEY_CONFIG, "false");
     runSimpleTest(props);
 
-    // should have 10 records at this point
+    // should have 5 records at this point
     // try deleting last one
-    int lastRecord = 9;
+    int lastRecord = NUM_RECORDS - 1;
     connect.kafka().produce(TOPIC, String.valueOf(lastRecord), null);
 
     // should have one less records
-    verifySearchResults(9);
+    verifySearchResults(NUM_RECORDS - 1);
   }
 
   @Test
@@ -98,12 +98,12 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
   public void testNullValue() throws Exception {
     runSimpleTest(props);
 
-    // should have 10 records at this point
+    // should have 5 records at this point
     // try writing null value
-    connect.kafka().produce(TOPIC, String.valueOf(10), null);
+    connect.kafka().produce(TOPIC, String.valueOf(NUM_RECORDS), null);
 
-    // should still have 10 records
-    verifySearchResults(10);
+    // should still have 5 records
+    verifySearchResults(NUM_RECORDS);
   }
 
   /*
@@ -119,7 +119,7 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
     // wait for tasks to spin up
     waitForConnectorToStart(CONNECTOR_NAME, TASKS_MAX);
 
-    for (int i  = 0; i < 10; i++) {
+    for (int i  = 0; i < NUM_RECORDS; i++) {
       connect.kafka().produce(TOPIC, String.valueOf(i),  String.valueOf(i));
     }
 

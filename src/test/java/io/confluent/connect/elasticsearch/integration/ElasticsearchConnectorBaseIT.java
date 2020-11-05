@@ -45,6 +45,7 @@ import org.junit.Before;
 
 public class ElasticsearchConnectorBaseIT extends BaseConnectorIT {
 
+  protected static final int NUM_RECORDS = 5;
   protected static final int TASKS_MAX = 1;
   protected static final String CONNECTOR_NAME = "es-connector";
   protected static final String TOPIC = "test";
@@ -107,9 +108,9 @@ public class ElasticsearchConnectorBaseIT extends BaseConnectorIT {
     // wait for tasks to spin up
     waitForConnectorToStart(CONNECTOR_NAME, TASKS_MAX);
 
-    writeRecords(10);
+    writeRecords(NUM_RECORDS);
 
-    verifySearchResults(10);
+    verifySearchResults(NUM_RECORDS);
   }
 
   protected void writeRecords(int numRecords) {
