@@ -1,5 +1,10 @@
 package io.confluent.connect.elasticsearch;
 
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_TIMEOUT_MS_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_KEY_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.READ_TIMEOUT_MS_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.TYPE_NAME_CONFIG;
 import static org.junit.Assert.assertEquals;
 
 import org.junit.Before;
@@ -15,9 +20,9 @@ public class ElasticsearchSinkConnectorConfigTest {
   @Before
   public void setup() {
     props = new HashMap<>();
-    props.put(ElasticsearchSinkConnectorConfig.TYPE_NAME_CONFIG, ElasticsearchSinkTestBase.TYPE);
-    props.put(ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG, "localhost");
-    props.put(ElasticsearchSinkConnectorConfig.IGNORE_KEY_CONFIG, "true");
+    props.put(TYPE_NAME_CONFIG, ElasticsearchSinkTestBase.TYPE);
+    props.put(CONNECTION_URL_CONFIG, "localhost");
+    props.put(IGNORE_KEY_CONFIG, "true");
   }
 
   @Test
@@ -29,8 +34,8 @@ public class ElasticsearchSinkConnectorConfigTest {
 
   @Test
   public void testSetHttpTimeoutsConfig() {
-    props.put(ElasticsearchSinkConnectorConfig.READ_TIMEOUT_MS_CONFIG, "10000");
-    props.put(ElasticsearchSinkConnectorConfig.CONNECTION_TIMEOUT_MS_CONFIG, "15000");
+    props.put(READ_TIMEOUT_MS_CONFIG, "10000");
+    props.put(CONNECTION_TIMEOUT_MS_CONFIG, "15000");
     ElasticsearchSinkConnectorConfig config = new ElasticsearchSinkConnectorConfig(props);
     assertEquals(config.readTimeoutMs(), 10000);
     assertEquals(config.connectionTimeoutMs(), 15000);
