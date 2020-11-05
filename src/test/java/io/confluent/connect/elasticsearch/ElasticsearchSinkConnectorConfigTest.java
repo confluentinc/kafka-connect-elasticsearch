@@ -122,18 +122,4 @@ public class ElasticsearchSinkConnectorConfigTest {
     props.put(PROXY_PORT_CONFIG, "-666");
     new ElasticsearchSinkConnectorConfig(props);
   }
-
-  @Test(expected = ConfigException.class)
-  public void shouldNotAllowProxyCredentialsWithoutProxy() {
-    props.put(PROXY_USERNAME_CONFIG, "username");
-    props.put(PROXY_PASSWORD_CONFIG, "password");
-    new ElasticsearchSinkConnectorConfig(props);
-  }
-
-  @Test(expected = ConfigException.class)
-  public void shouldNotAllowPartialProxyCredentials() {
-    props.put(PROXY_HOST_CONFIG, "proxy host");
-    props.put(PROXY_USERNAME_CONFIG, "username");
-    new ElasticsearchSinkConnectorConfig(props);
-  }
 }
