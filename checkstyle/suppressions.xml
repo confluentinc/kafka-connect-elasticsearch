@@ -24,4 +24,9 @@
             files="(ElasticsearchWriter).java"
     />
 
+    <suppress
+      checks="MethodLengthCheck"
+      files="ElasticsearchSinkConnectorConfig.java"
+    />
+
 </suppressions>
