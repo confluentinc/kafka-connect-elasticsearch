@@ -11,6 +11,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
+import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.config.SslConfigs;
 import org.apache.kafka.common.config.types.Password;
 import org.junit.Before;
@@ -45,6 +46,12 @@ public class ElasticsearchSinkConnectorConfigTest {
     ElasticsearchSinkConnectorConfig config = new ElasticsearchSinkConnectorConfig(props);
     assertEquals(config.readTimeoutMs(), 10000);
     assertEquals(config.connectionTimeoutMs(), 15000);
+  }
+
+  @Test(expected = ConfigException.class)
+  public void shouldNotAllowNullUrlList(){
+    props.put(CONNECTION_URL_CONFIG, null);
+    new ElasticsearchSinkConnectorConfig(props);
   }
 
   @Test
