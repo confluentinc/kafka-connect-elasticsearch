@@ -134,4 +134,10 @@ public class ElasticsearchSinkConnectorConfigTest {
     props.put(SECURITY_PROTOCOL_CONFIG, "unsecure");
     new ElasticsearchSinkConnectorConfig(props);
   }
+
+  @Test(expected = ConfigException.class)
+  public void shouldNotAllowNullUrlList(){
+    props.put(CONNECTION_URL_CONFIG, null);
+    new ElasticsearchSinkConnectorConfig(props);
+  }
 }
