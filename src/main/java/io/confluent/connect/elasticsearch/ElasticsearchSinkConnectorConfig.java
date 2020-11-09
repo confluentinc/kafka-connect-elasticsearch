@@ -698,8 +698,13 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   private static class UrlListValidator implements Validator {
 
     @Override
+    @SuppressWarnings("unchecked")
     public void ensureValid(String name, Object value) {
-      @SuppressWarnings("unchecked")
+      if (value == null) {
+        throw new ConfigException(
+            name, value, "The provided url list is null."
+        );
+      }
       List<String> urls = (List<String>) value;
       for (String url : urls) {
         try {

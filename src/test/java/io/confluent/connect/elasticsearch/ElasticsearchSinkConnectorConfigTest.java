@@ -6,16 +6,16 @@ import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfi
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.READ_TIMEOUT_MS_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.TYPE_NAME_CONFIG;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
+import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.config.types.Password;
 import org.junit.Before;
 import org.junit.Test;
 
 import java.util.HashMap;
 import java.util.Map;
-
-import static junit.framework.TestCase.assertTrue;
-import static org.junit.Assert.assertFalse;
 
 public class ElasticsearchSinkConnectorConfigTest {
 
@@ -43,6 +43,12 @@ public class ElasticsearchSinkConnectorConfigTest {
     ElasticsearchSinkConnectorConfig config = new ElasticsearchSinkConnectorConfig(props);
     assertEquals(config.readTimeoutMs(), 10000);
     assertEquals(config.connectionTimeoutMs(), 15000);
+  }
+
+  @Test(expected = ConfigException.class)
+  public void shouldNotAllowNullUrlList(){
+    props.put(CONNECTION_URL_CONFIG, null);
+    new ElasticsearchSinkConnectorConfig(props);
   }
 
   @Test
