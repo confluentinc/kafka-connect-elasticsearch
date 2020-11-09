@@ -53,6 +53,12 @@ public class ElasticsearchSinkConnectorConfigTest {
     assertEquals(config.connectionTimeoutMs(), 15000);
   }
 
+  @Test(expected = ConfigException.class)
+  public void shouldNotAllowNullUrlList(){
+    props.put(CONNECTION_URL_CONFIG, null);
+    new ElasticsearchSinkConnectorConfig(props);
+  }
+
   @Test
   public void testSslConfigs() {
     props.put(SSL_CONFIG_PREFIX + SslConfigs.SSL_KEYSTORE_LOCATION_CONFIG, "/path");
