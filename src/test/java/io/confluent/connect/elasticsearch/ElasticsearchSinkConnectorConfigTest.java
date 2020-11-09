@@ -7,6 +7,7 @@ import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfi
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.TYPE_NAME_CONFIG;
 import static org.junit.Assert.assertEquals;
 
+import org.apache.kafka.common.config.ConfigException;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -39,5 +40,11 @@ public class ElasticsearchSinkConnectorConfigTest {
     ElasticsearchSinkConnectorConfig config = new ElasticsearchSinkConnectorConfig(props);
     assertEquals(config.readTimeoutMs(), 10000);
     assertEquals(config.connectionTimeoutMs(), 15000);
+  }
+
+  @Test(expected = ConfigException.class)
+  public void shouldNotAllowNullUrlList(){
+    props.put(CONNECTION_URL_CONFIG, null);
+    new ElasticsearchSinkConnectorConfig(props);
   }
 }
