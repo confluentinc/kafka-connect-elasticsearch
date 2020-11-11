@@ -19,13 +19,18 @@ import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfi
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BEHAVIOR_ON_NULL_VALUES_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_KEY_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.LINGER_MS_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.WRITE_METHOD_CONFIG;
 import static org.apache.kafka.connect.runtime.ConnectorConfig.VALUE_CONVERTER_CLASS_CONFIG;
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
 
+import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import io.confluent.connect.elasticsearch.DataConverter.BehaviorOnNullValues;
 import io.confluent.connect.elasticsearch.Mapping;
 import io.confluent.connect.elasticsearch.TestUtils;
+import io.confluent.connect.elasticsearch.jest.JestElasticsearchClient.WriteMethod;
 import java.util.Collections;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.storage.StringConverter;
@@ -124,5 +129,34 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
     }
 
     waitForRecords(0);
+  }
+
+  @Test
+  public void testUpsert() throws Exception {
+    props.put(WRITE_METHOD_CONFIG, WriteMethod.UPSERT.toString());
+    props.put(IGNORE_KEY_CONFIG, "false");
+    runSimpleTest(props);
+
+    // should have 10 records at this point
+    // try updating last one
+    int lastRecord = NUM_RECORDS - 1;
+    connect.kafka().produce(TOPIC, String.valueOf(lastRecord), String.format("{\"doc_num\":%d}", 0));
+    writeRecordsFromIndex(NUM_RECORDS, NUM_RECORDS);
+
+    // should have double number of records
+    verifySearchResults(NUM_RECORDS * 2);
+
+    JsonObject result = client.search("", TOPIC, null);
+    JsonArray rawHits = result.getAsJsonObject("hits").getAsJsonArray("hits");
+
+    for (int i = 0; i < rawHits.size(); ++i) {
+      JsonObject hitData = rawHits.get(i).getAsJsonObject();
+      JsonObject source = hitData.get("_source").getAsJsonObject();
+      assertTrue(source.has("doc_num"));
+      if (Integer.valueOf(hitData.get("_id").getAsString()) == lastRecord) {
+        // last record should be updated
+        assertTrue(source.get("doc_num").getAsInt() == 0);
+      }
+    }
   }
 }
