@@ -114,7 +114,11 @@ public class ElasticsearchConnectorBaseIT extends BaseConnectorIT {
   }
 
   protected void writeRecords(int numRecords) {
-    for (int i  = 0; i < numRecords; i++) {
+    writeRecordsFromIndex(0, numRecords);
+  }
+
+  protected void writeRecordsFromIndex(int start, int numRecords) {
+    for (int i  = start; i < start + numRecords; i++) {
       connect.kafka().produce(TOPIC, String.valueOf(i), String.format("{\"doc_num\":%d}", i));
     }
   }
