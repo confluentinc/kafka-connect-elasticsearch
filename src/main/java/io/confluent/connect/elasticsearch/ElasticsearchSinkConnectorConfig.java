@@ -159,13 +159,6 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   private static final String READ_TIMEOUT_MS_DISPLAY = "Read Timeout";
   private static final int READ_TIMEOUT_MS_DEFAULT = (int) TimeUnit.SECONDS.toMillis(3);
 
-  public static final String CREATE_INDICES_AT_START_CONFIG = "auto.create.indices.at.start";
-  private static final String CREATE_INDICES_AT_START_DOC = "Auto create the Elasticsearch"
-      + " indices at startup. This is useful when the indices are a direct mapping "
-      + " of the Kafka topics.";
-  private static final String CREATE_INDICES_AT_START_DISPLAY = "Create indices at startup";
-  private static final boolean CREATE_INDICES_AT_START_DEFAULT = true;
-
   // Data Conversion configs
   public static final String TYPE_NAME_CONFIG = "type.name";
   private static final String TYPE_NAME_DOC = "The Elasticsearch type name to use when indexing.";
@@ -454,16 +447,6 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
             ++order,
             Width.SHORT,
             READ_TIMEOUT_MS_DISPLAY
-        ).define(
-            CREATE_INDICES_AT_START_CONFIG,
-            Type.BOOLEAN,
-            CREATE_INDICES_AT_START_DEFAULT,
-            Importance.LOW,
-            CREATE_INDICES_AT_START_DOC,
-            CONNECTOR_GROUP,
-            ++order,
-            Width.SHORT,
-            CREATE_INDICES_AT_START_DISPLAY
     );
   }
 
@@ -704,10 +687,6 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
 
   public Set<String> connectionUrls() {
     return new HashSet<>(getList(CONNECTION_URL_CONFIG));
-  }
-
-  public boolean createIndicesAtStart() {
-    return getBoolean(CREATE_INDICES_AT_START_CONFIG);
   }
 
   public boolean dropInvalidMessage() {

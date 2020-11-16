@@ -26,9 +26,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Collection;
-import java.util.HashSet;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 public class ElasticsearchSinkTask extends SinkTask {
@@ -36,7 +34,6 @@ public class ElasticsearchSinkTask extends SinkTask {
   private static final Logger log = LoggerFactory.getLogger(ElasticsearchSinkTask.class);
   private volatile ElasticsearchWriter writer;
   private ElasticsearchClient client;
-  private Boolean createIndicesAtStartTime;
 
   @Override
   public String version() {
@@ -102,8 +99,6 @@ public class ElasticsearchSinkTask extends SinkTask {
         log.warn("AK versions prior to 2.6 do not support the errant record reporter");
       }
 
-      this.createIndicesAtStartTime = config.createIndicesAtStart();
-
       writer = builder.build();
       writer.start();
       log.info(
@@ -116,18 +111,6 @@ public class ElasticsearchSinkTask extends SinkTask {
           "Couldn't start ElasticsearchSinkTask due to configuration error:",
           e
       );
-    }
-  }
-
-  @Override
-  public void open(Collection<TopicPartition> partitions) {
-    log.debug("Opening the task for topic partitions: {}", partitions);
-    if (createIndicesAtStartTime) {
-      Set<String> topics = new HashSet<>();
-      for (TopicPartition tp : partitions) {
-        topics.add(tp.topic());
-      }
-      writer.createIndicesForTopics(topics);
     }
   }
 
