@@ -36,9 +36,9 @@ import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfi
 import static io.confluent.connect.elasticsearch.helper.ElasticsearchContainer.ELASTIC_PASSWORD;
 
 @Category(IntegrationTest.class)
-public class ElasticsearchConnectorSecureIT extends ElasticsearchConnectorBaseIT {
+public class ElasticsearchConnectorSslIT extends ElasticsearchConnectorBaseIT {
 
-  private static final Logger log = LoggerFactory.getLogger(ElasticsearchConnectorSecureIT.class);
+  private static final Logger log = LoggerFactory.getLogger(ElasticsearchConnectorSslIT.class);
 
   @BeforeClass
   public static void setupBeforeAll() {

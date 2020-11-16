@@ -45,6 +45,8 @@
         <test.containers.version>1.15.0</test.containers.version>
         <kafka.connect.maven.plugin.version>0.11.1</kafka.connect.maven.plugin.version>
         <maven.release.plugin.version>2.5.3</maven.release.plugin.version>
+        <hadoop.version>3.3.0</hadoop.version>
+        <apacheds-jdbm1.version>2.0.0-M2</apacheds-jdbm1.version>
     </properties>
 
     <repositories>
@@ -160,6 +162,13 @@
             <artifactId>elasticsearch</artifactId>
             <version>${test.containers.version}</version>
             <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>hadoop-minikdc</artifactId>
+            <version>${hadoop.version}</version>
+            <scope>test</scope>
+
         </dependency>
     </dependencies>
 

@@ -2,6 +2,7 @@ package io.confluent.connect.elasticsearch;
 
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_TIMEOUT_MS_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.KEYTAB_FILE_PATH_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.PROXY_HOST_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.PROXY_PASSWORD_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.PROXY_PORT_CONFIG;
@@ -16,14 +17,16 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.SecurityProtocol;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.HashMap;
+import java.util.Map;
 import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.config.SslConfigs;
 import org.apache.kafka.common.config.types.Password;
 import org.junit.Before;
 import org.junit.Test;
-
-import java.util.HashMap;
-import java.util.Map;
 
 public class ElasticsearchSinkConnectorConfigTest {
 
@@ -82,24 +85,24 @@ public class ElasticsearchSinkConnectorConfigTest {
   @Test
   public void testSecured() {
     props.put(CONNECTION_URL_CONFIG, "http://host:9999");
-    assertFalse(new ElasticsearchSinkConnectorConfig(props).secured());
+    assertFalse(new ElasticsearchSinkConnectorConfig(props).isSslEnabled());
 
     props.put(CONNECTION_URL_CONFIG, "https://host:9999");
-    assertFalse(new ElasticsearchSinkConnectorConfig(props).secured());
+    assertFalse(new ElasticsearchSinkConnectorConfig(props).isSslEnabled());
 
     props.put(CONNECTION_URL_CONFIG, "http://host1:9992,https://host:9999");
-    assertFalse(new ElasticsearchSinkConnectorConfig(props).secured());
+    assertFalse(new ElasticsearchSinkConnectorConfig(props).isSslEnabled());
 
     // Default behavior should be backwards compat
     props.put(CONNECTION_URL_CONFIG, "host1:9992");
-    assertFalse(new ElasticsearchSinkConnectorConfig(props).secured());
+    assertFalse(new ElasticsearchSinkConnectorConfig(props).isSslEnabled());
 
     props.put(SECURITY_PROTOCOL_CONFIG, SecurityProtocol.SSL.name());
-    assertTrue(new ElasticsearchSinkConnectorConfig(props).secured());
+    assertTrue(new ElasticsearchSinkConnectorConfig(props).isSslEnabled());
 
     props.put(SECURITY_PROTOCOL_CONFIG, SecurityProtocol.PLAINTEXT.name());
     props.put(CONNECTION_URL_CONFIG, "https://host:9999");
-    assertFalse(new ElasticsearchSinkConnectorConfig(props).secured());
+    assertFalse(new ElasticsearchSinkConnectorConfig(props).isSslEnabled());
   }
 
   @Test
@@ -160,6 +163,28 @@ public class ElasticsearchSinkConnectorConfigTest {
     props.put(SSL_CONFIG_PREFIX + SSL_ENDPOINT_IDENTIFICATION_ALGORITHM_CONFIG, null);
     config = new ElasticsearchSinkConnectorConfig(props);
     assertFalse(config.shouldDisableHostnameVerification());
+  }
+
+  @Test(expected = ConfigException.class)
+  public void shouldNotAllowInvalidExtensionKeytab() {
+    props.put(KEYTAB_FILE_PATH_CONFIG, "keytab.wrongextension");
+    new ElasticsearchSinkConnectorConfig(props);
+  }
+
+  @Test(expected = ConfigException.class)
+  public void shouldNotAllowNonExistingKeytab() {
+    props.put(KEYTAB_FILE_PATH_CONFIG, "idontexist.keytab");
+    new ElasticsearchSinkConnectorConfig(props);
+  }
+
+  @Test
+  public void shouldAllowValidKeytab() throws IOException {
+    Path keytab = Files.createTempFile("iexist", ".keytab");
+    props.put(KEYTAB_FILE_PATH_CONFIG, keytab.toString());
+
+    new ElasticsearchSinkConnectorConfig(props);
+
+    keytab.toFile().delete();
   }
 
   public static Map<String, String> addNecessaryProps(Map<String, String> props) {
