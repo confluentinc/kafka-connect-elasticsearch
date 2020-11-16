@@ -79,7 +79,6 @@ public class ElasticsearchSinkTask extends SinkTask {
           .setIgnoreKey(config.ignoreKey(), config.ignoreKeyTopics())
           .setIgnoreSchema(config.ignoreSchema(), config.ignoreSchemaTopics())
           .setCompactMapEntries(config.useCompactMapEntries())
-          .setTopicToIndexMap(config.topicToIndexMap())
           .setFlushTimoutMs(config.flushTimeoutMs())
           .setMaxBufferedRecords(config.maxBufferedRecords())
           .setMaxInFlightRequests(config.maxInFlightRequests())

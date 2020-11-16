@@ -17,6 +17,7 @@ package io.confluent.connect.elasticsearch;
 
 import com.carrotsearch.randomizedtesting.annotations.ThreadLeakScope;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.confluent.connect.elasticsearch.bulk.BulkProcessor.BehaviorOnMalformedDoc;
 import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaBuilder;
@@ -94,25 +95,6 @@ public class ElasticsearchWriterTest extends ElasticsearchSinkTestBase {
     ElasticsearchWriter writer = initWriter(client);
     writeDataAndRefresh(writer, records);
     verifySearchResults(records);
-  }
-
-  @Test
-  public void testTopicIndexOverride() throws Exception {
-    ignoreKey = true;
-    ignoreSchema = true;
-
-    String indexOverride = "index";
-
-    Collection<SinkRecord> records = prepareData(2);
-    ElasticsearchWriter writer = initWriter(
-        client,
-        Collections.<String>emptySet(),
-        Collections.<String>emptySet(),
-        Collections.singletonMap(TOPIC, indexOverride),
-        false,
-        BehaviorOnNullValues.IGNORE);
-    writeDataAndRefresh(writer, records);
-    verifySearchResults(records, indexOverride);
   }
 
   @Test
@@ -379,7 +361,7 @@ public class ElasticsearchWriterTest extends ElasticsearchSinkTestBase {
 
     ElasticsearchWriter writer = initWriter(client, BehaviorOnNullValues.DELETE);
     writeDataAndRefresh(writer, records);
-    verifySearchResults(new ArrayList<SinkRecord>());
+    verifySearchResults(new ArrayList<>());
   }
 
   @Test
@@ -391,11 +373,11 @@ public class ElasticsearchWriterTest extends ElasticsearchSinkTestBase {
 
     ElasticsearchWriter writer = initWriter(client, BehaviorOnNullValues.DELETE);
     writeDataAndRefresh(writer, records);
-    verifySearchResults(new ArrayList<SinkRecord>());
+    verifySearchResults(new ArrayList<>());
   }
 
   @Test
-  public void testFailOnNullValue() throws Exception {
+  public void testFailOnNullValue() {
     Collection<SinkRecord> records = new ArrayList<>();
     SinkRecord sinkRecord =
         new SinkRecord(TOPIC, PARTITION, Schema.STRING_SCHEMA, key, schema, null, 0);
@@ -411,7 +393,7 @@ public class ElasticsearchWriterTest extends ElasticsearchSinkTestBase {
   }
 
   @Test
-  public void testInvalidRecordException() throws Exception {
+  public void testInvalidRecordException() {
     ignoreSchema = true;
 
     Collection<SinkRecord> records = new ArrayList<>();
@@ -457,7 +439,7 @@ public class ElasticsearchWriterTest extends ElasticsearchSinkTestBase {
   }
 
   @Test
-  public void testDropInvalidRecordThrowsOnOtherErrors() throws Exception {
+  public void testDropInvalidRecordThrowsOnOtherErrors() {
     ignoreSchema = true;
     Collection<SinkRecord> inputRecords = new ArrayList<>();
 
@@ -510,9 +492,8 @@ public class ElasticsearchWriterTest extends ElasticsearchSinkTestBase {
       BehaviorOnNullValues behavior) {
     return initWriter(
         client,
-        Collections.<String>emptySet(),
-        Collections.<String>emptySet(),
-        Collections.<String, String>emptyMap(),
+        Collections.emptySet(),
+        Collections.emptySet(),
         dropInvalidMessage,
         behavior
     );
@@ -522,7 +503,6 @@ public class ElasticsearchWriterTest extends ElasticsearchSinkTestBase {
       ElasticsearchClient client,
       Set<String> ignoreKeyTopics,
       Set<String> ignoreSchemaTopics,
-      Map<String, String> topicToIndexMap,
       boolean dropInvalidMessage,
       BehaviorOnNullValues behavior
   ) {
@@ -530,7 +510,6 @@ public class ElasticsearchWriterTest extends ElasticsearchSinkTestBase {
         .setType(TYPE)
         .setIgnoreKey(ignoreKey, ignoreKeyTopics)
         .setIgnoreSchema(ignoreSchema, ignoreSchemaTopics)
-        .setTopicToIndexMap(topicToIndexMap)
         .setFlushTimoutMs(10000)
         .setMaxBufferedRecords(10000)
         .setMaxInFlightRequests(1)
@@ -540,14 +519,14 @@ public class ElasticsearchWriterTest extends ElasticsearchSinkTestBase {
         .setMaxRetry(3)
         .setDropInvalidMessage(dropInvalidMessage)
         .setBehaviorOnNullValues(behavior)
+        .setBehaviorOnMalformedDoc(BehaviorOnMalformedDoc.FAIL)
         .build();
     writer.start();
     writer.createIndicesForTopics(Collections.singleton(TOPIC));
     return writer;
   }
 
-  private void writeDataAndRefresh(ElasticsearchWriter writer, Collection<SinkRecord> records)
-      throws Exception {
+  private void writeDataAndRefresh(ElasticsearchWriter writer, Collection<SinkRecord> records) {
     writer.write(records);
     writer.flush();
     writer.stop();

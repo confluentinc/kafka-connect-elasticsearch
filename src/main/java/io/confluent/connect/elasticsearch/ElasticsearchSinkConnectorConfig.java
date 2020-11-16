@@ -18,7 +18,6 @@ package io.confluent.connect.elasticsearch;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.Arrays;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -208,16 +207,6 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
           + "so set this to ``false`` to use that older behavior.";
   private static final String COMPACT_MAP_ENTRIES_DISPLAY = "Compact Map Entries";
   private static final boolean COMPACT_MAP_ENTRIES_DEFAULT = true;
-
-  @Deprecated
-  public static final String TOPIC_INDEX_MAP_CONFIG = "topic.index.map";
-  private static final String TOPIC_INDEX_MAP_DOC =
-      "This option is now deprecated. A future version may remove it completely. Please use "
-          + "single message transforms, such as RegexRouter, to map topic names to index names.\n"
-          + "A map from Kafka topic name to the destination Elasticsearch index, represented as "
-          + "a list of ``topic:index`` pairs.";
-  private static final String TOPIC_INDEX_MAP_DISPLAY = "Topic to Index Map";
-  private static final String TOPIC_INDEX_MAP_DEFAULT = "";
 
   private static final String IGNORE_KEY_TOPICS_DOC =
       "List of topics for which ``" + IGNORE_KEY_CONFIG + "`` should be ``true``.";
@@ -521,16 +510,6 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
             Width.SHORT,
             COMPACT_MAP_ENTRIES_DISPLAY
         ).define(
-            TOPIC_INDEX_MAP_CONFIG,
-            Type.LIST,
-            TOPIC_INDEX_MAP_DEFAULT,
-            Importance.LOW,
-            TOPIC_INDEX_MAP_DOC,
-            DATA_CONVERSION_GROUP,
-            ++order,
-            Width.LONG,
-            TOPIC_INDEX_MAP_DISPLAY
-        ).define(
             IGNORE_KEY_TOPICS_CONFIG,
             Type.LIST,
             IGNORE_KEY_TOPICS_DEFAULT,
@@ -813,11 +792,6 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
     return sslConfigDef.parse(originalsWithPrefix(SSL_CONFIG_PREFIX));
   }
 
-  @Deprecated
-  public Map<String, String> topicToIndexMap() {
-    return parseMapConfig(getList(TOPIC_INDEX_MAP_CONFIG));
-  }
-
   public String type() {
     return getString(TYPE_NAME_CONFIG);
   }
@@ -832,18 +806,6 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
 
   public WriteMethod writeMethod() {
     return WriteMethod.valueOf(getString(WRITE_METHOD_CONFIG).toUpperCase());
-  }
-
-  private Map<String, String> parseMapConfig(List<String> values) {
-    Map<String, String> map = new HashMap<>();
-    for (String value : values) {
-      String[] parts = value.split(":");
-      String topic = parts[0];
-      String type = parts[1];
-      map.put(topic, type);
-    }
-
-    return map;
   }
 
   private static class UrlListValidator implements Validator {
