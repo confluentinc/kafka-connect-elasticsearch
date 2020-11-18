@@ -175,29 +175,23 @@ public class DataConverter {
         : convertKey(record.keySchema(), record.key());
 
     if (record.value() != null) {
-      if (config.writeMethod() == WriteMethod.UPSERT) {
-        return new UpdateRequest(index, id)
-            .doc(payload, XContentType.JSON)
-            .upsert(payload, XContentType.JSON)
-            .retryOnConflict(Math.max(config.maxInFlightRequests(), 5));
+      switch (config.writeMethod()) {
+        case UPSERT:
+          return new UpdateRequest(index, id)
+              .doc(payload, XContentType.JSON)
+              .upsert(payload, XContentType.JSON)
+              .retryOnConflict(Math.min(config.maxInFlightRequests(), 5));
+        case INSERT:
+          return maybeAddExternalVersioning(
+              new IndexRequest(index).id(id).source(payload, XContentType.JSON),
+              record
+          );
+        default:
+          return null;
       }
-
-      return addExternalVersioning(
-          new IndexRequest(index).id(id).source(payload, XContentType.JSON),
-          record
-      );
     }
 
-    return addExternalVersioning(new DeleteRequest(index).id(id), record);
-  }
-
-  private DocWriteRequest<?> addExternalVersioning(DocWriteRequest<?> request, SinkRecord record) {
-    if (!config.shouldIgnoreKey(record.topic())) {
-      request.versionType(VersionType.EXTERNAL);
-      request.version(record.kafkaOffset());
-    }
-
-    return request;
+    return maybeAddExternalVersioning(new DeleteRequest(index).id(id), record);
   }
 
   private String getPayload(SinkRecord record) {
@@ -214,6 +208,18 @@ public class DataConverter {
 
     byte[] rawJsonPayload = JSON_CONVERTER.fromConnectData(record.topic(), schema, value);
     return new String(rawJsonPayload, StandardCharsets.UTF_8);
+  }
+
+  private DocWriteRequest<?> maybeAddExternalVersioning(
+      DocWriteRequest<?> request,
+      SinkRecord record
+  ) {
+    if (!config.shouldIgnoreKey(record.topic())) {
+      request.versionType(VersionType.EXTERNAL);
+      request.version(record.kafkaOffset());
+    }
+
+    return request;
   }
 
   // We need to pre process the Kafka Connect schema before converting to JSON as Elasticsearch

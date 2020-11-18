@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 Confluent Inc.
+ * Copyright 2018 Confluent Inc.
  *
  * Licensed under the Confluent Community License (the "License"); you may not use
  * this file except in compliance with the License.  You may obtain a copy of the
@@ -24,6 +24,7 @@ import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import javax.net.ssl.HostnameVerifier;
@@ -33,6 +34,7 @@ import org.apache.http.auth.AuthScope;
 import org.apache.http.auth.UsernamePasswordCredentials;
 import org.apache.http.client.CredentialsProvider;
 import org.apache.http.client.config.RequestConfig;
+import org.apache.http.conn.ssl.NoopHostnameVerifier;
 import org.apache.http.conn.ssl.SSLConnectionSocketFactory;
 import org.apache.http.impl.client.BasicCredentialsProvider;
 import org.apache.http.impl.nio.client.HttpAsyncClientBuilder;
@@ -79,12 +81,12 @@ public class ElasticsearchClient {
       )
   );
 
-  private AtomicReference<ConnectException> error;
-  private BulkProcessor bulkProcessor;
-  private ConcurrentHashMap<String, SinkRecord> recordMap;
-  private ElasticsearchSinkConnectorConfig config;
-  private ErrantRecordReporter reporter;
-  private RestHighLevelClient client;
+  private final AtomicReference<ConnectException> error;
+  protected final BulkProcessor bulkProcessor;
+  private final ConcurrentMap<String, SinkRecord> docIdToRecord;
+  private final ElasticsearchSinkConnectorConfig config;
+  private final ErrantRecordReporter reporter;
+  private final RestHighLevelClient client;
 
   public ElasticsearchClient(
       ElasticsearchSinkConnectorConfig config,
@@ -102,7 +104,7 @@ public class ElasticsearchClient {
     }
 
     this.error = new AtomicReference<>();
-    this.recordMap = reporter != null || !config.ignoreKey()
+    this.docIdToRecord = reporter != null || !config.ignoreKey()
         ? new ConcurrentHashMap<>()
         : null;
     this.config = config;
@@ -155,14 +157,15 @@ public class ElasticsearchClient {
    * Creates an index. Will not recreate the index if it already exists.
    *
    * @param index the index to create
+   * @return true if the index was created, false if it already exists
    */
-  public void createIndex(String index) {
+  public boolean createIndex(String index) {
     if (indexExists(index)) {
-      return;
+      return false;
     }
 
     CreateIndexRequest request = new CreateIndexRequest(index);
-    callWithRetries(
+    return callWithRetries(
         "create index " + index,
         () -> {
           try {
@@ -171,9 +174,10 @@ public class ElasticsearchClient {
             if (!e.getMessage().contains(RESOURCE_ALREADY_EXISTS_EXCEPTION)) {
               throw e;
             }
+             return false;
           }
 
-          return null;
+          return true;
         }
     );
   }
@@ -187,7 +191,7 @@ public class ElasticsearchClient {
   public void createMapping(String index, Schema schema) {
     PutMappingRequest request = new PutMappingRequest(index).source(Mapping.buildMapping(schema));
     callWithRetries(
-        "create mapping",
+        String.format("create mapping for index %s with schema %s", index, schema),
         () -> client.indices().putMapping(request, RequestOptions.DEFAULT)
     );
   }
@@ -205,7 +209,7 @@ public class ElasticsearchClient {
    * @return true if a mapping exists, false if it does not
    */
   public boolean hasMapping(String index) {
-    MappingMetaData mapping = getMapping(index);
+    MappingMetaData mapping = mapping(index);
     return mapping != null && !mapping.sourceAsMap().isEmpty();
   }
 
@@ -223,9 +227,9 @@ public class ElasticsearchClient {
       throw error.get();
     }
 
-    if (recordMap != null) {
+    if (docIdToRecord != null) {
       // make sure that only unique records are being sent in a batch
-      while (recordMap.contains(request.id())) {
+      while (docIdToRecord.containsKey(request.id())) {
         flush();
         try {
           Thread.sleep(TimeUnit.SECONDS.toMillis(1));
@@ -259,8 +263,8 @@ public class ElasticsearchClient {
    * @param record the record
    */
   private void addToRecordMap(String id, SinkRecord record) {
-    if (recordMap != null) {
-      recordMap.put(id, record);
+    if (docIdToRecord != null) {
+      docIdToRecord.put(id, record);
     }
   }
 
@@ -284,6 +288,9 @@ public class ElasticsearchClient {
 
       @Override
       public void afterBulk(long executionId, BulkRequest request, Throwable failure) {
+        for (DocWriteRequest<?> req : request.requests()) {
+          removeFromRecordMap(req.id());
+        }
         error.compareAndSet(null, new ConnectException("Bulk request failed.", failure));
       }
     };
@@ -293,7 +300,7 @@ public class ElasticsearchClient {
    * Calls the specified function with retries and backoffs until the retries are exhausted or the
    * function succeeds.
    *
-   * @param description description of the attempted action n present tense
+   * @param description description of the attempted action in present tense
    * @param function the function to call and retry
    * @param <T> the return type of the function
    * @return the return value of the called function
@@ -394,7 +401,7 @@ public class ElasticsearchClient {
     }
 
     HostnameVerifier hostnameVerifier = config.shouldDisableHostnameVerification()
-        ? (hostname, session) -> true
+        ? new NoopHostnameVerifier()
         : SSLConnectionSocketFactory.getDefaultHostnameVerifier();
 
     builder.setSSLContext(sslContext);
@@ -435,24 +442,9 @@ public class ElasticsearchClient {
   }
 
   /**
-   * Gets the mapping for an index.
-   *
-   * @param index the index to fetch the mapping for
-   * @return the MappingMetaData for the index
-   */
-  private MappingMetaData getMapping(String index) {
-    GetMappingsRequest request = new GetMappingsRequest().indices(index);
-    GetMappingsResponse response = callWithRetries(
-        "get mapping for index " + index,
-        () -> client.indices().getMapping(request, RequestOptions.DEFAULT)
-    );
-    return response.mappings().get(index);
-  }
-
-  /**
-   * Processes a response from a BulkAction. Successful responses are ignored. Failed responses are
-   * reported to the DLQ and handled according to configuration (ignore or fail). Version conflicts
-   * are ignored.
+   * Processes a response from a {@link org.elasticsearch.action.bulk.BulkItemRequest}.
+   * Successful responses are ignored. Failed responses are reported to the DLQ and handled
+   * according to configuration (ignore or fail). Version conflicts are ignored.
    *
    * @param response the response to process
    */
@@ -530,13 +522,28 @@ public class ElasticsearchClient {
   }
 
   /**
+   * Gets the mapping for an index.
+   *
+   * @param index the index to fetch the mapping for
+   * @return the MappingMetaData for the index
+   */
+  private MappingMetaData mapping(String index) {
+    GetMappingsRequest request = new GetMappingsRequest().indices(index);
+    GetMappingsResponse response = callWithRetries(
+        "get mapping for index " + index,
+        () -> client.indices().getMapping(request, RequestOptions.DEFAULT)
+    );
+    return response.mappings().get(index);
+  }
+
+  /**
    * Removes the mapping for document id to record being written.
    *
    * @param id the document id
    */
   private void removeFromRecordMap(String id) {
-    if (recordMap != null) {
-      recordMap.remove(id);
+    if (docIdToRecord != null) {
+      docIdToRecord.remove(id);
     }
   }
 
@@ -547,7 +554,7 @@ public class ElasticsearchClient {
    */
   private synchronized void reportBadRecord(BulkItemResponse response) {
     if (reporter != null) {
-      SinkRecord original = recordMap.get(response.getId());
+      SinkRecord original = docIdToRecord.get(response.getId());
       if (original != null) {
         reporter.report(
             original,
@@ -570,7 +577,7 @@ public class ElasticsearchClient {
     }
 
     /**
-     * This method is overriden to swallow the stack trace.
+     * This method is overridden to swallow the stack trace.
      *
      * @return Throwable
      */

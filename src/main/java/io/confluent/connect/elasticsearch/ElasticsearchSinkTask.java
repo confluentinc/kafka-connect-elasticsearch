@@ -80,15 +80,15 @@ public class ElasticsearchSinkTask extends SinkTask {
     log.debug("Putting {} records to Elasticsearch.", records.size());
     for (SinkRecord record : records) {
       if (shouldSkipRecord(record)) {
-        log.trace("Ignoring sink {} with null value.", recordString(record));
+        logTrace("Ignoring {} with null value.", record);
         reportBadRecord(record, new ConnectException("Cannot write null valued record."));
         continue;
       }
 
-      log.trace("Writing {} to Elasticsearch.", recordString(record));
+      logTrace("Writing {} to Elasticsearch", record);
 
       String index = convertTopicToIndexName(record.topic());
-      checkIndex(index);
+      ensureIndexExists(index);
       checkMapping(record);
       tryWriteRecord(record);
     }
@@ -114,14 +114,6 @@ public class ElasticsearchSinkTask extends SinkTask {
   @Override
   public String version() {
     return Version.getVersion();
-  }
-
-  private void checkIndex(String index) {
-    if (!indexCache.contains(index)) {
-      log.info("Creating index {}.", index);
-      client.createIndex(index);
-      indexCache.add(index);
-    }
   }
 
   private void checkMapping(SinkRecord record) {
@@ -162,6 +154,20 @@ public class ElasticsearchSinkTask extends SinkTask {
 
     log.trace("Topic '{}' was translated to index '{}'.", topic, index);
     return index;
+  }
+
+  private void ensureIndexExists(String index) {
+    if (!indexCache.contains(index)) {
+      log.info("Creating index {}.", index);
+      client.createIndex(index);
+      indexCache.add(index);
+    }
+  }
+
+  private void logTrace(String formatMsg, SinkRecord record) {
+    if (log.isTraceEnabled()) {
+      log.trace(formatMsg, recordString(record));
+    }
   }
 
   private void reportBadRecord(SinkRecord record, Throwable error) {

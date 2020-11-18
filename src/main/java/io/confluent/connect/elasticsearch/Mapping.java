@@ -158,7 +158,7 @@ public class Mapping {
   ) throws IOException {
 
     if (type == null) {
-      throw new DataException("Invalid primitive type " + type + ".");
+      throw new DataException(String.format("Invalid primitive type %s.", type));
     }
 
     builder.field(TYPE_FIELD, type);

@@ -15,11 +15,13 @@
 
 package io.confluent.connect.elasticsearch;
 
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BATCH_SIZE_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BEHAVIOR_ON_MALFORMED_DOCS_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BEHAVIOR_ON_NULL_VALUES_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_KEY_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.LINGER_MS_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.MAX_IN_FLIGHT_REQUESTS_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.WRITE_METHOD_CONFIG;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -36,8 +38,11 @@ import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.Behav
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.WriteMethod;
 import io.confluent.connect.elasticsearch.helper.ElasticsearchContainer;
 import io.confluent.connect.elasticsearch.helper.ElasticsearchHelperClient;
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.ObjectInput;
+import java.io.ObjectInputStream;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -49,6 +54,7 @@ import org.apache.kafka.connect.sink.ErrantRecordReporter;
 import org.apache.kafka.connect.sink.SinkRecord;
 import org.apache.kafka.test.TestUtils;
 import org.elasticsearch.ElasticsearchStatusException;
+import org.elasticsearch.cluster.metadata.MappingMetaData;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.common.xcontent.XContentFactory;
 import org.elasticsearch.search.SearchHit;
@@ -57,7 +63,6 @@ import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
-import org.testcontainers.shaded.okio.Sink;
 
 public class ElasticsearchClientTest {
 
@@ -77,7 +82,7 @@ public class ElasticsearchClientTest {
   }
 
   @AfterClass
-  public static void cleanuoAfterAll() {
+  public static void cleanupAfterAll() {
     container.close();
   }
 
@@ -104,6 +109,28 @@ public class ElasticsearchClientTest {
     client.close();
   }
 
+  @Test(expected = ConnectException.class)
+  public void testCloseFails() {
+    props.put(BATCH_SIZE_CONFIG, "1");
+    props.put(MAX_IN_FLIGHT_REQUESTS_CONFIG, "1");
+    ElasticsearchClient client = new ElasticsearchClient(config, null) {
+      @Override
+      public void close() {
+        try {
+          if (!bulkProcessor.awaitClose(1, TimeUnit.MILLISECONDS)) {
+            throw new ConnectException("Failed to process all outstanding requests in time.");
+          }
+        } catch (InterruptedException e) {}
+      }
+    };
+
+    for (int i = 0; i < 10; i++) {
+      client.index(sinkRecord(i), converter.convertRecord(sinkRecord(i), INDEX));
+    }
+
+    client.close();
+  }
+
   @Test
   public void testCreateIndex() throws IOException {
     ElasticsearchClient client = new ElasticsearchClient(config, null);
@@ -114,14 +141,14 @@ public class ElasticsearchClientTest {
   }
 
   @Test
-  public void testIndexAlreadyExists() throws IOException {
+  public void testDoesNotCreateAlreadyExistingIndex() throws IOException {
     ElasticsearchClient client = new ElasticsearchClient(config, null);
     assertFalse(helperClient.indexExists(INDEX));
 
-    client.createIndex(INDEX);
+    assertTrue(client.createIndex(INDEX));
     assertTrue(helperClient.indexExists(INDEX));
 
-    client.createIndex(INDEX);
+    assertFalse(client.createIndex(INDEX));
     assertTrue(helperClient.indexExists(INDEX));
   }
 
@@ -130,7 +157,7 @@ public class ElasticsearchClientTest {
     ElasticsearchClient client = new ElasticsearchClient(config, null);
     assertFalse(helperClient.indexExists(INDEX));
 
-    client.createIndex(INDEX);
+    assertTrue(client.createIndex(INDEX));
     assertTrue(client.indexExists(INDEX));
   }
 
@@ -143,6 +170,7 @@ public class ElasticsearchClientTest {
   }
 
   @Test
+  @SuppressWarnings("unchecked")
   public void testCreateMapping() throws IOException {
     ElasticsearchClient client = new ElasticsearchClient(config, null);
     client.createIndex(INDEX);
@@ -151,17 +179,17 @@ public class ElasticsearchClientTest {
 
     assertTrue(client.hasMapping(INDEX));
 
-    XContentBuilder builder = Mapping.buildMapping(sinkRecord(0).valueSchema());
-    builder.flush();
-    ByteArrayOutputStream stream = (ByteArrayOutputStream) builder.getOutputStream();
-    System.out.println(stream.toString());
-
-    helperClient.getMapping(INDEX).sourceAsMap();
-    XContentBuilder mapping = XContentFactory.jsonBuilder();
-    mapping.map(helperClient.getMapping(INDEX).sourceAsMap());
-    mapping.flush();
-    stream = (ByteArrayOutputStream) mapping.getOutputStream();
-    System.out.println(stream.toString());
+    Map<String, Object> mapping = helperClient.getMapping(INDEX).sourceAsMap();
+    assertTrue(mapping.containsKey("properties"));
+    Map<String, Object> props = (Map<String, Object>) mapping.get("properties");
+    assertTrue(props.containsKey("offset"));
+    assertTrue(props.containsKey("another"));
+    Map<String, Object> offset = (Map<String, Object>) props.get("offset");
+    assertEquals("integer", offset.get("type"));
+    assertEquals(0, offset.get("null_value"));
+    Map<String, Object> another = (Map<String, Object>) props.get("another");
+    assertEquals("integer", another.get("type"));
+    assertEquals(0, another.get("null_value"));
   }
 
   @Test

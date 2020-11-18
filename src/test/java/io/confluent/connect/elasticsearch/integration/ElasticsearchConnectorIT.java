@@ -125,7 +125,7 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
     // try updating last one
     int lastRecord = NUM_RECORDS - 1;
     connect.kafka().produce(TOPIC, String.valueOf(lastRecord), String.format("{\"doc_num\":%d}", 0));
-    writeRecordsFromIndex(NUM_RECORDS, NUM_RECORDS);
+    writeRecordsFromStartIndex(NUM_RECORDS, NUM_RECORDS);
 
     // should have double number of records
     verifySearchResults(NUM_RECORDS * 2);
