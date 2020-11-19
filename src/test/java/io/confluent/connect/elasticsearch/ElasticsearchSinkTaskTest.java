@@ -47,11 +47,6 @@ public class ElasticsearchSinkTaskTest extends ElasticsearchSinkTestBase {
   private static final int PARTITION_113 = 113;
   private static final TopicPartition TOPIC_IN_CAPS_PARTITION = new TopicPartition(TOPIC_IN_CAPS, PARTITION_113);
 
-  private static final String UNSEEN_TOPIC = "UnseenTopic";
-  private static final int PARTITION_114 = 114;
-  private static final TopicPartition UNSEEN_TOPIC_PARTITION = new TopicPartition(UNSEEN_TOPIC, PARTITION_114);
-
-
   private Map<String, String> createProps() {
     Map<String, String> props = new HashMap<>();
     props.put(ElasticsearchSinkConnectorConfig.TYPE_NAME_CONFIG, TYPE);
@@ -123,39 +118,8 @@ public class ElasticsearchSinkTaskTest extends ElasticsearchSinkTestBase {
     } finally {
       task.stop();
     }
-  }
 
-  @Test
-  public void testCreateAndWriteToIndexNotCreatedAtStartTime() {
-    InternalTestCluster cluster = ESIntegTestCase.internalCluster();
-    cluster.ensureAtLeastNumDataNodes(3);
-    Map<String, String> props = createProps();
-
-    props.put(ElasticsearchSinkConnectorConfig.CREATE_INDICES_AT_START_CONFIG, "false");
-
-    ElasticsearchSinkTask task = new ElasticsearchSinkTask();
-    task.initialize(mock(SinkTaskContext.class));
-
-    String key = "key";
-    Schema schema = createSchema();
-    Struct record = createRecord(schema);
-
-    SinkRecord sinkRecord = new SinkRecord(UNSEEN_TOPIC,
-        PARTITION_114,
-        Schema.STRING_SCHEMA,
-        key,
-        schema,
-        record,
-        0 );
-
-    task.start(props, client);
-    task.open(new HashSet<>(Collections.singletonList(TOPIC_IN_CAPS_PARTITION)));
-    task.put(Collections.singleton(sinkRecord));
-    task.stop();
-
-    assertTrue(UNSEEN_TOPIC + " index created without errors ",
-        verifyIndexExist(cluster, UNSEEN_TOPIC.toLowerCase()));
-
+    assertTrue(verifyIndexExist(cluster, TOPIC_IN_CAPS.toLowerCase()));
   }
 
   @Test
