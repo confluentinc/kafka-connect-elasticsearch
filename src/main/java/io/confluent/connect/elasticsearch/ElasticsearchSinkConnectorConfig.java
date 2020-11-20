@@ -730,7 +730,6 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
     return getLong(LINGER_MS_CONFIG);
   }
 
-  // TODO: probably remove
   public int maxBufferedRecords() {
     return getInt(MAX_BUFFERED_RECORDS_CONFIG);
   }

@@ -26,6 +26,7 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import javax.net.ssl.HostnameVerifier;
 import javax.net.ssl.SSLContext;
@@ -81,6 +82,7 @@ public class ElasticsearchClient {
       )
   );
 
+  protected final AtomicInteger numRecords;
   private final AtomicReference<ConnectException> error;
   protected final BulkProcessor bulkProcessor;
   private final ConcurrentMap<String, SinkRecord> docIdToRecord;
@@ -103,6 +105,7 @@ public class ElasticsearchClient {
       }
     }
 
+    this.numRecords = new AtomicInteger(0);
     this.error = new AtomicReference<>();
     this.docIdToRecord = reporter != null || !config.ignoreKey()
         ? new ConcurrentHashMap<>()
@@ -174,9 +177,8 @@ public class ElasticsearchClient {
             if (!e.getMessage().contains(RESOURCE_ALREADY_EXISTS_EXCEPTION)) {
               throw e;
             }
-             return false;
+            return false;
           }
-
           return true;
         }
     );
@@ -239,7 +241,17 @@ public class ElasticsearchClient {
       }
     }
 
+    // limit the internal buffer
+    while (numRecords.get() >= config.maxBufferedRecords()) {
+      try {
+        Thread.sleep(TimeUnit.SECONDS.toMillis(1));
+      } catch (InterruptedException e) {
+        throw new ConnectException(e);
+      }
+    }
+
     addToRecordMap(request.id(), record);
+    numRecords.incrementAndGet();
     bulkProcessor.add(request);
   }
 
@@ -284,6 +296,7 @@ public class ElasticsearchClient {
           handleResponse(bulkItemResponse);
           removeFromRecordMap(bulkItemResponse.getId());
         }
+        numRecords.addAndGet(-response.getItems().length);
       }
 
       @Override
@@ -292,6 +305,7 @@ public class ElasticsearchClient {
           removeFromRecordMap(req.id());
         }
         error.compareAndSet(null, new ConnectException("Bulk request failed.", failure));
+        numRecords.addAndGet(-request.requests().size());
       }
     };
   }

@@ -16,7 +16,6 @@
 package io.confluent.connect.elasticsearch;
 
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BehaviorOnNullValues;
-import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.WriteMethod;
 import org.apache.kafka.connect.data.ConnectSchema;
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
@@ -187,7 +186,7 @@ public class DataConverter {
               record
           );
         default:
-          return null;
+          return null; // shouldn't happen
       }
     }
 
