@@ -17,4 +17,9 @@
             files="ElasticsearchClient.java"
     />
 
+    <suppress
+      checks="(MethodLength)"
+      files="ElasticsearchSinkConnectorConfig.java"
+    />
+
 </suppressions>

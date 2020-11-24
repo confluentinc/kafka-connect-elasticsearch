@@ -15,7 +15,6 @@
 
 package io.confluent.connect.elasticsearch;
 
-
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import java.io.ByteArrayOutputStream;

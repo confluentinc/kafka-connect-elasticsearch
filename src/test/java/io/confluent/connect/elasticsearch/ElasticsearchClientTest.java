@@ -39,11 +39,7 @@ import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.Behav
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.WriteMethod;
 import io.confluent.connect.elasticsearch.helper.ElasticsearchContainer;
 import io.confluent.connect.elasticsearch.helper.ElasticsearchHelperClient;
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.io.ObjectInput;
-import java.io.ObjectInputStream;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -55,9 +51,6 @@ import org.apache.kafka.connect.sink.ErrantRecordReporter;
 import org.apache.kafka.connect.sink.SinkRecord;
 import org.apache.kafka.test.TestUtils;
 import org.elasticsearch.ElasticsearchStatusException;
-import org.elasticsearch.cluster.metadata.MappingMetaData;
-import org.elasticsearch.common.xcontent.XContentBuilder;
-import org.elasticsearch.common.xcontent.XContentFactory;
 import org.elasticsearch.search.SearchHit;
 import org.junit.After;
 import org.junit.AfterClass;
@@ -240,7 +233,7 @@ public class ElasticsearchClientTest {
 
   @Test
   public void testFlush() throws Exception {
-    props.put(LINGER_MS_CONFIG, String.valueOf(Integer.MAX_VALUE));
+    props.put(LINGER_MS_CONFIG, String.valueOf(TimeUnit.DAYS.toMillis(1)));
     config = new ElasticsearchSinkConnectorConfig(props);
     ElasticsearchClient client = new ElasticsearchClient(config, null);
     client.createIndex(INDEX);

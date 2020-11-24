@@ -18,6 +18,7 @@ package io.confluent.connect.elasticsearch.helper;
 import java.io.IOException;
 import org.apache.http.HttpHost;
 import org.elasticsearch.action.admin.indices.delete.DeleteIndexRequest;
+import org.elasticsearch.action.admin.indices.refresh.RefreshRequest;
 import org.elasticsearch.action.search.SearchRequest;
 import org.elasticsearch.client.RequestOptions;
 import org.elasticsearch.client.RestClient;
@@ -64,6 +65,11 @@ public class ElasticsearchHelperClient {
   public boolean indexExists(String index) throws IOException {
     GetIndexRequest request = new GetIndexRequest(index);
     return client.indices().exists(request, RequestOptions.DEFAULT);
+  }
+
+  public void refresh(String index) throws IOException {
+    RefreshRequest request = new RefreshRequest(index);
+    client.indices().refresh(request, RequestOptions.DEFAULT);
   }
 
   public SearchHits search(String index) throws IOException {

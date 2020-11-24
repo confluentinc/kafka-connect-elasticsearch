@@ -39,7 +39,12 @@ import org.apache.http.conn.ssl.NoopHostnameVerifier;
 import org.apache.http.conn.ssl.SSLConnectionSocketFactory;
 import org.apache.http.impl.client.BasicCredentialsProvider;
 import org.apache.http.impl.nio.client.HttpAsyncClientBuilder;
+import org.apache.http.impl.nio.conn.PoolingNHttpClientConnectionManager;
+import org.apache.http.impl.nio.reactor.DefaultConnectingIOReactor;
+import org.apache.http.nio.conn.NHttpClientConnectionManager;
 import org.apache.http.nio.conn.ssl.SSLIOSessionStrategy;
+import org.apache.http.nio.reactor.ConnectingIOReactor;
+import org.apache.http.nio.reactor.IOReactorException;
 import org.apache.kafka.common.network.Mode;
 import org.apache.kafka.common.security.ssl.SslFactory;
 import org.apache.kafka.connect.data.Schema;
@@ -88,6 +93,7 @@ public class ElasticsearchClient {
   private final ConcurrentMap<String, SinkRecord> docIdToRecord;
   private final ElasticsearchSinkConnectorConfig config;
   private final ErrantRecordReporter reporter;
+  private IdleConnectionReaper connectionReaper;
   private final RestHighLevelClient client;
 
   public ElasticsearchClient(
@@ -148,11 +154,27 @@ public class ElasticsearchClient {
    */
   public void close() {
     try {
-      if (!bulkProcessor.awaitClose(1, TimeUnit.MINUTES)) {
+      if (!bulkProcessor.awaitClose(config.flushTimeoutMs(), TimeUnit.MILLISECONDS)) {
         throw new ConnectException("Failed to process all outstanding requests in time.");
       }
     } catch (InterruptedException e) {
       log.error("Bulk processor close was interrupted.", e);
+    }
+
+    try {
+      if (connectionReaper != null) {
+        connectionReaper.shutdown();
+        connectionReaper.join();
+        connectionReaper = null;
+      }
+    } catch (InterruptedException e) {
+      log.error("Interrupted while closing connection evicting thread.");
+    }
+
+    try {
+      client.close();
+    } catch (IOException e) {
+      log.error("Failed to close Elasticsearch client.", e);
     }
   }
 
@@ -242,11 +264,15 @@ public class ElasticsearchClient {
     }
 
     // limit the internal buffer
+    long maxWaitTime = System.currentTimeMillis() + config.flushTimeoutMs();
     while (numRecords.get() >= config.maxBufferedRecords()) {
       try {
         Thread.sleep(TimeUnit.SECONDS.toMillis(1));
       } catch (InterruptedException e) {
         throw new ConnectException(e);
+      }
+      if (System.currentTimeMillis() > maxWaitTime) {
+        throw new ConnectException("Could not make space in the internal buffer fast enough.");
       }
     }
 
@@ -430,7 +456,21 @@ public class ElasticsearchClient {
    * @return the builder
    */
   private HttpAsyncClientBuilder customizeHttpClientConfig(HttpAsyncClientBuilder builder) {
+    try {
+      ConnectingIOReactor ioReactor = new DefaultConnectingIOReactor();
+      PoolingNHttpClientConnectionManager cm = new PoolingNHttpClientConnectionManager(ioReactor);
+      cm.setDefaultMaxPerRoute(config.maxInFlightRequests());
+      cm.setMaxTotal(config.maxInFlightRequests());
+      builder.setConnectionManager(cm);
+      connectionReaper = new IdleConnectionReaper(cm);
+      connectionReaper.start();
+    } catch (IOReactorException e) {
+      throw new ConnectException("Unable to open Elasticsearchclient.", e);
+    }
+
+
     builder.setMaxConnPerRoute(config.maxInFlightRequests());
+    builder.setMaxConnTotal(config.maxInFlightRequests());
     configureAuthentication(builder);
 
     if (config.secured()) {
@@ -574,6 +614,44 @@ public class ElasticsearchClient {
             original,
             new ReportingException("Indexing failed: " + response.getFailureMessage())
         );
+      }
+    }
+  }
+
+  /**
+   * Class that handles closing any idle or expired connections to avoid SocketTimeoutExceptions.
+   * Expired connections occur when the server closes their half of the connection without notifying
+   * the client.
+   */
+  private class IdleConnectionReaper extends Thread {
+
+    private volatile boolean shutdown;
+    private final NHttpClientConnectionManager connMgr;
+
+    public IdleConnectionReaper(NHttpClientConnectionManager connMgr) {
+      super();
+      this.connMgr = connMgr;
+    }
+
+    @Override
+    public void run() {
+      try {
+        while (!shutdown) {
+          synchronized (this) {
+            wait(config.maxIdleTimeMs() / 2);
+            connMgr.closeExpiredConnections();
+            connMgr.closeIdleConnections(config.maxIdleTimeMs(), TimeUnit.MILLISECONDS);
+          }
+        }
+      } catch (InterruptedException ex) {
+        // terminate
+      }
+    }
+
+    public void shutdown() {
+      shutdown = true;
+      synchronized (this) {
+        notifyAll();
       }
     }
   }

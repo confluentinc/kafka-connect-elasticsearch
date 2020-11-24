@@ -100,6 +100,14 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   private static final String LINGER_MS_DISPLAY = "Linger (ms)";
   private static final long LINGER_MS_DEFAULT = 1;
 
+  public static final String FLUSH_TIMEOUT_MS_CONFIG = "flush.timeout.ms";
+  private static final String FLUSH_TIMEOUT_MS_DOC =
+      "The timeout in milliseconds to use for periodic flushing, and when waiting for buffer space"
+          + " to be made available by completed requests as records are added. If this timeout is"
+          + " exceeded the task will fail.";
+  private static final String FLUSH_TIMEOUT_MS_DISPLAY = "Flush Timeout (ms)";
+  private static final int FLUSH_TIMEOUT_MS_DEFAULT = (int) TimeUnit.MINUTES.toMillis(3);
+
   public static final String MAX_RETRIES_CONFIG = "max.retries";
   private static final String MAX_RETRIES_DOC =
       "The maximum number of retries that are allowed for failed indexing requests. If the retry "
@@ -388,6 +396,17 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
             ++order,
             Width.SHORT,
             LINGER_MS_DISPLAY
+        ).define(
+            FLUSH_TIMEOUT_MS_CONFIG,
+            Type.LONG,
+            FLUSH_TIMEOUT_MS_DEFAULT,
+            between(TimeUnit.SECONDS.toMillis(1), TimeUnit.DAYS.toMillis(7)),
+            Importance.LOW,
+            FLUSH_TIMEOUT_MS_DOC,
+            CONNECTOR_GROUP,
+            ++order,
+            Width.SHORT,
+            FLUSH_TIMEOUT_MS_DISPLAY
         ).define(
             MAX_RETRIES_CONFIG,
             Type.INT,
@@ -710,6 +729,10 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
     return getBoolean(DROP_INVALID_MESSAGE_CONFIG);
   }
 
+  public long flushTimeoutMs() {
+    return getLong(FLUSH_TIMEOUT_MS_CONFIG);
+  }
+
   public boolean ignoreKey() {
     return getBoolean(IGNORE_KEY_CONFIG);
   }
@@ -734,7 +757,6 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
     return getInt(MAX_BUFFERED_RECORDS_CONFIG);
   }
 
-  // TODO: decide whether to remove or reimplement
   public int maxIdleTimeMs() {
     return getInt(MAX_CONNECTION_IDLE_TIME_MS_CONFIG);
   }
