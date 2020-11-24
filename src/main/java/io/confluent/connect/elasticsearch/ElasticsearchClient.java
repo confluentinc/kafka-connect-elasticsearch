@@ -291,7 +291,6 @@ public class ElasticsearchClient {
     addToRecordMap(request.id(), record);
     numRecords.incrementAndGet();
     bulkProcessor.add(request);
-    System.out.println("ADDING ONLY ONCE PLEASE" + request);
   }
 
   /**

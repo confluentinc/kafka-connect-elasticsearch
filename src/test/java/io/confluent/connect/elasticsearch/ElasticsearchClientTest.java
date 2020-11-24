@@ -104,7 +104,7 @@ public class ElasticsearchClientTest {
   }
 
   @Test(expected = ConnectException.class)
-  public void testCloseFails() {
+  public void testCloseFails() throws Exception {
     props.put(BATCH_SIZE_CONFIG, "1");
     props.put(MAX_IN_FLIGHT_REQUESTS_CONFIG, "1");
     ElasticsearchClient client = new ElasticsearchClient(config, null) {
@@ -118,11 +118,13 @@ public class ElasticsearchClientTest {
       }
     };
 
-    for (int i = 0; i < 10; i++) {
-      writeRecord(sinkRecord(i), client);
+    writeRecord(sinkRecord(0), client);
+    try {
+      client.close();
+    } catch (ConnectException e) {
+      waitUntilRecordsInES(1);
+      throw e;
     }
-
-    client.close();
   }
 
   @Test
@@ -216,13 +218,11 @@ public class ElasticsearchClientTest {
     props.put(LINGER_MS_CONFIG, "1000");
     props.put(MAX_IN_FLIGHT_REQUESTS_CONFIG, "1");
     props.put(MAX_BUFFERED_RECORDS_CONFIG, "1");
-    props.put(IGNORE_KEY_CONFIG, "false");
     config = new ElasticsearchSinkConnectorConfig(props);
-    converter = new DataConverter(config);
     ElasticsearchClient client = new ElasticsearchClient(config, null);
     client.createIndex(INDEX);
 
-    writeRecord(sinkRecord("key0", 0), client);
+    writeRecord(sinkRecord(0), client);
     assertEquals(1, client.numRecords.get());
     client.flush();
 
@@ -230,11 +230,11 @@ public class ElasticsearchClientTest {
     assertEquals(1, helperClient.getDocCount(INDEX));
     assertEquals(0, client.numRecords.get());
 
-    writeRecord(sinkRecord("key1",1), client);
+    writeRecord(sinkRecord(1), client);
     assertEquals(1, client.numRecords.get());
 
     // will block until the previous record is flushed
-    writeRecord(sinkRecord("key2",2), client);
+    writeRecord(sinkRecord(2), client);
     assertEquals(1, client.numRecords.get());
 
     waitUntilRecordsInES(3);
@@ -418,9 +418,9 @@ public class ElasticsearchClientTest {
         .field("offset", SchemaBuilder.bool().defaultValue(false).build())
         .build();
     Struct value = new Struct(schema).put("offset", false);
-    SinkRecord badRecord = new SinkRecord(INDEX, 0, Schema.STRING_SCHEMA, "key", schema, value, 1);
+    SinkRecord badRecord = new SinkRecord(INDEX, 0, Schema.STRING_SCHEMA, "key0", schema, value, 1);
 
-    writeRecord(sinkRecord(1), client);
+    writeRecord(sinkRecord("key0", 0), client);
     client.flush();
     waitUntilRecordsInES(1);
 
@@ -428,10 +428,10 @@ public class ElasticsearchClientTest {
     client.flush();
 
     // failed requests take a bit longer
-    for (int i = 0; i < 5; i++) {
+    for (int i = 2; i < 7; i++) {
       writeRecord(sinkRecord("key" + i, i + 1), client);
       client.flush();
-      waitUntilRecordsInES(i + 2);
+      waitUntilRecordsInES(i);
     }
 
     verify(reporter, times(1)).report(eq(badRecord), any(Throwable.class));
@@ -506,7 +506,6 @@ public class ElasticsearchClientTest {
     TestUtils.waitForCondition(
         () -> {
           try {
-            System.out.println(helperClient.getDocCount(INDEX));
             return helperClient.getDocCount(INDEX) == expectedRecords;
           } catch (ElasticsearchStatusException e) {
             if (e.getMessage().contains("index_not_found_exception")) {
