@@ -132,6 +132,7 @@ public class ElasticsearchClientTest {
 
     client.createIndex(INDEX);
     assertTrue(helperClient.indexExists(INDEX));
+    client.close();
   }
 
   @Test
@@ -144,6 +145,7 @@ public class ElasticsearchClientTest {
 
     assertFalse(client.createIndex(INDEX));
     assertTrue(helperClient.indexExists(INDEX));
+    client.close();
   }
 
   @Test
@@ -153,6 +155,7 @@ public class ElasticsearchClientTest {
 
     assertTrue(client.createIndex(INDEX));
     assertTrue(client.indexExists(INDEX));
+    client.close();
   }
 
   @Test
@@ -161,6 +164,7 @@ public class ElasticsearchClientTest {
     assertFalse(helperClient.indexExists(INDEX));
 
     assertFalse(client.indexExists(INDEX));
+    client.close();
   }
 
   @Test
@@ -184,6 +188,7 @@ public class ElasticsearchClientTest {
     Map<String, Object> another = (Map<String, Object>) props.get("another");
     assertEquals("integer", another.get("type"));
     assertEquals(0, another.get("null_value"));
+    client.close();
   }
 
   @Test
@@ -194,6 +199,7 @@ public class ElasticsearchClientTest {
     client.createMapping(INDEX, schema());
 
     assertTrue(client.hasMapping(INDEX));
+    client.close();
   }
 
   @Test
@@ -202,6 +208,7 @@ public class ElasticsearchClientTest {
     client.createIndex(INDEX);
 
     assertFalse(client.hasMapping(INDEX));
+    client.close();
   }
 
   @Test
@@ -209,11 +216,13 @@ public class ElasticsearchClientTest {
     props.put(LINGER_MS_CONFIG, "1000");
     props.put(MAX_IN_FLIGHT_REQUESTS_CONFIG, "1");
     props.put(MAX_BUFFERED_RECORDS_CONFIG, "1");
+    props.put(IGNORE_KEY_CONFIG, "false");
     config = new ElasticsearchSinkConnectorConfig(props);
+    converter = new DataConverter(config);
     ElasticsearchClient client = new ElasticsearchClient(config, null);
     client.createIndex(INDEX);
 
-    writeRecord(sinkRecord(0), client);
+    writeRecord(sinkRecord("key0", 0), client);
     assertEquals(1, client.numRecords.get());
     client.flush();
 
@@ -221,14 +230,15 @@ public class ElasticsearchClientTest {
     assertEquals(1, helperClient.getDocCount(INDEX));
     assertEquals(0, client.numRecords.get());
 
-    writeRecord(sinkRecord(1), client);
+    writeRecord(sinkRecord("key1",1), client);
     assertEquals(1, client.numRecords.get());
 
     // will block until the previous record is flushed
-    writeRecord(sinkRecord(2), client);
+    writeRecord(sinkRecord("key2",2), client);
     assertEquals(1, client.numRecords.get());
 
     waitUntilRecordsInES(3);
+    client.close();
   }
 
   @Test
@@ -243,6 +253,7 @@ public class ElasticsearchClientTest {
     client.flush();
     waitUntilRecordsInES(1);
     assertEquals(1, helperClient.getDocCount(INDEX));
+    client.close();
   }
 
   @Test
@@ -255,6 +266,7 @@ public class ElasticsearchClientTest {
 
     waitUntilRecordsInES(1);
     assertEquals(1, helperClient.getDocCount(INDEX));
+    client.close();
   }
 
   @Test
@@ -277,6 +289,7 @@ public class ElasticsearchClientTest {
     writeRecord(deleteRecord, client);
 
     waitUntilRecordsInES(1);
+    client.close();
   }
 
   @Test
@@ -317,6 +330,8 @@ public class ElasticsearchClientTest {
         assertEquals(0, hit.getSourceAsMap().get("another"));
       }
     }
+
+    client.close();
   }
 
   @Test
@@ -348,6 +363,7 @@ public class ElasticsearchClientTest {
 
     waitUntilRecordsInES(2);
     assertEquals(2, helperClient.getDocCount(INDEX));
+    client.close();
   }
 
   @Test(expected = ConnectException.class)
@@ -372,10 +388,15 @@ public class ElasticsearchClientTest {
     client.flush();
 
     // consecutive index calls should cause exception
-    for (int i = 0; i < 10; i++) {
-      writeRecord(sinkRecord(i + 1), client);
-      client.flush();
-      waitUntilRecordsInES(i + 2);
+    try {
+      for (int i = 0; i < 5; i++) {
+        writeRecord(sinkRecord(i + 1), client);
+        client.flush();
+        waitUntilRecordsInES(i + 2);
+      }
+    } catch (ConnectException e) {
+      client.close();
+      throw e;
     }
   }
 
@@ -407,13 +428,14 @@ public class ElasticsearchClientTest {
     client.flush();
 
     // failed requests take a bit longer
-    for (int i = 0; i < 10; i++) {
+    for (int i = 0; i < 5; i++) {
       writeRecord(sinkRecord("key" + i, i + 1), client);
       client.flush();
       waitUntilRecordsInES(i + 2);
     }
 
     verify(reporter, times(1)).report(eq(badRecord), any(Throwable.class));
+    client.close();
   }
 
   @Test
@@ -430,6 +452,7 @@ public class ElasticsearchClientTest {
     waitUntilRecordsInES(3);
     assertEquals(3, helperClient.getDocCount(INDEX));
     verify(reporter, never()).report(eq(sinkRecord(0)), any(Throwable.class));
+    client.close();
   }
 
   @Test
@@ -457,6 +480,8 @@ public class ElasticsearchClientTest {
     assertEquals(1, helperClient.getDocCount(INDEX));
     verify(reporter, never()).report(any(SinkRecord.class), any(Throwable.class));
     verify(reporter2, never()).report(any(SinkRecord.class), any(Throwable.class));
+    client.close();
+    client2.close();
   }
 
   private static Schema schema() {
@@ -481,6 +506,7 @@ public class ElasticsearchClientTest {
     TestUtils.waitForCondition(
         () -> {
           try {
+            System.out.println(helperClient.getDocCount(INDEX));
             return helperClient.getDocCount(INDEX) == expectedRecords;
           } catch (ElasticsearchStatusException e) {
             if (e.getMessage().contains("index_not_found_exception")) {

@@ -36,6 +36,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.SecurityProtocol;
+import java.util.HashMap;
 import java.util.Map;
 import org.apache.kafka.common.config.Config;
 import org.apache.kafka.common.config.ConfigValue;
@@ -50,7 +51,7 @@ public class ValidatorTest {
 
   @Before
   public void setup() {
-    props = ElasticsearchSinkConnectorConfigTest.addNecessaryProps(props);
+    props = ElasticsearchSinkConnectorConfigTest.addNecessaryProps(new HashMap<>());
   }
 
   @Test

@@ -15,6 +15,9 @@
 
 package io.confluent.connect.elasticsearch;
 
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.FLUSH_TIMEOUT_MS_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.MAX_BUFFERED_RECORDS_CONFIG;
+
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BehaviorOnMalformedDoc;
 import java.io.IOException;
 import java.net.MalformedURLException;
@@ -234,12 +237,14 @@ public class ElasticsearchClient {
    */
   public boolean hasMapping(String index) {
     MappingMetaData mapping = mapping(index);
-    return mapping != null && !mapping.sourceAsMap().isEmpty();
+    return mapping != null && mapping.sourceAsMap() != null && !mapping.sourceAsMap().isEmpty();
   }
 
   /**
    * Buffers a record to index. Will ensure that there are no concurrent requests for the same
-   * document id.
+   * document id when either the DLQ is configured or
+   * {@link ElasticsearchSinkConnectorConfig#IGNORE_KEY_CONFIG} is set to <code>false</code> because
+   * they require the use of a map keyed by document id.
    *
    * @param record the record to index
    * @param request the associated request to send
@@ -263,7 +268,7 @@ public class ElasticsearchClient {
       }
     }
 
-    // limit the internal buffer
+    // wait for internal buffer to be less than max.buffered.records configuration
     long maxWaitTime = System.currentTimeMillis() + config.flushTimeoutMs();
     while (numRecords.get() >= config.maxBufferedRecords()) {
       try {
@@ -272,13 +277,21 @@ public class ElasticsearchClient {
         throw new ConnectException(e);
       }
       if (System.currentTimeMillis() > maxWaitTime) {
-        throw new ConnectException("Could not make space in the internal buffer fast enough.");
+        throw new ConnectException(
+            String.format(
+                "Could not make space in the internal buffer fast enough. Consider increasing %s"
+                    + " or %s.",
+                FLUSH_TIMEOUT_MS_CONFIG,
+                MAX_BUFFERED_RECORDS_CONFIG
+            )
+        );
       }
     }
 
     addToRecordMap(request.id(), record);
     numRecords.incrementAndGet();
     bulkProcessor.add(request);
+    System.out.println("ADDING ONLY ONCE PLEASE" + request);
   }
 
   /**
@@ -398,14 +411,13 @@ public class ElasticsearchClient {
    * @param builder the HttpAsyncClientBuilder
    */
   private void configureSslContext(HttpAsyncClientBuilder builder) {
-    SslFactory kafkaSslFactory = new SslFactory(Mode.CLIENT, null, false);
-    kafkaSslFactory.configure(config.sslConfigs());
+    SslFactory sslFactory = new SslFactory(Mode.CLIENT, null, false);
+    sslFactory.configure(config.sslConfigs());
 
     SSLContext sslContext;
     try {
       // try AK <= 2.2 first
-      sslContext =
-          (SSLContext) SslFactory.class.getDeclaredMethod("sslContext").invoke(kafkaSslFactory);
+      sslContext = (SSLContext) SslFactory.class.getDeclaredMethod("sslContext").invoke(sslFactory);
       log.debug("Using AK 2.2 SslFactory methods.");
     } catch (Exception e) {
       // must be running AK 2.3+
@@ -414,7 +426,7 @@ public class ElasticsearchClient {
       Object sslEngine;
       try {
         // try AK <= 2.6 second
-        sslEngine = SslFactory.class.getDeclaredMethod("sslEngineBuilder").invoke(kafkaSslFactory);
+        sslEngine = SslFactory.class.getDeclaredMethod("sslEngineBuilder").invoke(sslFactory);
         log.debug("Using AK 2.2-2.5 SslFactory methods.");
 
       } catch (Exception ex) {
@@ -424,8 +436,7 @@ public class ElasticsearchClient {
                 + " Trying AK 2.6+ methods for SslFactory."
         );
         try {
-          sslEngine =
-              SslFactory.class.getDeclaredMethod("sslEngineFactory").invoke(kafkaSslFactory);
+          sslEngine = SslFactory.class.getDeclaredMethod("sslEngineFactory").invoke(sslFactory);
           log.debug("Using AK 2.6+ SslFactory methods.");
         } catch (Exception exc) {
           throw new ConnectException("Failed to find methods for SslFactory.", exc);

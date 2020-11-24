@@ -141,6 +141,9 @@ public class RetryUtil {
       long initialBackoff,
       Time clock
   ) throws Exception {
+    assert description != null;
+    assert function != null;
+
     int attempt = 0;
     while (true) {
       ++attempt;

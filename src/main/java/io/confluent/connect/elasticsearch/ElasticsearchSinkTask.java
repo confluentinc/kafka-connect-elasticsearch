@@ -152,7 +152,9 @@ public class ElasticsearchSinkTask extends SinkTask {
       log.warn("Elasticsearch cannot have indices named {}. Index will be named {}.", topic, index);
     }
 
-    log.trace("Topic '{}' was translated to index '{}'.", topic, index);
+    if (!topic.equals(index)) {
+      log.trace("Topic '{}' was translated to index '{}'.", topic, index);
+    }
     return index;
   }
 
