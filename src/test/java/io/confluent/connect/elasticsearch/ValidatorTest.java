@@ -18,6 +18,7 @@ package io.confluent.connect.elasticsearch;
 
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BATCH_SIZE_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_PASSWORD_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_USERNAME_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.FLUSH_TIMEOUT_MS_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_KEY_CONFIG;
@@ -52,6 +53,13 @@ public class ValidatorTest {
   @Before
   public void setup() {
     props = ElasticsearchSinkConnectorConfigTest.addNecessaryProps(new HashMap<>());
+  }
+
+  @Test
+  public void testInvalidIndividualConfigs() {
+    validator = new Validator(new HashMap<>());
+    Config result = validator.validate();
+    assertHasErrorMessage(result, CONNECTION_URL_CONFIG, "Missing required configuration");
   }
 
   @Test

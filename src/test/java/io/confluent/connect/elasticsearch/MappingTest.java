@@ -27,6 +27,7 @@ import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
+import org.apache.kafka.connect.errors.DataException;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.junit.Test;
 
@@ -38,6 +39,11 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 
 public class MappingTest {
+
+  @Test(expected = DataException.class)
+  public void testBuildMappingWithNullSchema() {
+    XContentBuilder builder = Mapping.buildMapping(null);
+  }
 
   @Test
   public void testBuildMapping() throws IOException {
@@ -66,15 +72,23 @@ public class MappingTest {
     Schema schema = SchemaBuilder
         .struct()
         .name("record")
-        .field("int", SchemaBuilder.int32().defaultValue(0).build())
+        .field("boolean", SchemaBuilder.bool().defaultValue(true).build())
+        .field("int8", SchemaBuilder.int8().defaultValue((byte) 1).build())
+        .field("int16", SchemaBuilder.int16().defaultValue((short) 1).build())
+        .field("int32", SchemaBuilder.int32().defaultValue(1).build())
+        .field("int64", SchemaBuilder.int64().defaultValue((long) 1).build())
+        .field("float32", SchemaBuilder.float32().defaultValue((float) 1).build())
+        .field("float64", SchemaBuilder.float64().defaultValue((double) 1).build())
         .build();
 
-    JsonObject result = runTest(schema);
-
-    assertEquals(
-        0,
-        result.getAsJsonObject("properties").getAsJsonObject("int").get("null_value").getAsInt()
-    );
+    JsonObject properties = runTest(schema).getAsJsonObject("properties");
+    assertEquals(1, properties.getAsJsonObject("int8").get("null_value").getAsInt());
+    assertEquals(1, properties.getAsJsonObject("int16").get("null_value").getAsInt());
+    assertEquals(1, properties.getAsJsonObject("int32").get("null_value").getAsInt());
+    assertEquals(1, properties.getAsJsonObject("int64").get("null_value").getAsInt());
+    assertEquals(1, properties.getAsJsonObject("float32").get("null_value").getAsInt());
+    assertEquals(1, properties.getAsJsonObject("float64").get("null_value").getAsInt());
+    assertEquals(true, properties.getAsJsonObject("boolean").get("null_value").getAsBoolean());
   }
 
   @Test

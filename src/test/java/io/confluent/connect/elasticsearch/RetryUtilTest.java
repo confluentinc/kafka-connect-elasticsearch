@@ -37,6 +37,12 @@ public class RetryUtilTest {
   }
 
   @Test
+  public void computeRetryBackoffForNegativeAttempts() {
+    assertComputeRetryInRange(0, 10L);
+    assertEquals(10L, RetryUtil.computeRandomRetryWaitTimeInMillis(-1, 10L));
+  }
+
+  @Test
   public void computeRetryBackoffForValidRanges() {
     assertComputeRetryInRange(10, 10L);
     assertComputeRetryInRange(10, 100L);

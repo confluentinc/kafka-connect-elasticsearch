@@ -9,6 +9,7 @@ import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfi
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.READ_TIMEOUT_MS_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.SECURITY_PROTOCOL_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.SSL_CONFIG_PREFIX;
+import static org.apache.kafka.common.config.SslConfigs.SSL_ENDPOINT_IDENTIFICATION_ALGORITHM_CONFIG;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -114,6 +115,7 @@ public class ElasticsearchSinkConnectorConfigTest {
   @Test
   public void shouldAcceptValidProxyWithAuthentication() {
     props.put(PROXY_HOST_CONFIG, "proxy host");
+    props.put(PROXY_PORT_CONFIG, "1010");
     props.put(PROXY_USERNAME_CONFIG, "username");
     props.put(PROXY_PASSWORD_CONFIG, "password");
     ElasticsearchSinkConnectorConfig config = new ElasticsearchSinkConnectorConfig(props);
@@ -121,6 +123,10 @@ public class ElasticsearchSinkConnectorConfigTest {
     assertNotNull(config);
     assertTrue(config.isBasicProxyConfigured());
     assertTrue(config.isProxyWithAuthenticationConfigured());
+    assertEquals("proxy host", config.proxyHost());
+    assertEquals(1010, config.proxyPort());
+    assertEquals("username", config.proxyUsername());
+    assertEquals("password", config.proxyPassword().value());
   }
 
   @Test(expected = ConfigException.class)
@@ -139,6 +145,21 @@ public class ElasticsearchSinkConnectorConfigTest {
   public void shouldNotAllowInvalidSecurityProtocol() {
     props.put(SECURITY_PROTOCOL_CONFIG, "unsecure");
     new ElasticsearchSinkConnectorConfig(props);
+  }
+
+  @Test
+  public void shouldDisableHostnameVerification() {
+    props.put(SSL_CONFIG_PREFIX + SSL_ENDPOINT_IDENTIFICATION_ALGORITHM_CONFIG, "https");
+    ElasticsearchSinkConnectorConfig config = new ElasticsearchSinkConnectorConfig(props);
+    assertFalse(config.shouldDisableHostnameVerification());
+
+    props.put(SSL_CONFIG_PREFIX + SSL_ENDPOINT_IDENTIFICATION_ALGORITHM_CONFIG, "");
+    config = new ElasticsearchSinkConnectorConfig(props);
+    assertTrue(config.shouldDisableHostnameVerification());
+
+    props.put(SSL_CONFIG_PREFIX + SSL_ENDPOINT_IDENTIFICATION_ALGORITHM_CONFIG, null);
+    config = new ElasticsearchSinkConnectorConfig(props);
+    assertFalse(config.shouldDisableHostnameVerification());
   }
 
   public static Map<String, String> addNecessaryProps(Map<String, String> props) {

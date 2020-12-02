@@ -281,7 +281,7 @@ public class ElasticsearchSinkTaskTest {
     task.put(Collections.singletonList(record));
     verify(client, times(1)).createIndex(eq(upperCaseTopic.toLowerCase()));
 
-    String tooLongTopic = String.format("%0255d", 1);
+    String tooLongTopic = String.format("%0256d", 1);
     record = record(tooLongTopic, true, false, 0);
     task.put(Collections.singletonList(record));
     verify(client, times(1)).createIndex(eq(tooLongTopic.substring(0, 255)));
