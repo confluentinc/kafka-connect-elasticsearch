@@ -25,7 +25,6 @@ import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
-import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.errors.DataException;
 import org.apache.kafka.connect.json.JsonConverter;
 import org.apache.kafka.connect.sink.SinkRecord;
@@ -61,7 +60,7 @@ public class DataConverter {
     JSON_CONVERTER.configure(Collections.singletonMap("schemas.enable", "false"), false);
   }
 
-  private ElasticsearchSinkConnectorConfig config;
+  private final ElasticsearchSinkConnectorConfig config;
 
   /**
    * Create a DataConverter, specifying how map entries with string keys within record
@@ -109,12 +108,7 @@ public class DataConverter {
     if (record.value() == null) {
       switch (config.behaviorOnNullValues()) {
         case IGNORE:
-          log.trace(
-              "Ignoring record with null value at topic '{}', partition {}, offset {}",
-              record.topic(),
-              record.kafkaPartition(),
-              record.kafkaOffset()
-          );
+          log.trace("Ignoring {} with null value.", recordString(record));
           return null;
         case DELETE:
           if (record.key() == null) {
@@ -126,43 +120,25 @@ public class DataConverter {
             // unique per message, we can be confident that there wouldn't be any corresponding
             // index present in ES to delete anyways.
             log.trace(
-                "Ignoring record with null key at topic '{}', partition {}, offset {}, since "
-                + "the record key is used as the ID of the index",
-                record.topic(),
-                record.kafkaPartition(),
-                record.kafkaOffset()
+                "Ignoring {} with null key, since the record key is used as the ID of the index",
+                recordString(record)
             );
             return null;
           }
           // Will proceed as normal, ultimately creating a DeleteRequest
-          log.trace(
-              "Deleting from Elasticsearch record at topic '{}', partition {}, offset {}",
-              record.topic(),
-              record.kafkaPartition(),
-              record.kafkaOffset()
-          );
+          log.trace("Deleting {} from Elasticsearch", recordString(record));
           break;
         case FAIL:
+        default:
           throw new DataException(
               String.format(
-                  "Sink record with key of %s and null value encountered for topic/partition/offset"
-                      + " %s/%s/%s (to ignore future records like this change the configuration"
-                      + " property '%s' from '%s' to '%s')",
+                  "{} with key of %s and null value encountered (to ignore future records like"
+                      + " this change the configuration property '%s' from '%s' to '%s')",
+                  recordString(record),
                   record.key(),
-                  record.topic(),
-                  record.kafkaPartition(),
-                  record.kafkaOffset(),
                   ElasticsearchSinkConnectorConfig.BEHAVIOR_ON_NULL_VALUES_CONFIG,
                   BehaviorOnNullValues.FAIL,
                   BehaviorOnNullValues.IGNORE
-              )
-          );
-        default:
-          throw new ConnectException(
-              String.format(
-                  "Unknown value for %s enum: %s",
-                  BehaviorOnNullValues.class.getSimpleName(),
-                  config.behaviorOnNullValues()
               )
           );
       }
@@ -173,24 +149,26 @@ public class DataConverter {
         ? String.format("%s+%d+%d", record.topic(), record.kafkaPartition(), record.kafkaOffset())
         : convertKey(record.keySchema(), record.key());
 
-    if (record.value() != null) {
-      switch (config.writeMethod()) {
-        case UPSERT:
-          return new UpdateRequest(index, id)
-              .doc(payload, XContentType.JSON)
-              .upsert(payload, XContentType.JSON)
-              .retryOnConflict(Math.min(config.maxInFlightRequests(), 5));
-        case INSERT:
-          return maybeAddExternalVersioning(
-              new IndexRequest(index).id(id).source(payload, XContentType.JSON),
-              record
-          );
-        default:
-          return null; // shouldn't happen
-      }
+    // delete
+    if (record.value() == null) {
+      return maybeAddExternalVersioning(new DeleteRequest(index).id(id), record);
     }
 
-    return maybeAddExternalVersioning(new DeleteRequest(index).id(id), record);
+    // index
+    switch (config.writeMethod()) {
+      case UPSERT:
+        return new UpdateRequest(index, id)
+            .doc(payload, XContentType.JSON)
+            .upsert(payload, XContentType.JSON)
+            .retryOnConflict(Math.min(config.maxInFlightRequests(), 5));
+      case INSERT:
+        return maybeAddExternalVersioning(
+            new IndexRequest(index).id(id).source(payload, XContentType.JSON),
+            record
+        );
+      default:
+        return null; // shouldn't happen
+    }
   }
 
   private String getPayload(SinkRecord record) {
@@ -405,5 +383,14 @@ public class DataConverter {
       newStruct.put(field.name(), converted);
     }
     return newStruct;
+  }
+
+  private static String recordString(SinkRecord record) {
+    return String.format(
+        "record from topic=%s partition=%s offset=%s",
+        record.topic(),
+        record.kafkaPartition(),
+        record.kafkaOffset()
+    );
   }
 }

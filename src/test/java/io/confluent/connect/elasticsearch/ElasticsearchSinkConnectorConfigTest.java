@@ -142,7 +142,10 @@ public class ElasticsearchSinkConnectorConfigTest {
   }
 
   public static Map<String, String> addNecessaryProps(Map<String, String> props) {
-      props.put(ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG, "http://localhost:8080");
-      return props;
+    if (props == null) {
+      props = new HashMap<>();
+    }
+    props.put(ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG, "http://localhost:8080");
+    return props;
   }
 }

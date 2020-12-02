@@ -122,7 +122,7 @@ public class ElasticsearchSinkTask extends SinkTask {
       if (!client.hasMapping(index)) {
         client.createMapping(index, record.valueSchema());
       }
-      log.debug("Locally caching mapping for index '{}'", index);
+      log.debug("Caching mapping for index '{}' locally.", index);
       existingMappings.add(index);
     }
   }
@@ -135,7 +135,7 @@ public class ElasticsearchSinkTask extends SinkTask {
    *   <li>does not start with - or _</li>
    *   <li>is not . or ..</li>
    * </ul>
-   * (<a href="https://github.com/elastic/elasticsearch/issues/29420">ref</a>_.)
+   * (<a href="https://www.elastic.co/guide/en/elasticsearch/reference/current/indices-create-index.html#indices-create-api-path-params">ref</a>_.)
    */
   private String convertTopicToIndexName(String topic) {
     String index = topic.toLowerCase();
@@ -155,6 +155,7 @@ public class ElasticsearchSinkTask extends SinkTask {
     if (!topic.equals(index)) {
       log.trace("Topic '{}' was translated to index '{}'.", topic, index);
     }
+
     return index;
   }
 

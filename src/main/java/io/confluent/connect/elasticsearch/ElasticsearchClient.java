@@ -20,17 +20,18 @@ import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfi
 
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BehaviorOnMalformedDoc;
 import java.io.IOException;
-import java.net.MalformedURLException;
-import java.net.URL;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
 import javax.net.ssl.HostnameVerifier;
 import javax.net.ssl.SSLContext;
 import org.apache.http.HttpHost;
@@ -44,12 +45,12 @@ import org.apache.http.impl.client.BasicCredentialsProvider;
 import org.apache.http.impl.nio.client.HttpAsyncClientBuilder;
 import org.apache.http.impl.nio.conn.PoolingNHttpClientConnectionManager;
 import org.apache.http.impl.nio.reactor.DefaultConnectingIOReactor;
-import org.apache.http.nio.conn.NHttpClientConnectionManager;
 import org.apache.http.nio.conn.ssl.SSLIOSessionStrategy;
 import org.apache.http.nio.reactor.ConnectingIOReactor;
 import org.apache.http.nio.reactor.IOReactorException;
 import org.apache.kafka.common.network.Mode;
 import org.apache.kafka.common.security.ssl.SslFactory;
+import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.sink.ErrantRecordReporter;
@@ -96,24 +97,14 @@ public class ElasticsearchClient {
   private final ConcurrentMap<String, SinkRecord> docIdToRecord;
   private final ElasticsearchSinkConnectorConfig config;
   private final ErrantRecordReporter reporter;
-  private IdleConnectionReaper connectionReaper;
   private final RestHighLevelClient client;
+  private final ScheduledExecutorService executorService;
+  private final Time clock;
 
   public ElasticsearchClient(
       ElasticsearchSinkConnectorConfig config,
       ErrantRecordReporter reporter
   ) {
-    int pos = 0;
-    HttpHost[] hosts = new HttpHost[config.connectionUrls().size()];
-    for (String address : config.connectionUrls()) {
-      try {
-        URL url = new URL(address);
-        hosts[pos++] = new HttpHost(url.getHost(), url.getPort(), url.getProtocol());
-      } catch (MalformedURLException e) {
-        throw new ConnectException(e);
-      }
-    }
-
     this.numRecords = new AtomicInteger(0);
     this.error = new AtomicReference<>();
     this.docIdToRecord = reporter != null || !config.ignoreKey()
@@ -121,9 +112,17 @@ public class ElasticsearchClient {
         : null;
     this.config = config;
     this.reporter = reporter;
+    this.executorService = Executors.newSingleThreadScheduledExecutor();
+    this.clock = Time.SYSTEM;
     this.client = new RestHighLevelClient(
         RestClient
-            .builder(hosts)
+            .builder(
+                config.connectionUrls()
+                    .stream()
+                    .map(HttpHost::create)
+                    .collect(Collectors.toList())
+                    .toArray(new HttpHost[config.connectionUrls().size()])
+            )
             .setHttpClientConfigCallback(this::customizeHttpClientConfig)
             .setRequestConfigCallback(this::customizeRequestConfig)
     );
@@ -158,27 +157,19 @@ public class ElasticsearchClient {
   public void close() {
     try {
       if (!bulkProcessor.awaitClose(config.flushTimeoutMs(), TimeUnit.MILLISECONDS)) {
-        throw new ConnectException("Failed to process all outstanding requests in time.");
+        closeConnections();
+        throw new ConnectException(
+            "Failed to process outstanding requests in time while closing the ElasticsearchClient."
+        );
       }
     } catch (InterruptedException e) {
-      log.error("Bulk processor close was interrupted.", e);
+      closeConnections();
+      throw new ConnectException(
+          "Interrupted while processing all in-flight requests on ElasticsearchClient close."
+      );
     }
 
-    try {
-      if (connectionReaper != null) {
-        connectionReaper.shutdown();
-        connectionReaper.join();
-        connectionReaper = null;
-      }
-    } catch (InterruptedException e) {
-      log.error("Interrupted while closing connection evicting thread.");
-    }
-
-    try {
-      client.close();
-    } catch (IOException e) {
-      log.error("Failed to close Elasticsearch client.", e);
-    }
+    closeConnections();
   }
 
   /**
@@ -252,31 +243,28 @@ public class ElasticsearchClient {
    */
   public void index(SinkRecord record, DocWriteRequest<?> request) {
     if (isFailed()) {
-      close();
+      try {
+        close();
+      } catch (ConnectException e) {
+        // if close fails, want to still throw the original exception
+      }
       throw error.get();
     }
 
     if (docIdToRecord != null) {
       // make sure that only unique records are being sent in a batch
+      // every request that is flushed and succeeds triggers a callback that removes it from the map
       while (docIdToRecord.containsKey(request.id())) {
         flush();
-        try {
-          Thread.sleep(TimeUnit.SECONDS.toMillis(1));
-        } catch (InterruptedException e)  {
-          throw new ConnectException(e);
-        }
+        clock.sleep(TimeUnit.SECONDS.toMillis(1));
       }
     }
 
     // wait for internal buffer to be less than max.buffered.records configuration
-    long maxWaitTime = System.currentTimeMillis() + config.flushTimeoutMs();
+    long maxWaitTime = clock.milliseconds() + config.flushTimeoutMs();
     while (numRecords.get() >= config.maxBufferedRecords()) {
-      try {
-        Thread.sleep(TimeUnit.SECONDS.toMillis(1));
-      } catch (InterruptedException e) {
-        throw new ConnectException(e);
-      }
-      if (System.currentTimeMillis() > maxWaitTime) {
+      clock.sleep(TimeUnit.SECONDS.toMillis(1));
+      if (clock.milliseconds() > maxWaitTime) {
         throw new ConnectException(
             String.format(
                 "Could not make space in the internal buffer fast enough. Consider increasing %s"
@@ -309,6 +297,7 @@ public class ElasticsearchClient {
 
   /**
    * Maps a record to the document id.
+   *
    * @param id the document id
    * @param record the record
    */
@@ -371,12 +360,24 @@ public class ElasticsearchClient {
   }
 
   /**
+   * Closes all of the connection and thread resources of the client.
+   */
+  private void closeConnections() {
+    executorService.shutdown();
+
+    try {
+      client.close();
+    } catch (IOException e) {
+      log.warn("Failed to close Elasticsearch client.", e);
+    }
+  }
+
+  /**
    * Configures HTTP authentication and proxy authentication according to the client configuration.
    *
    * @param builder the HttpAsyncClientBuilder
    */
   private void configureAuthentication(HttpAsyncClientBuilder builder) {
-
     CredentialsProvider credentialsProvider = new BasicCredentialsProvider();
     if (config.isAuthenticatedConnection()) {
       config.connectionUrls().forEach(
@@ -427,11 +428,10 @@ public class ElasticsearchClient {
         // try AK <= 2.6 second
         sslEngine = SslFactory.class.getDeclaredMethod("sslEngineBuilder").invoke(sslFactory);
         log.debug("Using AK 2.2-2.5 SslFactory methods.");
-
       } catch (Exception ex) {
         // must be running AK 2.6+
         log.debug(
-            "Could not find Ak 2.3-2.5 methods for SslFactory."
+            "Could not find AK 2.3-2.5 methods for SslFactory."
                 + " Trying AK 2.6+ methods for SslFactory."
         );
         try {
@@ -472,12 +472,24 @@ public class ElasticsearchClient {
       cm.setDefaultMaxPerRoute(config.maxInFlightRequests());
       cm.setMaxTotal(config.maxInFlightRequests());
       builder.setConnectionManager(cm);
-      connectionReaper = new IdleConnectionReaper(cm);
-      connectionReaper.start();
-    } catch (IOReactorException e) {
-      throw new ConnectException("Unable to open Elasticsearchclient.", e);
-    }
 
+      /*
+       * Handles closing any idle or expired connections to avoid SocketTimeoutExceptions. Expired
+       * connections occur when the server closes their half of the connection without notifying
+       * the client.
+       */
+      executorService.scheduleAtFixedRate(
+          () -> {
+            cm.closeExpiredConnections();
+            cm.closeIdleConnections(config.maxIdleTimeMs(), TimeUnit.MILLISECONDS);
+          },
+          config.maxIdleTimeMs(),
+          config.maxIdleTimeMs() / 2,
+          TimeUnit.MILLISECONDS
+      );
+    } catch (IOReactorException e) {
+      throw new ConnectException("Unable to open ElasticsearchClient.", e);
+    }
 
     builder.setMaxConnPerRoute(config.maxInFlightRequests());
     builder.setMaxConnTotal(config.maxInFlightRequests());
@@ -624,44 +636,6 @@ public class ElasticsearchClient {
             original,
             new ReportingException("Indexing failed: " + response.getFailureMessage())
         );
-      }
-    }
-  }
-
-  /**
-   * Class that handles closing any idle or expired connections to avoid SocketTimeoutExceptions.
-   * Expired connections occur when the server closes their half of the connection without notifying
-   * the client.
-   */
-  private class IdleConnectionReaper extends Thread {
-
-    private volatile boolean shutdown;
-    private final NHttpClientConnectionManager connMgr;
-
-    public IdleConnectionReaper(NHttpClientConnectionManager connMgr) {
-      super();
-      this.connMgr = connMgr;
-    }
-
-    @Override
-    public void run() {
-      try {
-        while (!shutdown) {
-          synchronized (this) {
-            wait(config.maxIdleTimeMs() / 2);
-            connMgr.closeExpiredConnections();
-            connMgr.closeIdleConnections(config.maxIdleTimeMs(), TimeUnit.MILLISECONDS);
-          }
-        }
-      } catch (InterruptedException ex) {
-        // terminate
-      }
-    }
-
-    public void shutdown() {
-      shutdown = true;
-      synchronized (this) {
-        notifyAll();
       }
     }
   }

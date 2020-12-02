@@ -67,11 +67,6 @@ public class ElasticsearchHelperClient {
     return client.indices().exists(request, RequestOptions.DEFAULT);
   }
 
-  public void refresh(String index) throws IOException {
-    RefreshRequest request = new RefreshRequest(index);
-    client.indices().refresh(request, RequestOptions.DEFAULT);
-  }
-
   public SearchHits search(String index) throws IOException {
     SearchRequest request = new SearchRequest(index);
     return client.search(request, RequestOptions.DEFAULT).getHits();
