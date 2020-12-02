@@ -85,10 +85,9 @@ public class ElasticsearchSinkTask extends SinkTask {
         continue;
       }
 
-      logTrace("Writing {} to Elasticsearch", record);
+      logTrace("Writing {} to Elasticsearch.", record);
 
-      String index = convertTopicToIndexName(record.topic());
-      ensureIndexExists(index);
+      ensureIndexExists(convertTopicToIndexName(record.topic()));
       checkMapping(record);
       tryWriteRecord(record);
     }
@@ -108,7 +107,6 @@ public class ElasticsearchSinkTask extends SinkTask {
   public void stop() {
     log.debug("Stopping Elasticsearch client.");
     client.close();
-    log.debug("Stopped Elasticsearch client.");
   }
 
   @Override

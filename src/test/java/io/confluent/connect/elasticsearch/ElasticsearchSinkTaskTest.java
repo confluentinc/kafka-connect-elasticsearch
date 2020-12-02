@@ -19,8 +19,12 @@ import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfi
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.DROP_INVALID_MESSAGE_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_KEY_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_SCHEMA_CONFIG;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -80,7 +84,7 @@ public class ElasticsearchSinkTaskTest {
     task.put(Collections.singletonList(nullRecord));
     verify(client, never()).index(eq(nullRecord), any(DocWriteRequest.class));
 
-    // don't skip null
+    // don't skip non-null
     SinkRecord notNullRecord = record(true, false,1);
     task.put(Collections.singletonList(notNullRecord));
     verify(client, times(1)).index(eq(notNullRecord), any(DocWriteRequest.class));
@@ -105,6 +109,16 @@ public class ElasticsearchSinkTaskTest {
     task.put(Collections.singletonList(notNullRecord));
     verify(client, times(1)).index(eq(notNullRecord), any(DocWriteRequest.class));
     verify(mockReporter, never()).report(eq(notNullRecord), any(ConnectException.class));
+  }
+
+  @Test(expected = DataException.class)
+  public void testPutFailNullRecords() {
+    props.put(BEHAVIOR_ON_NULL_VALUES_CONFIG, BehaviorOnNullValues.FAIL.name());
+    setUpTask();
+
+    // fail null
+    SinkRecord nullRecord = record(true, true, 0);
+    task.put(Collections.singletonList(nullRecord));
   }
 
   @Test
@@ -225,6 +239,85 @@ public class ElasticsearchSinkTaskTest {
     task.put(Collections.singletonList(invalidRecord));
   }
 
+  @Test
+  public void testFlush() {
+    setUpTask();
+    task.flush(null);
+    verify(client, times(1)).flush();
+  }
+
+  @Test
+  public void testFlushDoesNotThrow() {
+    setUpTask();
+    doThrow(new IllegalStateException("already closed")).when(client).flush();
+
+    // should not throw
+    task.flush(null);
+    verify(client, times(1)).flush();
+  }
+
+  @Test
+  public void testStartAndStop() {
+    task = new ElasticsearchSinkTask();
+    task.initialize(context);
+    task.start(props);
+    task.stop();
+  }
+
+  @Test
+  public void testVersion() {
+    setUpTask();
+    assertNotNull(task.version());
+    assertFalse(task.version().equals("0.0.0.0"));
+    assertTrue(task.version().matches("^(\\d+\\.)?(\\d+\\.)?(\\*|\\d+)(-\\w+)?$"));
+  }
+
+  @Test
+  public void testConvertTopicToIndexName() {
+    setUpTask();
+
+    String upperCaseTopic = "UPPERCASE";
+    SinkRecord record = record(upperCaseTopic, true, false, 0);
+    task.put(Collections.singletonList(record));
+    verify(client, times(1)).createIndex(eq(upperCaseTopic.toLowerCase()));
+
+    String tooLongTopic = String.format("%0255d", 1);
+    record = record(tooLongTopic, true, false, 0);
+    task.put(Collections.singletonList(record));
+    verify(client, times(1)).createIndex(eq(tooLongTopic.substring(0, 255)));
+
+    String startsWithDash = "-dash";
+    record = record(startsWithDash, true, false, 0);
+    task.put(Collections.singletonList(record));
+    verify(client, times(1)).createIndex(eq("dash"));
+
+    String startsWithUnderscore = "_underscore";
+    record = record(startsWithUnderscore, true, false, 0);
+    task.put(Collections.singletonList(record));
+    verify(client, times(1)).createIndex(eq("underscore"));
+
+    String dot = ".";
+    record = record(dot, true, false, 0);
+    task.put(Collections.singletonList(record));
+    verify(client, times(1)).createIndex(eq("dot"));
+
+    String dots = "..";
+    record = record(dots, true, false, 0);
+    task.put(Collections.singletonList(record));
+    verify(client, times(1)).createIndex(eq("dotdot"));
+  }
+
+  @Test
+  public void testShouldNotThrowIfReporterDoesNotExist() {
+    when(context.errantRecordReporter())
+        .thenThrow(new NoSuchMethodError("what are you doing"))
+        .thenThrow(new NoClassDefFoundError("i no exist"));
+
+    // call start twice for both exceptions
+    setUpTask();
+    setUpTask();
+  }
+
   private SinkRecord record() {
     return record(true, false,0);
   }
@@ -234,23 +327,27 @@ public class ElasticsearchSinkTaskTest {
   }
 
   private SinkRecord record(boolean nullKey, boolean nullValue, long offset) {
-    Schema schema = SchemaBuilder.struct().name("struct")
-        .field("user", Schema.STRING_SCHEMA)
-        .field("message", Schema.STRING_SCHEMA)
-        .build();
-
-    Struct struct = new Struct(schema);
-    struct.put("user", "Liquan");
-    struct.put("message", "trying out Elastic Search.");
-
-    return new SinkRecord(
-        TOPIC,
-        1,
-        Schema.STRING_SCHEMA,
-        nullKey ? null : "key",
-        schema,
-        nullValue ? null : struct,
-        offset
-    );
+    return record(TOPIC, nullKey, nullValue, offset);
   }
+
+  private SinkRecord record(String topic, boolean nullKey, boolean nullValue, long offset) {
+  Schema schema = SchemaBuilder.struct().name("struct")
+      .field("user", Schema.STRING_SCHEMA)
+      .field("message", Schema.STRING_SCHEMA)
+      .build();
+
+  Struct struct = new Struct(schema);
+  struct.put("user", "Liquan");
+  struct.put("message", "trying out Elastic Search.");
+
+  return new SinkRecord(
+      topic,
+      1,
+      Schema.STRING_SCHEMA,
+      nullKey ? null : "key",
+      schema,
+      nullValue ? null : struct,
+      offset
+  );
+}
 }
