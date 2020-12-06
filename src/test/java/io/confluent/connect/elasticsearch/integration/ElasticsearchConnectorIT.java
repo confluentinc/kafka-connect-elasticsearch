@@ -131,7 +131,7 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
     verifySearchResults(NUM_RECORDS * 2);
 
     for (SearchHit hit : helperClient.search(TOPIC)) {
-      if (Integer.valueOf(hit.getId()) == lastRecord) {
+      if (Integer.parseInt(hit.getId()) == lastRecord) {
         // last record should be updated
         int docNum = (Integer) hit.getSourceAsMap().get("doc_num");
         assertEquals(0, docNum);

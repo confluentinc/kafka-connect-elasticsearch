@@ -49,7 +49,6 @@ public class ElasticsearchConnectorBaseIT extends BaseConnectorIT {
   protected static final int TASKS_MAX = 1;
   protected static final String CONNECTOR_NAME = "es-connector";
   protected static final String TOPIC = "test";
-  protected static final String TYPE = "kafka-connect";
 
   protected static ElasticsearchContainer container;
 

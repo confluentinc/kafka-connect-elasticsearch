@@ -95,7 +95,7 @@ public class RetryUtil {
   }
 
   /**
-   * Call the supplied function up to the {@param maxAttempts maximum number of attempts}.
+   * Call the supplied function up to the {@code maxAttempts}.
    *
    * <p>The description of the function should be a succinct, human-readable present tense phrase
    * that summarizes the function, such as "read tables" or "connect to database" or
@@ -106,8 +106,10 @@ public class RetryUtil {
    * @param function         the function to call; may not be null
    * @param maxAttempts      maximum number of attempts
    * @param initialBackoff   the initial backoff in ms before retrying
+   * @param <T>              the return type of the function to retry
    * @return the function's return value
    * @throws ConnectException        if the function failed after retries
+   * @throws Exception               if the function throws an exception
    */
   public static <T> T callWithRetries(
       String description,
@@ -119,7 +121,7 @@ public class RetryUtil {
   }
 
   /**
-   * Call the supplied function up to the {@param maxAttempts maximum number of attempts}.
+   * Call the supplied function up to the {@code maxAttempts}.
    *
    * <p>The description of the function should be a succinct, human-readable present tense phrase
    * that summarizes the function, such as "read tables" or "connect to database" or
@@ -131,8 +133,10 @@ public class RetryUtil {
    * @param maxAttempts      maximum number of attempts
    * @param initialBackoff   the initial backoff in ms before retrying
    * @param clock            the clock to use for waiting
+   * @param <T>              the return type of the function to retry
    * @return the function's return value
    * @throws ConnectException        if the function failed after retries
+   * @throws Exception               if the function throws an exception
    */
   protected static <T> T callWithRetries(
       String description,

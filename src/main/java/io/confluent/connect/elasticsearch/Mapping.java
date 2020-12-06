@@ -58,6 +58,7 @@ public class Mapping {
    * Build mapping from the provided schema.
    *
    * @param schema The schema used to build the mapping.
+   * @return the schema as a JSON mapping
    */
   public static XContentBuilder buildMapping(Schema schema) {
     try {

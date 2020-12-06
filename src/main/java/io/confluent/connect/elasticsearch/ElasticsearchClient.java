@@ -157,19 +157,17 @@ public class ElasticsearchClient {
   public void close() {
     try {
       if (!bulkProcessor.awaitClose(config.flushTimeoutMs(), TimeUnit.MILLISECONDS)) {
-        closeConnections();
         throw new ConnectException(
             "Failed to process outstanding requests in time while closing the ElasticsearchClient."
         );
       }
     } catch (InterruptedException e) {
-      closeConnections();
       throw new ConnectException(
           "Interrupted while processing all in-flight requests on ElasticsearchClient close."
       );
+    } finally {
+      closeConnections();
     }
-
-    closeConnections();
   }
 
   /**
@@ -431,8 +429,7 @@ public class ElasticsearchClient {
       } catch (Exception ex) {
         // must be running AK 2.6+
         log.debug(
-            "Could not find AK 2.3-2.5 methods for SslFactory."
-                + " Trying AK 2.6+ methods for SslFactory."
+            "Could not find AK 2.3-2.5 SslFactory methods. Trying AK 2.6+ methods for SslFactory."
         );
         try {
           sslEngine = SslFactory.class.getDeclaredMethod("sslEngineFactory").invoke(sslFactory);
