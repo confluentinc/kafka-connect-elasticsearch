@@ -97,7 +97,7 @@ public class ElasticsearchClientTest {
 
   @After
   public void cleanup() throws IOException {
-    if (helperClient.indexExists(INDEX)){
+    if (helperClient != null && helperClient.indexExists(INDEX)){
       helperClient.deleteIndex(INDEX);
     }
   }
@@ -487,6 +487,40 @@ public class ElasticsearchClientTest {
     verify(reporter2, never()).report(any(SinkRecord.class), any(Throwable.class));
     client.close();
     client2.close();
+  }
+
+  @Test
+  public void testSsl() throws Exception {
+    container.close();
+    container = ElasticsearchContainer.fromSystemProperties().withSslEnabled(true);
+    container.start();
+
+    String address = container.getConnectionUrl().replace(container.getContainerIpAddress(), container.hostMachineIpAddress());
+    props.put(CONNECTION_URL_CONFIG, address);
+    props.put(SECURITY_PROTOCOL_CONFIG, SecurityProtocol.SSL.name());
+    props.put(SSL_CONFIG_PREFIX + SslConfigs.SSL_KEYSTORE_LOCATION_CONFIG, container.getKeystorePath());
+    props.put(SSL_CONFIG_PREFIX + SslConfigs.SSL_KEYSTORE_PASSWORD_CONFIG, container.getKeystorePassword());
+    props.put(SSL_CONFIG_PREFIX + SslConfigs.SSL_TRUSTSTORE_LOCATION_CONFIG, container.getTruststorePath());
+    props.put(SSL_CONFIG_PREFIX + SslConfigs.SSL_TRUSTSTORE_PASSWORD_CONFIG, container.getTruststorePassword());
+    props.put(SSL_CONFIG_PREFIX + SslConfigs.SSL_KEY_PASSWORD_CONFIG, container.getKeyPassword());
+    config = new ElasticsearchSinkConnectorConfig(props);
+    converter = new DataConverter(config);
+
+    ElasticsearchClient client = new ElasticsearchClient(config, null);
+    helperClient = new ElasticsearchHelperClient(client.client());
+    client.createIndex(INDEX);
+
+    writeRecord(sinkRecord(0), client);
+    client.flush();
+
+    waitUntilRecordsInES(1);
+    assertEquals(1, helperClient.getDocCount(INDEX));
+    client.close();
+    helperClient = null;
+
+    container.close();
+    container = ElasticsearchContainer.fromSystemProperties();
+    container.start();
   }
 
   private static Schema schema() {

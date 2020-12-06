@@ -39,12 +39,16 @@ import org.apache.http.auth.AuthScope;
 import org.apache.http.auth.UsernamePasswordCredentials;
 import org.apache.http.client.CredentialsProvider;
 import org.apache.http.client.config.RequestConfig;
+import org.apache.http.config.Registry;
+import org.apache.http.config.RegistryBuilder;
 import org.apache.http.conn.ssl.NoopHostnameVerifier;
 import org.apache.http.conn.ssl.SSLConnectionSocketFactory;
 import org.apache.http.impl.client.BasicCredentialsProvider;
 import org.apache.http.impl.nio.client.HttpAsyncClientBuilder;
 import org.apache.http.impl.nio.conn.PoolingNHttpClientConnectionManager;
 import org.apache.http.impl.nio.reactor.DefaultConnectingIOReactor;
+import org.apache.http.nio.conn.NoopIOSessionStrategy;
+import org.apache.http.nio.conn.SchemeIOSessionStrategy;
 import org.apache.http.nio.conn.ssl.SSLIOSessionStrategy;
 import org.apache.http.nio.reactor.ConnectingIOReactor;
 import org.apache.http.nio.reactor.IOReactorException;
@@ -409,85 +413,74 @@ public class ElasticsearchClient {
    * @param builder the HttpAsyncClientBuilder
    */
   private void configureSslContext(HttpAsyncClientBuilder builder) {
-    SslFactory sslFactory = new SslFactory(Mode.CLIENT, null, false);
-    sslFactory.configure(config.sslConfigs());
-
-    SSLContext sslContext;
-    try {
-      // try AK <= 2.2 first
-      sslContext = (SSLContext) SslFactory.class.getDeclaredMethod("sslContext").invoke(sslFactory);
-      log.debug("Using AK 2.2 SslFactory methods.");
-    } catch (Exception e) {
-      // must be running AK 2.3+
-      log.debug("Could not find AK 2.2 SslFactory methods. Trying AK 2.3+ methods for SslFactory.");
-
-      Object sslEngine;
-      try {
-        // try AK <= 2.6 second
-        sslEngine = SslFactory.class.getDeclaredMethod("sslEngineBuilder").invoke(sslFactory);
-        log.debug("Using AK 2.2-2.5 SslFactory methods.");
-      } catch (Exception ex) {
-        // must be running AK 2.6+
-        log.debug(
-            "Could not find AK 2.3-2.5 SslFactory methods. Trying AK 2.6+ methods for SslFactory."
-        );
-        try {
-          sslEngine = SslFactory.class.getDeclaredMethod("sslEngineFactory").invoke(sslFactory);
-          log.debug("Using AK 2.6+ SslFactory methods.");
-        } catch (Exception exc) {
-          throw new ConnectException("Failed to find methods for SslFactory.", exc);
-        }
-      }
-
-      try {
-        sslContext =
-            (SSLContext) sslEngine.getClass().getDeclaredMethod("sslContext").invoke(sslEngine);
-      } catch (Exception ex) {
-        throw new ConnectException("Could not create SSLContext.", ex);
-      }
-    }
-
     HostnameVerifier hostnameVerifier = config.shouldDisableHostnameVerification()
         ? new NoopHostnameVerifier()
         : SSLConnectionSocketFactory.getDefaultHostnameVerifier();
 
+    SSLContext sslContext = sslContext();
     builder.setSSLContext(sslContext);
     builder.setSSLHostnameVerifier(hostnameVerifier);
     builder.setSSLStrategy(new SSLIOSessionStrategy(sslContext, hostnameVerifier));
   }
 
   /**
-   * Customizes the client according to the configurations.
+   * Creates a connection manager for the client.
+   *
+   * @return the connection manager
+   */
+  private PoolingNHttpClientConnectionManager connectionManager() {
+    try {
+      PoolingNHttpClientConnectionManager cm;
+      ConnectingIOReactor ioReactor = new DefaultConnectingIOReactor();
+
+      if (config.secured()) {
+        HostnameVerifier hostnameVerifier = config.shouldDisableHostnameVerification()
+            ? new NoopHostnameVerifier()
+            : SSLConnectionSocketFactory.getDefaultHostnameVerifier();
+        Registry<SchemeIOSessionStrategy> r = RegistryBuilder.<SchemeIOSessionStrategy>create()
+            .register("http", NoopIOSessionStrategy.INSTANCE)
+            .register("https", new SSLIOSessionStrategy(sslContext(), hostnameVerifier))
+            .build();
+
+        cm = new PoolingNHttpClientConnectionManager(ioReactor, r);
+      } else {
+        cm = new PoolingNHttpClientConnectionManager(ioReactor);
+      }
+
+      cm.setDefaultMaxPerRoute(config.maxInFlightRequests());
+      cm.setMaxTotal(config.maxInFlightRequests());
+
+      return cm;
+    } catch (IOReactorException e) {
+      throw new ConnectException("Unable to open ElasticsearchClient.", e);
+    }
+  }
+
+  /**
+   * Customizes the client according to the configurations and starts the connection reaping thread.
    *
    * @param builder the HttpAsyncClientBuilder
    * @return the builder
    */
   private HttpAsyncClientBuilder customizeHttpClientConfig(HttpAsyncClientBuilder builder) {
-    try {
-      ConnectingIOReactor ioReactor = new DefaultConnectingIOReactor();
-      PoolingNHttpClientConnectionManager cm = new PoolingNHttpClientConnectionManager(ioReactor);
-      cm.setDefaultMaxPerRoute(config.maxInFlightRequests());
-      cm.setMaxTotal(config.maxInFlightRequests());
-      builder.setConnectionManager(cm);
 
-      /*
-       * Handles closing any idle or expired connections to avoid SocketTimeoutExceptions. Expired
-       * connections occur when the server closes their half of the connection without notifying
-       * the client.
-       */
-      executorService.scheduleAtFixedRate(
-          () -> {
-            cm.closeExpiredConnections();
-            cm.closeIdleConnections(config.maxIdleTimeMs(), TimeUnit.MILLISECONDS);
-          },
-          config.maxIdleTimeMs(),
-          config.maxIdleTimeMs() / 2,
-          TimeUnit.MILLISECONDS
-      );
-    } catch (IOReactorException e) {
-      throw new ConnectException("Unable to open ElasticsearchClient.", e);
-    }
+    PoolingNHttpClientConnectionManager cm = connectionManager();
+    /*
+     * Handles closing any idle or expired connections to avoid SocketTimeoutExceptions. Expired
+     * connections occur when the server closes their half of the connection without notifying
+     * the client.
+     */
+    executorService.scheduleAtFixedRate(
+        () -> {
+          cm.closeExpiredConnections();
+          cm.closeIdleConnections(config.maxIdleTimeMs(), TimeUnit.MILLISECONDS);
+        },
+        config.maxIdleTimeMs(),
+        config.maxIdleTimeMs() / 2,
+        TimeUnit.MILLISECONDS
+    );
 
+    builder.setConnectionManager(cm);
     builder.setMaxConnPerRoute(config.maxInFlightRequests());
     builder.setMaxConnTotal(config.maxInFlightRequests());
     configureAuthentication(builder);
@@ -498,6 +491,7 @@ public class ElasticsearchClient {
     } else {
       log.info("Using unsecured connection to {}.", config.connectionUrls());
     }
+
     return builder;
   }
 
@@ -633,6 +627,50 @@ public class ElasticsearchClient {
             original,
             new ReportingException("Indexing failed: " + response.getFailureMessage())
         );
+      }
+    }
+  }
+
+  /**
+   * Gets the SslContext for the client.
+   */
+  private SSLContext sslContext() {
+    SslFactory sslFactory = new SslFactory(Mode.CLIENT, null, false);
+    sslFactory.configure(config.sslConfigs());
+
+    try {
+      // try AK <= 2.2 first
+      log.debug("Trying AK 2.2 SslFactory methods.");
+      return (SSLContext) SslFactory.class.getDeclaredMethod("sslContext").invoke(sslFactory);
+    } catch (Exception e) {
+      // must be running AK 2.3+
+      log.debug("Could not find AK 2.2 SslFactory methods. Trying AK 2.3+ methods for SslFactory.");
+
+      Object sslEngine;
+      try {
+        // try AK <= 2.6 second
+        sslEngine = SslFactory.class.getDeclaredMethod("sslEngineBuilder").invoke(sslFactory);
+        log.debug("Using AK 2.2-2.5 SslFactory methods.");
+      } catch (Exception ex) {
+        // must be running AK 2.6+
+        log.debug(
+            "Could not find AK 2.3-2.5 SslFactory methods. Trying AK 2.6+ methods for SslFactory."
+        );
+        try {
+          sslEngine = SslFactory.class.getDeclaredMethod("sslEngineFactory").invoke(sslFactory);
+          log.debug("Using AK 2.6+ SslFactory methods.");
+        } catch (Exception exc) {
+          throw new ConnectException("Failed to find methods for SslFactory.", exc);
+        }
+      }
+
+      try {
+        return (SSLContext) sslEngine
+            .getClass()
+            .getDeclaredMethod("sslContext")
+            .invoke(sslEngine);
+      } catch (Exception ex) {
+        throw new ConnectException("Could not create SSLContext.", ex);
       }
     }
   }
