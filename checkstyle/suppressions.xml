@@ -14,7 +14,7 @@
 
     <suppress
             checks="(ClassDataAbstractionCoupling)"
-            files="ElasticsearchClient.java"
+            files="(ElasticsearchClient|ClientConfigCallbackHandler).java"
     />
 
     <suppress

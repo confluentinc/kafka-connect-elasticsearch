@@ -32,28 +32,9 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
-import javax.net.ssl.HostnameVerifier;
-import javax.net.ssl.SSLContext;
 import org.apache.http.HttpHost;
-import org.apache.http.auth.AuthScope;
-import org.apache.http.auth.UsernamePasswordCredentials;
-import org.apache.http.client.CredentialsProvider;
 import org.apache.http.client.config.RequestConfig;
-import org.apache.http.config.Registry;
-import org.apache.http.config.RegistryBuilder;
-import org.apache.http.conn.ssl.NoopHostnameVerifier;
-import org.apache.http.conn.ssl.SSLConnectionSocketFactory;
-import org.apache.http.impl.client.BasicCredentialsProvider;
-import org.apache.http.impl.nio.client.HttpAsyncClientBuilder;
-import org.apache.http.impl.nio.conn.PoolingNHttpClientConnectionManager;
-import org.apache.http.impl.nio.reactor.DefaultConnectingIOReactor;
-import org.apache.http.nio.conn.NoopIOSessionStrategy;
-import org.apache.http.nio.conn.SchemeIOSessionStrategy;
-import org.apache.http.nio.conn.ssl.SSLIOSessionStrategy;
-import org.apache.http.nio.reactor.ConnectingIOReactor;
-import org.apache.http.nio.reactor.IOReactorException;
-import org.apache.kafka.common.network.Mode;
-import org.apache.kafka.common.security.ssl.SslFactory;
+import org.apache.http.nio.conn.NHttpClientConnectionManager;
 import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.errors.ConnectException;
@@ -109,6 +90,24 @@ public class ElasticsearchClient {
       ElasticsearchSinkConnectorConfig config,
       ErrantRecordReporter reporter
   ) {
+    ClientConfigCallbackHandler configCallbackHandler = new ClientConfigCallbackHandler(config);
+    NHttpClientConnectionManager cm = configCallbackHandler.connectionManager();
+    /*
+     * Handles closing any idle or expired connections to avoid SocketTimeoutExceptions. Expired
+     * connections occur when the server closes their half of the connection without notifying
+     * the client.
+     */
+    this.executorService = Executors.newSingleThreadScheduledExecutor();
+    executorService.scheduleAtFixedRate(
+        () -> {
+          cm.closeExpiredConnections();
+          cm.closeIdleConnections(config.maxIdleTimeMs(), TimeUnit.MILLISECONDS);
+        },
+        config.maxIdleTimeMs(),
+        config.maxIdleTimeMs() / 2,
+        TimeUnit.MILLISECONDS
+    );
+
     this.numRecords = new AtomicInteger(0);
     this.error = new AtomicReference<>();
     this.docIdToRecord = reporter != null || !config.ignoreKey()
@@ -116,7 +115,6 @@ public class ElasticsearchClient {
         : null;
     this.config = config;
     this.reporter = reporter;
-    this.executorService = Executors.newSingleThreadScheduledExecutor();
     this.clock = Time.SYSTEM;
     this.client = new RestHighLevelClient(
         RestClient
@@ -127,7 +125,7 @@ public class ElasticsearchClient {
                     .collect(Collectors.toList())
                     .toArray(new HttpHost[config.connectionUrls().size()])
             )
-            .setHttpClientConfigCallback(this::customizeHttpClientConfig)
+            .setHttpClientConfigCallback(configCallbackHandler)
             .setRequestConfigCallback(this::customizeRequestConfig)
     );
     this.bulkProcessor = BulkProcessor
@@ -375,126 +373,6 @@ public class ElasticsearchClient {
   }
 
   /**
-   * Configures HTTP authentication and proxy authentication according to the client configuration.
-   *
-   * @param builder the HttpAsyncClientBuilder
-   */
-  private void configureAuthentication(HttpAsyncClientBuilder builder) {
-    CredentialsProvider credentialsProvider = new BasicCredentialsProvider();
-    if (config.isAuthenticatedConnection()) {
-      config.connectionUrls().forEach(
-          url -> credentialsProvider.setCredentials(
-              new AuthScope(HttpHost.create(url)),
-              new UsernamePasswordCredentials(config.username(), config.password().value())
-          )
-      );
-      builder.setDefaultCredentialsProvider(credentialsProvider);
-    }
-
-    if (config.isBasicProxyConfigured()) {
-      HttpHost proxy = new HttpHost(config.proxyHost(), config.proxyPort());
-      builder.setProxy(proxy);
-
-      if (config.isProxyWithAuthenticationConfigured()) {
-        credentialsProvider.setCredentials(
-            new AuthScope(proxy),
-            new UsernamePasswordCredentials(config.proxyUsername(), config.proxyPassword().value())
-        );
-      }
-
-      builder.setDefaultCredentialsProvider(credentialsProvider);
-    }
-  }
-
-  /**
-   * Configures the client to use SSL if configured.
-   *
-   * @param builder the HttpAsyncClientBuilder
-   */
-  private void configureSslContext(HttpAsyncClientBuilder builder) {
-    HostnameVerifier hostnameVerifier = config.shouldDisableHostnameVerification()
-        ? new NoopHostnameVerifier()
-        : SSLConnectionSocketFactory.getDefaultHostnameVerifier();
-
-    SSLContext sslContext = sslContext();
-    builder.setSSLContext(sslContext);
-    builder.setSSLHostnameVerifier(hostnameVerifier);
-    builder.setSSLStrategy(new SSLIOSessionStrategy(sslContext, hostnameVerifier));
-  }
-
-  /**
-   * Creates a connection manager for the client.
-   *
-   * @return the connection manager
-   */
-  private PoolingNHttpClientConnectionManager connectionManager() {
-    try {
-      PoolingNHttpClientConnectionManager cm;
-      ConnectingIOReactor ioReactor = new DefaultConnectingIOReactor();
-
-      if (config.secured()) {
-        HostnameVerifier hostnameVerifier = config.shouldDisableHostnameVerification()
-            ? new NoopHostnameVerifier()
-            : SSLConnectionSocketFactory.getDefaultHostnameVerifier();
-        Registry<SchemeIOSessionStrategy> r = RegistryBuilder.<SchemeIOSessionStrategy>create()
-            .register("http", NoopIOSessionStrategy.INSTANCE)
-            .register("https", new SSLIOSessionStrategy(sslContext(), hostnameVerifier))
-            .build();
-
-        cm = new PoolingNHttpClientConnectionManager(ioReactor, r);
-      } else {
-        cm = new PoolingNHttpClientConnectionManager(ioReactor);
-      }
-
-      cm.setDefaultMaxPerRoute(config.maxInFlightRequests());
-      cm.setMaxTotal(config.maxInFlightRequests());
-
-      return cm;
-    } catch (IOReactorException e) {
-      throw new ConnectException("Unable to open ElasticsearchClient.", e);
-    }
-  }
-
-  /**
-   * Customizes the client according to the configurations and starts the connection reaping thread.
-   *
-   * @param builder the HttpAsyncClientBuilder
-   * @return the builder
-   */
-  private HttpAsyncClientBuilder customizeHttpClientConfig(HttpAsyncClientBuilder builder) {
-
-    PoolingNHttpClientConnectionManager cm = connectionManager();
-    /*
-     * Handles closing any idle or expired connections to avoid SocketTimeoutExceptions. Expired
-     * connections occur when the server closes their half of the connection without notifying
-     * the client.
-     */
-    executorService.scheduleAtFixedRate(
-        () -> {
-          cm.closeExpiredConnections();
-          cm.closeIdleConnections(config.maxIdleTimeMs(), TimeUnit.MILLISECONDS);
-        },
-        config.maxIdleTimeMs(),
-        config.maxIdleTimeMs() / 2,
-        TimeUnit.MILLISECONDS
-    );
-
-    builder.setConnectionManager(cm);
-    builder.setMaxConnPerRoute(config.maxInFlightRequests());
-    builder.setMaxConnTotal(config.maxInFlightRequests());
-    configureAuthentication(builder);
-
-    if (config.secured()) {
-      log.info("Using secured connection to {}.", config.connectionUrls());
-      configureSslContext(builder);
-    } else {
-      log.info("Using unsecured connection to {}.", config.connectionUrls());
-    }
-
-    return builder;
-  }
-
-  /**
    * Customizes each request according to configurations.
    *
    * @param builder the RequestConfigBuilder
@@ -626,50 +504,6 @@ public class ElasticsearchClient {
             original,
             new ReportingException("Indexing failed: " + response.getFailureMessage())
         );
-      }
-    }
-  }
-
-  /**
-   * Gets the SslContext for the client.
-   */
-  private SSLContext sslContext() {
-    SslFactory sslFactory = new SslFactory(Mode.CLIENT, null, false);
-    sslFactory.configure(config.sslConfigs());
-
-    try {
-      // try AK <= 2.2 first
-      log.debug("Trying AK 2.2 SslFactory methods.");
-      return (SSLContext) SslFactory.class.getDeclaredMethod("sslContext").invoke(sslFactory);
-    } catch (Exception e) {
-      // must be running AK 2.3+
-      log.debug("Could not find AK 2.2 SslFactory methods. Trying AK 2.3+ methods for SslFactory.");
-
-      Object sslEngine;
-      try {
-        // try AK <= 2.6 second
-        sslEngine = SslFactory.class.getDeclaredMethod("sslEngineBuilder").invoke(sslFactory);
-        log.debug("Using AK 2.2-2.5 SslFactory methods.");
-      } catch (Exception ex) {
-        // must be running AK 2.6+
-        log.debug(
-            "Could not find AK 2.3-2.5 SslFactory methods. Trying AK 2.6+ methods for SslFactory."
-        );
-        try {
-          sslEngine = SslFactory.class.getDeclaredMethod("sslEngineFactory").invoke(sslFactory);
-          log.debug("Using AK 2.6+ SslFactory methods.");
-        } catch (Exception exc) {
-          throw new ConnectException("Failed to find methods for SslFactory.", exc);
-        }
-      }
-
-      try {
-        return (SSLContext) sslEngine
-            .getClass()
-            .getDeclaredMethod("sslContext")
-            .invoke(sslEngine);
-      } catch (Exception ex) {
-        throw new ConnectException("Could not create SSLContext.", ex);
       }
     }
   }
