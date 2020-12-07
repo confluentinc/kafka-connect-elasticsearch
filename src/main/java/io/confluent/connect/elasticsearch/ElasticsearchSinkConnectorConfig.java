@@ -286,8 +286,8 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   // Kerberos configs
   public static final String USER_PRINCIPAL_CONFIG = "kerberos.user.principal";
   private static final String USER_PRINCIPAL_DISPLAY = "Kerberos User Principal";
-  private static final String USER_PRINCIPAL_DOC = "The Kerberos user principal for the connector"
-      + " to use to authenticate with Kerberos.";
+  private static final String USER_PRINCIPAL_DOC = "The Kerberos user principal the connector may"
+      + " use to authenticate with Kerberos.";
   private static final String USER_PRINCIPAL_DEFAULT = null;
 
   public static final String KEYTAB_FILE_PATH_CONFIG = "kerberos.keytab.path";

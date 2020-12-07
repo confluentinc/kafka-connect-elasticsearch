@@ -25,6 +25,7 @@ import java.security.PrivilegedExceptionAction;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Map;
 import javax.net.ssl.HostnameVerifier;
 import javax.net.ssl.SSLContext;
 import javax.security.auth.Subject;
@@ -72,7 +73,7 @@ public class ClientConfigCallbackHandler implements HttpClientConfigCallback {
 
   private static final Logger log = LoggerFactory.getLogger(ClientConfigCallbackHandler.class);
 
-  private static final Oid SPNEGO_OID = getSpnegoOid();
+  private static final Oid SPNEGO_OID = spnegoOid();
 
   private final ElasticsearchSinkConnectorConfig config;
   private final NHttpClientConnectionManager connectionManager;
@@ -97,13 +98,21 @@ public class ClientConfigCallbackHandler implements HttpClientConfigCallback {
     configureAuthentication(builder);
 
     if (config.isKerberosEnabled()) {
-      log.info("Using Kerberos connection to {}.", config.connectionUrls());
       configureKerberos(builder);
     }
 
     if (config.isSslEnabled()) {
-      log.info("Using SSL connection to {}.", config.connectionUrls());
       configureSslContext(builder);
+    }
+
+    if (config.isKerberosEnabled() && config.isSslEnabled()) {
+      log.info("Using Kerberos and SSL connection to {}.", config.connectionUrls());
+    } else if (config.isKerberosEnabled()) {
+      log.info("Using Kerberos connection to {}.", config.connectionUrls());
+    } else if (config.isSslEnabled()) {
+      log.info("Using SSL connection to {}.", config.connectionUrls());
+    } else {
+      log.info("Using unsecured connection to {}.", config.connectionUrls());
     }
 
     return builder;
@@ -126,8 +135,7 @@ public class ClientConfigCallbackHandler implements HttpClientConfigCallback {
   private void configureAuthentication(HttpAsyncClientBuilder builder) {
     CredentialsProvider credentialsProvider = new BasicCredentialsProvider();
     if (config.isAuthenticatedConnection()) {
-      config.connectionUrls().forEach(
-          url -> credentialsProvider.setCredentials(
+      config.connectionUrls().forEach(url -> credentialsProvider.setCredentials(
               new AuthScope(HttpHost.create(url)),
               new UsernamePasswordCredentials(config.username(), config.password().value())
           )
@@ -188,7 +196,7 @@ public class ClientConfigCallbackHandler implements HttpClientConfigCallback {
    * credentials.
    *
    * @param builder the HttpAsyncClientBuilder to configure
-   * @return the builder
+   * @return the configured builder
    */
   private HttpAsyncClientBuilder configureKerberos(HttpAsyncClientBuilder builder) {
     GSSManager gssManager = GSSManager.getInstance();
@@ -302,29 +310,14 @@ public class ClientConfigCallbackHandler implements HttpClientConfigCallback {
   }
 
   private LoginContext login() throws PrivilegedActionException {
-
     Configuration conf = new Configuration() {
-      @SuppressWarnings("serial")
       @Override
       public AppConfigurationEntry[] getAppConfigurationEntry(String name) {
         return new AppConfigurationEntry[] {
             new AppConfigurationEntry(
                 Krb5LoginModule.class.getName(),
                 AppConfigurationEntry.LoginModuleControlFlag.REQUIRED,
-                new HashMap<String, Object>() {
-                {
-                  put("useTicketCache", "false");
-                  put("useKeyTab", "true");
-                  put("keyTab", config.keytabPath());
-                  //Krb5 in GSS API needs to be refreshed so it does not throw the error
-                  //Specified version of key is not available
-                  put("refreshKrb5Config", "true");
-                  put("principal", config.kerberosUserPrincipal());
-                  put("storeKey", "false");
-                  put("doNotPrompt", "true");
-                  put("isInitiator", "true");
-                }
-              }
+                kerberosConfigs()
             )
         };
       }
@@ -350,7 +343,22 @@ public class ClientConfigCallbackHandler implements HttpClientConfigCallback {
     );
   }
 
-  private static Oid getSpnegoOid() {
+  private Map<String, Object> kerberosConfigs() {
+    Map<String, Object> configs = new HashMap<>();
+    configs.put("useTicketCache", "false");
+    configs.put("useKeyTab", "true");
+    configs.put("keyTab", config.keytabPath());
+    //Krb5 in GSS API needs to be refreshed so it does not throw the error
+    //Specified version of key is not available
+    configs.put("refreshKrb5Config", "true");
+    configs.put("principal", config.kerberosUserPrincipal());
+    configs.put("storeKey", "false");
+    configs.put("doNotPrompt", "true");
+    configs.put("isInitiator", "true");
+    return configs;
+  }
+
+  private static Oid spnegoOid() {
     try {
       return new Oid("1.3.6.1.5.5.2");
     } catch (GSSException gsse) {

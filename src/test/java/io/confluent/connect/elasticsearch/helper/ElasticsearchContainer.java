@@ -202,8 +202,7 @@ public class ElasticsearchContainer
     super.configure();
 
     waitingFor(
-        Wait
-            .forLogMessage(".*(Security is enabled|license .* valid).*", 1)
+        Wait.forLogMessage(".*(Security is enabled|license .* valid).*", 1)
             .withStartupTimeout(Duration.ofMinutes(5))
     );
 
