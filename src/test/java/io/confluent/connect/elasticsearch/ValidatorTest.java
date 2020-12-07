@@ -25,7 +25,7 @@ import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfi
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_KEY_TOPICS_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_SCHEMA_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_SCHEMA_TOPICS_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.KEYTAB_FILE_PATH_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.KERBEROS_KEYTAB_PATH_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.LINGER_MS_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.MAX_BUFFERED_RECORDS_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.MAX_IN_FLIGHT_REQUESTS_CONFIG;
@@ -34,7 +34,7 @@ import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfi
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.PROXY_USERNAME_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.SECURITY_PROTOCOL_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.SSL_CONFIG_PREFIX;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.USER_PRINCIPAL_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.KERBEROS_PRINCIPAL_CONFIG;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
@@ -139,23 +139,23 @@ public class ValidatorTest {
 
   @Test
   public void testInvalidKerberos() throws IOException {
-    props.put(USER_PRINCIPAL_CONFIG, "principal");
+    props.put(KERBEROS_PRINCIPAL_CONFIG, "principal");
     validator = new Validator(props);
 
     Config result = validator.validate();
-    assertHasErrorMessage(result, USER_PRINCIPAL_CONFIG, "must be set");
-    assertHasErrorMessage(result, KEYTAB_FILE_PATH_CONFIG, "must be set");
+    assertHasErrorMessage(result, KERBEROS_PRINCIPAL_CONFIG, "must be set");
+    assertHasErrorMessage(result, KERBEROS_KEYTAB_PATH_CONFIG, "must be set");
 
     // proxy
     Path keytab = Files.createTempFile("es", ".keytab");
-    props.put(USER_PRINCIPAL_CONFIG, "principal");
-    props.put(KEYTAB_FILE_PATH_CONFIG, keytab.toString());
+    props.put(KERBEROS_PRINCIPAL_CONFIG, "principal");
+    props.put(KERBEROS_KEYTAB_PATH_CONFIG, keytab.toString());
     props.put(PROXY_HOST_CONFIG, "proxy.com");
     validator = new Validator(props);
 
     result = validator.validate();
-    assertHasErrorMessage(result, USER_PRINCIPAL_CONFIG, "not supported with proxy settings");
-    assertHasErrorMessage(result, KEYTAB_FILE_PATH_CONFIG, "not supported with proxy settings");
+    assertHasErrorMessage(result, KERBEROS_PRINCIPAL_CONFIG, "not supported with proxy settings");
+    assertHasErrorMessage(result, KERBEROS_KEYTAB_PATH_CONFIG, "not supported with proxy settings");
     assertHasErrorMessage(result, PROXY_HOST_CONFIG, "not supported with proxy settings");
 
     // basic credentials
@@ -165,8 +165,8 @@ public class ValidatorTest {
     validator = new Validator(props);
 
     result = validator.validate();
-    assertHasErrorMessage(result, USER_PRINCIPAL_CONFIG, "Either only Kerberos");
-    assertHasErrorMessage(result, KEYTAB_FILE_PATH_CONFIG, "Either only Kerberos");
+    assertHasErrorMessage(result, KERBEROS_PRINCIPAL_CONFIG, "Either only Kerberos");
+    assertHasErrorMessage(result, KERBEROS_KEYTAB_PATH_CONFIG, "Either only Kerberos");
     assertHasErrorMessage(result, CONNECTION_USERNAME_CONFIG, "Either only Kerberos");
     assertHasErrorMessage(result, CONNECTION_PASSWORD_CONFIG, "Either only Kerberos");
 
@@ -183,8 +183,8 @@ public class ValidatorTest {
 
     // kerberos configs both false
     Path keytab = Files.createTempFile("es", ".keytab");
-    props.put(USER_PRINCIPAL_CONFIG, "principal");
-    props.put(KEYTAB_FILE_PATH_CONFIG, keytab.toString());
+    props.put(KERBEROS_PRINCIPAL_CONFIG, "principal");
+    props.put(KERBEROS_KEYTAB_PATH_CONFIG, keytab.toString());
     validator = new Validator(props);
 
     result = validator.validate();

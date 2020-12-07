@@ -34,7 +34,7 @@ import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfi
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_KEY_TOPICS_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_SCHEMA_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_SCHEMA_TOPICS_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.KEYTAB_FILE_PATH_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.KERBEROS_KEYTAB_PATH_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.LINGER_MS_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.MAX_BUFFERED_RECORDS_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.MAX_IN_FLIGHT_REQUESTS_CONFIG;
@@ -43,7 +43,7 @@ import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfi
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.PROXY_USERNAME_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.SECURITY_PROTOCOL_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.SSL_CONFIG_PREFIX;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.USER_PRINCIPAL_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.KERBEROS_PRINCIPAL_CONFIG;
 
 public class Validator {
 
@@ -114,11 +114,11 @@ public class Validator {
     if (onlyOneSet) {
       String errorMessage = String.format(
           "Either both or neither '%s' and '%s' must be set.",
-          USER_PRINCIPAL_CONFIG,
-          KEYTAB_FILE_PATH_CONFIG
+          KERBEROS_PRINCIPAL_CONFIG,
+          KERBEROS_KEYTAB_PATH_CONFIG
       );
-      addErrorMessage(USER_PRINCIPAL_CONFIG, errorMessage);
-      addErrorMessage(KEYTAB_FILE_PATH_CONFIG, errorMessage);
+      addErrorMessage(KERBEROS_PRINCIPAL_CONFIG, errorMessage);
+      addErrorMessage(KERBEROS_KEYTAB_PATH_CONFIG, errorMessage);
     }
 
     if (config.isKerberosEnabled()) {
@@ -126,13 +126,13 @@ public class Validator {
       if (config.isAuthenticatedConnection()) {
         String errorMessage = String.format(
             "Either only Kerberos (%s, %s) or connection credentials (%s, %s) must be set.",
-            USER_PRINCIPAL_CONFIG,
-            KEYTAB_FILE_PATH_CONFIG,
+            KERBEROS_PRINCIPAL_CONFIG,
+            KERBEROS_KEYTAB_PATH_CONFIG,
             CONNECTION_USERNAME_CONFIG,
             CONNECTION_PASSWORD_CONFIG
         );
-        addErrorMessage(USER_PRINCIPAL_CONFIG, errorMessage);
-        addErrorMessage(KEYTAB_FILE_PATH_CONFIG, errorMessage);
+        addErrorMessage(KERBEROS_PRINCIPAL_CONFIG, errorMessage);
+        addErrorMessage(KERBEROS_KEYTAB_PATH_CONFIG, errorMessage);
         addErrorMessage(CONNECTION_USERNAME_CONFIG, errorMessage);
         addErrorMessage(CONNECTION_PASSWORD_CONFIG, errorMessage);
       }
@@ -141,12 +141,12 @@ public class Validator {
       if (config.isBasicProxyConfigured()) {
         String errorMessage = String.format(
             "Kerberos (%s, %s) is not supported with proxy settings (%s).",
-            USER_PRINCIPAL_CONFIG,
-            KEYTAB_FILE_PATH_CONFIG,
+            KERBEROS_PRINCIPAL_CONFIG,
+            KERBEROS_KEYTAB_PATH_CONFIG,
             PROXY_HOST_CONFIG
         );
-        addErrorMessage(USER_PRINCIPAL_CONFIG, errorMessage);
-        addErrorMessage(KEYTAB_FILE_PATH_CONFIG, errorMessage);
+        addErrorMessage(KERBEROS_PRINCIPAL_CONFIG, errorMessage);
+        addErrorMessage(KERBEROS_KEYTAB_PATH_CONFIG, errorMessage);
         addErrorMessage(PROXY_HOST_CONFIG, errorMessage);
       }
     }

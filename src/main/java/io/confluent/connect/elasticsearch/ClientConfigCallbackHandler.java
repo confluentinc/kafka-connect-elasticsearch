@@ -17,9 +17,6 @@ package io.confluent.connect.elasticsearch;
 
 import com.sun.security.auth.module.Krb5LoginModule;
 import java.security.AccessController;
-import java.security.KeyManagementException;
-import java.security.KeyStoreException;
-import java.security.NoSuchAlgorithmException;
 import java.security.PrivilegedActionException;
 import java.security.PrivilegedExceptionAction;
 import java.util.Collections;
@@ -45,7 +42,6 @@ import org.apache.http.config.Registry;
 import org.apache.http.config.RegistryBuilder;
 import org.apache.http.conn.ssl.NoopHostnameVerifier;
 import org.apache.http.conn.ssl.SSLConnectionSocketFactory;
-import org.apache.http.conn.ssl.TrustAllStrategy;
 import org.apache.http.impl.auth.SPNegoSchemeFactory;
 import org.apache.http.impl.client.BasicCredentialsProvider;
 import org.apache.http.impl.nio.client.HttpAsyncClientBuilder;
@@ -57,7 +53,6 @@ import org.apache.http.nio.conn.SchemeIOSessionStrategy;
 import org.apache.http.nio.conn.ssl.SSLIOSessionStrategy;
 import org.apache.http.nio.reactor.ConnectingIOReactor;
 import org.apache.http.nio.reactor.IOReactorException;
-import org.apache.http.ssl.SSLContextBuilder;
 import org.apache.kafka.common.network.Mode;
 import org.apache.kafka.common.security.ssl.SslFactory;
 import org.apache.kafka.connect.errors.ConnectException;
@@ -207,11 +202,10 @@ public class ClientConfigCallbackHandler implements HttpClientConfigCallback {
     builder.setDefaultAuthSchemeRegistry(authSchemeRegistry);
 
     try {
-      LoginContext loginContext = login();
+      LoginContext loginContext = loginContext();
       GSSCredential credential = Subject.doAs(
           loginContext.getSubject(),
-          (PrivilegedExceptionAction<GSSCredential>) ()
-              -> gssManager.createCredential(
+          (PrivilegedExceptionAction<GSSCredential>) () -> gssManager.createCredential(
               null,
               GSSCredential.DEFAULT_LIFETIME,
               SPNEGO_OID,
@@ -231,19 +225,6 @@ public class ClientConfigCallbackHandler implements HttpClientConfigCallback {
       builder.setDefaultCredentialsProvider(credentialsProvider);
     } catch (PrivilegedActionException e) {
       throw new ConnectException(e);
-    }
-
-    if (!config.isSslEnabled()) {
-      try {
-        SSLContextBuilder sslContextBuilder = new SSLContextBuilder();
-        sslContextBuilder.loadTrustMaterial(null, new TrustAllStrategy());
-        builder.setSSLContext(sslContextBuilder.build());
-        builder.setSSLStrategy(
-            new SSLIOSessionStrategy(sslContextBuilder.build(), new NoopHostnameVerifier())
-        );
-      } catch (NoSuchAlgorithmException | KeyStoreException | KeyManagementException e) {
-        throw new ConnectException(e);
-      }
     }
 
     return builder;
@@ -309,7 +290,12 @@ public class ClientConfigCallbackHandler implements HttpClientConfigCallback {
     }
   }
 
-  private LoginContext login() throws PrivilegedActionException {
+  /**
+   * Creates and returns a login context for the given kerberos user principle.
+   * @return the login context
+   * @throws PrivilegedActionException
+   */
+  private LoginContext loginContext() throws PrivilegedActionException {
     Configuration conf = new Configuration() {
       @Override
       public AppConfigurationEntry[] getAppConfigurationEntry(String name) {
@@ -343,9 +329,15 @@ public class ClientConfigCallbackHandler implements HttpClientConfigCallback {
     );
   }
 
+  /**
+   * Creates the Kerberos configurations.
+   *
+   * @return map of kerberos configs
+   */
   private Map<String, Object> kerberosConfigs() {
     Map<String, Object> configs = new HashMap<>();
-    configs.put("useTicketCache", "false");
+    configs.put("useTicketCache", "true");
+    configs.put("renewTGT", "true");
     configs.put("useKeyTab", "true");
     configs.put("keyTab", config.keytabPath());
     //Krb5 in GSS API needs to be refreshed so it does not throw the error
@@ -354,7 +346,6 @@ public class ClientConfigCallbackHandler implements HttpClientConfigCallback {
     configs.put("principal", config.kerberosUserPrincipal());
     configs.put("storeKey", "false");
     configs.put("doNotPrompt", "true");
-    configs.put("isInitiator", "true");
     return configs;
   }
 

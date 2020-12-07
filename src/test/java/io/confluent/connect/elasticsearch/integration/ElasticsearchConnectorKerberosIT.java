@@ -1,7 +1,7 @@
 package io.confluent.connect.elasticsearch.integration;
 
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.KEYTAB_FILE_PATH_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.USER_PRINCIPAL_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.KERBEROS_KEYTAB_PATH_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.KERBEROS_PRINCIPAL_CONFIG;
 
 import io.confluent.connect.elasticsearch.ElasticsearchClient;
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig;
@@ -98,7 +98,7 @@ public class ElasticsearchConnectorKerberosIT extends ElasticsearchConnectorBase
   }
 
   private static void addKerberosConfigs(Map<String, String> props) {
-    props.put(USER_PRINCIPAL_CONFIG, userPrincipal);
-    props.put(KEYTAB_FILE_PATH_CONFIG, userKeytab);
+    props.put(KERBEROS_PRINCIPAL_CONFIG, userPrincipal);
+    props.put(KERBEROS_KEYTAB_PATH_CONFIG, userKeytab);
   }
 }

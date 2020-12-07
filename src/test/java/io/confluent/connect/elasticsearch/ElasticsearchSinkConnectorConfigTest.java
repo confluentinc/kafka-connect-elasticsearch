@@ -2,7 +2,7 @@ package io.confluent.connect.elasticsearch;
 
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_TIMEOUT_MS_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.KEYTAB_FILE_PATH_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.KERBEROS_KEYTAB_PATH_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.PROXY_HOST_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.PROXY_PASSWORD_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.PROXY_PORT_CONFIG;
@@ -167,20 +167,20 @@ public class ElasticsearchSinkConnectorConfigTest {
 
   @Test(expected = ConfigException.class)
   public void shouldNotAllowInvalidExtensionKeytab() {
-    props.put(KEYTAB_FILE_PATH_CONFIG, "keytab.wrongextension");
+    props.put(KERBEROS_KEYTAB_PATH_CONFIG, "keytab.wrongextension");
     new ElasticsearchSinkConnectorConfig(props);
   }
 
   @Test(expected = ConfigException.class)
   public void shouldNotAllowNonExistingKeytab() {
-    props.put(KEYTAB_FILE_PATH_CONFIG, "idontexist.keytab");
+    props.put(KERBEROS_KEYTAB_PATH_CONFIG, "idontexist.keytab");
     new ElasticsearchSinkConnectorConfig(props);
   }
 
   @Test
   public void shouldAllowValidKeytab() throws IOException {
     Path keytab = Files.createTempFile("iexist", ".keytab");
-    props.put(KEYTAB_FILE_PATH_CONFIG, keytab.toString());
+    props.put(KERBEROS_KEYTAB_PATH_CONFIG, keytab.toString());
 
     new ElasticsearchSinkConnectorConfig(props);
 

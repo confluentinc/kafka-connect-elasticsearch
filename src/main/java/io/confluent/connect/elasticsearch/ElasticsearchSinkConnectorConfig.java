@@ -284,17 +284,17 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   private static final String SECURITY_PROTOCOL_DEFAULT = SecurityProtocol.PLAINTEXT.name();
 
   // Kerberos configs
-  public static final String USER_PRINCIPAL_CONFIG = "kerberos.user.principal";
-  private static final String USER_PRINCIPAL_DISPLAY = "Kerberos User Principal";
-  private static final String USER_PRINCIPAL_DOC = "The Kerberos user principal the connector may"
-      + " use to authenticate with Kerberos.";
-  private static final String USER_PRINCIPAL_DEFAULT = null;
+  public static final String KERBEROS_PRINCIPAL_CONFIG = "kerberos.user.principal";
+  private static final String KERBEROS_PRINCIPAL_DISPLAY = "Kerberos User Principal";
+  private static final String KERBEROS_PRINCIPAL_DOC = "The Kerberos user principal the connector"
+      + " may use to authenticate with Kerberos.";
+  private static final String KERBEROS_PRINCIPAL_DEFAULT = null;
 
-  public static final String KEYTAB_FILE_PATH_CONFIG = "kerberos.keytab.path";
-  private static final String KEYTAB_FILE_PATH_DISPLAY = "Kerberos Keytab File Path";
-  private static final String KEYTAB_FILE_PATH_DOC = "The path to the keytab file to use for"
+  public static final String KERBEROS_KEYTAB_PATH_CONFIG = "kerberos.keytab.path";
+  private static final String KERBEROS_KEYTAB_PATH = "Kerberos Keytab File Path";
+  private static final String KERBEROS_KEYTAB_PATH_DOC = "The path to the keytab file to use for"
       + " authentication with Kerberos.";
-  private static final String KEYTAB_FILE_PATH_DEFAULT = null;
+  private static final String KERBEROS_KEYTAB_PATH_DEFAULT = null;
 
   private static final String CONNECTOR_GROUP = "Connector";
   private static final String DATA_CONVERSION_GROUP = "Data Conversion";
@@ -680,26 +680,26 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
     int orderInGroup = 0;
     configDef
         .define(
-            USER_PRINCIPAL_CONFIG,
+            KERBEROS_PRINCIPAL_CONFIG,
             Type.STRING,
-            USER_PRINCIPAL_DEFAULT,
+            KERBEROS_PRINCIPAL_DEFAULT,
             Importance.LOW,
-            USER_PRINCIPAL_DOC,
+            KERBEROS_PRINCIPAL_DOC,
             KERBEROS_GROUP,
             orderInGroup++,
             Width.LONG,
-            USER_PRINCIPAL_DISPLAY
+            KERBEROS_PRINCIPAL_DISPLAY
         ).define(
-            KEYTAB_FILE_PATH_CONFIG,
+            KERBEROS_KEYTAB_PATH_CONFIG,
             Type.STRING,
-            KEYTAB_FILE_PATH_DEFAULT,
+            KERBEROS_KEYTAB_PATH_DEFAULT,
             new FilePathValidator("keytab"),
             Importance.LOW,
-            KEYTAB_FILE_PATH_DOC,
+            KERBEROS_KEYTAB_PATH_DOC,
             KERBEROS_GROUP,
             orderInGroup++,
             Width.LONG,
-            KEYTAB_FILE_PATH_DISPLAY
+            KERBEROS_KEYTAB_PATH
     );
   }
 
@@ -797,11 +797,11 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   }
 
   public String kerberosUserPrincipal() {
-    return getString(USER_PRINCIPAL_CONFIG);
+    return getString(KERBEROS_PRINCIPAL_CONFIG);
   }
 
   public String keytabPath() {
-    return getString(KEYTAB_FILE_PATH_CONFIG);
+    return getString(KERBEROS_KEYTAB_PATH_CONFIG);
   }
 
   public long lingerMs() {
