@@ -340,7 +340,7 @@
                                 enabled and disabled cases with the same cert. So, disable this IT
                                 in jenkins.
                                 -->
-                                <exclude>**/ElasticsearchConnectorSecureIT.java</exclude>
+                                <exclude>**/ElasticsearchConnectorSslIT.java</exclude>
                             </excludes>
                         </configuration>
                     </plugin>
