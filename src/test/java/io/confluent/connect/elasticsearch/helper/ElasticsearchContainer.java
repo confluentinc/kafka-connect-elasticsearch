@@ -1,19 +1,27 @@
 /*
- * Copyright [2018 - 2018] Confluent Inc.
+ * Copyright 2018 Confluent Inc.
+ *
+ * Licensed under the Confluent Community License (the "License"); you may not use
+ * this file except in compliance with the License.  You may obtain a copy of the
+ * License at
+ *
+ * http://www.confluent.io/confluent-community-license
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OF ANY KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations under the License.
  */
 
-package io.confluent.connect.elasticsearch.integration;
+package io.confluent.connect.elasticsearch.helper;
 
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.InetAddress;
-import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.net.URL;
-import java.net.UnknownHostException;
 import java.time.Duration;
 import java.util.concurrent.Future;
 
@@ -47,7 +55,7 @@ public class ElasticsearchContainer
   /**
    * Default Elasticsearch version.
    */
-  public static final String DEFAULT_ES_VERSION = "7.0.0";
+  public static final String DEFAULT_ES_VERSION = "7.0.1";
 
   /**
    * Default Elasticsearch port.
@@ -98,7 +106,7 @@ public class ElasticsearchContainer
   }
 
   private static final String KEY_PASSWORD = "asdfasdf";
-  private static final String ELASTIC_PASSWORD = "elastic";
+  public static final String ELASTIC_PASSWORD = "elastic";
   private static final String KEYSTORE_PASSWORD = KEY_PASSWORD;
   private static final String TRUSTSTORE_PASSWORD = KEY_PASSWORD;
   private static final long TWO_GIGABYTES = 2L * 1024 * 1024 * 1024;
@@ -213,7 +221,7 @@ public class ElasticsearchContainer
            );
   }
 
-  protected String hostMachineIpAddress() {
+  public String hostMachineIpAddress() {
     String dockerHost = System.getenv("DOCKER_HOST");
     if (dockerHost != null && !dockerHost.trim().isEmpty()) {
       try {

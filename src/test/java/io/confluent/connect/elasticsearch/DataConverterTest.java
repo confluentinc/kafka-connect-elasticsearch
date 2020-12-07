@@ -15,9 +15,11 @@
 
 package io.confluent.connect.elasticsearch;
 
+import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BehaviorOnNullValues;
 import org.apache.kafka.connect.data.*;
 import org.apache.kafka.connect.errors.DataException;
 import org.apache.kafka.connect.sink.SinkRecord;
+import org.elasticsearch.action.delete.DeleteRequest;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -29,8 +31,8 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 
-import static io.confluent.connect.elasticsearch.DataConverter.BehaviorOnNullValues;
-
+import static io.confluent.connect.elasticsearch.DataConverter.MAP_KEY;
+import static io.confluent.connect.elasticsearch.DataConverter.MAP_VALUE;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.fail;
@@ -38,23 +40,27 @@ import static org.junit.Assert.fail;
 public class DataConverterTest {
   
   private DataConverter converter;
+  private Map<String, String> props;
+
   private String key;
   private String topic;
   private int partition;
   private long offset;
   private String index;
-  private String type;
   private Schema schema;
 
   @Before
   public void setUp() {
-    converter = new DataConverter(true, BehaviorOnNullValues.DEFAULT);
+    props = ElasticsearchSinkConnectorConfigTest.addNecessaryProps(new HashMap<>());
+    props.put(ElasticsearchSinkConnectorConfig.IGNORE_KEY_CONFIG, "true");
+    props.put(ElasticsearchSinkConnectorConfig.COMPACT_MAP_ENTRIES_CONFIG, "true");
+
+    converter = new DataConverter(new ElasticsearchSinkConnectorConfig(props));
     key = "key";
     topic = "topic";
     partition = 0;
     offset = 0;
     index = "index";
-    type = "type";
     schema = SchemaBuilder
         .struct()
         .name("struct")
@@ -150,8 +156,8 @@ public class DataConverterTest {
     assertEquals(
         SchemaBuilder.array(
             SchemaBuilder.struct().name(Schema.INT32_SCHEMA.type().name() + "-" + Decimal.LOGICAL_NAME)
-                .field(ElasticsearchSinkConnectorConstants.MAP_KEY, Schema.INT32_SCHEMA)
-                .field(ElasticsearchSinkConnectorConstants.MAP_VALUE, Schema.FLOAT64_SCHEMA)
+                .field(MAP_KEY, Schema.INT32_SCHEMA)
+                .field(MAP_VALUE, Schema.FLOAT64_SCHEMA)
                 .build()
         ).build(),
         preProcessedSchema
@@ -163,11 +169,11 @@ public class DataConverterTest {
     assertEquals(
         new HashSet<>(Arrays.asList(
             new Struct(preProcessedSchema.valueSchema())
-                .put(ElasticsearchSinkConnectorConstants.MAP_KEY, 1)
-                .put(ElasticsearchSinkConnectorConstants.MAP_VALUE, 0.02),
+                .put(MAP_KEY, 1)
+                .put(MAP_VALUE, 0.02),
             new Struct(preProcessedSchema.valueSchema())
-                .put(ElasticsearchSinkConnectorConstants.MAP_KEY, 2)
-                .put(ElasticsearchSinkConnectorConstants.MAP_VALUE, 0.42)
+                .put(MAP_KEY, 2)
+                .put(MAP_VALUE, 0.42)
         )),
         new HashSet<>((List<?>) converter.preProcessValue(origValue, origSchema, preProcessedSchema))
     );
@@ -194,14 +200,15 @@ public class DataConverterTest {
     origValue.put("field2", 2);
 
     // Use the older non-compact format for map entries with string keys
-    converter = new DataConverter(false, BehaviorOnNullValues.DEFAULT);
+    props.put(ElasticsearchSinkConnectorConfig.COMPACT_MAP_ENTRIES_CONFIG, "false");
+    converter = new DataConverter(new ElasticsearchSinkConnectorConfig(props));
 
     Schema preProcessedSchema = converter.preProcessSchema(origSchema);
     assertEquals(
         SchemaBuilder.array(
             SchemaBuilder.struct().name(Schema.STRING_SCHEMA.type().name() + "-" + Schema.INT32_SCHEMA.type().name())
-                         .field(ElasticsearchSinkConnectorConstants.MAP_KEY, Schema.STRING_SCHEMA)
-                         .field(ElasticsearchSinkConnectorConstants.MAP_VALUE, Schema.INT32_SCHEMA)
+                         .field(MAP_KEY, Schema.STRING_SCHEMA)
+                         .field(MAP_VALUE, Schema.INT32_SCHEMA)
                          .build()
         ).build(),
         preProcessedSchema
@@ -209,11 +216,11 @@ public class DataConverterTest {
     assertEquals(
         new HashSet<>(Arrays.asList(
                 new Struct(preProcessedSchema.valueSchema())
-                        .put(ElasticsearchSinkConnectorConstants.MAP_KEY, "field1")
-                        .put(ElasticsearchSinkConnectorConstants.MAP_VALUE, 1),
+                        .put(MAP_KEY, "field1")
+                        .put(MAP_VALUE, 1),
                 new Struct(preProcessedSchema.valueSchema())
-                        .put(ElasticsearchSinkConnectorConstants.MAP_KEY, "field2")
-                        .put(ElasticsearchSinkConnectorConstants.MAP_VALUE, 2)
+                        .put(MAP_KEY, "field2")
+                        .put(MAP_VALUE, 2)
         )),
         new HashSet<>((List<?>) converter.preProcessValue(origValue, origSchema, preProcessedSchema))
     );
@@ -228,7 +235,8 @@ public class DataConverterTest {
     origValue.put("field2", 2);
 
     // Use the newer compact format for map entries with string keys
-    converter = new DataConverter(true, BehaviorOnNullValues.DEFAULT);
+    props.put(ElasticsearchSinkConnectorConfig.COMPACT_MAP_ENTRIES_CONFIG, "true");
+    converter = new DataConverter(new ElasticsearchSinkConnectorConfig(props));
     Schema preProcessedSchema = converter.preProcessSchema(origSchema);
     assertEquals(
         SchemaBuilder.map(Schema.STRING_SCHEMA, Schema.INT32_SCHEMA).build(),
@@ -272,7 +280,8 @@ public class DataConverterTest {
     testOptionalFieldWithoutDefault(SchemaBuilder.struct().field("innerField", Schema.BOOLEAN_SCHEMA));
     testOptionalFieldWithoutDefault(SchemaBuilder.map(Schema.STRING_SCHEMA, Schema.BOOLEAN_SCHEMA));
     // Have to test maps with useCompactMapEntries set to true and set to false
-    converter = new DataConverter(false, BehaviorOnNullValues.DEFAULT);
+    props.put(ElasticsearchSinkConnectorConfig.COMPACT_MAP_ENTRIES_CONFIG, "false");
+    converter = new DataConverter(new ElasticsearchSinkConnectorConfig(props));
     testOptionalFieldWithoutDefault(SchemaBuilder.map(Schema.STRING_SCHEMA, Schema.BOOLEAN_SCHEMA));
   }
 
@@ -293,39 +302,56 @@ public class DataConverterTest {
 
   @Test
   public void ignoreOnNullValue() {
-    converter = new DataConverter(true, BehaviorOnNullValues.IGNORE);
+
+    props.put(ElasticsearchSinkConnectorConfig.COMPACT_MAP_ENTRIES_CONFIG, "true");
+    props.put(ElasticsearchSinkConnectorConfig.IGNORE_KEY_CONFIG, "false");
+    props.put(ElasticsearchSinkConnectorConfig.IGNORE_SCHEMA_CONFIG, "false");
+    props.put(ElasticsearchSinkConnectorConfig.BEHAVIOR_ON_NULL_VALUES_CONFIG, BehaviorOnNullValues.IGNORE.name());
+    converter = new DataConverter(new ElasticsearchSinkConnectorConfig(props));
 
     SinkRecord sinkRecord = createSinkRecordWithValue(null);
-    assertNull(converter.convertRecord(sinkRecord, index, type, false, false));
+    assertNull(converter.convertRecord(sinkRecord, index));
   }
 
   @Test
   public void deleteOnNullValue() {
-    converter = new DataConverter(true, BehaviorOnNullValues.DELETE);
-
+    props.put(ElasticsearchSinkConnectorConfig.COMPACT_MAP_ENTRIES_CONFIG, "true");
+    props.put(ElasticsearchSinkConnectorConfig.IGNORE_KEY_CONFIG, "false");
+    props.put(ElasticsearchSinkConnectorConfig.IGNORE_SCHEMA_CONFIG, "false");
+    props.put(ElasticsearchSinkConnectorConfig.BEHAVIOR_ON_NULL_VALUES_CONFIG, BehaviorOnNullValues.DELETE.name());
+    converter = new DataConverter(new ElasticsearchSinkConnectorConfig(props));
     SinkRecord sinkRecord = createSinkRecordWithValue(null);
-    IndexableRecord expectedRecord = createIndexableRecordWithPayload(null);
-    IndexableRecord actualRecord = converter.convertRecord(sinkRecord, index, type, false, false);
+    DeleteRequest actualRecord = (DeleteRequest) converter.convertRecord(sinkRecord, index);
 
-    assertEquals(expectedRecord, actualRecord);
+    assertEquals(key, actualRecord.id());
+    assertEquals(index, actualRecord.index());
   }
 
   @Test
   public void ignoreDeleteOnNullValueWithNullKey() {
-    converter = new DataConverter(true, BehaviorOnNullValues.DELETE);
+    props.put(ElasticsearchSinkConnectorConfig.COMPACT_MAP_ENTRIES_CONFIG, "true");
+    props.put(ElasticsearchSinkConnectorConfig.IGNORE_KEY_CONFIG, "false");
+    props.put(ElasticsearchSinkConnectorConfig.IGNORE_SCHEMA_CONFIG, "false");
+    props.put(ElasticsearchSinkConnectorConfig.BEHAVIOR_ON_NULL_VALUES_CONFIG, BehaviorOnNullValues.DELETE.name());
+    converter = new DataConverter(new ElasticsearchSinkConnectorConfig(props));
+
     key = null;
 
     SinkRecord sinkRecord = createSinkRecordWithValue(null);
-    assertNull(converter.convertRecord(sinkRecord, index, type, false, false));
+    assertNull(converter.convertRecord(sinkRecord, index));
   }
 
   @Test
   public void failOnNullValue() {
-    converter = new DataConverter(true, BehaviorOnNullValues.FAIL);
+    props.put(ElasticsearchSinkConnectorConfig.COMPACT_MAP_ENTRIES_CONFIG, "true");
+    props.put(ElasticsearchSinkConnectorConfig.IGNORE_KEY_CONFIG, "false");
+    props.put(ElasticsearchSinkConnectorConfig.IGNORE_SCHEMA_CONFIG, "false");
+    props.put(ElasticsearchSinkConnectorConfig.BEHAVIOR_ON_NULL_VALUES_CONFIG, BehaviorOnNullValues.FAIL.name());
+    converter = new DataConverter(new ElasticsearchSinkConnectorConfig(props));
 
     SinkRecord sinkRecord = createSinkRecordWithValue(null);
     try {
-      converter.convertRecord(sinkRecord, index, type, false, false);
+      converter.convertRecord(sinkRecord, index);
       fail("should fail on null-valued record with behaviorOnNullValues = FAIL");
     } catch (DataException e) {
       // expected
@@ -335,9 +361,4 @@ public class DataConverterTest {
   public SinkRecord createSinkRecordWithValue(Object value) {
     return new SinkRecord(topic, partition, Schema.STRING_SCHEMA, key, schema, value, offset);
   }
-
-  public IndexableRecord createIndexableRecordWithPayload(String payload) {
-    return new IndexableRecord(new Key(index, type, key), payload, offset);
-  }
-
 }

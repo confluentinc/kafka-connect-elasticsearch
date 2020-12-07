@@ -15,10 +15,6 @@
 
 package io.confluent.connect.elasticsearch;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.node.JsonNodeFactory;
-import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.google.gson.JsonObject;
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Field;
@@ -27,94 +23,207 @@ import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.errors.DataException;
+import org.elasticsearch.common.xcontent.XContentBuilder;
+import org.elasticsearch.common.xcontent.XContentFactory;
 
 import java.io.IOException;
-import java.nio.ByteBuffer;
-
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConstants.BINARY_TYPE;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConstants.BOOLEAN_TYPE;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConstants.BYTE_TYPE;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConstants.DOUBLE_TYPE;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConstants.FLOAT_TYPE;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConstants.INTEGER_TYPE;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConstants.KEYWORD_TYPE;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConstants.LONG_TYPE;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConstants.MAP_KEY;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConstants.MAP_VALUE;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConstants.SHORT_TYPE;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConstants.STRING_TYPE;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConstants.TEXT_TYPE;
 
 public class Mapping {
 
-  /**
-   * Create an explicit mapping.
-   *
-   * @param client The client to connect to Elasticsearch.
-   * @param index  The index to write to Elasticsearch.
-   * @param type   The type to create mapping for.
-   * @param schema The schema used to infer mapping.
-   * @throws IOException from underlying JestClient
-   */
-  public static void createMapping(
-      ElasticsearchClient client,
-      String index,
-      String type,
-      Schema schema
-  )
-      throws IOException {
-    client.createMapping(index, type, schema);
-  }
+  // Elasticsearch types
+  public static final String BOOLEAN_TYPE = "boolean";
+  public static final String BYTE_TYPE = "byte";
+  public static final String BINARY_TYPE = "binary";
+  public static final String SHORT_TYPE = "short";
+  public static final String INTEGER_TYPE = "integer";
+  public static final String LONG_TYPE = "long";
+  public static final String FLOAT_TYPE = "float";
+  public static final String DOUBLE_TYPE = "double";
+  public static final String STRING_TYPE = "string";
+  public static final String TEXT_TYPE = "text";
+  public static final String KEYWORD_TYPE = "keyword";
+  public static final String DATE_TYPE = "date";
+
+  // Elasticsearch mapping fields
+  private static final String DEFAULT_VALUE_FIELD = "null_value";
+  private static final String FIELDS_FIELD = "fields";
+  private static final String IGNORE_ABOVE_FIELD = "ignore_above";
+  public static final String KEY_FIELD = "key";
+  private static final String KEYWORD_FIELD = "keyword";
+  private static final String PROPERTIES_FIELD = "properties";
+  private static final String TYPE_FIELD = "type";
+  public static final String VALUE_FIELD = "value";
 
   /**
-   * Get the JSON mapping for given index and type. Returns {@code null} if it does not exist.
+   * Build mapping from the provided schema.
+   *
+   * @param schema The schema used to build the mapping.
+   * @return the schema as a JSON mapping
    */
-  public static JsonObject getMapping(ElasticsearchClient client, String index, String type)
-      throws IOException {
-    return client.getMapping(index, type);
+  public static XContentBuilder buildMapping(Schema schema) {
+    try {
+      XContentBuilder builder = XContentFactory.jsonBuilder();
+      builder.startObject();
+      {
+        buildMapping(schema, builder);
+      }
+      builder.endObject();
+      return builder;
+    } catch (IOException e) {
+      throw new ConnectException("Failed to build mapping for schema " + schema, e);
+    }
   }
 
-  /**
-   * Infer mapping from the provided schema.
-   *
-   * @param schema The schema used to infer mapping.
-   */
-  public static JsonNode inferMapping(ElasticsearchClient client, Schema schema) {
+  private static XContentBuilder buildMapping(Schema schema, XContentBuilder builder)
+      throws IOException {
+
     if (schema == null) {
       throw new DataException("Cannot infer mapping without schema.");
     }
 
     // Handle logical types
-    JsonNode logicalConversion = inferLogicalMapping(schema);
+    XContentBuilder logicalConversion = inferLogicalMapping(builder, schema);
     if (logicalConversion != null) {
       return logicalConversion;
     }
 
     Schema.Type schemaType = schema.type();
-    ObjectNode properties = JsonNodeFactory.instance.objectNode();
-    ObjectNode fields = JsonNodeFactory.instance.objectNode();
-    switch (schemaType) {
+    switch (schema.type()) {
       case ARRAY:
-        return inferMapping(client, schema.valueSchema());
+        return buildMapping(schema.valueSchema(), builder);
+
       case MAP:
-        properties.set("properties", fields);
-        fields.set(MAP_KEY, inferMapping(client, schema.keySchema()));
-        fields.set(MAP_VALUE, inferMapping(client, schema.valueSchema()));
-        return properties;
+        return buildMap(schema, builder);
+
       case STRUCT:
-        properties.set("properties", fields);
-        for (Field field : schema.fields()) {
-          fields.set(field.name(), inferMapping(client, field.schema()));
-        }
-        return properties;
+        return buildStruct(schema, builder);
+
       default:
-        String esType = getElasticsearchType(client, schemaType);
-        return inferPrimitive(esType, schema.defaultValue());
+        return inferPrimitive(builder, getElasticsearchType(schemaType), schema.defaultValue());
+    }
+  }
+
+  private static void addTextMapping(XContentBuilder builder) throws IOException {
+    // Add additional mapping for indexing, per https://www.elastic.co/blog/strings-are-dead-long-live-strings
+    builder.startObject(FIELDS_FIELD);
+    {
+      builder.startObject(KEYWORD_FIELD);
+      {
+        builder.field(TYPE_FIELD, KEYWORD_TYPE);
+        builder.field(IGNORE_ABOVE_FIELD, 256);
+      }
+      builder.endObject();
+    }
+    builder.endObject();
+  }
+
+  private static XContentBuilder buildMap(Schema schema, XContentBuilder builder)
+      throws IOException {
+
+    builder.startObject(PROPERTIES_FIELD);
+    {
+      builder.startObject(KEY_FIELD);
+      {
+        buildMapping(schema.keySchema(), builder);
+      }
+      builder.endObject();
+      builder.startObject(VALUE_FIELD);
+      {
+        buildMapping(schema.valueSchema(), builder);
+      }
+      builder.endObject();
+    }
+    return builder.endObject();
+  }
+
+  private static XContentBuilder buildStruct(Schema schema, XContentBuilder builder)
+      throws IOException {
+
+    builder.startObject(PROPERTIES_FIELD);
+    {
+      for (Field field : schema.fields()) {
+        builder.startObject(field.name());
+        {
+          buildMapping(field.schema(), builder);
+        }
+        builder.endObject();
+      }
+    }
+    return builder.endObject();
+  }
+
+  private static XContentBuilder inferPrimitive(
+      XContentBuilder builder,
+      String type,
+      Object defaultValue
+  ) throws IOException {
+
+    if (type == null) {
+      throw new DataException(String.format("Invalid primitive type %s.", type));
+    }
+
+    builder.field(TYPE_FIELD, type);
+    if (type.equals(TEXT_TYPE)) {
+      addTextMapping(builder);
+    }
+
+    if (defaultValue == null) {
+      return builder;
+    }
+
+    switch (type) {
+      case BYTE_TYPE:
+        return builder.field(DEFAULT_VALUE_FIELD, (byte) defaultValue);
+      case SHORT_TYPE:
+        return builder.field(DEFAULT_VALUE_FIELD, (short) defaultValue);
+      case INTEGER_TYPE:
+        return builder.field(DEFAULT_VALUE_FIELD, (int) defaultValue);
+      case LONG_TYPE:
+        return builder.field(DEFAULT_VALUE_FIELD, (long) defaultValue);
+      case FLOAT_TYPE:
+        return builder.field(DEFAULT_VALUE_FIELD, (float) defaultValue);
+      case DOUBLE_TYPE:
+        return builder.field(DEFAULT_VALUE_FIELD, (double) defaultValue);
+      case BOOLEAN_TYPE:
+        return builder.field(DEFAULT_VALUE_FIELD, (boolean) defaultValue);
+      case DATE_TYPE:
+        return builder.field(DEFAULT_VALUE_FIELD, ((java.util.Date) defaultValue).getTime());
+      /*
+       * IGNORE default values for text and binary types as this is not supported by ES side.
+       * see https://www.elastic.co/guide/en/elasticsearch/reference/current/text.html and
+       * https://www.elastic.co/guide/en/elasticsearch/reference/current/binary.html for details.
+       */
+      case STRING_TYPE:
+      case TEXT_TYPE:
+      case BINARY_TYPE:
+        return builder;
+      default:
+        throw new DataException("Invalid primitive type " + type + ".");
+    }
+  }
+
+  private static XContentBuilder inferLogicalMapping(XContentBuilder builder, Schema schema)
+      throws IOException {
+
+    if (schema.name() == null) {
+      return null;
+    }
+
+    switch (schema.name()) {
+      case Date.LOGICAL_NAME:
+      case Time.LOGICAL_NAME:
+      case Timestamp.LOGICAL_NAME:
+        return inferPrimitive(builder, DATE_TYPE, schema.defaultValue());
+      case Decimal.LOGICAL_NAME:
+        return inferPrimitive(builder, DOUBLE_TYPE, schema.defaultValue());
+      default:
+        // User-defined type or unknown built-in
+        return null;
     }
   }
 
   // visible for testing
-  protected static String getElasticsearchType(ElasticsearchClient client, Schema.Type schemaType) {
+  protected static String getElasticsearchType(Schema.Type schemaType) {
     switch (schemaType) {
       case BOOLEAN:
         return BOOLEAN_TYPE;
@@ -131,119 +240,11 @@ public class Mapping {
       case FLOAT64:
         return DOUBLE_TYPE;
       case STRING:
-        switch (client.getVersion()) {
-          case ES_V1:
-          case ES_V2:
-            return STRING_TYPE;
-          case ES_V5:
-          case ES_V6:
-          default:
-            return TEXT_TYPE;
-        }
+        return TEXT_TYPE;
       case BYTES:
         return BINARY_TYPE;
       default:
         return null;
     }
   }
-
-  private static JsonNode inferLogicalMapping(Schema schema) {
-    String schemaName = schema.name();
-    Object defaultValue = schema.defaultValue();
-    if (schemaName == null) {
-      return null;
-    }
-
-    switch (schemaName) {
-      case Date.LOGICAL_NAME:
-      case Time.LOGICAL_NAME:
-      case Timestamp.LOGICAL_NAME:
-        return inferPrimitive(ElasticsearchSinkConnectorConstants.DATE_TYPE, defaultValue);
-      case Decimal.LOGICAL_NAME:
-        return inferPrimitive(ElasticsearchSinkConnectorConstants.DOUBLE_TYPE, defaultValue);
-      default:
-        // User-defined type or unknown built-in
-        return null;
-    }
-  }
-
-  private static JsonNode inferPrimitive(String type, Object defaultValue) {
-    if (type == null) {
-      throw new ConnectException("Invalid primitive type.");
-    }
-
-    ObjectNode obj = JsonNodeFactory.instance.objectNode();
-    obj.set("type", JsonNodeFactory.instance.textNode(type));
-    if (type.equals(TEXT_TYPE)) {
-      addTextMapping(obj);
-    }
-    JsonNode defaultValueNode = null;
-    if (defaultValue != null) {
-      switch (type) {
-        case ElasticsearchSinkConnectorConstants.BYTE_TYPE:
-          defaultValueNode = JsonNodeFactory.instance.numberNode((byte) defaultValue);
-          break;
-        case ElasticsearchSinkConnectorConstants.SHORT_TYPE:
-          defaultValueNode = JsonNodeFactory.instance.numberNode((short) defaultValue);
-          break;
-        case ElasticsearchSinkConnectorConstants.INTEGER_TYPE:
-          defaultValueNode = JsonNodeFactory.instance.numberNode((int) defaultValue);
-          break;
-        case ElasticsearchSinkConnectorConstants.LONG_TYPE:
-          defaultValueNode = JsonNodeFactory.instance.numberNode((long) defaultValue);
-          break;
-        case ElasticsearchSinkConnectorConstants.FLOAT_TYPE:
-          defaultValueNode = JsonNodeFactory.instance.numberNode((float) defaultValue);
-          break;
-        case ElasticsearchSinkConnectorConstants.DOUBLE_TYPE:
-          defaultValueNode = JsonNodeFactory.instance.numberNode((double) defaultValue);
-          break;
-        case ElasticsearchSinkConnectorConstants.STRING_TYPE:
-        case ElasticsearchSinkConnectorConstants.TEXT_TYPE:
-        case ElasticsearchSinkConnectorConstants.BINARY_TYPE:
-          // IGNORE default values for text and binary types as this is not supported by ES side.
-          // see https://www.elastic.co/guide/en/elasticsearch/reference/current/text.html
-          // https://www.elastic.co/guide/en/elasticsearch/reference/current/binary.html
-          // for more details.
-          //defaultValueNode = null;
-          break;
-        case ElasticsearchSinkConnectorConstants.BOOLEAN_TYPE:
-          defaultValueNode = JsonNodeFactory.instance.booleanNode((boolean) defaultValue);
-          break;
-        case ElasticsearchSinkConnectorConstants.DATE_TYPE:
-          long value = ((java.util.Date) defaultValue).getTime();
-          defaultValueNode = JsonNodeFactory.instance.numberNode(value);
-          break;
-        default:
-          throw new DataException("Invalid primitive type.");
-      }
-    }
-    if (defaultValueNode != null) {
-      obj.set("null_value", defaultValueNode);
-    }
-    return obj;
-  }
-
-  private static void addTextMapping(ObjectNode obj) {
-    // Add additional mapping for indexing, per https://www.elastic.co/blog/strings-are-dead-long-live-strings
-    ObjectNode keyword = JsonNodeFactory.instance.objectNode();
-    keyword.set("type", JsonNodeFactory.instance.textNode(KEYWORD_TYPE));
-    keyword.set("ignore_above", JsonNodeFactory.instance.numberNode(256));
-    ObjectNode fields = JsonNodeFactory.instance.objectNode();
-    fields.set("keyword", keyword);
-    obj.set("fields", fields);
-  }
-
-  private static byte[] bytes(Object value) {
-    final byte[] bytes;
-    if (value instanceof ByteBuffer) {
-      final ByteBuffer buffer = ((ByteBuffer) value).slice();
-      bytes = new byte[buffer.remaining()];
-      buffer.get(bytes);
-    } else {
-      bytes = (byte[]) value;
-    }
-    return bytes;
-  }
-
 }

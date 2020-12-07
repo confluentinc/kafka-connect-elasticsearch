@@ -18,7 +18,6 @@ package io.confluent.connect.elasticsearch.integration;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_KEY_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_SCHEMA_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.TYPE_NAME_CONFIG;
 import static org.apache.kafka.connect.json.JsonConverterConfig.SCHEMAS_ENABLE_CONFIG;
 import static org.apache.kafka.connect.runtime.ConnectorConfig.CONNECTOR_CLASS_CONFIG;
 import static org.apache.kafka.connect.runtime.ConnectorConfig.KEY_CONVERTER_CLASS_CONFIG;
@@ -26,19 +25,20 @@ import static org.apache.kafka.connect.runtime.ConnectorConfig.TASKS_MAX_CONFIG;
 import static org.apache.kafka.connect.runtime.ConnectorConfig.VALUE_CONVERTER_CLASS_CONFIG;
 import static org.apache.kafka.connect.runtime.SinkConnectorConfig.TOPICS_CONFIG;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
-import com.google.gson.JsonArray;
-import com.google.gson.JsonObject;
-import io.confluent.connect.elasticsearch.ElasticsearchClient;
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnector;
-import io.confluent.connect.elasticsearch.jest.JestElasticsearchClient;
+import io.confluent.connect.elasticsearch.helper.ElasticsearchContainer;
+import io.confluent.connect.elasticsearch.helper.ElasticsearchHelperClient;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
 import org.apache.kafka.connect.json.JsonConverter;
 import org.apache.kafka.connect.storage.StringConverter;
 import org.apache.kafka.test.TestUtils;
+import org.elasticsearch.ElasticsearchStatusException;
+import org.elasticsearch.search.SearchHit;
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Before;
@@ -49,11 +49,10 @@ public class ElasticsearchConnectorBaseIT extends BaseConnectorIT {
   protected static final int TASKS_MAX = 1;
   protected static final String CONNECTOR_NAME = "es-connector";
   protected static final String TOPIC = "test";
-  protected static final String TYPE = "kafka-connect";
 
   protected static ElasticsearchContainer container;
 
-  protected ElasticsearchClient client;
+  protected ElasticsearchHelperClient helperClient;
   protected Map<String, String> props;
 
   @AfterClass
@@ -67,18 +66,15 @@ public class ElasticsearchConnectorBaseIT extends BaseConnectorIT {
     connect.kafka().createTopic(TOPIC);
 
     props = createProps();
-    client = createClient();
+    helperClient = new ElasticsearchHelperClient(container.getConnectionUrl());
   }
 
   @After
   public void cleanup() throws IOException {
     stopConnect();
-    client.deleteAll();
-    client.close();
-  }
+    helperClient.deleteIndex(TOPIC);
 
-  protected ElasticsearchClient createClient() {
-    return new JestElasticsearchClient(container.getConnectionUrl());
+    helperClient.close();
   }
 
   protected Map<String, String> createProps() {
@@ -93,7 +89,6 @@ public class ElasticsearchConnectorBaseIT extends BaseConnectorIT {
     props.put("value.converter." + SCHEMAS_ENABLE_CONFIG, "false");
 
     // connectors specific
-    props.put(TYPE_NAME_CONFIG, TYPE);
     props.put(CONNECTION_URL_CONFIG, container.getConnectionUrl());
     props.put(IGNORE_KEY_CONFIG, "true");
     props.put(IGNORE_SCHEMA_CONFIG, "true");
@@ -113,29 +108,15 @@ public class ElasticsearchConnectorBaseIT extends BaseConnectorIT {
     verifySearchResults(NUM_RECORDS);
   }
 
-  protected void writeRecords(int numRecords) {
-    writeRecordsFromIndex(0, numRecords);
-  }
-
-  protected void writeRecordsFromIndex(int start, int numRecords) {
-    for (int i  = start; i < start + numRecords; i++) {
-      connect.kafka().produce(TOPIC, String.valueOf(i), String.format("{\"doc_num\":%d}", i));
-    }
-  }
 
   protected void verifySearchResults(int numRecords) throws Exception {
     waitForRecords(numRecords);
 
-    final JsonObject result = client.search("", TOPIC, null);
-    final JsonArray rawHits = result.getAsJsonObject("hits").getAsJsonArray("hits");
-
-    assertEquals(numRecords, rawHits.size());
-
-    for (int i = 0; i < rawHits.size(); ++i) {
-      final JsonObject hitData = rawHits.get(i).getAsJsonObject();
-      final JsonObject source = hitData.get("_source").getAsJsonObject();
-      assertTrue(source.has("doc_num"));
-      assertTrue(source.get("doc_num").getAsInt() < numRecords);
+    for (SearchHit hit : helperClient.search(TOPIC)) {
+      int id = (Integer) hit.getSourceAsMap().get("doc_num");
+      assertNotNull(id);
+      assertTrue(id < numRecords);
+      assertEquals(TOPIC, hit.getIndex());
     }
   }
 
@@ -143,17 +124,29 @@ public class ElasticsearchConnectorBaseIT extends BaseConnectorIT {
     TestUtils.waitForCondition(
         () -> {
           try {
-            client.refresh();
-            final JsonObject result = client.search("", TOPIC, null);
-            return result.getAsJsonObject("hits") != null
-                && result.getAsJsonObject("hits").getAsJsonArray("hits").size() == numRecords;
+            return helperClient.getDocCount(TOPIC) == numRecords;
+          } catch (ElasticsearchStatusException e) {
+            if (e.getMessage().contains("index_not_found_exception")) {
+              return false;
+            }
 
-          } catch (IOException e) {
-            return false;
+            throw e;
           }
         },
         CONSUME_MAX_DURATION_MS,
         "Sufficient amount of document were not found in ES on time."
     );
+  }
+
+  protected void writeRecords(int numRecords) {
+    for (int i = 0; i < numRecords; i++) {
+      connect.kafka().produce(TOPIC, String.valueOf(i), String.format("{\"doc_num\":%d}", i));
+    }
+  }
+
+  protected void writeRecordsFromStartIndex(int start, int numRecords) {
+    for (int i  = start; i < start + numRecords; i++) {
+      connect.kafka().produce(TOPIC, String.valueOf(i), String.format("{\"doc_num\":%d}", i));
+    }
   }
 }

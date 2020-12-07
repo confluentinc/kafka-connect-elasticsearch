@@ -15,7 +15,7 @@
 
 package io.confluent.connect.elasticsearch;
 
-import org.apache.kafka.common.config.ConfigDef;
+import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BehaviorOnNullValues;
 import org.apache.kafka.connect.data.ConnectSchema;
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
@@ -25,11 +25,16 @@ import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
-import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.errors.DataException;
 import org.apache.kafka.connect.json.JsonConverter;
 import org.apache.kafka.connect.sink.SinkRecord;
 import org.apache.kafka.connect.storage.Converter;
+import org.elasticsearch.action.DocWriteRequest;
+import org.elasticsearch.action.delete.DeleteRequest;
+import org.elasticsearch.action.index.IndexRequest;
+import org.elasticsearch.action.update.UpdateRequest;
+import org.elasticsearch.common.xcontent.XContentType;
+import org.elasticsearch.index.VersionType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -40,25 +45,22 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
-import java.util.Objects;
-
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConstants.MAP_KEY;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConstants.MAP_VALUE;
 
 public class DataConverter {
 
   private static final Logger log = LoggerFactory.getLogger(DataConverter.class);
+
   private static final Converter JSON_CONVERTER;
+  protected static final String MAP_KEY = "key";
+  protected static final String MAP_VALUE = "value";
 
   static {
     JSON_CONVERTER = new JsonConverter();
     JSON_CONVERTER.configure(Collections.singletonMap("schemas.enable", "false"), false);
   }
 
-  private final boolean useCompactMapEntries;
-  private final BehaviorOnNullValues behaviorOnNullValues;
+  private final ElasticsearchSinkConnectorConfig config;
 
   /**
    * Create a DataConverter, specifying how map entries with string keys within record
@@ -67,19 +69,15 @@ public class DataConverter {
    * document such as <code>{"key": "entryKey", "value": "entryValue"}</code>. All map entries
    * with non-string keys are always written as nested documents.
    *
-   * @param useCompactMapEntries true for compact map entries with string keys, or false for
-   *                             the nested document form.
-   * @param behaviorOnNullValues behavior for handling records with null values; may not be null
+   * @param config connector config
    */
-  public DataConverter(boolean useCompactMapEntries, BehaviorOnNullValues behaviorOnNullValues) {
-    this.useCompactMapEntries = useCompactMapEntries;
-    this.behaviorOnNullValues =
-        Objects.requireNonNull(behaviorOnNullValues, "behaviorOnNullValues cannot be null.");
+  public DataConverter(ElasticsearchSinkConnectorConfig config) {
+    this.config = config;
   }
 
   private String convertKey(Schema keySchema, Object key) {
     if (key == null) {
-      throw new ConnectException("Key is used as document id and can not be null.");
+      throw new DataException("Key is used as document id and can not be null.");
     }
 
     final Schema.Type schemaType;
@@ -87,9 +85,7 @@ public class DataConverter {
       schemaType = ConnectSchema.schemaType(key.getClass());
       if (schemaType == null) {
         throw new DataException(
-            "Java class "
-            + key.getClass()
-            + " does not have corresponding schema type."
+            "Java class " + key.getClass() + " does not have corresponding schema type."
         );
       }
     } else {
@@ -108,22 +104,11 @@ public class DataConverter {
     }
   }
 
-  public IndexableRecord convertRecord(
-      SinkRecord record,
-      String index,
-      String type,
-      boolean ignoreKey,
-      boolean ignoreSchema
-  ) {
+  public DocWriteRequest<?> convertRecord(SinkRecord record, String index) {
     if (record.value() == null) {
-      switch (behaviorOnNullValues) {
+      switch (config.behaviorOnNullValues()) {
         case IGNORE:
-          log.trace(
-              "Ignoring record with null value at topic '{}', partition {}, offset {}",
-              record.topic(),
-              record.kafkaPartition(),
-              record.kafkaOffset()
-          );
+          log.trace("Ignoring {} with null value.", recordString(record));
           return null;
         case DELETE:
           if (record.key() == null) {
@@ -135,73 +120,83 @@ public class DataConverter {
             // unique per message, we can be confident that there wouldn't be any corresponding
             // index present in ES to delete anyways.
             log.trace(
-                "Ignoring record with null key at topic '{}', partition {}, offset {}, since "
-                + "the record key is used as the ID of the index",
-                record.topic(),
-                record.kafkaPartition(),
-                record.kafkaOffset()
+                "Ignoring {} with null key, since the record key is used as the ID of the index",
+                recordString(record)
             );
             return null;
           }
-          // Will proceed as normal, ultimately creating an IndexableRecord with a null payload
-          log.trace(
-              "Deleting from Elasticsearch record at topic '{}', partition {}, offset {}",
-              record.topic(),
-              record.kafkaPartition(),
-              record.kafkaOffset()
-          );
+          // Will proceed as normal, ultimately creating a DeleteRequest
+          log.trace("Deleting {} from Elasticsearch", recordString(record));
           break;
         case FAIL:
-          throw new DataException(String.format(
-              "Sink record with key of %s and null value encountered for topic/partition/offset "
-              + "%s/%s/%s (to ignore future records like this change the configuration property "
-              + "'%s' from '%s' to '%s')",
-              record.key(),
-              record.topic(),
-              record.kafkaPartition(),
-              record.kafkaOffset(),
-              ElasticsearchSinkConnectorConfig.BEHAVIOR_ON_NULL_VALUES_CONFIG,
-              BehaviorOnNullValues.FAIL,
-              BehaviorOnNullValues.IGNORE
-          ));
         default:
-          throw new RuntimeException(String.format(
-              "Unknown value for %s enum: %s",
-              BehaviorOnNullValues.class.getSimpleName(),
-              behaviorOnNullValues
-          ));
+          throw new DataException(
+              String.format(
+                  "{} with key of %s and null value encountered (to ignore future records like"
+                      + " this change the configuration property '%s' from '%s' to '%s')",
+                  recordString(record),
+                  record.key(),
+                  ElasticsearchSinkConnectorConfig.BEHAVIOR_ON_NULL_VALUES_CONFIG,
+                  BehaviorOnNullValues.FAIL,
+                  BehaviorOnNullValues.IGNORE
+              )
+          );
       }
     }
 
-    final String id;
-    if (ignoreKey) {
-      id = record.topic()
-           + "+" + String.valueOf((int) record.kafkaPartition())
-           + "+" + String.valueOf(record.kafkaOffset());
-    } else {
-      id = convertKey(record.keySchema(), record.key());
+    final String payload = getPayload(record);
+    final String id = config.shouldIgnoreKey(record.topic())
+        ? String.format("%s+%d+%d", record.topic(), record.kafkaPartition(), record.kafkaOffset())
+        : convertKey(record.keySchema(), record.key());
+
+    // delete
+    if (record.value() == null) {
+      return maybeAddExternalVersioning(new DeleteRequest(index).id(id), record);
     }
 
-    final String payload = getPayload(record, ignoreSchema);
-    final Long version = ignoreKey ? null : record.kafkaOffset();
-    return new IndexableRecord(new Key(index, type, id), payload, version);
+    // index
+    switch (config.writeMethod()) {
+      case UPSERT:
+        return new UpdateRequest(index, id)
+            .doc(payload, XContentType.JSON)
+            .upsert(payload, XContentType.JSON)
+            .retryOnConflict(Math.min(config.maxInFlightRequests(), 5));
+      case INSERT:
+        return maybeAddExternalVersioning(
+            new IndexRequest(index).id(id).source(payload, XContentType.JSON),
+            record
+        );
+      default:
+        return null; // shouldn't happen
+    }
   }
 
-  private String getPayload(SinkRecord record, boolean ignoreSchema) {
+  private String getPayload(SinkRecord record) {
     if (record.value() == null) {
       return null;
     }
 
-    Schema schema = ignoreSchema
+    Schema schema = config.shouldIgnoreSchema(record.topic())
         ? record.valueSchema()
         : preProcessSchema(record.valueSchema());
-
-    Object value = ignoreSchema
+    Object value = config.shouldIgnoreSchema(record.topic())
         ? record.value()
         : preProcessValue(record.value(), record.valueSchema(), schema);
 
     byte[] rawJsonPayload = JSON_CONVERTER.fromConnectData(record.topic(), schema, value);
     return new String(rawJsonPayload, StandardCharsets.UTF_8);
+  }
+
+  private DocWriteRequest<?> maybeAddExternalVersioning(
+      DocWriteRequest<?> request,
+      SinkRecord record
+  ) {
+    if (!config.shouldIgnoreKey(record.topic())) {
+      request.versionType(VersionType.EXTERNAL);
+      request.version(record.kafkaOffset());
+    }
+
+    return request;
   }
 
   // We need to pre process the Kafka Connect schema before converting to JSON as Elasticsearch
@@ -255,7 +250,7 @@ public class DataConverter {
     String valueName = valueSchema.name() == null ? valueSchema.type().name() : valueSchema.name();
     Schema preprocessedKeySchema = preProcessSchema(keySchema);
     Schema preprocessedValueSchema = preProcessSchema(valueSchema);
-    if (useCompactMapEntries && keySchema.type() == Schema.Type.STRING) {
+    if (config.useCompactMapEntries() && keySchema.type() == Schema.Type.STRING) {
       SchemaBuilder result = SchemaBuilder.map(preprocessedKeySchema, preprocessedValueSchema);
       return copySchemaBasics(schema, result).build();
     }
@@ -357,7 +352,7 @@ public class DataConverter {
     Schema valueSchema = schema.valueSchema();
     Schema newValueSchema = newSchema.valueSchema();
     Map<?, ?> map = (Map<?, ?>) value;
-    if (useCompactMapEntries && keySchema.type() == Schema.Type.STRING) {
+    if (config.useCompactMapEntries() && keySchema.type() == Schema.Type.STRING) {
       Map<Object, Object> processedMap = new HashMap<>();
       for (Map.Entry<?, ?> entry: map.entrySet()) {
         processedMap.put(
@@ -390,47 +385,12 @@ public class DataConverter {
     return newStruct;
   }
 
-  public enum BehaviorOnNullValues {
-    IGNORE,
-    DELETE,
-    FAIL;
-
-    public static final BehaviorOnNullValues DEFAULT = IGNORE;
-
-    // Want values for "behavior.on.null.values" property to be case-insensitive
-    public static final ConfigDef.Validator VALIDATOR = new ConfigDef.Validator() {
-      private final ConfigDef.ValidString validator = ConfigDef.ValidString.in(names());
-
-      @Override
-      public void ensureValid(String name, Object value) {
-        if (value instanceof String) {
-          value = ((String) value).toLowerCase(Locale.ROOT);
-        }
-        validator.ensureValid(name, value);
-      }
-
-      // Overridden here so that ConfigDef.toEnrichedRst shows possible values correctly
-      @Override
-      public String toString() {
-        return validator.toString();
-      }
-
-    };
-
-    public static String[] names() {
-      BehaviorOnNullValues[] behaviors = values();
-      String[] result = new String[behaviors.length];
-
-      for (int i = 0; i < behaviors.length; i++) {
-        result[i] = behaviors[i].toString();
-      }
-
-      return result;
-    }
-
-    @Override
-    public String toString() {
-      return name().toLowerCase(Locale.ROOT);
-    }
+  private static String recordString(SinkRecord record) {
+    return String.format(
+        "record from topic=%s partition=%s offset=%s",
+        record.topic(),
+        record.kafkaPartition(),
+        record.kafkaOffset()
+    );
   }
 }

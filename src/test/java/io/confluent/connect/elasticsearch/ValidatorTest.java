@@ -33,10 +33,10 @@ import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfi
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.PROXY_USERNAME_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.SECURITY_PROTOCOL_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.SSL_CONFIG_PREFIX;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.TYPE_NAME_CONFIG;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
+import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.SecurityProtocol;
 import java.util.HashMap;
 import java.util.Map;
 import org.apache.kafka.common.config.Config;
@@ -52,9 +52,14 @@ public class ValidatorTest {
 
   @Before
   public void setup() {
-    props = new HashMap<>();
-    props.put(TYPE_NAME_CONFIG, "type");
-    props.put(CONNECTION_URL_CONFIG, "localhost:8080");
+    props = ElasticsearchSinkConnectorConfigTest.addNecessaryProps(new HashMap<>());
+  }
+
+  @Test
+  public void testInvalidIndividualConfigs() {
+    validator = new Validator(new HashMap<>());
+    Config result = validator.validate();
+    assertHasErrorMessage(result, CONNECTION_URL_CONFIG, "Missing required configuration");
   }
 
   @Test

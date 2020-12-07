@@ -18,8 +18,9 @@ package io.confluent.connect.elasticsearch.integration;
 import io.confluent.common.utils.IntegrationTest;
 import io.confluent.connect.elasticsearch.ElasticsearchClient;
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig;
-import io.confluent.connect.elasticsearch.SecurityProtocol;
-import io.confluent.connect.elasticsearch.jest.JestElasticsearchClient;
+import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.SecurityProtocol;
+import io.confluent.connect.elasticsearch.helper.ElasticsearchContainer;
+import io.confluent.connect.elasticsearch.helper.ElasticsearchHelperClient;
 import org.apache.kafka.common.config.SslConfigs;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -27,9 +28,12 @@ import org.junit.experimental.categories.Category;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_PASSWORD_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_USERNAME_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.SECURITY_PROTOCOL_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.SSL_CONFIG_PREFIX;
+import static io.confluent.connect.elasticsearch.helper.ElasticsearchContainer.ELASTIC_PASSWORD;
 
 @Category(IntegrationTest.class)
 public class ElasticsearchConnectorSecureIT extends ElasticsearchConnectorBaseIT {
@@ -56,7 +60,7 @@ public class ElasticsearchConnectorSecureIT extends ElasticsearchConnectorBaseIT
     props.put(CONNECTION_URL_CONFIG, address);
     addSslProps();
 
-    client = new JestElasticsearchClient(props);
+    helperClient = new ElasticsearchHelperClient(new ElasticsearchClient(new ElasticsearchSinkConnectorConfig(props), null).client());
 
     // Start connector
     runSimpleTest(props);
@@ -75,16 +79,10 @@ public class ElasticsearchConnectorSecureIT extends ElasticsearchConnectorBaseIT
     // disable hostname verification
     props.put(SSL_CONFIG_PREFIX + SslConfigs.SSL_ENDPOINT_IDENTIFICATION_ALGORITHM_CONFIG, "");
 
-    client = new JestElasticsearchClient(props);
+    helperClient = new ElasticsearchHelperClient(new ElasticsearchClient(new ElasticsearchSinkConnectorConfig(props), null).client());
 
     // Start connector
     runSimpleTest(props);
-  }
-
-  @Override
-  protected ElasticsearchClient createClient() {
-    // will be created in the test with the proper SSL configs
-    return null;
   }
 
   private void addSslProps() {
@@ -94,5 +92,7 @@ public class ElasticsearchConnectorSecureIT extends ElasticsearchConnectorBaseIT
     props.put(SSL_CONFIG_PREFIX + SslConfigs.SSL_TRUSTSTORE_LOCATION_CONFIG, container.getTruststorePath());
     props.put(SSL_CONFIG_PREFIX + SslConfigs.SSL_TRUSTSTORE_PASSWORD_CONFIG, container.getTruststorePassword());
     props.put(SSL_CONFIG_PREFIX + SslConfigs.SSL_KEY_PASSWORD_CONFIG, container.getKeyPassword());
+    props.put(CONNECTION_USERNAME_CONFIG, "elastic");
+    props.put(CONNECTION_PASSWORD_CONFIG, ELASTIC_PASSWORD);
   }
 }

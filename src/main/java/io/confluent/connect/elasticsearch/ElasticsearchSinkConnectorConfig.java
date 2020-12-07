@@ -35,9 +35,6 @@ import java.util.Map;
 import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.config.types.Password;
 
-import static io.confluent.connect.elasticsearch.jest.JestElasticsearchClient.WriteMethod;
-import static io.confluent.connect.elasticsearch.DataConverter.BehaviorOnNullValues;
-import static io.confluent.connect.elasticsearch.bulk.BulkProcessor.BehaviorOnMalformedDoc;
 import static org.apache.kafka.common.config.ConfigDef.Range.between;
 import static org.apache.kafka.common.config.SslConfigs.SSL_ENDPOINT_IDENTIFICATION_ALGORITHM_CONFIG;
 import static org.apache.kafka.common.config.SslConfigs.addClientSslSupport;
@@ -105,11 +102,11 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
 
   public static final String FLUSH_TIMEOUT_MS_CONFIG = "flush.timeout.ms";
   private static final String FLUSH_TIMEOUT_MS_DOC =
-      "The timeout in milliseconds to use for periodic flushing, and when waiting for buffer "
-      + "space to be made available by completed requests as records are added. If this timeout "
-      + "is exceeded the task will fail.";
+      "The timeout in milliseconds to use for periodic flushing, and when waiting for buffer space"
+          + " to be made available by completed requests as records are added. If this timeout is"
+          + " exceeded the task will fail.";
   private static final String FLUSH_TIMEOUT_MS_DISPLAY = "Flush Timeout (ms)";
-  private static final int FLUSH_TIMEOUT_MS_DEFAULT = (int) TimeUnit.SECONDS.toMillis(10);
+  private static final int FLUSH_TIMEOUT_MS_DEFAULT = (int) TimeUnit.MINUTES.toMillis(3);
 
   public static final String MAX_RETRIES_CONFIG = "max.retries";
   private static final String MAX_RETRIES_DOC =
@@ -160,10 +157,6 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   private static final int READ_TIMEOUT_MS_DEFAULT = (int) TimeUnit.SECONDS.toMillis(3);
 
   // Data Conversion configs
-  public static final String TYPE_NAME_CONFIG = "type.name";
-  private static final String TYPE_NAME_DOC = "The Elasticsearch type name to use when indexing.";
-  private static final String TYPE_NAME_DISPLAY = "Type Name";
-
   public static final String IGNORE_KEY_TOPICS_CONFIG = "topic.key.ignore";
   public static final String IGNORE_SCHEMA_TOPICS_CONFIG = "topic.schema.ignore";
 
@@ -222,6 +215,8 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
       + "non-null key and a null value (i.e. Kafka tombstone records). Valid options are "
       + "'ignore', 'delete', and 'fail'.";
   private static final String BEHAVIOR_ON_NULL_VALUES_DISPLAY = "Behavior for null-valued records";
+  private static final BehaviorOnNullValues BEHAVIOR_ON_NULL_VALUES_DEFAULT =
+      BehaviorOnNullValues.FAIL;
 
   public static final String BEHAVIOR_ON_MALFORMED_DOCS_CONFIG = "behavior.on.malformed.documents";
   private static final String BEHAVIOR_ON_MALFORMED_DOCS_DOC = "How to handle records that "
@@ -230,21 +225,29 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
       + " id. Valid options are ignore', 'warn', and 'fail'.";
   private static final String BEHAVIOR_ON_MALFORMED_DOCS_DISPLAY =
       "Behavior on malformed documents";
+  private static final BehaviorOnMalformedDoc BEHAVIOR_ON_MALFORMED_DOCS_DEFAULT =
+      BehaviorOnMalformedDoc.FAIL;
 
   public static final String WRITE_METHOD_CONFIG = "write.method";
-  private static final String WRITE_METHOD_DOC = "Method used for writing data to Elasticsearch,"
-      + " and one of " + WriteMethod.INSERT.toString() + " or " + WriteMethod.UPSERT.toString()
-      + ". The default method is " + WriteMethod.INSERT.toString() + ", in which the "
-      + "connector constructs a document from the record value and inserts that document "
-      + "into Elasticsearch, completely replacing any existing document with the same ID; "
-      + "this matches previous behavior. The " + WriteMethod.UPSERT.toString()
-      + " method will create a new document if one with the specified ID does not yet "
-      + "exist, or will update an existing document with the same ID by adding/replacing "
-      + "only those fields present in the record value. The " + WriteMethod.UPSERT.toString()
-      + " method may require additional time and resources of Elasticsearch, so consider "
-      + "increasing the " + FLUSH_TIMEOUT_MS_CONFIG + ", " + READ_TIMEOUT_MS_CONFIG
-      + ", and decrease " + BATCH_SIZE_CONFIG + " configuration properties.";
+  private static final String WRITE_METHOD_DOC = String.format(
+      "Method used for writing data to Elasticsearch, and one of %s or %s. The default method is"
+          + " %s, in which the connector constructs a document from the record value and inserts"
+          + " that document into Elasticsearch, completely replacing any existing document with the"
+          + " same ID; this matches previous behavior. The %s method will create a new document if"
+          + " one with the specified ID does not yet exist, or will update an existing document"
+          + " with the same ID by adding/replacing only those fields present in the record value."
+          + " The %s method may require additional time and resources of Elasticsearch, so consider"
+          + " increasing the %s and decreasing the %s configuration properties.",
+      WriteMethod.INSERT,
+      WriteMethod.UPSERT,
+      WriteMethod.INSERT,
+      WriteMethod.UPSERT,
+      WriteMethod.UPSERT,
+      READ_TIMEOUT_MS_CONFIG,
+      BATCH_SIZE_CONFIG
+  );
   private static final String WRITE_METHOD_DISPLAY = "Write Method";
+  private static final String WRITE_METHOD_DEFAULT = WriteMethod.INSERT.name();
 
   // Proxy group
   public static final String PROXY_HOST_CONFIG = "proxy.host";
@@ -283,6 +286,28 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   private static final String DATA_CONVERSION_GROUP = "Data Conversion";
   private static final String PROXY_GROUP = "Proxy";
   private static final String SSL_GROUP = "Security";
+
+  public enum BehaviorOnMalformedDoc {
+    IGNORE,
+    WARN,
+    FAIL
+  }
+
+  public enum BehaviorOnNullValues {
+    IGNORE,
+    DELETE,
+    FAIL
+  }
+
+  public enum SecurityProtocol {
+    PLAINTEXT,
+    SSL
+  }
+
+  public enum WriteMethod {
+    INSERT,
+    UPSERT
+  }
 
   protected static ConfigDef baseConfigDef() {
     final ConfigDef configDef = new ConfigDef();
@@ -375,7 +400,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
             FLUSH_TIMEOUT_MS_CONFIG,
             Type.LONG,
             FLUSH_TIMEOUT_MS_DEFAULT,
-            between(TimeUnit.SECONDS.toMillis(1), Long.MAX_VALUE),
+            between(TimeUnit.SECONDS.toMillis(1), TimeUnit.DAYS.toMillis(7)),
             Importance.LOW,
             FLUSH_TIMEOUT_MS_DOC,
             CONNECTOR_GROUP,
@@ -454,15 +479,6 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
     int order = 0;
     configDef
         .define(
-            TYPE_NAME_CONFIG,
-            Type.STRING,
-            Importance.HIGH,
-            TYPE_NAME_DOC,
-            DATA_CONVERSION_GROUP,
-            ++order,
-            Width.SHORT,
-            TYPE_NAME_DISPLAY
-        ).define(
             IGNORE_KEY_CONFIG,
             Type.BOOLEAN,
             IGNORE_KEY_DEFAULT,
@@ -525,8 +541,13 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
         ).define(
             BEHAVIOR_ON_NULL_VALUES_CONFIG,
             Type.STRING,
-            BehaviorOnNullValues.DEFAULT.toString(),
-            BehaviorOnNullValues.VALIDATOR,
+            BEHAVIOR_ON_NULL_VALUES_DEFAULT.name(),
+            ConfigDef.CaseInsensitiveValidString.in(
+                Arrays.stream(BehaviorOnNullValues.values())
+                    .map(BehaviorOnNullValues::name)
+                    .collect(Collectors.toList())
+                    .toArray(new String[BehaviorOnNullValues.values().length])
+            ),
             Importance.LOW,
             BEHAVIOR_ON_NULL_VALUES_DOC,
             DATA_CONVERSION_GROUP,
@@ -536,8 +557,13 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
         ).define(
             BEHAVIOR_ON_MALFORMED_DOCS_CONFIG,
             Type.STRING,
-            BehaviorOnMalformedDoc.DEFAULT.toString(),
-            BehaviorOnMalformedDoc.VALIDATOR,
+            BEHAVIOR_ON_MALFORMED_DOCS_DEFAULT.name(),
+            ConfigDef.CaseInsensitiveValidString.in(
+                Arrays.stream(BehaviorOnMalformedDoc.values())
+                    .map(BehaviorOnMalformedDoc::name)
+                    .collect(Collectors.toList())
+                    .toArray(new String[BehaviorOnMalformedDoc.values().length])
+            ),
             Importance.LOW,
             BEHAVIOR_ON_MALFORMED_DOCS_DOC,
             DATA_CONVERSION_GROUP,
@@ -547,8 +573,13 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
         ).define(
             WRITE_METHOD_CONFIG,
             Type.STRING,
-            WriteMethod.DEFAULT.toString(),
-            WriteMethod.VALIDATOR,
+            WRITE_METHOD_DEFAULT,
+            ConfigDef.CaseInsensitiveValidString.in(
+                Arrays.stream(WriteMethod.values())
+                    .map(WriteMethod::name)
+                    .collect(Collectors.toList())
+                    .toArray(new String[WriteMethod.values().length])
+            ),
             Importance.LOW,
             WRITE_METHOD_DOC,
             DATA_CONVERSION_GROUP,
@@ -626,9 +657,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
         Width.SHORT,
         SECURITY_PROTOCOL_DISPLAY
     );
-    configDef.embed(
-        SSL_CONFIG_PREFIX, SSL_GROUP, configDef.configKeys().size() + 2, sslConfigDef
-    );
+    configDef.embed(SSL_CONFIG_PREFIX, SSL_GROUP, configDef.configKeys().size() + 2, sslConfigDef);
   }
 
   public static final ConfigDef CONFIG = baseConfigDef();
@@ -652,8 +681,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   }
 
   public boolean secured() {
-    SecurityProtocol securityProtocol = securityProtocol();
-    return SecurityProtocol.SSL.equals(securityProtocol);
+    return SecurityProtocol.SSL == securityProtocol();
   }
 
   public boolean shouldDisableHostnameVerification() {
@@ -661,6 +689,14 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
         getString(SSL_CONFIG_PREFIX + SSL_ENDPOINT_IDENTIFICATION_ALGORITHM_CONFIG);
     return sslEndpointIdentificationAlgorithm != null
         && sslEndpointIdentificationAlgorithm.isEmpty();
+  }
+
+  public boolean shouldIgnoreKey(String topic) {
+    return ignoreKey() || ignoreKeyTopics().contains(topic);
+  }
+
+  public boolean shouldIgnoreSchema(String topic) {
+    return ignoreSchema() || ignoreSchemaTopics().contains(topic);
   }
 
   public int batchSize() {
@@ -769,10 +805,6 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
     ConfigDef sslConfigDef = new ConfigDef();
     addClientSslSupport(sslConfigDef);
     return sslConfigDef.parse(originalsWithPrefix(SSL_CONFIG_PREFIX));
-  }
-
-  public String type() {
-    return getString(TYPE_NAME_CONFIG);
   }
 
   public String username() {

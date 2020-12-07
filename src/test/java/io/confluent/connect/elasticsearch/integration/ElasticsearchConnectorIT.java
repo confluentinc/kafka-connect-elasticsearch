@@ -22,19 +22,13 @@ import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfi
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.WRITE_METHOD_CONFIG;
 import static org.apache.kafka.connect.runtime.ConnectorConfig.VALUE_CONVERTER_CLASS_CONFIG;
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertTrue;
 
-import com.google.gson.JsonArray;
-import com.google.gson.JsonObject;
-import io.confluent.connect.elasticsearch.DataConverter.BehaviorOnNullValues;
-import io.confluent.connect.elasticsearch.Mapping;
-import io.confluent.connect.elasticsearch.TestUtils;
-import io.confluent.connect.elasticsearch.jest.JestElasticsearchClient.WriteMethod;
-import java.util.Collections;
-import org.apache.kafka.connect.data.Schema;
+import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BehaviorOnNullValues;
+import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.WriteMethod;
+import io.confluent.connect.elasticsearch.helper.ElasticsearchContainer;
 import org.apache.kafka.connect.storage.StringConverter;
 import org.apache.kafka.test.IntegrationTest;
+import org.elasticsearch.search.SearchHit;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -45,6 +39,8 @@ import org.slf4j.LoggerFactory;
 public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
 
   private static Logger log = LoggerFactory.getLogger(ElasticsearchConnectorIT.class);
+
+  // TODO: test compatibility
 
   @BeforeClass
   public static void setupBeforeAll() {
@@ -85,18 +81,6 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
   @Test
   public void testHappyPath() throws Exception {
     runSimpleTest(props);
-  }
-
-  @Test
-  @SuppressWarnings("unchecked")
-  public void testMapping() throws Exception {
-    client.createIndices(Collections.singleton(TOPIC));
-    Schema schema = TestUtils.createSchema();
-    Mapping.createMapping(client, TOPIC, TYPE, schema);
-
-    JsonObject mapping = Mapping.getMapping(client, TOPIC, TYPE);
-    assertNotNull(mapping);
-    TestUtils.verifyMapping(client, schema, mapping);
   }
 
   @Test
@@ -141,21 +125,16 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
     // try updating last one
     int lastRecord = NUM_RECORDS - 1;
     connect.kafka().produce(TOPIC, String.valueOf(lastRecord), String.format("{\"doc_num\":%d}", 0));
-    writeRecordsFromIndex(NUM_RECORDS, NUM_RECORDS);
+    writeRecordsFromStartIndex(NUM_RECORDS, NUM_RECORDS);
 
     // should have double number of records
     verifySearchResults(NUM_RECORDS * 2);
 
-    JsonObject result = client.search("", TOPIC, null);
-    JsonArray rawHits = result.getAsJsonObject("hits").getAsJsonArray("hits");
-
-    for (int i = 0; i < rawHits.size(); ++i) {
-      JsonObject hitData = rawHits.get(i).getAsJsonObject();
-      JsonObject source = hitData.get("_source").getAsJsonObject();
-      assertTrue(source.has("doc_num"));
-      if (Integer.valueOf(hitData.get("_id").getAsString()) == lastRecord) {
+    for (SearchHit hit : helperClient.search(TOPIC)) {
+      if (Integer.parseInt(hit.getId()) == lastRecord) {
         // last record should be updated
-        assertTrue(source.get("doc_num").getAsInt() == 0);
+        int docNum = (Integer) hit.getSourceAsMap().get("doc_num");
+        assertEquals(0, docNum);
       }
     }
   }

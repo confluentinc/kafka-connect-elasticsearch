@@ -15,8 +15,14 @@
 
 package io.confluent.connect.elasticsearch;
 
+import java.io.IOException;
+import java.util.concurrent.Callable;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
+import org.apache.kafka.common.utils.Time;
+import org.apache.kafka.connect.errors.ConnectException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Utility to compute the retry times for a given attempt, using exponential backoff.
@@ -30,6 +36,8 @@ import java.util.concurrent.TimeUnit;
  * for details.
  */
 public class RetryUtil {
+
+  private static final Logger log = LoggerFactory.getLogger(RetryUtil.class);
 
   /**
    * An arbitrary absolute maximum practical retry time.
@@ -86,5 +94,80 @@ public class RetryUtil {
     return result < 0L ? MAX_RETRY_TIME_MS : Math.min(MAX_RETRY_TIME_MS, result);
   }
 
+  /**
+   * Call the supplied function up to the {@code maxAttempts}.
+   *
+   * <p>The description of the function should be a succinct, human-readable present tense phrase
+   * that summarizes the function, such as "read tables" or "connect to database" or
+   * "make remote request". This description will be used within exception and log messages.
+   *
+   * @param description      present tense description of the action, used to create the error
+   *                         message; may not be null
+   * @param function         the function to call; may not be null
+   * @param maxAttempts      maximum number of attempts
+   * @param initialBackoff   the initial backoff in ms before retrying
+   * @param <T>              the return type of the function to retry
+   * @return the function's return value
+   * @throws ConnectException        if the function failed after retries
+   * @throws Exception               if the function throws an exception
+   */
+  public static <T> T callWithRetries(
+      String description,
+      Callable<T> function,
+      int maxAttempts,
+      long initialBackoff
+  ) throws Exception {
+    return callWithRetries(description, function, maxAttempts, initialBackoff, Time.SYSTEM);
+  }
 
+  /**
+   * Call the supplied function up to the {@code maxAttempts}.
+   *
+   * <p>The description of the function should be a succinct, human-readable present tense phrase
+   * that summarizes the function, such as "read tables" or "connect to database" or
+   * "make remote request". This description will be used within exception and log messages.
+   *
+   * @param description      present tense description of the action, used to create the error
+   *                         message; may not be null
+   * @param function         the function to call; may not be null
+   * @param maxAttempts      maximum number of attempts
+   * @param initialBackoff   the initial backoff in ms before retrying
+   * @param clock            the clock to use for waiting
+   * @param <T>              the return type of the function to retry
+   * @return the function's return value
+   * @throws ConnectException        if the function failed after retries
+   * @throws Exception               if the function throws an exception
+   */
+  protected static <T> T callWithRetries(
+      String description,
+      Callable<T> function,
+      int maxAttempts,
+      long initialBackoff,
+      Time clock
+  ) throws Exception {
+    assert description != null;
+    assert function != null;
+
+    int attempt = 0;
+    while (true) {
+      ++attempt;
+      try {
+        log.trace(
+            "Try {} (attempt {} of {})",
+            description,
+            attempt,
+            maxAttempts
+        );
+        return function.call();
+      } catch (IOException e) {
+        if (attempt >= maxAttempts) {
+          throw new ConnectException("Failed to " + description, e);
+        }
+
+        // Otherwise it is retriable and we should retry
+        long backoff = computeRandomRetryWaitTimeInMillis(attempt, initialBackoff);
+        clock.sleep(backoff);
+      }
+    }
+  }
 }

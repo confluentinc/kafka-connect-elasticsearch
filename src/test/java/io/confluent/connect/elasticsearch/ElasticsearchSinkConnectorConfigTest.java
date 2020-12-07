@@ -2,7 +2,6 @@ package io.confluent.connect.elasticsearch;
 
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_TIMEOUT_MS_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_KEY_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.PROXY_HOST_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.PROXY_PASSWORD_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.PROXY_PORT_CONFIG;
@@ -10,12 +9,13 @@ import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfi
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.READ_TIMEOUT_MS_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.SECURITY_PROTOCOL_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.SSL_CONFIG_PREFIX;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.TYPE_NAME_CONFIG;
+import static org.apache.kafka.common.config.SslConfigs.SSL_ENDPOINT_IDENTIFICATION_ALGORITHM_CONFIG;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
+import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.SecurityProtocol;
 import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.config.SslConfigs;
 import org.apache.kafka.common.config.types.Password;
@@ -31,10 +31,7 @@ public class ElasticsearchSinkConnectorConfigTest {
 
   @Before
   public void setup() {
-    props = new HashMap<>();
-    props.put(TYPE_NAME_CONFIG, ElasticsearchSinkTestBase.TYPE);
-    props.put(CONNECTION_URL_CONFIG, "localhost");
-    props.put(IGNORE_KEY_CONFIG, "true");
+    props = addNecessaryProps(new HashMap<>());
   }
 
   @Test
@@ -49,6 +46,7 @@ public class ElasticsearchSinkConnectorConfigTest {
     props.put(READ_TIMEOUT_MS_CONFIG, "10000");
     props.put(CONNECTION_TIMEOUT_MS_CONFIG, "15000");
     ElasticsearchSinkConnectorConfig config = new ElasticsearchSinkConnectorConfig(props);
+
     assertEquals(config.readTimeoutMs(), 10000);
     assertEquals(config.connectionTimeoutMs(), 15000);
   }
@@ -66,6 +64,7 @@ public class ElasticsearchSinkConnectorConfigTest {
     props.put(SSL_CONFIG_PREFIX + SslConfigs.SSL_TRUSTSTORE_LOCATION_CONFIG, "/path2");
     props.put(SSL_CONFIG_PREFIX + SslConfigs.SSL_TRUSTSTORE_PASSWORD_CONFIG, "opensesame2");
     ElasticsearchSinkConnectorConfig config = new ElasticsearchSinkConnectorConfig(props);
+
     Map<String, Object> sslConfigs = config.sslConfigs();
     assertTrue(sslConfigs.size() > 0);
     assertEquals(
@@ -107,6 +106,7 @@ public class ElasticsearchSinkConnectorConfigTest {
   public void shouldAcceptValidBasicProxy() {
     props.put(PROXY_HOST_CONFIG, "proxy host");
     ElasticsearchSinkConnectorConfig config = new ElasticsearchSinkConnectorConfig(props);
+
     assertNotNull(config);
     assertTrue(config.isBasicProxyConfigured());
     assertFalse(config.isProxyWithAuthenticationConfigured());
@@ -115,12 +115,18 @@ public class ElasticsearchSinkConnectorConfigTest {
   @Test
   public void shouldAcceptValidProxyWithAuthentication() {
     props.put(PROXY_HOST_CONFIG, "proxy host");
+    props.put(PROXY_PORT_CONFIG, "1010");
     props.put(PROXY_USERNAME_CONFIG, "username");
     props.put(PROXY_PASSWORD_CONFIG, "password");
     ElasticsearchSinkConnectorConfig config = new ElasticsearchSinkConnectorConfig(props);
+
     assertNotNull(config);
     assertTrue(config.isBasicProxyConfigured());
     assertTrue(config.isProxyWithAuthenticationConfigured());
+    assertEquals("proxy host", config.proxyHost());
+    assertEquals(1010, config.proxyPort());
+    assertEquals("username", config.proxyUsername());
+    assertEquals("password", config.proxyPassword().value());
   }
 
   @Test(expected = ConfigException.class)
@@ -139,5 +145,28 @@ public class ElasticsearchSinkConnectorConfigTest {
   public void shouldNotAllowInvalidSecurityProtocol() {
     props.put(SECURITY_PROTOCOL_CONFIG, "unsecure");
     new ElasticsearchSinkConnectorConfig(props);
+  }
+
+  @Test
+  public void shouldDisableHostnameVerification() {
+    props.put(SSL_CONFIG_PREFIX + SSL_ENDPOINT_IDENTIFICATION_ALGORITHM_CONFIG, "https");
+    ElasticsearchSinkConnectorConfig config = new ElasticsearchSinkConnectorConfig(props);
+    assertFalse(config.shouldDisableHostnameVerification());
+
+    props.put(SSL_CONFIG_PREFIX + SSL_ENDPOINT_IDENTIFICATION_ALGORITHM_CONFIG, "");
+    config = new ElasticsearchSinkConnectorConfig(props);
+    assertTrue(config.shouldDisableHostnameVerification());
+
+    props.put(SSL_CONFIG_PREFIX + SSL_ENDPOINT_IDENTIFICATION_ALGORITHM_CONFIG, null);
+    config = new ElasticsearchSinkConnectorConfig(props);
+    assertFalse(config.shouldDisableHostnameVerification());
+  }
+
+  public static Map<String, String> addNecessaryProps(Map<String, String> props) {
+    if (props == null) {
+      props = new HashMap<>();
+    }
+    props.put(ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG, "http://localhost:8080");
+    return props;
   }
 }
