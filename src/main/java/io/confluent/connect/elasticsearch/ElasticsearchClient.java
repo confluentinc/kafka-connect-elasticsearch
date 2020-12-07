@@ -383,11 +383,10 @@ public class ElasticsearchClient {
     CredentialsProvider credentialsProvider = new BasicCredentialsProvider();
     if (config.isAuthenticatedConnection()) {
       config.connectionUrls().forEach(
-          url ->
-              credentialsProvider.setCredentials(
-                  new AuthScope(new HttpHost(url)),
-                  new UsernamePasswordCredentials(config.username(), config.password().value())
-              )
+          url -> credentialsProvider.setCredentials(
+              new AuthScope(HttpHost.create(url)),
+              new UsernamePasswordCredentials(config.username(), config.password().value())
+          )
       );
       builder.setDefaultCredentialsProvider(credentialsProvider);
     }

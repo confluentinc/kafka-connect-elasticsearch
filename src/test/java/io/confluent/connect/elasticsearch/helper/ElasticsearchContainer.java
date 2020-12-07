@@ -106,7 +106,7 @@ public class ElasticsearchContainer
   }
 
   private static final String KEY_PASSWORD = "asdfasdf";
-  private static final String ELASTIC_PASSWORD = "elastic";
+  public static final String ELASTIC_PASSWORD = "elastic";
   private static final String KEYSTORE_PASSWORD = KEY_PASSWORD;
   private static final String TRUSTSTORE_PASSWORD = KEY_PASSWORD;
   private static final long TWO_GIGABYTES = 2L * 1024 * 1024 * 1024;
