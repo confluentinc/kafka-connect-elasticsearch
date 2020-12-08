@@ -291,9 +291,10 @@ public class ClientConfigCallbackHandler implements HttpClientConfigCallback {
   }
 
   /**
-   * Creates and returns a login context for the given kerberos user principle.
+   * Logs in and returns a login context for the given kerberos user principle.
+   *
    * @return the login context
-   * @throws PrivilegedActionException
+   * @throws PrivilegedActionException if the login failed
    */
   private LoginContext loginContext() throws PrivilegedActionException {
     Configuration conf = new Configuration() {
