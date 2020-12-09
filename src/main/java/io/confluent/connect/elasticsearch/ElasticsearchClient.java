@@ -33,7 +33,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 import org.apache.http.HttpHost;
-import org.apache.http.client.config.RequestConfig;
 import org.apache.http.nio.conn.NHttpClientConnectionManager;
 import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.connect.data.Schema;
@@ -90,7 +89,7 @@ public class ElasticsearchClient {
       ElasticsearchSinkConnectorConfig config,
       ErrantRecordReporter reporter
   ) {
-    ClientConfigCallbackHandler configCallbackHandler = new ClientConfigCallbackHandler(config);
+    ConfigCallbackHandler configCallbackHandler = new ConfigCallbackHandler(config);
     NHttpClientConnectionManager cm = configCallbackHandler.connectionManager();
     /*
      * Handles closing any idle or expired connections to avoid SocketTimeoutExceptions. Expired
@@ -126,7 +125,7 @@ public class ElasticsearchClient {
                     .toArray(new HttpHost[config.connectionUrls().size()])
             )
             .setHttpClientConfigCallback(configCallbackHandler)
-            .setRequestConfigCallback(this::customizeRequestConfig)
+            .setRequestConfigCallback(configCallbackHandler)
     );
     this.bulkProcessor = BulkProcessor
         .builder((req, lis) -> client.bulkAsync(req, RequestOptions.DEFAULT, lis), buildListener())
@@ -370,19 +369,6 @@ public class ElasticsearchClient {
     } catch (IOException e) {
       log.warn("Failed to close Elasticsearch client.", e);
     }
-  }
-
-  /**
-   * Customizes each request according to configurations.
-   *
-   * @param builder the RequestConfigBuilder
-   * @return the builder
-   */
-  private RequestConfig.Builder customizeRequestConfig(RequestConfig.Builder builder) {
-    return builder
-        .setContentCompressionEnabled(config.compression())
-        .setConnectTimeout(config.connectionTimeoutMs())
-        .setConnectionRequestTimeout(config.readTimeoutMs());
   }
 
   /**

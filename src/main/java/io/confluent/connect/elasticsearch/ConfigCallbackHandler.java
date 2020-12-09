@@ -37,6 +37,7 @@ import org.apache.http.auth.KerberosCredentials;
 import org.apache.http.auth.UsernamePasswordCredentials;
 import org.apache.http.client.CredentialsProvider;
 import org.apache.http.client.config.AuthSchemes;
+import org.apache.http.client.config.RequestConfig;
 import org.apache.http.config.Lookup;
 import org.apache.http.config.Registry;
 import org.apache.http.config.RegistryBuilder;
@@ -57,6 +58,7 @@ import org.apache.kafka.common.network.Mode;
 import org.apache.kafka.common.security.ssl.SslFactory;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.elasticsearch.client.RestClientBuilder.HttpClientConfigCallback;
+import org.elasticsearch.client.RestClientBuilder.RequestConfigCallback;
 import org.ietf.jgss.GSSCredential;
 import org.ietf.jgss.GSSException;
 import org.ietf.jgss.GSSManager;
@@ -64,16 +66,16 @@ import org.ietf.jgss.Oid;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class ClientConfigCallbackHandler implements HttpClientConfigCallback {
+public class ConfigCallbackHandler implements HttpClientConfigCallback, RequestConfigCallback {
 
-  private static final Logger log = LoggerFactory.getLogger(ClientConfigCallbackHandler.class);
+  private static final Logger log = LoggerFactory.getLogger(ConfigCallbackHandler.class);
 
   private static final Oid SPNEGO_OID = spnegoOid();
 
   private final ElasticsearchSinkConnectorConfig config;
   private final NHttpClientConnectionManager connectionManager;
 
-  public ClientConfigCallbackHandler(ElasticsearchSinkConnectorConfig config) {
+  public ConfigCallbackHandler(ElasticsearchSinkConnectorConfig config) {
     this.config = config;
     this.connectionManager = configureConnectionManager();
   }
@@ -111,6 +113,20 @@ public class ClientConfigCallbackHandler implements HttpClientConfigCallback {
     }
 
     return builder;
+  }
+
+  /**
+   * Customizes each request according to configurations.
+   *
+   * @param builder the RequestConfigBuilder
+   * @return the builder
+   */
+  @Override
+  public RequestConfig.Builder customizeRequestConfig(RequestConfig.Builder builder) {
+    return builder
+        .setContentCompressionEnabled(config.compression())
+        .setConnectTimeout(config.connectionTimeoutMs())
+        .setConnectionRequestTimeout(config.readTimeoutMs());
   }
 
   /**

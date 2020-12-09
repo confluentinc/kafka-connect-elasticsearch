@@ -3,7 +3,6 @@ package io.confluent.connect.elasticsearch.integration;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.KERBEROS_KEYTAB_PATH_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.KERBEROS_PRINCIPAL_CONFIG;
 
-import io.confluent.connect.elasticsearch.ElasticsearchClient;
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig;
 import io.confluent.connect.elasticsearch.helper.ElasticsearchContainer;
 import io.confluent.connect.elasticsearch.helper.ElasticsearchHelperClient;
@@ -25,7 +24,7 @@ public class ElasticsearchConnectorKerberosIT extends ElasticsearchConnectorBase
   private static File baseDir;
   private static MiniKdc kdc;
   private static String esPrincipal;
-  private static String esKeytab;
+  protected static String esKeytab;
   private static String userPrincipal;
   private static String userKeytab;
 
@@ -49,32 +48,14 @@ public class ElasticsearchConnectorKerberosIT extends ElasticsearchConnectorBase
   @Test
   public void testKerberos() throws Exception {
     addKerberosConfigs(props);
-    helperClient = new ElasticsearchHelperClient(new ElasticsearchClient(new ElasticsearchSinkConnectorConfig(props), null).client());
+    helperClient = new ElasticsearchHelperClient(
+        container.getConnectionUrl(),
+        new ElasticsearchSinkConnectorConfig(props)
+    );
     runSimpleTest(props);
   }
 
-  private static void closeKdc() {
-    if (kdc != null) {
-      kdc.stop();
-    }
-
-    if (baseDir.exists()) {
-      deleteDirectory(baseDir.toPath());
-    }
-  }
-
-  private static void deleteDirectory(Path directoryPath) {
-    try {
-      Files.walk(directoryPath)
-          .sorted(Comparator.reverseOrder())
-          .map(Path::toFile)
-          .forEach(File::delete);
-    } catch (IOException e) {
-      throw new ConnectException(e);
-    }
-  }
-
-  private static void initKdc() throws Exception {
+  protected static void initKdc() throws Exception {
     baseDir = new File(System.getProperty("test.build.dir", "target/test-dir"));
     if (baseDir.exists()) {
       deleteDirectory(baseDir.toPath());
@@ -97,8 +78,29 @@ public class ElasticsearchConnectorKerberosIT extends ElasticsearchConnectorBase
     userPrincipal = user + "/localhost@" + kdc.getRealm();
   }
 
-  private static void addKerberosConfigs(Map<String, String> props) {
+  protected static void addKerberosConfigs(Map<String, String> props) {
     props.put(KERBEROS_PRINCIPAL_CONFIG, userPrincipal);
     props.put(KERBEROS_KEYTAB_PATH_CONFIG, userKeytab);
+  }
+
+  private static void closeKdc() {
+    if (kdc != null) {
+      kdc.stop();
+    }
+
+    if (baseDir.exists()) {
+      deleteDirectory(baseDir.toPath());
+    }
+  }
+
+  private static void deleteDirectory(Path directoryPath) {
+    try {
+      Files.walk(directoryPath)
+          .sorted(Comparator.reverseOrder())
+          .map(Path::toFile)
+          .forEach(File::delete);
+    } catch (IOException e) {
+      throw new ConnectException(e);
+    }
   }
 }

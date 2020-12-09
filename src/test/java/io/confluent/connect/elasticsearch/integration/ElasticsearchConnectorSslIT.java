@@ -16,7 +16,6 @@
 package io.confluent.connect.elasticsearch.integration;
 
 import io.confluent.common.utils.IntegrationTest;
-import io.confluent.connect.elasticsearch.ElasticsearchClient;
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig;
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.SecurityProtocol;
 import io.confluent.connect.elasticsearch.helper.ElasticsearchContainer;
@@ -60,7 +59,10 @@ public class ElasticsearchConnectorSslIT extends ElasticsearchConnectorBaseIT {
     props.put(CONNECTION_URL_CONFIG, address);
     addSslProps();
 
-    helperClient = new ElasticsearchHelperClient(new ElasticsearchClient(new ElasticsearchSinkConnectorConfig(props), null).client());
+    helperClient = new ElasticsearchHelperClient(
+        address,
+        new ElasticsearchSinkConnectorConfig(props)
+    );
 
     // Start connector
     runSimpleTest(props);
@@ -79,7 +81,10 @@ public class ElasticsearchConnectorSslIT extends ElasticsearchConnectorBaseIT {
     // disable hostname verification
     props.put(SSL_CONFIG_PREFIX + SslConfigs.SSL_ENDPOINT_IDENTIFICATION_ALGORITHM_CONFIG, "");
 
-    helperClient = new ElasticsearchHelperClient(new ElasticsearchClient(new ElasticsearchSinkConnectorConfig(props), null).client());
+    helperClient = new ElasticsearchHelperClient(
+        address,
+        new ElasticsearchSinkConnectorConfig(props)
+    );
 
     // Start connector
     runSimpleTest(props);

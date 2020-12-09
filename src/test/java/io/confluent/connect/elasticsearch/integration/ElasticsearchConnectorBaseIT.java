@@ -29,6 +29,7 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnector;
+import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig;
 import io.confluent.connect.elasticsearch.helper.ElasticsearchContainer;
 import io.confluent.connect.elasticsearch.helper.ElasticsearchHelperClient;
 import java.io.IOException;
@@ -66,15 +67,20 @@ public class ElasticsearchConnectorBaseIT extends BaseConnectorIT {
     connect.kafka().createTopic(TOPIC);
 
     props = createProps();
-    helperClient = new ElasticsearchHelperClient(container.getConnectionUrl());
+    helperClient = new ElasticsearchHelperClient(
+        container.getConnectionUrl(),
+        new ElasticsearchSinkConnectorConfig(props)
+    );
   }
 
   @After
   public void cleanup() throws IOException {
     stopConnect();
-    helperClient.deleteIndex(TOPIC);
 
-    helperClient.close();
+    if (helperClient != null) {
+      helperClient.deleteIndex(TOPIC);
+      helperClient.close();
+    }
   }
 
   protected Map<String, String> createProps() {
