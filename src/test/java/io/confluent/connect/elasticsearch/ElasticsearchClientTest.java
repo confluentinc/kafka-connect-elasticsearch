@@ -95,7 +95,7 @@ public class ElasticsearchClientTest {
     props.put(IGNORE_KEY_CONFIG, "true");
     config = new ElasticsearchSinkConnectorConfig(props);
     converter = new DataConverter(config);
-    helperClient = new ElasticsearchHelperClient(container.getConnectionUrl());
+    helperClient = new ElasticsearchHelperClient(container.getConnectionUrl(), config);
   }
 
   @After
@@ -512,7 +512,7 @@ public class ElasticsearchClientTest {
     converter = new DataConverter(config);
 
     ElasticsearchClient client = new ElasticsearchClient(config, null);
-    helperClient = new ElasticsearchHelperClient(client.client());
+    helperClient = new ElasticsearchHelperClient(address, config);
     client.createIndex(INDEX);
 
     writeRecord(sinkRecord(0), client);

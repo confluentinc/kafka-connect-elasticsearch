@@ -23,7 +23,6 @@ import java.net.InetAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.time.Duration;
-import java.util.concurrent.Future;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -34,9 +33,6 @@ import org.testcontainers.images.builder.ImageFromDockerfile;
 import org.testcontainers.images.builder.dockerfile.DockerfileBuilder;
 import org.testcontainers.shaded.org.apache.commons.io.IOUtils;
 import org.testcontainers.utility.DockerImageName;
-
-import static java.net.HttpURLConnection.HTTP_OK;
-import static java.net.HttpURLConnection.HTTP_UNAUTHORIZED;
 
 /**
  * A specialized TestContainer container for testing Elasticsearch, optionally with SSL support.
@@ -113,6 +109,7 @@ public class ElasticsearchContainer
 
   private final String imageName;
   private boolean enableSsl = false;
+  private String keytabPath;
   private String localKeystorePath;
   private String localTruststorePath;
 
@@ -129,7 +126,12 @@ public class ElasticsearchContainer
   }
 
   public ElasticsearchContainer withSslEnabled(boolean enable) {
-    setSslEnabled(enable);
+    enableSsl(enable);
+    return this;
+  }
+
+  public ElasticsearchContainer withKerberosEnabled(String keytab) {
+    enableKerberos(keytab);
     return this;
   }
 
@@ -140,10 +142,10 @@ public class ElasticsearchContainer
    *
    * @param enable true if SSL is to be enabled, or false otherwise
    */
-  public void setSslEnabled(boolean enable) {
+  public void enableSsl(boolean enable) {
     if (isCreated()) {
       throw new IllegalStateException(
-          "setSslEnabled can only be used before the Container is created."
+          "enableSsl can only be used before the Container is created."
       );
     }
     enableSsl = enable;
@@ -158,67 +160,107 @@ public class ElasticsearchContainer
     return enableSsl;
   }
 
+  /**
+   * Set whether the Elasticsearch instance should use Kerberos.
+   *
+   * <p>This can only be called <em>before</em> the container is started.
+   *
+   * @param keytab non-null keytab path if Kerberos is enabled
+   */
+  public void enableKerberos(String keytab) {
+    if (isCreated()) {
+      throw new IllegalStateException(
+          "enableKerberos can only be used before the container is created."
+      );
+    }
+    keytabPath = keytab;
+  }
+
+  /**
+   * Get whether the Elasticsearch instance is configured to use Kerberos.
+   *
+   * @return true if Kerberos is enabled, or false otherwise
+   */
+  public boolean isKerberosEnabled() {
+    return keytabPath != null;
+  }
+
+  private String getFullResourcePath(String resourceName) {
+    if (isSslEnabled() && isKerberosEnabled()) {
+      return "/both/" + resourceName;
+    } else if (isSslEnabled()) {
+      return "/ssl/" + resourceName;
+    } else if (isKerberosEnabled()) {
+      return "/kerberos/" + resourceName;
+    } else {
+      return resourceName;
+    }
+  }
+
   @Override
   protected void configure() {
     super.configure();
-    Future<String> image;
+
+    waitingFor(
+        Wait.forLogMessage(".*(Security is enabled|license .* valid).*", 1)
+            .withStartupTimeout(Duration.ofMinutes(5))
+    );
+
+    if (!isSslEnabled() && !isKerberosEnabled()) {
+      setImage(new RemoteDockerImage(DockerImageName.parse(imageName)));
+      return;
+    }
+
+    ImageFromDockerfile image = new ImageFromDockerfile()
+        // Copy the Elasticsearch config file
+        .withFileFromClasspath("elasticsearch.yml", getFullResourcePath("elasticsearch.yml"))
+        // Copy the network definitions
+        .withFileFromClasspath("instances.yml", getFullResourcePath("instances.yml"))
+        .withDockerfileFromBuilder(this::buildImage);
+
     if (isSslEnabled()) {
+      log.info("Extending Docker image to generate certs and enable SSL");
       withEnv("ELASTIC_PASSWORD", ELASTIC_PASSWORD);
       withEnv("STORE_PASSWORD", KEY_PASSWORD);
       withEnv("IP_ADDRESS", hostMachineIpAddress());
-      log.info("Extending Docker image to generate certs and enable SSL");
-      log.info("Wait for 'license .* valid' in log file, signaling Elasticsearch has started");
-      // Because this is an secured Elasticsearch instance, we can't use HTTPS checks
-      // because of the untrusted cert
-      waitingFor(
-          Wait.forLogMessage(".*(Security is enabled|license .* valid).*", 1)
-              .withStartupTimeout(Duration.ofMinutes(5))
-      );
-      image = new ImageFromDockerfile()
-          // Copy the Elasticsearch config file for SSL
-          .withFileFromClasspath(
-              "elasticsearch.yml",
-              "/ssl/elasticsearch.yml"
-          )
-          // Copy the network definitions
-          .withFileFromClasspath(
-              "instances.yml",
-              "/ssl/instances.yml"
-          )
+
+      image
           // Copy the script to generate the certs and start Elasticsearch
-          .withFileFromClasspath(
-              "start-elasticsearch.sh",
-              "/ssl/start-elasticsearch.sh"
-          )
-          .withDockerfileFromBuilder(this::build);
-    } else {
-      log.info("Will use HTTP check to wait for Elasticsearch image");
-      // Because this is an unsecured Elasticsearch instance, we can use HTTP checks
-      waitingFor(
-          Wait.forHttp("/")
-              .forPort(ELASTICSEARCH_DEFAULT_PORT)
-              .forStatusCodeMatching(status -> status == HTTP_OK || status == HTTP_UNAUTHORIZED)
-              .withStartupTimeout(Duration.ofMinutes(2))
-      );
-      image = new RemoteDockerImage(DockerImageName.parse(imageName));
+          .withFileFromClasspath("start-elasticsearch.sh", getFullResourcePath("start-elasticsearch.sh"));
     }
+
+    if (isKerberosEnabled()) {
+      log.info("Creating Kerberized Elasticsearch image.");
+      image.withFileFromFile("es.keytab", new File(keytabPath));
+    }
+
     setImage(image);
   }
 
-  protected void build(DockerfileBuilder builder) {
-    log.info("Building Elasticsearch image with SSL configuration");
-    builder.from(imageName)
-           // OpenSSL and Java's Keytool used to generate the certs, so install them
-           .run("yum -y install openssl")
-           // Copy the Elasticsearch configuration
-           .copy("elasticsearch.yml", CONFIG_PATH +"/elasticsearch.yml")
-           // Copy and run the script to generate the certs
-           .copy("instances.yml", CONFIG_SSL_PATH + "/instances.yml")
-           .copy("start-elasticsearch.sh", CONFIG_SSL_PATH + "/start-elasticsearch.sh")
-           .run("chmod +x " + CONFIG_SSL_PATH + "/start-elasticsearch.sh")
-           .entryPoint(
-               CONFIG_SSL_PATH + "/start-elasticsearch.sh"
-           );
+  private void buildImage(DockerfileBuilder builder) {
+    builder
+        .from(imageName)
+        // Copy the Elasticsearch configuration
+        .copy("elasticsearch.yml", CONFIG_PATH +"/elasticsearch.yml");
+
+    if (isSslEnabled()) {
+      log.info("Building Elasticsearch image with SSL configuration");
+      builder
+          .copy("instances.yml", CONFIG_SSL_PATH + "/instances.yml")
+          .copy("start-elasticsearch.sh", CONFIG_SSL_PATH + "/start-elasticsearch.sh")
+          // OpenSSL and Java's Keytool used to generate the certs, so install them
+          .run("yum -y install openssl")
+          .run("chmod +x " + CONFIG_SSL_PATH + "/start-elasticsearch.sh")
+          .entryPoint(CONFIG_SSL_PATH + "/start-elasticsearch.sh");
+    }
+
+    if (isKerberosEnabled()) {
+      log.info("Building Elasticsearch image with Kerberos configuration.");
+      builder.copy("es.keytab", CONFIG_PATH + "/es.keytab");
+      if (!isSslEnabled()) {
+        builder.copy("instances.yml", CONFIG_PATH + "/instances.yml");
+      }
+    }
   }
 
   public String hostMachineIpAddress() {

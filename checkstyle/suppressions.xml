@@ -8,13 +8,13 @@
 
     <!-- switch statements on types exceed maximum complexity -->
     <suppress
-            checks="(CyclomaticComplexity)"
-            files="Mapping.java"
+      checks="(CyclomaticComplexity)"
+      files="Mapping.java"
     />
 
     <suppress
-            checks="(ClassDataAbstractionCoupling)"
-            files="(ElasticsearchClient|ClientConfigCallbackHandler).java"
+      checks="(ClassDataAbstractionCoupling)"
+      files="(ElasticsearchClient|ConfigCallbackHandler).java"
     />
 
     <suppress

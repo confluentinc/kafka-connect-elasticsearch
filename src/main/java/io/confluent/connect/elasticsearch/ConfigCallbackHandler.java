@@ -15,16 +15,35 @@
 
 package io.confluent.connect.elasticsearch;
 
+import com.sun.security.auth.module.Krb5LoginModule;
+import java.security.AccessController;
+import java.security.PrivilegedActionException;
+import java.security.PrivilegedExceptionAction;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
 import javax.net.ssl.HostnameVerifier;
 import javax.net.ssl.SSLContext;
+import javax.security.auth.Subject;
+import javax.security.auth.kerberos.KerberosPrincipal;
+import javax.security.auth.login.AppConfigurationEntry;
+import javax.security.auth.login.Configuration;
+import javax.security.auth.login.LoginContext;
 import org.apache.http.HttpHost;
+import org.apache.http.auth.AuthSchemeProvider;
 import org.apache.http.auth.AuthScope;
+import org.apache.http.auth.KerberosCredentials;
 import org.apache.http.auth.UsernamePasswordCredentials;
 import org.apache.http.client.CredentialsProvider;
+import org.apache.http.client.config.AuthSchemes;
+import org.apache.http.client.config.RequestConfig;
+import org.apache.http.config.Lookup;
 import org.apache.http.config.Registry;
 import org.apache.http.config.RegistryBuilder;
 import org.apache.http.conn.ssl.NoopHostnameVerifier;
 import org.apache.http.conn.ssl.SSLConnectionSocketFactory;
+import org.apache.http.impl.auth.SPNegoSchemeFactory;
 import org.apache.http.impl.client.BasicCredentialsProvider;
 import org.apache.http.impl.nio.client.HttpAsyncClientBuilder;
 import org.apache.http.impl.nio.conn.PoolingNHttpClientConnectionManager;
@@ -39,17 +58,24 @@ import org.apache.kafka.common.network.Mode;
 import org.apache.kafka.common.security.ssl.SslFactory;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.elasticsearch.client.RestClientBuilder.HttpClientConfigCallback;
+import org.elasticsearch.client.RestClientBuilder.RequestConfigCallback;
+import org.ietf.jgss.GSSCredential;
+import org.ietf.jgss.GSSException;
+import org.ietf.jgss.GSSManager;
+import org.ietf.jgss.Oid;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class ClientConfigCallbackHandler implements HttpClientConfigCallback {
+public class ConfigCallbackHandler implements HttpClientConfigCallback, RequestConfigCallback {
 
-  private static final Logger log = LoggerFactory.getLogger(ClientConfigCallbackHandler.class);
+  private static final Logger log = LoggerFactory.getLogger(ConfigCallbackHandler.class);
+
+  private static final Oid SPNEGO_OID = spnegoOid();
 
   private final ElasticsearchSinkConnectorConfig config;
   private final NHttpClientConnectionManager connectionManager;
 
-  public ClientConfigCallbackHandler(ElasticsearchSinkConnectorConfig config) {
+  public ConfigCallbackHandler(ElasticsearchSinkConnectorConfig config) {
     this.config = config;
     this.connectionManager = configureConnectionManager();
   }
@@ -65,16 +91,42 @@ public class ClientConfigCallbackHandler implements HttpClientConfigCallback {
     builder.setConnectionManager(connectionManager);
     builder.setMaxConnPerRoute(config.maxInFlightRequests());
     builder.setMaxConnTotal(config.maxInFlightRequests());
+
     configureAuthentication(builder);
 
-    if (config.secured()) {
-      log.info("Using secured connection to {}.", config.connectionUrls());
+    if (config.isKerberosEnabled()) {
+      configureKerberos(builder);
+    }
+
+    if (config.isSslEnabled()) {
       configureSslContext(builder);
+    }
+
+    if (config.isKerberosEnabled() && config.isSslEnabled()) {
+      log.info("Using Kerberos and SSL connection to {}.", config.connectionUrls());
+    } else if (config.isKerberosEnabled()) {
+      log.info("Using Kerberos connection to {}.", config.connectionUrls());
+    } else if (config.isSslEnabled()) {
+      log.info("Using SSL connection to {}.", config.connectionUrls());
     } else {
       log.info("Using unsecured connection to {}.", config.connectionUrls());
     }
 
     return builder;
+  }
+
+  /**
+   * Customizes each request according to configurations.
+   *
+   * @param builder the RequestConfigBuilder
+   * @return the builder
+   */
+  @Override
+  public RequestConfig.Builder customizeRequestConfig(RequestConfig.Builder builder) {
+    return builder
+        .setContentCompressionEnabled(config.compression())
+        .setConnectTimeout(config.connectionTimeoutMs())
+        .setConnectionRequestTimeout(config.readTimeoutMs());
   }
 
   /**
@@ -94,8 +146,7 @@ public class ClientConfigCallbackHandler implements HttpClientConfigCallback {
   private void configureAuthentication(HttpAsyncClientBuilder builder) {
     CredentialsProvider credentialsProvider = new BasicCredentialsProvider();
     if (config.isAuthenticatedConnection()) {
-      config.connectionUrls().forEach(
-          url -> credentialsProvider.setCredentials(
+      config.connectionUrls().forEach(url -> credentialsProvider.setCredentials(
               new AuthScope(HttpHost.create(url)),
               new UsernamePasswordCredentials(config.username(), config.password().value())
           )
@@ -128,7 +179,7 @@ public class ClientConfigCallbackHandler implements HttpClientConfigCallback {
       PoolingNHttpClientConnectionManager cm;
       ConnectingIOReactor ioReactor = new DefaultConnectingIOReactor();
 
-      if (config.secured()) {
+      if (config.isSslEnabled()) {
         HostnameVerifier hostnameVerifier = config.shouldDisableHostnameVerification()
             ? new NoopHostnameVerifier()
             : SSLConnectionSocketFactory.getDefaultHostnameVerifier();
@@ -149,6 +200,50 @@ public class ClientConfigCallbackHandler implements HttpClientConfigCallback {
     } catch (IOReactorException e) {
       throw new ConnectException("Unable to open ElasticsearchClient.", e);
     }
+  }
+
+  /**
+   * Configures the client to use Kerberos authentication. Overrides any proxy or basic auth
+   * credentials.
+   *
+   * @param builder the HttpAsyncClientBuilder to configure
+   * @return the configured builder
+   */
+  private HttpAsyncClientBuilder configureKerberos(HttpAsyncClientBuilder builder) {
+    GSSManager gssManager = GSSManager.getInstance();
+    Lookup<AuthSchemeProvider> authSchemeRegistry =
+        RegistryBuilder.<AuthSchemeProvider>create()
+            .register(AuthSchemes.SPNEGO, new SPNegoSchemeFactory())
+            .build();
+    builder.setDefaultAuthSchemeRegistry(authSchemeRegistry);
+
+    try {
+      LoginContext loginContext = loginContext();
+      GSSCredential credential = Subject.doAs(
+          loginContext.getSubject(),
+          (PrivilegedExceptionAction<GSSCredential>) () -> gssManager.createCredential(
+              null,
+              GSSCredential.DEFAULT_LIFETIME,
+              SPNEGO_OID,
+              GSSCredential.INITIATE_ONLY
+          )
+      );
+      CredentialsProvider credentialsProvider = new BasicCredentialsProvider();
+      credentialsProvider.setCredentials(
+          new AuthScope(
+              AuthScope.ANY_HOST,
+              AuthScope.ANY_PORT,
+              AuthScope.ANY_REALM,
+              AuthSchemes.SPNEGO
+          ),
+          new KerberosCredentials(credential)
+      );
+      builder.setDefaultCredentialsProvider(credentialsProvider);
+    } catch (PrivilegedActionException e) {
+      throw new ConnectException(e);
+    }
+
+    return builder;
   }
 
   /**
@@ -208,6 +303,74 @@ public class ClientConfigCallbackHandler implements HttpClientConfigCallback {
       } catch (Exception ex) {
         throw new ConnectException("Could not create SSLContext.", ex);
       }
+    }
+  }
+
+  /**
+   * Logs in and returns a login context for the given kerberos user principle.
+   *
+   * @return the login context
+   * @throws PrivilegedActionException if the login failed
+   */
+  private LoginContext loginContext() throws PrivilegedActionException {
+    Configuration conf = new Configuration() {
+      @Override
+      public AppConfigurationEntry[] getAppConfigurationEntry(String name) {
+        return new AppConfigurationEntry[] {
+            new AppConfigurationEntry(
+                Krb5LoginModule.class.getName(),
+                AppConfigurationEntry.LoginModuleControlFlag.REQUIRED,
+                kerberosConfigs()
+            )
+        };
+      }
+    };
+
+    return AccessController.doPrivileged(
+        (PrivilegedExceptionAction<LoginContext>) () -> {
+          Subject subject = new Subject(
+              false,
+              Collections.singleton(new KerberosPrincipal(config.kerberosUserPrincipal())),
+              new HashSet<>(),
+              new HashSet<>()
+          );
+          LoginContext loginContext = new LoginContext(
+              "ElasticsearchSinkConnector",
+              subject,
+              null,
+              conf
+          );
+          loginContext.login();
+          return loginContext;
+        }
+    );
+  }
+
+  /**
+   * Creates the Kerberos configurations.
+   *
+   * @return map of kerberos configs
+   */
+  private Map<String, Object> kerberosConfigs() {
+    Map<String, Object> configs = new HashMap<>();
+    configs.put("useTicketCache", "true");
+    configs.put("renewTGT", "true");
+    configs.put("useKeyTab", "true");
+    configs.put("keyTab", config.keytabPath());
+    //Krb5 in GSS API needs to be refreshed so it does not throw the error
+    //Specified version of key is not available
+    configs.put("refreshKrb5Config", "true");
+    configs.put("principal", config.kerberosUserPrincipal());
+    configs.put("storeKey", "false");
+    configs.put("doNotPrompt", "true");
+    return configs;
+  }
+
+  private static Oid spnegoOid() {
+    try {
+      return new Oid("1.3.6.1.5.5.2");
+    } catch (GSSException gsse) {
+      throw new ConnectException(gsse);
     }
   }
 }

@@ -34,6 +34,7 @@ import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfi
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_KEY_TOPICS_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_SCHEMA_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_SCHEMA_TOPICS_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.KERBEROS_KEYTAB_PATH_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.LINGER_MS_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.MAX_BUFFERED_RECORDS_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.MAX_IN_FLIGHT_REQUESTS_CONFIG;
@@ -42,6 +43,7 @@ import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfi
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.PROXY_USERNAME_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.SECURITY_PROTOCOL_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.SSL_CONFIG_PREFIX;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.KERBEROS_PRINCIPAL_CONFIG;
 
 public class Validator {
 
@@ -68,6 +70,7 @@ public class Validator {
 
     validateCredentials();
     validateIgnoreConfigs();
+    validateKerberos();
     validateLingerMs();
     validateMaxBufferedRecords();
     validateProxy();
@@ -104,6 +107,50 @@ public class Validator {
       addErrorMessage(IGNORE_SCHEMA_CONFIG, errorMessage);
       addErrorMessage(IGNORE_SCHEMA_TOPICS_CONFIG, errorMessage);
     }
+  }
+
+  private void validateKerberos() {
+    boolean onlyOneSet = config.kerberosUserPrincipal() != null ^ config.keytabPath() != null;
+    if (onlyOneSet) {
+      String errorMessage = String.format(
+          "Either both or neither '%s' and '%s' must be set.",
+          KERBEROS_PRINCIPAL_CONFIG,
+          KERBEROS_KEYTAB_PATH_CONFIG
+      );
+      addErrorMessage(KERBEROS_PRINCIPAL_CONFIG, errorMessage);
+      addErrorMessage(KERBEROS_KEYTAB_PATH_CONFIG, errorMessage);
+    }
+
+    if (config.isKerberosEnabled()) {
+      // currently do not support Kerberos with regular auth
+      if (config.isAuthenticatedConnection()) {
+        String errorMessage = String.format(
+            "Either only Kerberos (%s, %s) or connection credentials (%s, %s) must be set.",
+            KERBEROS_PRINCIPAL_CONFIG,
+            KERBEROS_KEYTAB_PATH_CONFIG,
+            CONNECTION_USERNAME_CONFIG,
+            CONNECTION_PASSWORD_CONFIG
+        );
+        addErrorMessage(KERBEROS_PRINCIPAL_CONFIG, errorMessage);
+        addErrorMessage(KERBEROS_KEYTAB_PATH_CONFIG, errorMessage);
+        addErrorMessage(CONNECTION_USERNAME_CONFIG, errorMessage);
+        addErrorMessage(CONNECTION_PASSWORD_CONFIG, errorMessage);
+      }
+
+      // currently do not support Kerberos with proxy
+      if (config.isBasicProxyConfigured()) {
+        String errorMessage = String.format(
+            "Kerberos (%s, %s) is not supported with proxy settings (%s).",
+            KERBEROS_PRINCIPAL_CONFIG,
+            KERBEROS_KEYTAB_PATH_CONFIG,
+            PROXY_HOST_CONFIG
+        );
+        addErrorMessage(KERBEROS_PRINCIPAL_CONFIG, errorMessage);
+        addErrorMessage(KERBEROS_KEYTAB_PATH_CONFIG, errorMessage);
+        addErrorMessage(PROXY_HOST_CONFIG, errorMessage);
+      }
+    }
+
   }
 
   private void validateLingerMs() {
@@ -165,7 +212,7 @@ public class Validator {
 
   private void validateSsl() {
     Map<String, Object> sslConfigs = config.originalsWithPrefix(SSL_CONFIG_PREFIX);
-    if (!config.secured()) {
+    if (!config.isSslEnabled()) {
       if (!sslConfigs.isEmpty()) {
         String errorMessage = String.format(
             "'%s' must be set to '%s' to use SSL configs.",

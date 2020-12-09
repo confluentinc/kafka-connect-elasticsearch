@@ -15,10 +15,11 @@
 
 package io.confluent.connect.elasticsearch.helper;
 
+import io.confluent.connect.elasticsearch.ConfigCallbackHandler;
+import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig;
 import java.io.IOException;
 import org.apache.http.HttpHost;
 import org.elasticsearch.action.admin.indices.delete.DeleteIndexRequest;
-import org.elasticsearch.action.admin.indices.refresh.RefreshRequest;
 import org.elasticsearch.action.search.SearchRequest;
 import org.elasticsearch.client.RequestOptions;
 import org.elasticsearch.client.RestClient;
@@ -38,12 +39,14 @@ public class ElasticsearchHelperClient {
 
   private RestHighLevelClient client;
 
-  public ElasticsearchHelperClient(String url) {
-    this.client = new RestHighLevelClient(RestClient.builder(HttpHost.create(url)));
-  }
-
-  public ElasticsearchHelperClient(RestHighLevelClient client) {
-    this.client = client;
+  public ElasticsearchHelperClient(String url, ElasticsearchSinkConnectorConfig config) {
+    ConfigCallbackHandler configCallbackHandler = new ConfigCallbackHandler(config);
+    this.client = new RestHighLevelClient(
+        RestClient
+            .builder(HttpHost.create(url))
+            .setHttpClientConfigCallback(configCallbackHandler)
+            .setRequestConfigCallback(configCallbackHandler)
+    );
   }
 
   public void deleteIndex(String index) throws IOException {

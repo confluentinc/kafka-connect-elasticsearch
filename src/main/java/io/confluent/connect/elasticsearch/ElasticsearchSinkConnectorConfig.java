@@ -15,6 +15,7 @@
 
 package io.confluent.connect.elasticsearch;
 
+import java.io.File;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.Arrays;
@@ -276,16 +277,30 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
 
   public static final String SECURITY_PROTOCOL_CONFIG = "elastic.security.protocol";
   private static final String SECURITY_PROTOCOL_DOC =
-      "The security protocol to use when connecting to Elasticsearch. "
-          + "Values can be `PLAINTEXT` or `SSL`. If `PLAINTEXT` is passed, "
-          + "all configs prefixed by " + SSL_CONFIG_PREFIX + " will be ignored.";
+      "The security protocol to use when connecting to Elasticsearch. Values can be `PLAINTEXT` or"
+          + " `SSL`. If `PLAINTEXT` is passed, all configs prefixed by " + SSL_CONFIG_PREFIX
+          + " will be ignored.";
   private static final String SECURITY_PROTOCOL_DISPLAY = "Security protocol";
   private static final String SECURITY_PROTOCOL_DEFAULT = SecurityProtocol.PLAINTEXT.name();
+
+  // Kerberos configs
+  public static final String KERBEROS_PRINCIPAL_CONFIG = "kerberos.user.principal";
+  private static final String KERBEROS_PRINCIPAL_DISPLAY = "Kerberos User Principal";
+  private static final String KERBEROS_PRINCIPAL_DOC = "The Kerberos user principal the connector"
+      + " may use to authenticate with Kerberos.";
+  private static final String KERBEROS_PRINCIPAL_DEFAULT = null;
+
+  public static final String KERBEROS_KEYTAB_PATH_CONFIG = "kerberos.keytab.path";
+  private static final String KERBEROS_KEYTAB_PATH = "Kerberos Keytab File Path";
+  private static final String KERBEROS_KEYTAB_PATH_DOC = "The path to the keytab file to use for"
+      + " authentication with Kerberos.";
+  private static final String KERBEROS_KEYTAB_PATH_DEFAULT = null;
 
   private static final String CONNECTOR_GROUP = "Connector";
   private static final String DATA_CONVERSION_GROUP = "Data Conversion";
   private static final String PROXY_GROUP = "Proxy";
   private static final String SSL_GROUP = "Security";
+  private static final String KERBEROS_GROUP = "Kerberos";
 
   public enum BehaviorOnMalformedDoc {
     IGNORE,
@@ -314,7 +329,8 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
     addConnectorConfigs(configDef);
     addConversionConfigs(configDef);
     addProxyConfigs(configDef);
-    addSecurityConfigs(configDef);
+    addSslConfigs(configDef);
+    addKerberosConfigs(configDef);
     return configDef;
   }
 
@@ -636,7 +652,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
     );
   }
 
-  private static void addSecurityConfigs(ConfigDef configDef) {
+  private static void addSslConfigs(ConfigDef configDef) {
     ConfigDef sslConfigDef = new ConfigDef();
     addClientSslSupport(sslConfigDef);
     int order = 0;
@@ -660,6 +676,33 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
     configDef.embed(SSL_CONFIG_PREFIX, SSL_GROUP, configDef.configKeys().size() + 2, sslConfigDef);
   }
 
+  private static void addKerberosConfigs(ConfigDef configDef) {
+    int orderInGroup = 0;
+    configDef
+        .define(
+            KERBEROS_PRINCIPAL_CONFIG,
+            Type.STRING,
+            KERBEROS_PRINCIPAL_DEFAULT,
+            Importance.LOW,
+            KERBEROS_PRINCIPAL_DOC,
+            KERBEROS_GROUP,
+            orderInGroup++,
+            Width.LONG,
+            KERBEROS_PRINCIPAL_DISPLAY
+        ).define(
+            KERBEROS_KEYTAB_PATH_CONFIG,
+            Type.STRING,
+            KERBEROS_KEYTAB_PATH_DEFAULT,
+            new FilePathValidator("keytab"),
+            Importance.LOW,
+            KERBEROS_KEYTAB_PATH_DOC,
+            KERBEROS_GROUP,
+            orderInGroup++,
+            Width.LONG,
+            KERBEROS_KEYTAB_PATH
+    );
+  }
+
   public static final ConfigDef CONFIG = baseConfigDef();
 
   public ElasticsearchSinkConnectorConfig(Map<String, String> props) {
@@ -680,7 +723,11 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
         && getPassword(PROXY_PASSWORD_CONFIG) != null;
   }
 
-  public boolean secured() {
+  public boolean isKerberosEnabled() {
+    return kerberosUserPrincipal() != null || keytabPath() != null;
+  }
+
+  public boolean isSslEnabled() {
     return SecurityProtocol.SSL == securityProtocol();
   }
 
@@ -747,6 +794,14 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
 
   public Set<String> ignoreSchemaTopics() {
     return new HashSet<>(getList(IGNORE_SCHEMA_TOPICS_CONFIG));
+  }
+
+  public String kerberosUserPrincipal() {
+    return getString(KERBEROS_PRINCIPAL_CONFIG);
+  }
+
+  public String keytabPath() {
+    return getString(KERBEROS_KEYTAB_PATH_CONFIG);
   }
 
   public long lingerMs() {
@@ -825,10 +880,9 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
     @SuppressWarnings("unchecked")
     public void ensureValid(String name, Object value) {
       if (value == null) {
-        throw new ConfigException(
-            name, value, "The provided url list is null."
-        );
+        throw new ConfigException(name, value, "The config must be provided and non-null.");
       }
+
       List<String> urls = (List<String>) value;
       for (String url : urls) {
         try {
@@ -844,6 +898,37 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
     @Override
     public String toString() {
       return "List of valid URIs.";
+    }
+  }
+
+  private static class FilePathValidator implements Validator {
+
+    private String extension;
+
+    public FilePathValidator(String extension) {
+      this.extension = extension;
+    }
+
+    @Override
+    @SuppressWarnings("unchecked")
+    public void ensureValid(String name, Object value) {
+      if (value == null) {
+        return;
+      }
+
+      if (!((String) value).endsWith(extension)) {
+        throw new ConfigException(name, value, "The specified file must end with ." + extension);
+      }
+
+      File file = new File((String) value);
+      if (!file.exists()) {
+        throw new ConfigException(name, value, "The specified file does not exist.");
+      }
+    }
+
+    @Override
+    public String toString() {
+      return "Existing file with " + extension + " extension.";
     }
   }
 
