@@ -207,7 +207,7 @@
                         </goals>
                         <configuration>
                             <title>Kafka Connect Elasticsearch</title>
-                            <documentationUrl>https://docs.confluent.io/${confluent.version}/connect/connect-elasticsearch/docs/index.html</documentationUrl>
+                            <documentationUrl>https://docs.confluent.io/kafka-connect-elasticsearch/current/</documentationUrl>
                             <description>
                                 The Elasticsearch connector allows moving data from Kafka to Elasticsearch 2.x, 5.x, 6.x, and 7.x. It writes data from a topic in Kafka to an index in Elasticsearch and all data for a topic have the same type.
 
