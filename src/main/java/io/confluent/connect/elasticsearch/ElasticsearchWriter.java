@@ -15,6 +15,7 @@
 
 package io.confluent.connect.elasticsearch;
 
+import com.google.gson.JsonObject;
 import io.confluent.connect.elasticsearch.bulk.BulkProcessor;
 import org.apache.kafka.common.utils.SystemTime;
 import org.apache.kafka.connect.errors.ConnectException;
@@ -269,7 +270,8 @@ public class ElasticsearchWriter {
 
       if (!ignoreSchema && !existingMappings.contains(index)) {
         try {
-          if (Mapping.getMapping(client, index, type) == null) {
+          JsonObject mapping = Mapping.getMapping(client, index, type);
+          if ( mapping == null || mapping.getAsJsonObject("properties") == null) {
             Mapping.createMapping(client, index, type, sinkRecord.valueSchema());
           }
         } catch (IOException e) {
