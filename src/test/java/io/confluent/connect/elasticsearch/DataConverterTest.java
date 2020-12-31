@@ -48,6 +48,7 @@ public class DataConverterTest {
 
   @Before
   public void setUp() {
+
     converter = new DataConverter(true, BehaviorOnNullValues.DEFAULT);
     key = "key";
     topic = "topic";
