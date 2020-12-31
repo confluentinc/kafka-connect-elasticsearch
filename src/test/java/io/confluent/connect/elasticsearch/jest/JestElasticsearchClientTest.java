@@ -96,7 +96,7 @@ public class JestElasticsearchClientTest {
   private JestClientFactory jestClientFactory;
   private NodesInfo info;
 
-  @Before
+  //@Before
   public void setUp() throws Exception {
     jestClient = mock(JestClient.class);
     jestClientFactory = mock(JestClientFactory.class);
@@ -337,6 +337,22 @@ public class JestElasticsearchClientTest {
     when(jestClient.execute(getMapping)).thenReturn(result);
 
     assertThat(client.getMapping(INDEX, TYPE), is(equalTo(mapping)));
+  }
+
+  @Test
+  public void getsMappingNoMock() throws Exception {
+
+    Map<String, String> props = new HashMap<>();
+    props.put(ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG, "http://192.168.207.47:9200");
+    //props.put(ElasticsearchSinkConnectorConfig.CONNECTION_USERNAME_CONFIG, "elastic");
+    //props.put(ElasticsearchSinkConnectorConfig.CONNECTION_PASSWORD_CONFIG, "elasticpw");
+    props.put(ElasticsearchSinkConnectorConfig.TYPE_NAME_CONFIG, "kafka-connect");
+    props.put(ElasticsearchSinkConnectorConfig.CONNECTION_COMPRESSION_CONFIG, "true");
+    jestClientFactory = new JestClientFactory();
+    JestElasticsearchClient client = new JestElasticsearchClient(props, jestClientFactory);
+    JsonObject mapping = client.getMapping("ds-0-dev_t_d_order", "_doc");
+    System.out.print( mapping == null || mapping.getAsJsonObject("properties") == null);
+
   }
 
   @Test
