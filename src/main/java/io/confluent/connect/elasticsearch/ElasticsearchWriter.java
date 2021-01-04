@@ -271,7 +271,7 @@ public class ElasticsearchWriter {
       if (!ignoreSchema && !existingMappings.contains(index)) {
         try {
           JsonObject mapping = Mapping.getMapping(client, index, type);
-          if ( mapping == null || mapping.getAsJsonObject("properties") == null) {
+          if (mapping == null || mapping.getAsJsonObject("properties") == null) {
             Mapping.createMapping(client, index, type, sinkRecord.valueSchema());
           }
         } catch (IOException e) {
