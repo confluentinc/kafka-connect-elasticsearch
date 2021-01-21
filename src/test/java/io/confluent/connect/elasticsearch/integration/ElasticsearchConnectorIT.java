@@ -148,17 +148,13 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
     }
   }
   
-  /*
-   * Currently writing primitives to ES fails because ES expects a JSON document and the connector
-   * does not wrap primitives in any way into a JSON document.
-   */
   @Test
   public void testBadRecordsInDLQ() throws Exception {
     props.put(VALUE_CONVERTER_CLASS_CONFIG, StringConverter.class.getName());
     props.put(BEHAVIOR_ON_MALFORMED_DOCS_CONFIG,"ignore");
     props.put(DROP_INVALID_MESSAGE_CONFIG,"true");
     props.put("errors.tolerance","all");
-    props.put("errors.deadletterqueue.topic.name","dlq_file_sink_02");
+    props.put("errors.deadletterqueue.topic.name","dlq");
     props.put("errors.deadletterqueue.topic.replication.factor", "1");
     SinkTaskContext context = mock(SinkTaskContext.class);
     ErrantRecordReporter reporter = mock(ErrantRecordReporter.class);
