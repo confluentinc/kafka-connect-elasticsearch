@@ -16,16 +16,25 @@
 package io.confluent.connect.elasticsearch.integration;
 
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BATCH_SIZE_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BEHAVIOR_ON_MALFORMED_DOCS_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BEHAVIOR_ON_NULL_VALUES_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.DROP_INVALID_MESSAGE_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_KEY_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.LINGER_MS_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.WRITE_METHOD_CONFIG;
 import static org.apache.kafka.connect.runtime.ConnectorConfig.VALUE_CONVERTER_CLASS_CONFIG;
 import static org.junit.Assert.assertEquals;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
+import io.confluent.connect.elasticsearch.ElasticsearchClient;
+import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig;
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BehaviorOnNullValues;
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.WriteMethod;
 import io.confluent.connect.elasticsearch.helper.ElasticsearchContainer;
+import io.confluent.connect.elasticsearch.helper.ElasticsearchHelperClient;
+import org.apache.kafka.connect.sink.ErrantRecordReporter;
+import org.apache.kafka.connect.sink.SinkTaskContext;
 import org.apache.kafka.connect.storage.StringConverter;
 import org.apache.kafka.test.IntegrationTest;
 import org.elasticsearch.search.SearchHit;
@@ -137,5 +146,34 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
         assertEquals(0, docNum);
       }
     }
+  }
+  
+  /*
+   * Currently writing primitives to ES fails because ES expects a JSON document and the connector
+   * does not wrap primitives in any way into a JSON document.
+   */
+  @Test
+  public void testBadRecordsInDLQ() throws Exception {
+    props.put(VALUE_CONVERTER_CLASS_CONFIG, StringConverter.class.getName());
+    props.put(BEHAVIOR_ON_MALFORMED_DOCS_CONFIG,"ignore");
+    props.put(DROP_INVALID_MESSAGE_CONFIG,"true");
+    props.put("errors.tolerance","all");
+    props.put("errors.deadletterqueue.topic.name","dlq_file_sink_02");
+    props.put("errors.deadletterqueue.topic.replication.factor", "1");
+    SinkTaskContext context = mock(SinkTaskContext.class);
+    ErrantRecordReporter reporter = mock(ErrantRecordReporter.class);
+    when(context.errantRecordReporter()).thenReturn(reporter);
+    helperClient = new ElasticsearchHelperClient(new ElasticsearchClient(new ElasticsearchSinkConnectorConfig(props), reporter).client());
+
+    connect.configureConnector(CONNECTOR_NAME, props);
+    
+    // wait for tasks to spin up
+    waitForConnectorToStart(CONNECTOR_NAME, TASKS_MAX);
+    
+    for (int i  = 0; i < NUM_RECORDS; i++) {
+      connect.kafka().produce(TOPIC, String.valueOf(i),  null);
+    }
+    
+    waitForRecords(0);
   }
 }
