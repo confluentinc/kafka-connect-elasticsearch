@@ -16,6 +16,8 @@
 package io.confluent.connect.elasticsearch;
 
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BehaviorOnNullValues;
+import io.confluent.connect.storage.util.DataUtils;
+import org.apache.kafka.connect.connector.ConnectRecord;
 import org.apache.kafka.connect.data.ConnectSchema;
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
@@ -35,6 +37,8 @@ import org.elasticsearch.action.index.IndexRequest;
 import org.elasticsearch.action.update.UpdateRequest;
 import org.elasticsearch.common.xcontent.XContentType;
 import org.elasticsearch.index.VersionType;
+import org.joda.time.DateTime;
+import org.joda.time.format.DateTimeFormatter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -46,6 +50,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Pattern;
 
 public class DataConverter {
 
@@ -54,6 +59,7 @@ public class DataConverter {
   private static final Converter JSON_CONVERTER;
   protected static final String MAP_KEY = "key";
   protected static final String MAP_VALUE = "value";
+  private static final Pattern NUMERIC_TIMESTAMP_PATTERN = Pattern.compile("^-?[0-9]{1,19}$");
 
   static {
     JSON_CONVERTER = new JsonConverter();
@@ -61,6 +67,7 @@ public class DataConverter {
   }
 
   private final ElasticsearchSinkConnectorConfig config;
+  private DateTimeFormatter dateTime;
 
   /**
    * Create a DataConverter, specifying how map entries with string keys within record
@@ -193,7 +200,7 @@ public class DataConverter {
   ) {
     if (!config.shouldIgnoreKey(record.topic())) {
       request.versionType(VersionType.EXTERNAL);
-      request.version(record.kafkaOffset());
+      request.version(config.versionField() != null ? extract(record, config.versionField()) : record.timestamp());
     }
 
     return request;
@@ -392,5 +399,71 @@ public class DataConverter {
         record.kafkaPartition(),
         record.kafkaOffset()
     );
+  }
+
+  public Long extract(ConnectRecord<?> record, String fieldName) {
+    Object value = record.value();
+    if (value instanceof Struct) {
+      Struct struct = (Struct) value;
+      Object timestampValue = DataUtils.getNestedFieldValue(struct, fieldName);
+      Schema fieldSchema = DataUtils.getNestedField(record.valueSchema(), fieldName).schema();
+
+      if (Timestamp.LOGICAL_NAME.equals(fieldSchema.name())) {
+        return ((java.util.Date) timestampValue).getTime();
+      }
+
+      switch (fieldSchema.type()) {
+        case INT32:
+        case INT64:
+          return ((Number) timestampValue).longValue();
+        case STRING:
+          return extractTimestampFromString((String) timestampValue);
+        default:
+          log.error(
+                  "Unsupported type '{}' for user-defined timestamp field.",
+                  fieldSchema.type().getName()
+          );
+          throw new DataException(
+                  "Error extracting timestamp from record field: " + fieldName
+          );
+      }
+    } else if (value instanceof Map) {
+      Map<?, ?> map = (Map<?, ?>) value;
+      Object timestampValue = DataUtils.getNestedFieldValue(map, fieldName);
+      if (timestampValue instanceof Number) {
+        return ((Number) timestampValue).longValue();
+      } else if (timestampValue instanceof String) {
+        return extractTimestampFromString((String) timestampValue);
+      } else if (timestampValue instanceof java.util.Date) {
+        return ((java.util.Date) timestampValue).getTime();
+      } else {
+        log.error(
+                "Unsupported type '{}' for user-defined timestamp field.",
+                timestampValue.getClass()
+        );
+        throw new DataException(
+                "Error extracting timestamp from record field: " + fieldName
+        );
+      }
+    } else {
+      log.error("Value is not of Struct or Map type.");
+      throw new DataException("Error encoding partition.");
+    }
+  }
+
+  private Long extractTimestampFromString(String timestampValue) {
+    if (NUMERIC_TIMESTAMP_PATTERN.matcher(timestampValue).matches()) {
+      try {
+        return Long.valueOf(timestampValue);
+      } catch (NumberFormatException e) {
+        // expected, ignore
+      }
+    }
+    return dateTime.parseMillis(timestampValue);
+  }
+
+  public String getFormattedDate(Long timestamp){
+    final DateTime dt = new DateTime(timestamp);
+    return dt.toString("dd-MM-yyyy");
   }
 }

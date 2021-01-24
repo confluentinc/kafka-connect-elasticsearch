@@ -250,6 +250,16 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   private static final String WRITE_METHOD_DISPLAY = "Write Method";
   private static final String WRITE_METHOD_DEFAULT = WriteMethod.INSERT.name();
 
+  public static final String VERSION_FIELD_CONFIG = "version.field";
+  private static final String VERSION_FIELD_DOC = "What field to use as the doc version";
+  private static final String VERSION_FIELD_DISPLAY = "When key ignore is false this field will be used as the document version";
+  private static final String VERSION_FIELD_DEFAULT = null;
+
+  public static final String APPEND_DATE_FROM_FIELD_CONFIG = "append.date.from.field";
+  private static final String APPEND_DATE_FROM_FIELD_DOC = "What field to use to extract the date and append it to the index name";
+  private static final String APPEND_DATE_FROM_FIELD_DISPLAY = "field to extract date and append it to index name";
+  private static final String APPEND_DATE_FROM_FIELD_DEFAULT = null;
+
   // Proxy group
   public static final String PROXY_HOST_CONFIG = "proxy.host";
   private static final String PROXY_HOST_DISPLAY = "Proxy Host";
@@ -602,6 +612,26 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
             ++order,
             Width.SHORT,
             WRITE_METHOD_DISPLAY
+    ).define(
+            VERSION_FIELD_CONFIG,
+            Type.STRING,
+            VERSION_FIELD_DEFAULT,
+            Importance.MEDIUM,
+            VERSION_FIELD_DOC,
+            CONNECTOR_GROUP,
+            ++order,
+            Width.SHORT,
+            VERSION_FIELD_DISPLAY
+    ).define(
+            APPEND_DATE_FROM_FIELD_CONFIG,
+            Type.STRING,
+            APPEND_DATE_FROM_FIELD_DEFAULT,
+            Importance.MEDIUM,
+            APPEND_DATE_FROM_FIELD_DOC,
+            CONNECTOR_GROUP,
+            ++order,
+            Width.SHORT,
+            APPEND_DATE_FROM_FIELD_DISPLAY
     );
   }
 
@@ -872,6 +902,14 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
 
   public WriteMethod writeMethod() {
     return WriteMethod.valueOf(getString(WRITE_METHOD_CONFIG).toUpperCase());
+  }
+
+  public String versionField() {
+    return getString(VERSION_FIELD_CONFIG);
+  }
+
+  public String appendDateFromField() {
+    return getString(APPEND_DATE_FROM_FIELD_CONFIG);
   }
 
   private static class UrlListValidator implements Validator {

@@ -24,7 +24,6 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.Callable;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -109,9 +108,7 @@ public class ElasticsearchClient {
 
     this.numRecords = new AtomicInteger(0);
     this.error = new AtomicReference<>();
-    this.docIdToRecord = reporter != null || !config.ignoreKey()
-        ? new ConcurrentHashMap<>()
-        : null;
+    this.docIdToRecord = null;
     this.config = config;
     this.reporter = reporter;
     this.clock = Time.SYSTEM;

@@ -87,7 +87,7 @@ public class ElasticsearchSinkTask extends SinkTask {
 
       logTrace("Writing {} to Elasticsearch.", record);
 
-      ensureIndexExists(convertTopicToIndexName(record.topic()));
+      ensureIndexExists(convertTopicToIndexName(record));
       checkMapping(record);
       tryWriteRecord(record);
     }
@@ -115,7 +115,7 @@ public class ElasticsearchSinkTask extends SinkTask {
   }
 
   private void checkMapping(SinkRecord record) {
-    String index = convertTopicToIndexName(record.topic());
+    String index = convertTopicToIndexName(record);
     if (!config.shouldIgnoreSchema(record.topic()) && !existingMappings.contains(index)) {
       if (!client.hasMapping(index)) {
         client.createMapping(index, record.valueSchema());
@@ -134,9 +134,10 @@ public class ElasticsearchSinkTask extends SinkTask {
    *   <li>is not . or ..</li>
    * </ul>
    * (<a href="https://www.elastic.co/guide/en/elasticsearch/reference/current/indices-create-index.html#indices-create-api-path-params">ref</a>_.)
+   * @param record
    */
-  private String convertTopicToIndexName(String topic) {
-    String index = topic.toLowerCase();
+  private String convertTopicToIndexName(SinkRecord record) {
+    String index = record.topic().toLowerCase();
     if (index.length() > 255) {
       index = index.substring(0, 255);
     }
@@ -147,11 +148,16 @@ public class ElasticsearchSinkTask extends SinkTask {
 
     if (index.equals(".") || index.equals("..")) {
       index = index.replace(".", "dot");
-      log.warn("Elasticsearch cannot have indices named {}. Index will be named {}.", topic, index);
+      log.warn("Elasticsearch cannot have indices named {}. Index will be named {}.", record.topic(), index);
     }
 
-    if (!topic.equals(index)) {
-      log.trace("Topic '{}' was translated to index '{}'.", topic, index);
+    if (!record.topic().equals(index)) {
+      log.trace("Topic '{}' was translated to index '{}'.", record.topic(), index);
+    }
+
+    if (config.appendDateFromField() != null) {
+      Long timestamp = converter.extract(record, config.appendDateFromField());
+      index += "-" + converter.getFormattedDate(timestamp);
     }
 
     return index;
@@ -184,7 +190,7 @@ public class ElasticsearchSinkTask extends SinkTask {
   private void tryWriteRecord(SinkRecord sinkRecord) {
     DocWriteRequest<?> record = null;
     try {
-      record = converter.convertRecord(sinkRecord, convertTopicToIndexName(sinkRecord.topic()));
+      record = converter.convertRecord(sinkRecord, convertTopicToIndexName(sinkRecord));
     } catch (DataException convertException) {
       reportBadRecord(sinkRecord, convertException);
 
