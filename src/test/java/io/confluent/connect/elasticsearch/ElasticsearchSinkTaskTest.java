@@ -270,6 +270,8 @@ public class ElasticsearchSinkTaskTest {
     assertNotNull(task.version());
     assertFalse(task.version().equals("0.0.0.0"));
     assertTrue(task.version().matches("^(\\d+\\.)?(\\d+\\.)?(\\*|\\d+)(-\\w+)?$"));
+    // Match semver with potentially a qualifier in the end
+    assertTrue(task.version().matches("^(\\d+\\.){2}?(\\*|\\d+)(-.*)?$"));
   }
 
   @Test
