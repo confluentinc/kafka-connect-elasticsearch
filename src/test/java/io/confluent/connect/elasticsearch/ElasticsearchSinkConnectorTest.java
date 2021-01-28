@@ -77,6 +77,7 @@ public class ElasticsearchSinkConnectorTest {
     assertNotNull(connector.version());
     assertFalse(connector.version().equals("0.0.0.0"));
     assertFalse(connector.version().equals("unknown"));
-    assertTrue(connector.version().matches("^(\\d+\\.)?(\\d+\\.)?(\\*|\\d+)(-\\w+)?$"));
+    // Match semver with potentially a qualifier in the end
+    assertTrue(connector.version().matches("^(\\d+\\.){2}?(\\*|\\d+)(-.*)?$"));
   }
 }
