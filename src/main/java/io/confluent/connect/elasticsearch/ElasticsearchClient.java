@@ -64,6 +64,7 @@ public class ElasticsearchClient {
 
   private static final Logger log = LoggerFactory.getLogger(ElasticsearchClient.class);
 
+  private static final long WAIT_TIME = TimeUnit.MILLISECONDS.toMillis(10);
   private static final String RESOURCE_ALREADY_EXISTS_EXCEPTION =
       "resource_already_exists_exception";
   private static final String VERSION_CONFLICT_EXCEPTION = "version_conflict_engine_exception";
@@ -255,14 +256,14 @@ public class ElasticsearchClient {
       // every request that is flushed and succeeds triggers a callback that removes it from the map
       while (docIdToRecord.containsKey(request.id())) {
         flush();
-        clock.sleep(TimeUnit.SECONDS.toMillis(1));
+        clock.sleep(WAIT_TIME);
       }
     }
 
     // wait for internal buffer to be less than max.buffered.records configuration
     long maxWaitTime = clock.milliseconds() + config.flushTimeoutMs();
     while (numRecords.get() >= config.maxBufferedRecords()) {
-      clock.sleep(TimeUnit.SECONDS.toMillis(1));
+      clock.sleep(WAIT_TIME);
       if (clock.milliseconds() > maxWaitTime) {
         throw new ConnectException(
             String.format(
