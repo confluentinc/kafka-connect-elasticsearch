@@ -20,8 +20,10 @@ import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfi
 
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BehaviorOnMalformedDoc;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
@@ -79,7 +81,8 @@ public class ElasticsearchClient {
   protected final AtomicInteger numRecords;
   private final AtomicReference<ConnectException> error;
   protected final BulkProcessor bulkProcessor;
-  private final ConcurrentMap<String, SinkRecord> docIdToRecord;
+  private final ConcurrentMap<DocWriteRequest<?>, SinkRecord> requestToRecord;
+  private final ConcurrentMap<Long, List<SinkRecord>> inFlightRequests;
   private final ElasticsearchSinkConnectorConfig config;
   private final ErrantRecordReporter reporter;
   private final RestHighLevelClient client;
@@ -110,9 +113,8 @@ public class ElasticsearchClient {
 
     this.numRecords = new AtomicInteger(0);
     this.error = new AtomicReference<>();
-    this.docIdToRecord = reporter != null || !config.ignoreKey()
-        ? new ConcurrentHashMap<>()
-        : null;
+    this.requestToRecord = reporter != null ? new ConcurrentHashMap<>() : null;
+    this.inFlightRequests = reporter != null ? new ConcurrentHashMap<>() : null;
     this.config = config;
     this.reporter = reporter;
     this.clock = Time.SYSTEM;
@@ -251,15 +253,6 @@ public class ElasticsearchClient {
       throw error.get();
     }
 
-    if (docIdToRecord != null) {
-      // make sure that only unique records are being sent in a batch
-      // every request that is flushed and succeeds triggers a callback that removes it from the map
-      while (docIdToRecord.containsKey(request.id())) {
-        flush();
-        clock.sleep(WAIT_TIME);
-      }
-    }
-
     // wait for internal buffer to be less than max.buffered.records configuration
     long maxWaitTime = clock.milliseconds() + config.flushTimeoutMs();
     while (numRecords.get() >= config.maxBufferedRecords()) {
@@ -276,7 +269,7 @@ public class ElasticsearchClient {
       }
     }
 
-    addToRecordMap(request.id(), record);
+    addToRequestToRecordMap(request, record);
     numRecords.incrementAndGet();
     bulkProcessor.add(request);
   }
@@ -296,14 +289,14 @@ public class ElasticsearchClient {
   }
 
   /**
-   * Maps a record to the document id.
+   * Maps a record to the write request.
    *
-   * @param id the document id
-   * @param record the record
+   * @param request the write request
+   * @param record  the record
    */
-  private void addToRecordMap(String id, SinkRecord record) {
-    if (docIdToRecord != null) {
-      docIdToRecord.put(id, record);
+  private void addToRequestToRecordMap(DocWriteRequest<?> request, SinkRecord record) {
+    if (requestToRecord != null) {
+      requestToRecord.put(request, record);
     }
   }
 
@@ -315,22 +308,31 @@ public class ElasticsearchClient {
   private BulkProcessor.Listener buildListener() {
     return new Listener() {
       @Override
-      public void beforeBulk(long executionId, BulkRequest request) { }
+      public void beforeBulk(long executionId, BulkRequest request) {
+        if (requestToRecord != null && inFlightRequests != null) {
+          List<SinkRecord> sinkRecords = new ArrayList<>(request.requests().size());
+          for (DocWriteRequest<?> req : request.requests()) {
+            sinkRecords.add(requestToRecord.get(req));
+            requestToRecord.remove(req);
+          }
+
+          inFlightRequests.put(executionId, sinkRecords);
+        }
+      }
 
       @Override
       public void afterBulk(long executionId, BulkRequest request, BulkResponse response) {
         for (BulkItemResponse bulkItemResponse : response) {
-          handleResponse(bulkItemResponse);
-          removeFromRecordMap(bulkItemResponse.getId());
+          handleResponse(bulkItemResponse, executionId);
         }
+
+        removeFromInFlightRequests(executionId);
         numRecords.addAndGet(-response.getItems().length);
       }
 
       @Override
       public void afterBulk(long executionId, BulkRequest request, Throwable failure) {
-        for (DocWriteRequest<?> req : request.requests()) {
-          removeFromRecordMap(req.id());
-        }
+        removeFromInFlightRequests(executionId);
         error.compareAndSet(null, new ConnectException("Bulk request failed.", failure));
         numRecords.addAndGet(-request.requests().size());
       }
@@ -377,14 +379,15 @@ public class ElasticsearchClient {
    * Successful responses are ignored. Failed responses are reported to the DLQ and handled
    * according to configuration (ignore or fail). Version conflicts are ignored.
    *
-   * @param response the response to process
+   * @param response    the response to process
+   * @param executionId the execution id of the request
    */
-  private void handleResponse(BulkItemResponse response) {
+  private void handleResponse(BulkItemResponse response, long executionId) {
     if (response.isFailed()) {
       for (String error : MALFORMED_DOC_ERRORS) {
         if (response.getFailureMessage().contains(error)) {
           handleMalformedDocResponse(response);
-          reportBadRecord(response);
+          reportBadRecord(response, executionId);
           return;
         }
       }
@@ -398,7 +401,7 @@ public class ElasticsearchClient {
             response.getIndex()
         );
 
-        reportBadRecord(response);
+        reportBadRecord(response, executionId);
         return;
       }
 
@@ -468,24 +471,28 @@ public class ElasticsearchClient {
   }
 
   /**
-   * Removes the mapping for document id to record being written.
+   * Removes the mapping for bulk request id to records being written.
    *
-   * @param id the document id
+   * @param executionDd the execution id of the bulk request
    */
-  private void removeFromRecordMap(String id) {
-    if (docIdToRecord != null) {
-      docIdToRecord.remove(id);
+  private void removeFromInFlightRequests(long executionDd) {
+    if (inFlightRequests != null) {
+      inFlightRequests.remove(executionDd);
     }
   }
 
   /**
    * Reports a bad record to the DLQ.
    *
-   * @param response the failed response from ES
+   * @param response    the failed response from ES
+   * @param executionId the execution id of the request associated with the response
    */
-  private synchronized void reportBadRecord(BulkItemResponse response) {
+  private synchronized void reportBadRecord(BulkItemResponse response, long executionId) {
     if (reporter != null) {
-      SinkRecord original = docIdToRecord.get(response.getId());
+      List<SinkRecord> sinkRecords = inFlightRequests.getOrDefault(executionId, new ArrayList<>());
+      SinkRecord original = sinkRecords.size() > response.getItemId()
+          ? sinkRecords.get(response.getItemId())
+          : null;
       if (original != null) {
         reporter.report(
             original,
