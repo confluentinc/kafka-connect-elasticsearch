@@ -93,6 +93,7 @@ public class ElasticsearchClientTest {
     props = ElasticsearchSinkConnectorConfigTest.addNecessaryProps(new HashMap<>());
     props.put(CONNECTION_URL_CONFIG, container.getConnectionUrl());
     props.put(IGNORE_KEY_CONFIG, "true");
+    props.put(LINGER_MS_CONFIG, "1000");
     config = new ElasticsearchSinkConnectorConfig(props);
     converter = new DataConverter(config);
     helperClient = new ElasticsearchHelperClient(container.getConnectionUrl(), config);
@@ -223,7 +224,6 @@ public class ElasticsearchClientTest {
 
   @Test
   public void testBuffersCorrectly() throws Exception {
-    props.put(LINGER_MS_CONFIG, "1000");
     props.put(MAX_IN_FLIGHT_REQUESTS_CONFIG, "1");
     props.put(MAX_BUFFERED_RECORDS_CONFIG, "1");
     config = new ElasticsearchSinkConnectorConfig(props);
@@ -301,7 +301,7 @@ public class ElasticsearchClientTest {
   }
 
   @Test
-  public void testUpsertRecord() throws Exception {
+  public void testUpsertRecords() throws Exception {
     props.put(WRITE_METHOD_CONFIG, WriteMethod.UPSERT.name());
     props.put(IGNORE_KEY_CONFIG, "false");
     config = new ElasticsearchSinkConnectorConfig(props);
@@ -325,16 +325,20 @@ public class ElasticsearchClientTest {
 
     Struct value = new Struct(schema).put("offset", 2);
     SinkRecord upsertRecord = new SinkRecord(INDEX, 0, Schema.STRING_SCHEMA, "key0", schema, value, 2);
+    Struct value2 = new Struct(schema).put("offset", 3);
+    SinkRecord upsertRecord2 = new SinkRecord(INDEX, 0, Schema.STRING_SCHEMA, "key0", schema, value2, 3);
 
-    // upsert 1, write another
+
+    // upsert 2, write another
     writeRecord(upsertRecord, client);
-    writeRecord(sinkRecord("key2", 3), client);
+    writeRecord(upsertRecord2, client);
+    writeRecord(sinkRecord("key2", 4), client);
     client.flush();
 
     waitUntilRecordsInES(3);
     for (SearchHit hit : helperClient.search(INDEX)) {
       if (hit.getId().equals("key0")) {
-        assertEquals(2, hit.getSourceAsMap().get("offset"));
+        assertEquals(3, hit.getSourceAsMap().get("offset"));
         assertEquals(0, hit.getSourceAsMap().get("another"));
       }
     }
