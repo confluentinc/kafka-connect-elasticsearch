@@ -126,7 +126,8 @@ public class ConfigCallbackHandler implements HttpClientConfigCallback, RequestC
     return builder
         .setContentCompressionEnabled(config.compression())
         .setConnectTimeout(config.connectionTimeoutMs())
-        .setConnectionRequestTimeout(config.readTimeoutMs());
+        .setConnectionRequestTimeout(config.readTimeoutMs())
+        .setSocketTimeout(config.readTimeoutMs());
   }
 
   /**
