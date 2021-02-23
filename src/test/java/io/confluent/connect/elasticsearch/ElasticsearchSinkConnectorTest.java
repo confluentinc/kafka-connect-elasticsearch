@@ -62,16 +62,6 @@ public class ElasticsearchSinkConnectorTest {
     connector.stop();
   }
 
-
-  @Test
-  public void shouldValidateConfigs() {
-    Config result = connector.validate(settings);
-    assertNotNull(result);
-    result.configValues()
-        .stream()
-        .forEach(config -> assertTrue(config.errorMessages().isEmpty()));
-  }
-
   @Test
   public void testVersion() {
     assertNotNull(connector.version());
