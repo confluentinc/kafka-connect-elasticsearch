@@ -61,23 +61,23 @@ public class Validator {
   private ElasticsearchSinkConnectorConfig config;
   private Map<String, ConfigValue> values;
   private List<ConfigValue> validations;
-  private RestHighLevelClient client;
+  private ClientFactory clientFactory;
 
   public Validator(Map<String, String> props) {
+    this(props, null);
+  }
+
+  // Exposed for testing
+  protected Validator(Map<String, String> props, ClientFactory clientFactory) {
     try {
       this.config = new ElasticsearchSinkConnectorConfig(props);
     } catch (ConfigException e) {
       // some configs are invalid
     }
 
+    this.clientFactory = clientFactory == null ? this::createClient : clientFactory;
     validations = ElasticsearchSinkConnectorConfig.CONFIG.validate(props);
     values = validations.stream().collect(Collectors.toMap(ConfigValue::name, Function.identity()));
-  }
-
-  // Exposed for testing
-  protected Validator(Map<String, String> props, RestHighLevelClient client) {
-    this(props);
-    this.client = client;
   }
 
   public Config validate() {
@@ -86,29 +86,21 @@ public class Validator {
       return new Config(validations);
     }
 
-    if (client == null) {
-      client = createClient();
-    }
+    try (RestHighLevelClient client = clientFactory.client()) {
+      validateCredentials();
+      validateIgnoreConfigs();
+      validateKerberos();
+      validateLingerMs();
+      validateMaxBufferedRecords();
+      validateProxy();
+      validateSsl();
 
-    validateCredentials();
-    validateIgnoreConfigs();
-    validateKerberos();
-    validateLingerMs();
-    validateMaxBufferedRecords();
-    validateProxy();
-    validateSsl();
-
-    if (!hasErrors()) {
-      // no point if previous configs are invalid
-      validateConnection();
-    }
-
-    try {
-      client.close();
+      if (!hasErrors()) {
+        // no point if previous configs are invalid
+        validateConnection(client);
+      }
     } catch (IOException e) {
       log.warn("Closing the client failed ");
-    } finally {
-      client = null;
     }
 
     return new Config(validations);
@@ -272,24 +264,29 @@ public class Validator {
     }
   }
 
-  private void validateConnection() {
+  private void validateConnection(RestHighLevelClient client) {
+    boolean successful;
+    String exceptionMessage = "";
     try {
-      if (!client.ping(RequestOptions.DEFAULT)) {
-        throw new IOException("Cannot connect to Elasticsearch.");
-      }
+      successful = client.ping(RequestOptions.DEFAULT);
     } catch (IOException e) {
+      successful = false;
+      exceptionMessage = String.format("Error message: %s", e.getMessage());
+    }
+
+    if (!successful) {
       String errorMessage = String.format(
-          "Could not connect to Elasticsearch due to %s",
-          e.getMessage()
+          "Could not connect to Elasticsearch. %s",
+          exceptionMessage
       );
       addErrorMessage(CONNECTION_URL_CONFIG, errorMessage);
 
       if (config.isAuthenticatedConnection()) {
         errorMessage = String.format(
-            "Could not authenticate the user. Check the '%s' and '%s'. Error message: %s.",
+            "Could not authenticate the user. Check the '%s' and '%s'. %s",
             CONNECTION_USERNAME_CONFIG,
             CONNECTION_PASSWORD_CONFIG,
-            e.getMessage()
+            exceptionMessage
         );
         addErrorMessage(CONNECTION_USERNAME_CONFIG, errorMessage);
         addErrorMessage(CONNECTION_PASSWORD_CONFIG, errorMessage);
@@ -297,8 +294,8 @@ public class Validator {
 
       if (config.isSslEnabled()) {
         errorMessage = String.format(
-            "Could not connect to Elasticsearch. Check your SSL settings. Error message: %s",
-            e.getMessage()
+            "Could not connect to Elasticsearch. Check your SSL settings.%s",
+            exceptionMessage
         );
 
         addErrorMessage(SECURITY_PROTOCOL_CONFIG, errorMessage);
@@ -306,8 +303,8 @@ public class Validator {
 
       if (config.isKerberosEnabled()) {
         errorMessage = String.format(
-            "Could not connect to Elasticsearch. Check your Kerberos settings. Error message: %s",
-            e.getMessage()
+            "Could not connect to Elasticsearch. Check your Kerberos settings. %s",
+            exceptionMessage
         );
 
         addErrorMessage(KERBEROS_PRINCIPAL_CONFIG, errorMessage);
@@ -316,8 +313,8 @@ public class Validator {
 
       if (config.isBasicProxyConfigured()) {
         errorMessage = String.format(
-            "Could not connect to Elasticsearch. Check your proxy settings. Error message: %s",
-            e.getMessage()
+            "Could not connect to Elasticsearch. Check your proxy settings. %s",
+            exceptionMessage
         );
         addErrorMessage(PROXY_HOST_CONFIG, errorMessage);
         addErrorMessage(PROXY_PORT_CONFIG, errorMessage);
@@ -358,5 +355,9 @@ public class Validator {
     }
 
     return false;
+  }
+
+  interface ClientFactory {
+    RestHighLevelClient client();
   }
 }
