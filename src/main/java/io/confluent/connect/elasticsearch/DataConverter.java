@@ -132,7 +132,7 @@ public class DataConverter {
         default:
           throw new DataException(
               String.format(
-                  "{} with key of %s and null value encountered (to ignore future records like"
+                  "%s with key of %s and null value encountered (to ignore future records like"
                       + " this change the configuration property '%s' from '%s' to '%s')",
                   recordString(record),
                   record.key(),
