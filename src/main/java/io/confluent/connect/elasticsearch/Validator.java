@@ -100,7 +100,7 @@ public class Validator {
         validateConnection(client);
       }
     } catch (IOException e) {
-      log.warn("Closing the client failed ");
+      log.warn("Closing the client failed.", e);
     }
 
     return new Config(validations);
