@@ -161,6 +161,14 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   public static final String IGNORE_KEY_TOPICS_CONFIG = "topic.key.ignore";
   public static final String IGNORE_SCHEMA_TOPICS_CONFIG = "topic.schema.ignore";
 
+  private static final String REPLACE_IF_DOC_EXISTS_CONFIG = "replace.if.exists";
+  private static final boolean REPLACE_IF_DOC_EXISTS_DEFAULT = true;
+  private static final String REPLACE_IF_DOC_EXISTS_DISPLAY = "Replace existing docs";
+  private static final String REPLACE_IF_DOC_EXISTS_DOC = "How to handle records that already exist"
+          + " with the same ID in ElasticSearch. When set to true, documents that already exist"
+          + " will be replaced and the version incremented. When set to false, existing documents"
+          + " will not be replaced.";
+
   public static final String IGNORE_KEY_CONFIG = "key.ignore";
   private static final String IGNORE_KEY_DOC =
       "Whether to ignore the record key for the purpose of forming the Elasticsearch document ID."
@@ -545,6 +553,16 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
             Width.LONG,
             IGNORE_SCHEMA_TOPICS_DISPLAY
         ).define(
+            REPLACE_IF_DOC_EXISTS_CONFIG,
+            Type.BOOLEAN,
+            REPLACE_IF_DOC_EXISTS_DEFAULT,
+            Importance.LOW,
+            REPLACE_IF_DOC_EXISTS_DOC,
+            DATA_CONVERSION_GROUP,
+            ++order,
+            Width.SHORT,
+            REPLACE_IF_DOC_EXISTS_DISPLAY
+        ).define(
             DROP_INVALID_MESSAGE_CONFIG,
             Type.BOOLEAN,
             DROP_INVALID_MESSAGE_DEFAULT,
@@ -794,6 +812,10 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
 
   public Set<String> ignoreSchemaTopics() {
     return new HashSet<>(getList(IGNORE_SCHEMA_TOPICS_CONFIG));
+  }
+
+  public Boolean replaceIfExists() {
+    return getBoolean(REPLACE_IF_DOC_EXISTS_CONFIG);
   }
 
   public String kerberosUserPrincipal() {

@@ -163,7 +163,10 @@ public class DataConverter {
             .retryOnConflict(Math.min(config.maxInFlightRequests(), 5));
       case INSERT:
         return maybeAddExternalVersioning(
-            new IndexRequest(index).id(id).source(payload, XContentType.JSON),
+            new IndexRequest(index)
+                    .id(id)
+                    .source(payload, XContentType.JSON)
+                    .create(!config.replaceIfExists()),
             record
         );
       default:
