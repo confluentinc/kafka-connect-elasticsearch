@@ -161,7 +161,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   public static final String IGNORE_KEY_TOPICS_CONFIG = "topic.key.ignore";
   public static final String IGNORE_SCHEMA_TOPICS_CONFIG = "topic.schema.ignore";
 
-  private static final String REPLACE_IF_DOC_EXISTS_CONFIG = "replace.if.exists";
+  public static final String REPLACE_IF_DOC_EXISTS_CONFIG = "replace.if.exists";
   private static final boolean REPLACE_IF_DOC_EXISTS_DEFAULT = true;
   private static final String REPLACE_IF_DOC_EXISTS_DISPLAY = "Replace existing docs";
   private static final String REPLACE_IF_DOC_EXISTS_DOC = "How to handle records that already exist"
