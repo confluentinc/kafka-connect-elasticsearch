@@ -17,17 +17,25 @@
 package io.confluent.connect.elasticsearch;
 
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.SecurityProtocol;
+import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import org.apache.http.HttpHost;
 import org.apache.kafka.common.config.Config;
 import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.config.ConfigValue;
 import org.apache.kafka.common.config.SslConfigs;
+import org.elasticsearch.client.RequestOptions;
+import org.elasticsearch.client.RestClient;
+import org.elasticsearch.client.RestHighLevelClient;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BATCH_SIZE_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_PASSWORD_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_USERNAME_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.FLUSH_TIMEOUT_MS_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_KEY_CONFIG;
@@ -40,6 +48,7 @@ import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfi
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.MAX_IN_FLIGHT_REQUESTS_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.PROXY_HOST_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.PROXY_PASSWORD_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.PROXY_PORT_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.PROXY_USERNAME_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.SECURITY_PROTOCOL_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.SSL_CONFIG_PREFIX;
@@ -47,17 +56,26 @@ import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfi
 
 public class Validator {
 
+  private static final Logger log = LoggerFactory.getLogger(Validator.class);
+
   private ElasticsearchSinkConnectorConfig config;
   private Map<String, ConfigValue> values;
   private List<ConfigValue> validations;
+  private ClientFactory clientFactory;
 
   public Validator(Map<String, String> props) {
+    this(props, null);
+  }
+
+  // Exposed for testing
+  protected Validator(Map<String, String> props, ClientFactory clientFactory) {
     try {
       this.config = new ElasticsearchSinkConnectorConfig(props);
     } catch (ConfigException e) {
       // some configs are invalid
     }
 
+    this.clientFactory = clientFactory == null ? this::createClient : clientFactory;
     validations = ElasticsearchSinkConnectorConfig.CONFIG.validate(props);
     values = validations.stream().collect(Collectors.toMap(ConfigValue::name, Function.identity()));
   }
@@ -68,17 +86,25 @@ public class Validator {
       return new Config(validations);
     }
 
-    validateCredentials();
-    validateIgnoreConfigs();
-    validateKerberos();
-    validateLingerMs();
-    validateMaxBufferedRecords();
-    validateProxy();
-    validateSsl();
+    try (RestHighLevelClient client = clientFactory.client()) {
+      validateCredentials();
+      validateIgnoreConfigs();
+      validateKerberos();
+      validateLingerMs();
+      validateMaxBufferedRecords();
+      validateProxy();
+      validateSsl();
+
+      if (!hasErrors()) {
+        // no point if previous configs are invalid
+        validateConnection(client);
+      }
+    } catch (IOException e) {
+      log.warn("Closing the client failed.", e);
+    }
 
     return new Config(validations);
   }
-
 
   private void validateCredentials() {
     boolean onlyOneSet = config.username() != null ^ config.password() != null;
@@ -238,7 +264,100 @@ public class Validator {
     }
   }
 
+  private void validateConnection(RestHighLevelClient client) {
+    boolean successful;
+    String exceptionMessage = "";
+    try {
+      successful = client.ping(RequestOptions.DEFAULT);
+    } catch (IOException e) {
+      successful = false;
+      exceptionMessage = String.format("Error message: %s", e.getMessage());
+    }
+
+    if (!successful) {
+      String errorMessage = String.format(
+          "Could not connect to Elasticsearch. %s",
+          exceptionMessage
+      );
+      addErrorMessage(CONNECTION_URL_CONFIG, errorMessage);
+
+      if (config.isAuthenticatedConnection()) {
+        errorMessage = String.format(
+            "Could not authenticate the user. Check the '%s' and '%s'. %s",
+            CONNECTION_USERNAME_CONFIG,
+            CONNECTION_PASSWORD_CONFIG,
+            exceptionMessage
+        );
+        addErrorMessage(CONNECTION_USERNAME_CONFIG, errorMessage);
+        addErrorMessage(CONNECTION_PASSWORD_CONFIG, errorMessage);
+      }
+
+      if (config.isSslEnabled()) {
+        errorMessage = String.format(
+            "Could not connect to Elasticsearch. Check your SSL settings.%s",
+            exceptionMessage
+        );
+
+        addErrorMessage(SECURITY_PROTOCOL_CONFIG, errorMessage);
+      }
+
+      if (config.isKerberosEnabled()) {
+        errorMessage = String.format(
+            "Could not connect to Elasticsearch. Check your Kerberos settings. %s",
+            exceptionMessage
+        );
+
+        addErrorMessage(KERBEROS_PRINCIPAL_CONFIG, errorMessage);
+        addErrorMessage(KERBEROS_KEYTAB_PATH_CONFIG, errorMessage);
+      }
+
+      if (config.isBasicProxyConfigured()) {
+        errorMessage = String.format(
+            "Could not connect to Elasticsearch. Check your proxy settings. %s",
+            exceptionMessage
+        );
+        addErrorMessage(PROXY_HOST_CONFIG, errorMessage);
+        addErrorMessage(PROXY_PORT_CONFIG, errorMessage);
+
+        if (config.isProxyWithAuthenticationConfigured()) {
+          addErrorMessage(PROXY_USERNAME_CONFIG, errorMessage);
+          addErrorMessage(PROXY_PASSWORD_CONFIG, errorMessage);
+        }
+      }
+    }
+  }
+
   private void addErrorMessage(String property, String error) {
     values.get(property).addErrorMessage(error);
+  }
+
+  private RestHighLevelClient createClient() {
+    ConfigCallbackHandler configCallbackHandler = new ConfigCallbackHandler(config);
+    return new RestHighLevelClient(
+        RestClient
+            .builder(
+                config.connectionUrls()
+                    .stream()
+                    .map(HttpHost::create)
+                    .collect(Collectors.toList())
+                    .toArray(new HttpHost[config.connectionUrls().size()])
+            )
+            .setHttpClientConfigCallback(configCallbackHandler)
+            .setRequestConfigCallback(configCallbackHandler)
+    );
+  }
+
+  private boolean hasErrors() {
+    for (ConfigValue config : validations) {
+      if (!config.errorMessages().isEmpty()) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  interface ClientFactory {
+    RestHighLevelClient client();
   }
 }
