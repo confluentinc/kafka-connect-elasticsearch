@@ -19,6 +19,7 @@ import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfi
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BEHAVIOR_ON_NULL_VALUES_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_KEY_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.LINGER_MS_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.TYPE_NAME_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.WRITE_METHOD_CONFIG;
 import static org.apache.kafka.connect.runtime.ConnectorConfig.VALUE_CONVERTER_CLASS_CONFIG;
 import static org.junit.Assert.assertEquals;
@@ -58,6 +59,7 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
     runSimpleTest(props);
 
     // restart
+    props.put(TYPE_NAME_CONFIG, "_doc");
     props.put(BATCH_SIZE_CONFIG, "10");
     props.put(LINGER_MS_CONFIG, "1000");
     connect.configureConnector(CONNECTOR_NAME, props);
