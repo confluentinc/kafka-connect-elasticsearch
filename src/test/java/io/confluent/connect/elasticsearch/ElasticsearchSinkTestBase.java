@@ -40,7 +40,7 @@ import static io.confluent.connect.elasticsearch.DataConverter.BehaviorOnNullVal
 
 public class ElasticsearchSinkTestBase extends ESIntegTestCase {
 
-  protected static final String TYPE = "_kafka-connect";
+  protected static final String TYPE = "kafka-connect";
 
   protected static final String TOPIC = "topic";
   protected static final int PARTITION = 12;
