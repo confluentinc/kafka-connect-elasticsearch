@@ -130,6 +130,7 @@ public class ElasticsearchClient {
             .setHttpClientConfigCallback(configCallbackHandler)
             .setRequestConfigCallback(configCallbackHandler)
     );
+    // TODO: Do I need to update bulkProcessor?
     this.bulkProcessor = BulkProcessor
         .builder((req, lis) -> client.bulkAsync(req, RequestOptions.DEFAULT, lis), buildListener())
         .setBulkActions(config.batchSize())

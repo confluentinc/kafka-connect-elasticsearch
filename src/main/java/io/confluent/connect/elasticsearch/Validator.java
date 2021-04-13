@@ -189,7 +189,7 @@ public class Validator {
       addErrorMessage(FLUSH_TIMEOUT_MS_CONFIG, errorMessage);
     }
   }
-
+  // TODO: should I update this method?
   private void validateMaxBufferedRecords() {
     if (config.maxBufferedRecords() < config.batchSize() * config.maxInFlightRequests()) {
       String errorMessage = String.format(

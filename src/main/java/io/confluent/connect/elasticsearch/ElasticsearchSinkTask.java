@@ -47,7 +47,7 @@ public class ElasticsearchSinkTask extends SinkTask {
   public void start(Map<String, String> props) {
     start(props, null);
   }
-
+  //TODO: update start elasticsearch writer builder to include maxbatcchsize
   // visible for testing
   protected void start(Map<String, String> props, ElasticsearchClient client) {
     log.info("Starting ElasticsearchSinkTask.");

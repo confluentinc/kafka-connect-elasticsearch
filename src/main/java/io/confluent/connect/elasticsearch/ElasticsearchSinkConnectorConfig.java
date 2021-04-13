@@ -42,6 +42,13 @@ import static org.apache.kafka.common.config.SslConfigs.addClientSslSupport;
 
 public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
 
+  //TODO: Add configs for max batch sizes
+//  public static final String BATCH_SIZE_CONFIG = "batch.size";
+//  private static final String BATCH_SIZE_DOC =
+//          "The number of records to process as a batch when writing to Elasticsearch.";
+//  private static final String BATCH_SIZE_DISPLAY = "Batch Size";
+//  private static final int BATCH_SIZE_DEFAULT = 2000;
+
   // Connector group
   public static final String CONNECTION_URL_CONFIG = "connection.url";
   private static final String CONNECTION_URL_DOC =
@@ -489,6 +496,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
             Width.SHORT,
             READ_TIMEOUT_MS_DISPLAY
     );
+    // TODO: define max batch size config; maxbatchsizevalidator()
   }
 
   private static void addConversionConfigs(ConfigDef configDef) {
@@ -750,6 +758,8 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
     return getInt(BATCH_SIZE_CONFIG);
   }
 
+  // TODO: add getter for maxBatchSizeBytes??
+
   public BehaviorOnMalformedDoc behaviorOnMalformedDoc() {
     return BehaviorOnMalformedDoc.valueOf(
         getString(BEHAVIOR_ON_MALFORMED_DOCS_CONFIG).toUpperCase()
@@ -894,6 +904,8 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
         }
       }
     }
+
+    // TODO: create a validator class for MaxBatchSizeValidator
 
     @Override
     public String toString() {
