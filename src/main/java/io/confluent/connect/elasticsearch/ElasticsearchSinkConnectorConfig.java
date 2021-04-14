@@ -42,12 +42,13 @@ import static org.apache.kafka.common.config.SslConfigs.addClientSslSupport;
 
 public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
 
-  //TODO: Add configs for max batch sizes
-//  public static final String BATCH_SIZE_CONFIG = "batch.size";
-//  private static final String BATCH_SIZE_DOC =
-//          "The number of records to process as a batch when writing to Elasticsearch.";
-//  private static final String BATCH_SIZE_DISPLAY = "Batch Size";
-//  private static final int BATCH_SIZE_DEFAULT = 2000;
+  //TODO: what should max size be?
+  public static final String MAX_BATCH_SIZE_BYTES_CONFIG = "max.batch.size.bytes";
+  private static final String MAX_BATCH_SIZE_BYTES_DOC =
+          "The maximum size(in bytes) of the bulk request to be processed by the Connector when"
+                  + " writing records to Elasticsearch." ;
+  private static final long MAX_BATCH_SIZE_BYTES_DEFAULT = 15 * 1024 * 1024; // TODO: update type, 10mb? int.max_value-1 (2 gb)
+  private static final String BATCH_SIZE_BYTES_DISPLAY = "Connection URLs";
 
   // Connector group
   public static final String CONNECTION_URL_CONFIG = "connection.url";
@@ -495,8 +496,19 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
             ++order,
             Width.SHORT,
             READ_TIMEOUT_MS_DISPLAY
+        ).define(
+            MAX_BATCH_SIZE_BYTES_CONFIG,
+            Type.LONG,
+            MAX_BATCH_SIZE_BYTES_DEFAULT,
+            new MaxBatchSizeValidator(),
+            Importance.MEDIUM,
+            MAX_BATCH_SIZE_BYTES_DOC,
+            CONNECTOR_GROUP,
+            ++order,
+            Width.SHORT,
+            BATCH_SIZE_BYTES_DISPLAY
     );
-    // TODO: define max batch size config; maxbatchsizevalidator()
+    // TODO: (done) define max batch size config; maxbatchsizevalidator()
   }
 
   private static void addConversionConfigs(ConfigDef configDef) {
@@ -905,11 +917,32 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
       }
     }
 
-    // TODO: create a validator class for MaxBatchSizeValidator
-
     @Override
     public String toString() {
       return "List of valid URIs.";
+    }
+  }
+
+  // TODO: (done) create a validator class for MaxBatchSizeValidator
+  private static class MaxBatchSizeValidator implements Validator {
+    @Override
+    @SuppressWarnings("unchecked")
+    public void ensureValid(String name, Object value) {
+      long minBytes = 1 * 1024 * 1024;
+      long maxBytes = 25 * 1024 * 1024;
+      long bytes = (long) value;
+
+      if (!(minBytes <= bytes && maxBytes >= bytes)) {
+        throw new ConfigException(
+                name, value, String.format("The value must be in between `%s` to `%s` bytes.",
+                minBytes,
+                maxBytes));
+      }
+    }
+
+    @Override
+    public String toString() {
+      return "Batch size in bytes";
     }
   }
 
