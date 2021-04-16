@@ -35,13 +35,13 @@ import org.apache.kafka.common.config.ConfigDef.Width;
 import java.util.Map;
 import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.config.types.Password;
+import org.elasticsearch.common.unit.ByteSizeValue;
 
 import static org.apache.kafka.common.config.ConfigDef.Range.between;
 import static org.apache.kafka.common.config.SslConfigs.SSL_ENDPOINT_IDENTIFICATION_ALGORITHM_CONFIG;
 import static org.apache.kafka.common.config.SslConfigs.addClientSslSupport;
 
 public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
-
   // Connector group
   public static final String CONNECTION_URL_CONFIG = "connection.url";
   private static final String CONNECTION_URL_DOC =
@@ -72,6 +72,15 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
       "The number of records to process as a batch when writing to Elasticsearch.";
   private static final String BATCH_SIZE_DISPLAY = "Batch Size";
   private static final int BATCH_SIZE_DEFAULT = 2000;
+
+  public static final String BULK_SIZE_BYTES_CONFIG = "bulk.size.bytes";
+  private static final String BULK_SIZE_BYTES_DOC =
+      "The maximum size (in bytes) to be process as a batch when"
+      + " writing records to Elasticsearch. Setting to '-1' will disable "
+      + "this configuration. If the condition set by '" + BATCH_SIZE_CONFIG
+      + "' is met first, it will be used instead.";
+  private static final String BULK_SIZE_BYTES_DISPLAY = "Bulk Size (bytes)";
+  private static final int BULK_SIZE_BYTES_DEFAULT = 5 * 1024 * 1024;
 
   public static final String MAX_IN_FLIGHT_REQUESTS_CONFIG = "max.in.flight.requests";
   private static final String MAX_IN_FLIGHT_REQUESTS_DOC =
@@ -379,6 +388,17 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
             ++order,
             Width.SHORT,
             BATCH_SIZE_DISPLAY
+        ).define(
+            BULK_SIZE_BYTES_CONFIG,
+            Type.LONG,
+            BULK_SIZE_BYTES_DEFAULT,
+            between(-1, Integer.MAX_VALUE),
+            Importance.LOW,
+            BULK_SIZE_BYTES_DOC,
+            CONNECTOR_GROUP,
+            ++order,
+            Width.SHORT,
+            BULK_SIZE_BYTES_DISPLAY
         ).define(
             MAX_IN_FLIGHT_REQUESTS_CONFIG,
             Type.INT,
@@ -758,6 +778,10 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
 
   public BehaviorOnNullValues behaviorOnNullValues() {
     return BehaviorOnNullValues.valueOf(getString(BEHAVIOR_ON_NULL_VALUES_CONFIG).toUpperCase());
+  }
+
+  public ByteSizeValue bulkSize() {
+    return new ByteSizeValue(getLong(BULK_SIZE_BYTES_CONFIG));
   }
 
   public boolean compression() {

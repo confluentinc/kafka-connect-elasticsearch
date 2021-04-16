@@ -133,6 +133,7 @@ public class ElasticsearchClient {
     this.bulkProcessor = BulkProcessor
         .builder((req, lis) -> client.bulkAsync(req, RequestOptions.DEFAULT, lis), buildListener())
         .setBulkActions(config.batchSize())
+        .setBulkSize(config.bulkSize())
         .setConcurrentRequests(config.maxInFlightRequests() - 1) // 0 = no concurrent requests
         .setFlushInterval(TimeValue.timeValueMillis(config.lingerMs()))
         .setBackoffPolicy(
