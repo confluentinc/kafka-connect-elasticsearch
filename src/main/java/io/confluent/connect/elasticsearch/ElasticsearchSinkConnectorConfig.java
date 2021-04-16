@@ -53,7 +53,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
           + "would be used instead.";
   private static final long MAX_BATCH_SIZE_BYTES_DEFAULT = 10 * MEGABYTES_TO_BYTES;
   private static final long MIN_BATCH_SIZE_BYTES_DEFAULT = -1;
-  private static final String BATCH_SIZE_BYTES_DISPLAY = "Connection URLs";
+  private static final String BATCH_SIZE_BYTES_DISPLAY = "Max Batch Size in Bytes";
 
   // Connector group
   public static final String CONNECTION_URL_CONFIG = "connection.url";
