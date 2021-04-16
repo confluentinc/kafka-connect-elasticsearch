@@ -44,17 +44,6 @@ import static org.apache.kafka.common.config.SslConfigs.addClientSslSupport;
 public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   private static final long MEGABYTES_TO_BYTES = 1024 * 1024;
 
-  public static final String MAX_BATCH_SIZE_BYTES_CONFIG = "max.batch.size.bytes";
-  private static final String MAX_BATCH_SIZE_BYTES_DOC =
-          "The maximum size (in bytes) of the bulk request to be processed by the Connector when"
-          + " writing records to Elasticsearch. The default is 10mb, the maximum setting possible."
-          + "If set to -1 or the condition for batch size by number of records is met first, this "
-          + "configuration will be ignored and the setting for batch size by number of records "
-          + "would be used instead.";
-  private static final long MAX_BATCH_SIZE_BYTES_DEFAULT = 10 * MEGABYTES_TO_BYTES;
-  private static final long MIN_BATCH_SIZE_BYTES_DEFAULT = -1;
-  private static final String BATCH_SIZE_BYTES_DISPLAY = "Max Batch Size in Bytes";
-
   // Connector group
   public static final String CONNECTION_URL_CONFIG = "connection.url";
   private static final String CONNECTION_URL_DOC =
@@ -85,6 +74,17 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
       "The number of records to process as a batch when writing to Elasticsearch.";
   private static final String BATCH_SIZE_DISPLAY = "Batch Size";
   private static final int BATCH_SIZE_DEFAULT = 2000;
+
+  public static final String MAX_BATCH_SIZE_BYTES_CONFIG = "max.batch.size.bytes";
+  private static final String MAX_BATCH_SIZE_BYTES_DOC =
+      "The maximum size (in bytes) of the bulk request to be processed by the Connector when"
+          + " writing records to Elasticsearch. The default is 10mb, the maximum setting possible."
+          + "If set to -1 or the condition for batch size by number of records is met first, this "
+          + "configuration will be ignored and the setting for batch size by number of records "
+          + "would be used instead.";
+  private static final long MAX_BATCH_SIZE_BYTES_DEFAULT = 10 * MEGABYTES_TO_BYTES;
+  private static final long MIN_BATCH_SIZE_BYTES_DEFAULT = -1;
+  private static final String BATCH_SIZE_BYTES_DISPLAY = "Max Batch Size in Bytes";
 
   public static final String MAX_IN_FLIGHT_REQUESTS_CONFIG = "max.in.flight.requests";
   private static final String MAX_IN_FLIGHT_REQUESTS_DOC =
