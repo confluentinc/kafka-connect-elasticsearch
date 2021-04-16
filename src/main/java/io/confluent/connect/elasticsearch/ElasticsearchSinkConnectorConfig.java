@@ -785,7 +785,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   }
 
   public ByteSizeValue bulkSize() {
-    return new ByteSizeValue(getInt(MAX_BULK_SIZE_BYTES_CONFIG));
+    return new ByteSizeValue(getLong(MAX_BULK_SIZE_BYTES_CONFIG));
   }
 
   public boolean compression() {
