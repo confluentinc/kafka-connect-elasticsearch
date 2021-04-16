@@ -505,7 +505,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
             MAX_BULK_SIZE_BYTES_CONFIG,
             Type.LONG,
             MAX_BULK_SIZE_BYTES_DEFAULT,
-            between(MIN_BULK_SIZE_BYTES_DEFAULT, MAX_BULK_SIZE_BYTES_DEFAULT),
+            between(-1, 10 * MEGABYTES_TO_BYTES),
             Importance.MEDIUM,
             MAX_BULK_SIZE_BYTES_DOC,
             CONNECTOR_GROUP,
