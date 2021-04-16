@@ -393,6 +393,17 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
             Width.SHORT,
             BATCH_SIZE_DISPLAY
         ).define(
+            MAX_BULK_SIZE_BYTES_CONFIG,
+            Type.LONG,
+            MAX_BULK_SIZE_BYTES_DEFAULT,
+            between(-1, 10 * MEGABYTES_TO_BYTES),
+            Importance.MEDIUM,
+            MAX_BULK_SIZE_BYTES_DOC,
+            CONNECTOR_GROUP,
+            ++order,
+            Width.SHORT,
+            BULK_SIZE_BYTES_DISPLAY
+        ).define(
             MAX_IN_FLIGHT_REQUESTS_CONFIG,
             Type.INT,
             MAX_IN_FLIGHT_REQUESTS_DEFAULT,
@@ -501,17 +512,6 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
             ++order,
             Width.SHORT,
             READ_TIMEOUT_MS_DISPLAY
-        ).define(
-            MAX_BULK_SIZE_BYTES_CONFIG,
-            Type.LONG,
-            MAX_BULK_SIZE_BYTES_DEFAULT,
-            between(-1, 10 * MEGABYTES_TO_BYTES),
-            Importance.MEDIUM,
-            MAX_BULK_SIZE_BYTES_DOC,
-            CONNECTOR_GROUP,
-            ++order,
-            Width.SHORT,
-            BULK_SIZE_BYTES_DISPLAY
     );
   }
 
@@ -774,11 +774,6 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
     return getInt(BATCH_SIZE_CONFIG);
   }
 
-  public ByteSizeValue bulkSize() {
-    long maxBytes = getLong(MAX_BULK_SIZE_BYTES_CONFIG);
-    return new ByteSizeValue(maxBytes);
-  }
-
   public BehaviorOnMalformedDoc behaviorOnMalformedDoc() {
     return BehaviorOnMalformedDoc.valueOf(
         getString(BEHAVIOR_ON_MALFORMED_DOCS_CONFIG).toUpperCase()
@@ -787,6 +782,10 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
 
   public BehaviorOnNullValues behaviorOnNullValues() {
     return BehaviorOnNullValues.valueOf(getString(BEHAVIOR_ON_NULL_VALUES_CONFIG).toUpperCase());
+  }
+
+  public ByteSizeValue bulkSize() {
+    return new ByteSizeValue(getInt(MAX_BULK_SIZE_BYTES_CONFIG));
   }
 
   public boolean compression() {
