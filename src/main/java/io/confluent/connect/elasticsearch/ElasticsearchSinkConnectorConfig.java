@@ -75,11 +75,10 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
 
   public static final String BULK_SIZE_BYTES_CONFIG = "bulk.size.bytes";
   private static final String BULK_SIZE_BYTES_DOC =
-      "The maximum size (in bytes) of the bulk request to be processed by the Connector when"
-          + " writing records to Elasticsearch. The default is 10mb, the maximum setting possible."
-          + "If set to -1 or the condition for batch size by number of records is met first, this "
-          + "configuration will be ignored and the setting for batch size by number of records "
-          + "would be used instead.";
+      "The maximum size (in bytes) to be process as a batch when"
+      + " writing records to Elasticsearch. Setting to '-1' will disable "
+      + "this configuration. If the condition set by '" + BATCH_SIZE_CONFIG
+      + "' is met first, it will be used instead.";
   private static final int BULK_SIZE_BYTES_DEFAULT = 5 * 1024 * 1024;
   private static final String BULK_SIZE_BYTES_DISPLAY = "Bulk Size (bytes)";
 
