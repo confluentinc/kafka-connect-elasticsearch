@@ -75,16 +75,16 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   private static final String BATCH_SIZE_DISPLAY = "Batch Size";
   private static final int BATCH_SIZE_DEFAULT = 2000;
 
-  public static final String MAX_BATCH_SIZE_BYTES_CONFIG = "max.batch.size.bytes";
-  private static final String MAX_BATCH_SIZE_BYTES_DOC =
+  public static final String MAX_BULK_SIZE_BYTES_CONFIG = "max.batch.size.bytes";
+  private static final String MAX_BULK_SIZE_BYTES_DOC =
       "The maximum size (in bytes) of the bulk request to be processed by the Connector when"
           + " writing records to Elasticsearch. The default is 10mb, the maximum setting possible."
           + "If set to -1 or the condition for batch size by number of records is met first, this "
           + "configuration will be ignored and the setting for batch size by number of records "
           + "would be used instead.";
-  private static final long MAX_BATCH_SIZE_BYTES_DEFAULT = 10 * MEGABYTES_TO_BYTES;
-  private static final long MIN_BATCH_SIZE_BYTES_DEFAULT = -1;
-  private static final String BATCH_SIZE_BYTES_DISPLAY = "Max Batch Size in Bytes";
+  private static final long MAX_BULK_SIZE_BYTES_DEFAULT = 10 * MEGABYTES_TO_BYTES;
+  private static final long MIN_BULK_SIZE_BYTES_DEFAULT = -1;
+  private static final String BULK_SIZE_BYTES_DISPLAY = "Max Batch Size in Bytes";
 
   public static final String MAX_IN_FLIGHT_REQUESTS_CONFIG = "max.in.flight.requests";
   private static final String MAX_IN_FLIGHT_REQUESTS_DOC =
@@ -502,16 +502,16 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
             Width.SHORT,
             READ_TIMEOUT_MS_DISPLAY
         ).define(
-            MAX_BATCH_SIZE_BYTES_CONFIG,
+            MAX_BULK_SIZE_BYTES_CONFIG,
             Type.LONG,
-            MAX_BATCH_SIZE_BYTES_DEFAULT,
-            between(MIN_BATCH_SIZE_BYTES_DEFAULT, MAX_BATCH_SIZE_BYTES_DEFAULT),
+            MAX_BULK_SIZE_BYTES_DEFAULT,
+            between(MIN_BULK_SIZE_BYTES_DEFAULT, MAX_BULK_SIZE_BYTES_DEFAULT),
             Importance.MEDIUM,
-            MAX_BATCH_SIZE_BYTES_DOC,
+            MAX_BULK_SIZE_BYTES_DOC,
             CONNECTOR_GROUP,
             ++order,
             Width.SHORT,
-            BATCH_SIZE_BYTES_DISPLAY
+            BULK_SIZE_BYTES_DISPLAY
     );
   }
 
@@ -775,7 +775,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   }
 
   public ByteSizeValue bulkSize() {
-    long maxBytes = getLong(MAX_BATCH_SIZE_BYTES_CONFIG);
+    long maxBytes = getLong(MAX_BULK_SIZE_BYTES_CONFIG);
     return new ByteSizeValue(maxBytes);
   }
 
