@@ -79,8 +79,8 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
       + " writing records to Elasticsearch. Setting to '-1' will disable "
       + "this configuration. If the condition set by '" + BATCH_SIZE_CONFIG
       + "' is met first, it will be used instead.";
-  private static final int BULK_SIZE_BYTES_DEFAULT = 5 * 1024 * 1024;
   private static final String BULK_SIZE_BYTES_DISPLAY = "Bulk Size (bytes)";
+  private static final int BULK_SIZE_BYTES_DEFAULT = 5 * 1024 * 1024;
 
   public static final String MAX_IN_FLIGHT_REQUESTS_CONFIG = "max.in.flight.requests";
   private static final String MAX_IN_FLIGHT_REQUESTS_DOC =
