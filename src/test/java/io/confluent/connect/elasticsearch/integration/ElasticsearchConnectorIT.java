@@ -19,7 +19,7 @@ import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfi
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BEHAVIOR_ON_NULL_VALUES_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_KEY_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.LINGER_MS_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.MAX_BULK_SIZE_BYTES_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BULK_SIZE_BYTES_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.WRITE_METHOD_CONFIG;
 import static org.apache.kafka.connect.runtime.ConnectorConfig.VALUE_CONVERTER_CLASS_CONFIG;
 import static org.junit.Assert.assertEquals;
@@ -53,7 +53,7 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
   public void testBatchByByteSize() throws Exception {
     // Based on the size of the topic, key, and value strings in JSON format.
     int approximateRecordByteSize = 60;
-    props.put(MAX_BULK_SIZE_BYTES_CONFIG, Integer.toString(approximateRecordByteSize * 2));
+    props.put(BULK_SIZE_BYTES_CONFIG, Integer.toString(approximateRecordByteSize * 2));
     props.put(LINGER_MS_CONFIG, "180000");
 
     connect.configureConnector(CONNECTOR_NAME, props);

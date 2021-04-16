@@ -42,8 +42,6 @@ import static org.apache.kafka.common.config.SslConfigs.SSL_ENDPOINT_IDENTIFICAT
 import static org.apache.kafka.common.config.SslConfigs.addClientSslSupport;
 
 public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
-  private static final long MEGABYTES_TO_BYTES = 1024 * 1024;
-
   // Connector group
   public static final String CONNECTION_URL_CONFIG = "connection.url";
   private static final String CONNECTION_URL_DOC =
@@ -75,15 +73,15 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   private static final String BATCH_SIZE_DISPLAY = "Batch Size";
   private static final int BATCH_SIZE_DEFAULT = 2000;
 
-  public static final String MAX_BULK_SIZE_BYTES_CONFIG = "max.bulk.size.bytes";
-  private static final String MAX_BULK_SIZE_BYTES_DOC =
+  public static final String BULK_SIZE_BYTES_CONFIG = "bulk.size.bytes";
+  private static final String BULK_SIZE_BYTES_DOC =
       "The maximum size (in bytes) of the bulk request to be processed by the Connector when"
           + " writing records to Elasticsearch. The default is 10mb, the maximum setting possible."
           + "If set to -1 or the condition for batch size by number of records is met first, this "
           + "configuration will be ignored and the setting for batch size by number of records "
           + "would be used instead.";
-  private static final long MAX_BULK_SIZE_BYTES_DEFAULT = 10 * MEGABYTES_TO_BYTES;
-  private static final String BULK_SIZE_BYTES_DISPLAY = "Max Bulk Size in Bytes";
+  private static final int BULK_SIZE_BYTES_DEFAULT = 5 * 1024 * 1024;
+  private static final String BULK_SIZE_BYTES_DISPLAY = "Bulk Size (bytes)";
 
   public static final String MAX_IN_FLIGHT_REQUESTS_CONFIG = "max.in.flight.requests";
   private static final String MAX_IN_FLIGHT_REQUESTS_DOC =
@@ -392,12 +390,12 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
             Width.SHORT,
             BATCH_SIZE_DISPLAY
         ).define(
-            MAX_BULK_SIZE_BYTES_CONFIG,
+            BULK_SIZE_BYTES_CONFIG,
             Type.LONG,
-            MAX_BULK_SIZE_BYTES_DEFAULT,
-            between(-1, 10 * MEGABYTES_TO_BYTES),
-            Importance.MEDIUM,
-            MAX_BULK_SIZE_BYTES_DOC,
+            BULK_SIZE_BYTES_DEFAULT,
+            between(-1, 10 * 1024 * 1024),
+            Importance.LOW,
+            BULK_SIZE_BYTES_DOC,
             CONNECTOR_GROUP,
             ++order,
             Width.SHORT,
@@ -784,7 +782,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   }
 
   public ByteSizeValue bulkSize() {
-    return new ByteSizeValue(getLong(MAX_BULK_SIZE_BYTES_CONFIG));
+    return new ByteSizeValue(getLong(BULK_SIZE_BYTES_CONFIG));
   }
 
   public boolean compression() {
