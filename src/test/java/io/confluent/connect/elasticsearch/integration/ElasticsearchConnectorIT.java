@@ -52,7 +52,6 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
   @Test
   public void testBatchByByteSize() throws Exception {
     int approximateRecordByteSize = 60;
-    props.put(BATCH_SIZE_CONFIG, "4000");
     props.put(MAX_BATCH_SIZE_BYTES_CONFIG, Integer.toString(approximateRecordByteSize * 2));
     props.put(LINGER_MS_CONFIG, "180000");
 
