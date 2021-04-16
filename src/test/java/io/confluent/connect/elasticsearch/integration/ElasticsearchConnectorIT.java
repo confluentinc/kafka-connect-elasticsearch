@@ -51,6 +51,7 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
 
   @Test
   public void testBatchByByteSize() throws Exception {
+    // Calculated by factoring the size of the topic, key, and value stringsin JSON format.
     int approximateRecordByteSize = 60;
     props.put(MAX_BULK_SIZE_BYTES_CONFIG, Integer.toString(approximateRecordByteSize * 2));
     props.put(LINGER_MS_CONFIG, "180000");
