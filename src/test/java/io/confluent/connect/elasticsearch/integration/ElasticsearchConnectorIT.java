@@ -19,6 +19,7 @@ import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfi
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BEHAVIOR_ON_NULL_VALUES_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_KEY_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.LINGER_MS_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.MAX_BATCH_SIZE_BYTES_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.WRITE_METHOD_CONFIG;
 import static org.apache.kafka.connect.runtime.ConnectorConfig.VALUE_CONVERTER_CLASS_CONFIG;
 import static org.junit.Assert.assertEquals;
@@ -46,6 +47,24 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
   public static void setupBeforeAll() {
     container = ElasticsearchContainer.fromSystemProperties();
     container.start();
+  }
+
+  @Test
+  public void testBatchByByteSize() throws Exception {
+    int approximateRecordByteSize = 60;
+    props.put(BATCH_SIZE_CONFIG, "4000");
+    props.put(MAX_BATCH_SIZE_BYTES_CONFIG, Integer.toString(approximateRecordByteSize * 2));
+    props.put(LINGER_MS_CONFIG, "180000");
+
+    connect.configureConnector(CONNECTOR_NAME, props);
+    waitForConnectorToStart(CONNECTOR_NAME, TASKS_MAX);
+
+    writeRecords(3);
+    // Only 2 records fit in 1 batch. The other record is sent once another record is written.
+    verifySearchResults(2);
+
+    writeRecords(1);
+    verifySearchResults(4);
   }
 
   @Test

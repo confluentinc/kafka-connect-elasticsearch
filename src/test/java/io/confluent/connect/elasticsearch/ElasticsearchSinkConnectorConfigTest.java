@@ -37,7 +37,6 @@ public class ElasticsearchSinkConnectorConfigTest {
     props = addNecessaryProps(new HashMap<>());
   }
 
-  // TODO: test what happens when input invalid batch size
   @Test
   public void testDefaultHttpTimeoutsConfig() {
     ElasticsearchSinkConnectorConfig config = new ElasticsearchSinkConnectorConfig(props);
