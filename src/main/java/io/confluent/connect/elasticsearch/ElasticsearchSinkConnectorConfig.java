@@ -83,7 +83,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
           + "configuration will be ignored and the setting for batch size by number of records "
           + "would be used instead.";
   private static final long MAX_BULK_SIZE_BYTES_DEFAULT = 10 * MEGABYTES_TO_BYTES;
-  private static final String BULK_SIZE_BYTES_DISPLAY = "Max Batch Size in Bytes";
+  private static final String BULK_SIZE_BYTES_DISPLAY = "Max Bulk Size in Bytes";
 
   public static final String MAX_IN_FLIGHT_REQUESTS_CONFIG = "max.in.flight.requests";
   private static final String MAX_IN_FLIGHT_REQUESTS_DOC =
