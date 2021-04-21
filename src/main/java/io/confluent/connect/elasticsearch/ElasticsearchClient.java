@@ -332,9 +332,20 @@ public class ElasticsearchClient {
 
       @Override
       public void afterBulk(long executionId, BulkRequest request, Throwable failure) {
-        removeFromInFlightRequests(executionId);
-        error.compareAndSet(null, new ConnectException("Bulk request failed.", failure));
-        numRecords.addAndGet(-request.requests().size());
+        log.warn("Bulk request {} failed. Retrying request.", executionId, failure);
+        try {
+          // manually retry the bulk request until it succeeds or retries are exhausted using the
+          // initial request thread
+          BulkResponse bulkResponse = callWithRetries(
+              "retrying bulk request",
+              () -> client.bulk(request, RequestOptions.DEFAULT)
+          );
+          afterBulk(executionId, request, bulkResponse);
+        } catch (ConnectException e) {
+          removeFromInFlightRequests(executionId);
+          error.compareAndSet(null, new ConnectException("Bulk request failed.", e.getCause()));
+          numRecords.addAndGet(-request.requests().size());
+        }
       }
     };
   }
