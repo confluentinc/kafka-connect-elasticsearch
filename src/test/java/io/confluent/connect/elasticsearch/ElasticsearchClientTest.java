@@ -25,6 +25,9 @@ import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfi
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.LINGER_MS_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.MAX_BUFFERED_RECORDS_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.MAX_IN_FLIGHT_REQUESTS_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.MAX_RETRIES_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.READ_TIMEOUT_MS_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.RETRY_BACKOFF_MS_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.SECURITY_PROTOCOL_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.SSL_CONFIG_PREFIX;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.WRITE_METHOD_CONFIG;
@@ -46,6 +49,7 @@ import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.Secur
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.WriteMethod;
 import io.confluent.connect.elasticsearch.helper.ElasticsearchContainer;
 import io.confluent.connect.elasticsearch.helper.ElasticsearchHelperClient;
+import io.confluent.connect.elasticsearch.helper.NetworkErrorContainer;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
@@ -410,6 +414,37 @@ public class ElasticsearchClientTest {
       client.close();
       throw e;
     }
+  }
+
+  @Test
+  public void testRetryRecordsOnFailure() throws Exception {
+    props.put(LINGER_MS_CONFIG, "60000");
+    props.put(BATCH_SIZE_CONFIG, "2");
+    props.put(MAX_RETRIES_CONFIG, "100");
+    props.put(RETRY_BACKOFF_MS_CONFIG, "1000");
+    config = new ElasticsearchSinkConnectorConfig(props);
+    converter = new DataConverter(config);
+
+
+    // mock bulk processor to throw errors
+    ElasticsearchClient client = new ElasticsearchClient(config, null);
+    client.createIndex(INDEX);
+
+    // bring down ES service
+    NetworkErrorContainer delay = new NetworkErrorContainer(container.getContainerName());
+    delay.start();
+
+    // attempt a write
+    writeRecord(sinkRecord(0), client);
+    client.flush();
+
+    // keep the ES service down for a couple of timeouts
+    Thread.sleep(config.readTimeoutMs() * 4);
+
+    // bring up ES service
+    delay.stop();
+
+    waitUntilRecordsInES(1);
   }
 
   @Test
