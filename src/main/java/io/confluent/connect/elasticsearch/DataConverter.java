@@ -405,6 +405,9 @@ public class DataConverter {
     Object value = record.value();
     if (value instanceof Struct) {
       Struct struct = (Struct) value;
+      if(struct.get(fieldName) == null){
+        return Long.valueOf(1);
+      }
       Object timestampValue = DataUtils.getNestedFieldValue(struct, fieldName);
       Schema fieldSchema = DataUtils.getNestedField(record.valueSchema(), fieldName).schema();
 
@@ -429,6 +432,9 @@ public class DataConverter {
       }
     } else if (value instanceof Map) {
       Map<?, ?> map = (Map<?, ?>) value;
+      if(map.get(fieldName) == null){
+        return Long.valueOf(1);
+      }
       Object timestampValue = DataUtils.getNestedFieldValue(map, fieldName);
       if (timestampValue instanceof Number) {
         return ((Number) timestampValue).longValue();
