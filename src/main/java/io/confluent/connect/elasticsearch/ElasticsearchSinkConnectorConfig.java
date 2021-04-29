@@ -968,9 +968,9 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
 
       if (!value.equals(((String) value).toLowerCase())) {
         throw new ConfigException(name, value, "The specified dataset must be in lowercase.");
-      }// can I just do warning instead???
+      }
 
-      if (((String) value).matches(".*[\\/\\\\\\*\\?\"<>| ,#-:]+.*")) {
+      if (((String) value).matches(".*[\\\\\\/\\*\\?\\\"<>| ,#\\-:]+.*")) {
         throw new ConfigException(name, value, "The specified dataset contains invalid characters.");
       }
     }

@@ -2,6 +2,8 @@ package io.confluent.connect.elasticsearch;
 
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_TIMEOUT_MS_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.DATA_STREAM_DATASET_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.DATA_STREAM_TYPE_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.KERBEROS_KEYTAB_PATH_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.PROXY_HOST_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.PROXY_PASSWORD_CONFIG;
@@ -52,6 +54,42 @@ public class ElasticsearchSinkConnectorConfigTest {
 
     assertEquals(config.readTimeoutMs(), 10000);
     assertEquals(config.connectionTimeoutMs(), 15000);
+  }
+
+  @Test
+  public void shouldAllowValidChractersDataStreamDataset() {
+    props.put(DATA_STREAM_DATASET_CONFIG, "a_valid.dataset123");
+    new ElasticsearchSinkConnectorConfig(props);
+  }
+
+  @Test
+  public void shouldAllowValidDataStreamType() {
+    props.put(DATA_STREAM_TYPE_CONFIG, "metrics");
+    new ElasticsearchSinkConnectorConfig(props);
+  }
+
+  @Test
+  public void shouldAllowValidDataStreamTypeWithWeirdCasing() {
+    props.put(DATA_STREAM_TYPE_CONFIG, "mEtRICS");
+    new ElasticsearchSinkConnectorConfig(props);
+  }
+
+  @Test(expected = ConfigException.class)
+  public void shouldNotAllowInvalidCasingDataStreamDataset() {
+    props.put(DATA_STREAM_DATASET_CONFIG, "AN_INVALID.dataset123");
+    new ElasticsearchSinkConnectorConfig(props);
+  }
+
+  @Test(expected = ConfigException.class)
+  public void shouldNotAllowInvalidCharactersDataStreamDataset() {
+    props.put(DATA_STREAM_DATASET_CONFIG, "not-valid?");
+    new ElasticsearchSinkConnectorConfig(props);
+  }
+
+  @Test(expected = ConfigException.class)
+  public void shouldNotAllowInvalidDataStreamType() {
+    props.put(DATA_STREAM_TYPE_CONFIG, "notLogOrMetrics");
+    new ElasticsearchSinkConnectorConfig(props);
   }
 
   @Test(expected = ConfigException.class)
