@@ -971,7 +971,8 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
       }
 
       if (((String) value).matches(".*[\\\\\\/\\*\\?\\\"<>| ,#\\-:]+.*")) {
-        throw new ConfigException(name, value, "The specified dataset contains invalid characters.");
+        throw new ConfigException(name, value, "The specified dataset contains a space or at least one invalid character" +
+            "\\/*?\"<>|,#-:");
       }
     }
 
