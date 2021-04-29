@@ -82,6 +82,20 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   private static final String BULK_SIZE_BYTES_DISPLAY = "Bulk Size (bytes)";
   private static final int BULK_SIZE_BYTES_DEFAULT = 5 * 1024 * 1024;
 
+  public static final String DATA_STREAM_DATASET_CONFIG = "data.stream.dataset";
+  private static final String DATA_STREAM_DATASET_DOC =
+      "Generic name describing data ingested and its structure." +
+          " The default is generic, which is the same as Elastic's default.";
+  private static final String DATA_STREAM_DATASET_DISPLAY = "Data stream dataset";
+  private static final String DATA_STREAM_DATASET_DEFAULT = null;
+
+  public static final String DATA_STREAM_TYPE_CONFIG = "data.stream.type";
+  private static final String DATA_STREAM_TYPE_DOC =
+      "Generic type describing the data to be written to Elasticsearch Datastreams." +
+          " The default is logs, which is the same as Elastic's default.";
+  private static final String DATA_STREAM_TYPE_DISPLAY = "Data stream type";
+  private static final DataStreamType DATA_STREAM_TYPE_DEFAULT = DataStreamType.NONE;
+
   public static final String MAX_IN_FLIGHT_REQUESTS_CONFIG = "max.in.flight.requests";
   private static final String MAX_IN_FLIGHT_REQUESTS_DOC =
       "The maximum number of indexing requests that can be in-flight to Elasticsearch before "
@@ -323,6 +337,12 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
     FAIL
   }
 
+  public enum DataStreamType {
+    LOGS,
+    METRICS,
+    NONE
+  }
+
   public enum SecurityProtocol {
     PLAINTEXT,
     SSL
@@ -399,6 +419,33 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
             ++order,
             Width.SHORT,
             BULK_SIZE_BYTES_DISPLAY
+        ).define(
+            DATA_STREAM_DATASET_CONFIG,
+            Type.STRING,
+            DATA_STREAM_DATASET_DEFAULT,
+            new DataStreamDatasetValidator(),
+            Importance.LOW,
+            DATA_STREAM_DATASET_DOC,
+            CONNECTOR_GROUP,
+            ++order,
+            Width.MEDIUM,
+            DATA_STREAM_DATASET_DISPLAY
+        ).define(
+            DATA_STREAM_TYPE_CONFIG,
+            Type.STRING,
+            DATA_STREAM_TYPE_DEFAULT.name(),
+            ConfigDef.CaseInsensitiveValidString.in(
+                Arrays.stream(DataStreamType.values())
+                    .map(DataStreamType::name)
+                    .collect(Collectors.toList())
+                    .toArray(new String[DataStreamType.values().length])
+            ),
+            Importance.LOW,
+            DATA_STREAM_TYPE_DOC,
+            CONNECTOR_GROUP,
+            ++order,
+            Width.SHORT,
+            DATA_STREAM_TYPE_DISPLAY
         ).define(
             MAX_IN_FLIGHT_REQUESTS_CONFIG,
             Type.INT,
@@ -800,6 +847,14 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
     return getBoolean(DROP_INVALID_MESSAGE_CONFIG);
   }
 
+  public String dataStreamDataset() {
+    return getString(DATA_STREAM_DATASET_CONFIG);
+  }
+
+  public DataStreamType dataStreamType() {
+    return DataStreamType.valueOf(getString(DATA_STREAM_TYPE_CONFIG).toUpperCase());
+  }
+
   public long flushTimeoutMs() {
     return getLong(FLUSH_TIMEOUT_MS_CONFIG);
   }
@@ -896,6 +951,34 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
 
   public WriteMethod writeMethod() {
     return WriteMethod.valueOf(getString(WRITE_METHOD_CONFIG).toUpperCase());
+  }
+
+  private static class DataStreamDatasetValidator implements Validator {
+
+    @Override
+    @SuppressWarnings("unchecked")
+    public void ensureValid(String name, Object value) {
+      if (value == null) {
+        return;
+      }
+
+      if (((String) value).length() > 100) {
+        throw new ConfigException(name, value, "The specified dataset must be less than 100 characters.");
+      }
+
+      if (!value.equals(((String) value).toLowerCase())) {
+        throw new ConfigException(name, value, "The specified dataset must be in lowercase.");
+      }// can I just do warning instead???
+
+      if (((String) value).matches(".*[\\/\\\\\\*\\?\"<>| ,#-:]+.*")) {
+        throw new ConfigException(name, value, "The specified dataset contains invalid characters.");
+      }
+    }
+
+    @Override
+    public String toString() {
+      return "Valid Data stream dataset name.";
+    }
   }
 
   private static class UrlListValidator implements Validator {
