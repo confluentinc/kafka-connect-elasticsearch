@@ -84,15 +84,15 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
 
   public static final String DATA_STREAM_DATASET_CONFIG = "data.stream.dataset";
   private static final String DATA_STREAM_DATASET_DOC =
-      "Generic name describing data ingested and its structure." +
-          " The default is generic, which is the same as Elastic's default.";
+      "Generic name describing data ingested and its structure."
+      + " The default is generic, which is the same as Elastic's default.";
   private static final String DATA_STREAM_DATASET_DISPLAY = "Data stream dataset";
   private static final String DATA_STREAM_DATASET_DEFAULT = null;
 
   public static final String DATA_STREAM_TYPE_CONFIG = "data.stream.type";
   private static final String DATA_STREAM_TYPE_DOC =
-      "Generic type describing the data to be written to Elasticsearch Datastreams." +
-          " The default is logs, which is the same as Elastic's default.";
+      "Generic type describing the data to be written to Elasticsearch Datastreams."
+      + " The default is logs, which is the same as Elastic's default.";
   private static final String DATA_STREAM_TYPE_DISPLAY = "Data stream type";
   private static final DataStreamType DATA_STREAM_TYPE_DEFAULT = DataStreamType.NONE;
 
@@ -963,16 +963,28 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
       }
 
       if (((String) value).length() >= 100) {
-        throw new ConfigException(name, value, "The specified dataset must be less than 100 characters.");
+        throw new ConfigException(
+            name,
+            value,
+            "The specified dataset must be less than 100 characters."
+        );
       }
 
       if (!value.equals(((String) value).toLowerCase())) {
-        throw new ConfigException(name, value, "The specified dataset must be in lowercase.");
+        throw new ConfigException(
+            name,
+            value,
+            "The specified dataset must be in lowercase."
+        );
       }
 
       if (((String) value).matches(".*[\\\\\\/\\*\\?\\\"<>| ,#\\-:]+.*")) {
-        throw new ConfigException(name, value, "The specified dataset contains a space or at least one invalid character" +
-            "\\/*?\"<>|,#-:");
+        throw new ConfigException(
+            name,
+            value,
+            "The specified dataset contains a space or at least one invalid character"
+            + "\\/*?\"<>|,#-:"
+        );
       }
     }
 
