@@ -20,6 +20,8 @@ import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfi
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_PASSWORD_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_USERNAME_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.DATA_STREAM_DATASET_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.DATA_STREAM_TYPE_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.FLUSH_TIMEOUT_MS_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_KEY_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_KEY_TOPICS_CONFIG;
@@ -109,6 +111,24 @@ public class ValidatorTest {
 
     result = validator.validate();
     assertNoErrors(result);
+  }
+
+  @Test
+  public void testValidBothDataStreamConfigs() {
+    props.put(DATA_STREAM_DATASET_CONFIG, "a_valid_dataset");
+    props.put(DATA_STREAM_TYPE_CONFIG, "logs");
+    validator = new Validator(props, () -> mockClient);
+    Config result = validator.validate();
+    assertNoErrors(result);
+  }
+
+  @Test
+  public void testInvalidMissingOneDataStreamConfig() {
+    props.put(DATA_STREAM_DATASET_CONFIG, "a_valid_dataset");
+    validator = new Validator(props, () -> mockClient);
+    Config result = validator.validate();
+    assertHasErrorMessage(result, DATA_STREAM_DATASET_CONFIG, "must be set");
+    assertHasErrorMessage(result, DATA_STREAM_TYPE_CONFIG, "must be set");
   }
 
   @Test

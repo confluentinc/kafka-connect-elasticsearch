@@ -37,6 +37,9 @@ import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfi
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_PASSWORD_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_USERNAME_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.DATA_STREAM_DATASET_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.DATA_STREAM_TYPE_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.DataStreamType;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.FLUSH_TIMEOUT_MS_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_KEY_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_KEY_TOPICS_CONFIG;
@@ -88,6 +91,7 @@ public class Validator {
 
     try (RestHighLevelClient client = clientFactory.client()) {
       validateCredentials();
+      validateDataStreamFields();
       validateIgnoreConfigs();
       validateKerberos();
       validateLingerMs();
@@ -114,6 +118,16 @@ public class Validator {
       );
       addErrorMessage(CONNECTION_USERNAME_CONFIG, errorMessage);
       addErrorMessage(CONNECTION_PASSWORD_CONFIG, errorMessage);
+    }
+  }
+
+  private void validateDataStreamFields() {
+    if (config.dataStreamType() == DataStreamType.NONE ^ config.dataStreamDataset() == null) {
+      String errorMessage = String.format(
+          "'%s' must be set if '%s' is set.", DATA_STREAM_DATASET_CONFIG, DATA_STREAM_TYPE_CONFIG
+      );
+      addErrorMessage(DATA_STREAM_TYPE_CONFIG, errorMessage);
+      addErrorMessage(DATA_STREAM_DATASET_CONFIG, errorMessage);
     }
   }
 
