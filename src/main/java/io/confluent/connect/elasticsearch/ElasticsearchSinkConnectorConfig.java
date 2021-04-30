@@ -973,9 +973,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
 
       if (((String) value).length() >= 100) {
         throw new ConfigException(
-            name,
-            value,
-            "The specified dataset must be less than 100 characters."
+            name, value, "The specified dataset must be less than 100 characters."
         );
       }
 
