@@ -980,18 +980,13 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
       }
 
       if (!value.equals(((String) value).toLowerCase())) {
-        throw new ConfigException(
-            name,
-            value,
-            "The specified dataset must be in lowercase."
-        );
+        throw new ConfigException(name, value, "The specified dataset must be in lowercase.");
       }
 
       if (((String) value).matches(".*[\\\\\\/\\*\\?\\\"<>| ,#\\-:]+.*")) {
         throw new ConfigException(
-            name,
-            value,
-            "The specified dataset contains a space or at least one invalid character"
+            name, value,
+            "The specified dataset contains a space or at least one invalid character "
             + "\\/*?\"<>|,#-:"
         );
       }
