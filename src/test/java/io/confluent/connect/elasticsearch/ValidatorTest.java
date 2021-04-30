@@ -123,6 +123,13 @@ public class ValidatorTest {
   }
 
   @Test
+  public void testValidMissingBothDataStreamConfigs() {
+    validator = new Validator(props, () -> mockClient);
+    Config result = validator.validate();
+    assertNoErrors(result);
+  }
+
+  @Test
   public void testInvalidMissingOneDataStreamConfig() {
     props.put(DATA_STREAM_DATASET_CONFIG, "a_valid_dataset");
     validator = new Validator(props, () -> mockClient);
