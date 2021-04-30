@@ -84,15 +84,24 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
 
   public static final String DATA_STREAM_DATASET_CONFIG = "data.stream.dataset";
   private static final String DATA_STREAM_DATASET_DOC =
-      "Generic name describing data ingested and its structure."
-      + " The default is generic, which is the same as Elastic's default.";
+      "Generic name describing data ingested and its structure to be written to data stream. "
+      + "Can be any arbitrary string that is less than 100 characters, is in all lowercase, "
+      + "and does not contain spaces or any of these special characters ``/\\*\"<>|,#:-``. "
+      + "Otherwise, the default is ``null`` which indicates the connector will write "
+      + "to regular indices instead. If filled, this configuration will be used alongside "
+      + "``data.stream.type`` to construct the index name.";
   private static final String DATA_STREAM_DATASET_DISPLAY = "Data stream dataset";
   private static final String DATA_STREAM_DATASET_DEFAULT = null;
 
   public static final String DATA_STREAM_TYPE_CONFIG = "data.stream.type";
   private static final String DATA_STREAM_TYPE_DOC =
-      "Generic type describing the data to be written to Elasticsearch Datastreams."
-      + " The default is logs, which is the same as Elastic's default.";
+      "Generic type describing the data to be written to data stream. "
+      + "Should only be ``" + DataStreamType.LOGS.name() + "`` or ``"
+      + DataStreamType.METRICS.name() + "`` if the user wants to write "
+      + "to data stream. Otherwise, the default is" + DataStreamType.NONE.name()
+      + " which indicates the connector will write to regular indices instead. "
+      + "If set, this configuration will be used alongside " + DATA_STREAM_DATASET_CONFIG
+      + " to construct the index name.";
   private static final String DATA_STREAM_TYPE_DISPLAY = "Data stream type";
   private static final DataStreamType DATA_STREAM_TYPE_DEFAULT = DataStreamType.NONE;
 
