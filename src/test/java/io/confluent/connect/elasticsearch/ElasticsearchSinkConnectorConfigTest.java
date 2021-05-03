@@ -93,6 +93,12 @@ public class ElasticsearchSinkConnectorConfigTest {
   }
 
   @Test(expected = ConfigException.class)
+  public void shouldNotAllowTooLongDataStreamDataset() {
+    props.put(DATA_STREAM_DATASET_CONFIG, String.format("%d%100d", 1, 1));
+    new ElasticsearchSinkConnectorConfig(props);
+  }
+
+  @Test(expected = ConfigException.class)
   public void shouldNotAllowNullUrlList(){
     props.put(CONNECTION_URL_CONFIG, null);
     new ElasticsearchSinkConnectorConfig(props);
