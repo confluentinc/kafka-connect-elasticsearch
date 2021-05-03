@@ -85,7 +85,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   public static final String DATA_STREAM_DATASET_CONFIG = "data.stream.dataset";
   private static final String DATA_STREAM_DATASET_DOC =
       "Generic name describing data ingested and its structure to be written to data stream. "
-      + "Can be any arbitrary string that is less than 100 characters, is in all lowercase, "
+      + "Can be any arbitrary string that is no longer than 100 characters, is in all lowercase, "
       + "and does not contain spaces or any of these special characters ``/\\*\"<>|,#:-``. "
       + "Otherwise, the default is ``null`` which indicates the connector will write "
       + "to regular indices instead. If filled, this configuration will be used alongside "
@@ -971,9 +971,9 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
         return;
       }
 
-      if (((String) value).length() >= 100) {
+      if (((String) value).length() > 100) {
         throw new ConfigException(
-            name, value, "The specified dataset must be less than 100 characters."
+            name, value, "The specified dataset must no longer than 100 characters."
         );
       }
 
