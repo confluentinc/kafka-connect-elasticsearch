@@ -137,7 +137,7 @@ public class Validator {
     }
     boolean atLeastOneSet = config.dataStreamType() != DataStreamType.NONE
         || !config.dataStreamDataset().equals("");
-    System.out.println(atLeastOneSet);
+
     if (atLeastOneSet && config.writeMethod() == WriteMethod.UPSERT) {
       String errorMessage = String.format(
           "%s must not be %s if %s and %s are set.",

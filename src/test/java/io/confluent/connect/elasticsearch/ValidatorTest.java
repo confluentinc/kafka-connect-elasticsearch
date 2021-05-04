@@ -116,7 +116,7 @@ public class ValidatorTest {
   }
 
   @Test
-  public void testInvalidOperationsOnValidDataStreamConfigs() {
+  public void testInvalidUpsertDeleteOnValidDataStreamConfigs() {
     props.put(DATA_STREAM_DATASET_CONFIG, "a_valid_dataset");
     props.put(DATA_STREAM_TYPE_CONFIG, "logs");
     props.put(BEHAVIOR_ON_NULL_VALUES_CONFIG, "ignore");
