@@ -69,7 +69,7 @@ public class ElasticsearchSinkConnectorConfigTest {
   }
 
   @Test
-  public void shouldAllowValidDataStreamTypeCaseInsensitive) {
+  public void shouldAllowValidDataStreamTypeCaseInsensitive() {
     props.put(DATA_STREAM_TYPE_CONFIG, "mEtRICS");
     new ElasticsearchSinkConnectorConfig(props);
   }

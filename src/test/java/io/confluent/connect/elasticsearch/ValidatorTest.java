@@ -17,6 +17,7 @@
 package io.confluent.connect.elasticsearch;
 
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BATCH_SIZE_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BEHAVIOR_ON_NULL_VALUES_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_PASSWORD_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_USERNAME_CONFIG;
@@ -37,6 +38,7 @@ import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfi
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.SECURITY_PROTOCOL_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.SSL_CONFIG_PREFIX;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.KERBEROS_PRINCIPAL_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.WRITE_METHOD_CONFIG;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -114,12 +116,22 @@ public class ValidatorTest {
   }
 
   @Test
-  public void testValidDataStreamConfigs() {
+  public void testInvalidOperationsOnValidDataStreamConfigs() {
     props.put(DATA_STREAM_DATASET_CONFIG, "a_valid_dataset");
     props.put(DATA_STREAM_TYPE_CONFIG, "logs");
+    props.put(BEHAVIOR_ON_NULL_VALUES_CONFIG, "ignore");
+    props.put(WRITE_METHOD_CONFIG, "insert");
     validator = new Validator(props, () -> mockClient);
     Config result = validator.validate();
     assertNoErrors(result);
+
+    props.put(BEHAVIOR_ON_NULL_VALUES_CONFIG, "delete");
+    props.put(WRITE_METHOD_CONFIG, "upsert");
+    validator = new Validator(props, () -> mockClient);
+
+    result = validator.validate();
+    assertHasErrorMessage(result, BEHAVIOR_ON_NULL_VALUES_CONFIG, "must not be");
+    assertHasErrorMessage(result, WRITE_METHOD_CONFIG, "must not be");
   }
 
   @Test
@@ -136,6 +148,14 @@ public class ValidatorTest {
     Config result = validator.validate();
     assertHasErrorMessage(result, DATA_STREAM_DATASET_CONFIG, "must be set");
     assertHasErrorMessage(result, DATA_STREAM_TYPE_CONFIG, "must be set");
+
+    props.put(BEHAVIOR_ON_NULL_VALUES_CONFIG, "delete");
+    props.put(WRITE_METHOD_CONFIG, "upsert");
+    validator = new Validator(props, () -> mockClient);
+
+    result = validator.validate();
+    assertHasErrorMessage(result, BEHAVIOR_ON_NULL_VALUES_CONFIG, "must not be");
+    assertHasErrorMessage(result, WRITE_METHOD_CONFIG, "must not be");
   }
 
   @Test
