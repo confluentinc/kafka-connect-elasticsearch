@@ -144,8 +144,6 @@ public class ValidatorTest {
   public void testInvalidUpsertDeleteOnValidDataStreamConfigs() {
     props.put(DATA_STREAM_DATASET_CONFIG, "a_valid_dataset");
     props.put(DATA_STREAM_TYPE_CONFIG, "logs");
-    props.put(BEHAVIOR_ON_NULL_VALUES_CONFIG, "ignore");
-    props.put(WRITE_METHOD_CONFIG, "insert");
     validator = new Validator(props, () -> mockClient);
     Config result = validator.validate();
     assertNoErrors(result);
