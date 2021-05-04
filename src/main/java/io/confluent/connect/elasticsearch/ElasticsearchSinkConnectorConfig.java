@@ -1004,7 +1004,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
 
     @Override
     public String toString() {
-      return "A valid dataset name that is all lowercase, less than 100 characters and "
+      return "A valid dataset name that is all lowercase, less than 100 characters, and "
           + "does not contain any spaces or invalid characters \\/*?\"<>|,#-:";
     }
   }
