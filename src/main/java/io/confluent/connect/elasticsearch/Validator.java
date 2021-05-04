@@ -33,29 +33,7 @@ import org.elasticsearch.client.RestHighLevelClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BATCH_SIZE_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_PASSWORD_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_USERNAME_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.DATA_STREAM_DATASET_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.DATA_STREAM_TYPE_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.DataStreamType;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.FLUSH_TIMEOUT_MS_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_KEY_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_KEY_TOPICS_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_SCHEMA_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_SCHEMA_TOPICS_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.KERBEROS_KEYTAB_PATH_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.LINGER_MS_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.MAX_BUFFERED_RECORDS_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.MAX_IN_FLIGHT_REQUESTS_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.PROXY_HOST_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.PROXY_PASSWORD_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.PROXY_PORT_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.PROXY_USERNAME_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.SECURITY_PROTOCOL_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.SSL_CONFIG_PREFIX;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.KERBEROS_PRINCIPAL_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.*;
 
 public class Validator {
 
@@ -124,10 +102,34 @@ public class Validator {
   private void validateDataStreamFields() {
     if (config.dataStreamType() == DataStreamType.NONE ^ config.dataStreamDataset() == null) {
       String errorMessage = String.format(
-          "Either both or neither '%s' and '%s' must be set.", DATA_STREAM_DATASET_CONFIG, DATA_STREAM_TYPE_CONFIG
+          "Either both or neither '%s' and '%s' must be set.",
+          DATA_STREAM_DATASET_CONFIG,
+          DATA_STREAM_TYPE_CONFIG
       );
       addErrorMessage(DATA_STREAM_TYPE_CONFIG, errorMessage);
       addErrorMessage(DATA_STREAM_DATASET_CONFIG, errorMessage);
+    }
+
+    if (config.writeMethod() == WriteMethod.UPSERT) {
+      String errorMessage = String.format(
+          "%s must not be %s if %s and %s are set.",
+          WRITE_METHOD_CONFIG,
+          WriteMethod.UPSERT,
+          DATA_STREAM_TYPE_CONFIG,
+          DATA_STREAM_DATASET_CONFIG
+      );
+      addErrorMessage(WRITE_METHOD_CONFIG, errorMessage);
+    }
+
+    if (config.behaviorOnNullValues() == BehaviorOnNullValues.DELETE) {
+      String errorMessage = String.format(
+          "%s must not be %s if %s and %s are set.",
+          BEHAVIOR_ON_NULL_VALUES_CONFIG,
+          BehaviorOnNullValues.DELETE,
+          DATA_STREAM_TYPE_CONFIG,
+          DATA_STREAM_DATASET_CONFIG
+      );
+      addErrorMessage(BEHAVIOR_ON_NULL_VALUES_CONFIG, errorMessage);
     }
   }
 
