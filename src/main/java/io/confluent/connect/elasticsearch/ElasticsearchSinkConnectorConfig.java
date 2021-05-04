@@ -90,8 +90,8 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
       + "Otherwise, no value indicates the connector will write to regular indices instead. "
       + "If set, this configuration will be used alongside ``data.stream.type`` to "
       + "construct the data stream name in the form of {``data.stream.type``"
-      + "}-{" + DATA_STREAM_DATASET_CONFIG + "}-{namespace}.";
-  private static final String DATA_STREAM_DATASET_DISPLAY = "Data stream dataset";
+      + "}-{" + DATA_STREAM_DATASET_CONFIG + "}-{topic}.";
+  private static final String DATA_STREAM_DATASET_DISPLAY = "Data Stream Dataset";
   private static final String DATA_STREAM_DATASET_DEFAULT = "";
 
   public static final String DATA_STREAM_TYPE_CONFIG = "data.stream.type";
@@ -100,13 +100,12 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
           + "The default is %s which indicates the connector will write "
           + "to regular indices instead. If set, this configuration will "
           + "be used alongside %s to construct the data stream name in the form of"
-          + "{%s}-{%s}-{namespace}.",
+          + "{%s}-{%s}-{topic}.",
       DataStreamType.NONE.name(),
       DATA_STREAM_DATASET_CONFIG,
       DATA_STREAM_TYPE_CONFIG,
       DATA_STREAM_DATASET_CONFIG
   );
-
   private static final String DATA_STREAM_TYPE_DISPLAY = "Data Stream Type";
   private static final DataStreamType DATA_STREAM_TYPE_DEFAULT = DataStreamType.NONE;
 
@@ -1001,7 +1000,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
 
     @Override
     public String toString() {
-      return "A valid dataset name that is less than 100 characters and "
+      return "A valid dataset name that is all lowercase, less than 100 characters and "
           + "does not contain any spaces or invalid characters \\/*?\"<>|,#-:";
     }
   }

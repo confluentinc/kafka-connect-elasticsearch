@@ -140,7 +140,7 @@ public class Validator {
 
     if (atLeastOneSet && config.writeMethod() == WriteMethod.UPSERT) {
       String errorMessage = String.format(
-          "%s must not be %s if %s and %s are set.",
+          "Upserts are not supported with data streams. %s must not be %s if %s and %s are set.",
           WRITE_METHOD_CONFIG,
           WriteMethod.UPSERT,
           DATA_STREAM_TYPE_CONFIG,
@@ -151,7 +151,7 @@ public class Validator {
 
     if (atLeastOneSet && config.behaviorOnNullValues() == BehaviorOnNullValues.DELETE) {
       String errorMessage = String.format(
-          "%s must not be %s if %s and %s are set.",
+          "Deletes are not supported with data streams. %s must not be %s if %s and %s are set.",
           BEHAVIOR_ON_NULL_VALUES_CONFIG,
           BehaviorOnNullValues.DELETE,
           DATA_STREAM_TYPE_CONFIG,
