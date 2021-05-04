@@ -971,19 +971,21 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
         return;
       }
 
-      if (((String) value).length() > 100) {
+      String dataset = (String) value;
+
+      if (dataset.length() > 100) {
         throw new ConfigException(
             name, value, "The specified dataset must be no longer than 100 characters."
         );
       }
 
-      if (!value.equals(((String) value).toLowerCase())) {
+      if (!value.equals(dataset.toLowerCase())) {
         throw new ConfigException(
             name, value, "The specified dataset must be in all lowercase."
         );
       }
 
-      if (((String) value).matches(".*[\\\\\\/\\*\\?\\\"<>| ,#\\-:]+.*")) {
+      if (dataset.matches(".*[\\\\\\/\\*\\?\\\"<>| ,#\\-:]+.*")) {
         throw new ConfigException(
             name, value,
             "The specified dataset must not contain any spaces or "
