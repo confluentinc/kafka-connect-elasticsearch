@@ -87,21 +87,26 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
       "Generic name describing data ingested and its structure to be written to a data stream. "
       + "Can be any arbitrary string that is no longer than 100 characters, is in all lowercase, "
       + "and does not contain spaces or any of these special characters ``/\\*\"<>|,#:-``. "
-      + "Otherwise, no value indicates the connector will write "
-      + "to regular indices instead. If filled, this configuration will be used alongside "
-      + "``data.stream.type`` to construct the index name.";
+      + "Otherwise, no value indicates the connector will write to regular indices instead. "
+      + "If specified, this configuration will be used alongside ``data.stream.type`` to "
+      + "construct the datas stream name in the form of {``data.stream.type``"
+      + "}-{" + DATA_STREAM_DATASET_CONFIG + "}-{namespace}.";
   private static final String DATA_STREAM_DATASET_DISPLAY = "Data stream dataset";
   private static final String DATA_STREAM_DATASET_DEFAULT = "";
 
   public static final String DATA_STREAM_TYPE_CONFIG = "data.stream.type";
-  private static final String DATA_STREAM_TYPE_DOC =
+  private static final String DATA_STREAM_TYPE_DOC = String.format(
       "Generic type describing the data to be written to data stream. "
-      + "Should only be ``" + DataStreamType.LOGS.name() + "`` or ``"
-      + DataStreamType.METRICS.name() + "`` if the user wants to write "
-      + "to data stream. Otherwise, the default is" + DataStreamType.NONE.name()
-      + " which indicates the connector will write to regular indices instead. "
-      + "If set, this configuration will be used alongside " + DATA_STREAM_DATASET_CONFIG
-      + " to construct the index name.";
+          + "The default is %s which indicates the connector will write "
+          + "to regular indices instead. If set, this configuration will "
+          + "be used alongside %s to construct the data stream name in the form "
+          + "{%s}-{%s}-{namespace}.",
+      DataStreamType.NONE.name(),
+      DATA_STREAM_DATASET_CONFIG,
+      DATA_STREAM_TYPE_CONFIG,
+      DATA_STREAM_DATASET_CONFIG
+  );
+
   private static final String DATA_STREAM_TYPE_DISPLAY = "Data Stream Type";
   private static final DataStreamType DATA_STREAM_TYPE_DEFAULT = DataStreamType.NONE;
 
