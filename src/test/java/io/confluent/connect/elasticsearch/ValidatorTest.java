@@ -114,7 +114,7 @@ public class ValidatorTest {
   }
 
   @Test
-  public void testValidBothDataStreamConfigs() {
+  public void testValidDataStreamConfigs() {
     props.put(DATA_STREAM_DATASET_CONFIG, "a_valid_dataset");
     props.put(DATA_STREAM_TYPE_CONFIG, "logs");
     validator = new Validator(props, () -> mockClient);
@@ -123,7 +123,7 @@ public class ValidatorTest {
   }
 
   @Test
-  public void testValidMissingBothDataStreamConfigs() {
+  public void testValidDefaultConfig() {
     validator = new Validator(props, () -> mockClient);
     Config result = validator.validate();
     assertNoErrors(result);

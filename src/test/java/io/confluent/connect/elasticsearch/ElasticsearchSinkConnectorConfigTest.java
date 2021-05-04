@@ -69,13 +69,13 @@ public class ElasticsearchSinkConnectorConfigTest {
   }
 
   @Test
-  public void shouldAllowValidDataStreamTypeWithWeirdCasing() {
+  public void shouldAllowValidDataStreamTypeCaseInsensitive) {
     props.put(DATA_STREAM_TYPE_CONFIG, "mEtRICS");
     new ElasticsearchSinkConnectorConfig(props);
   }
 
   @Test(expected = ConfigException.class)
-  public void shouldNotAllowInvalidCasingDataStreamDataset() {
+  public void shouldNotAllowInvalidCaseDataStreamDataset() {
     props.put(DATA_STREAM_DATASET_CONFIG, "AN_INVALID.dataset123");
     new ElasticsearchSinkConnectorConfig(props);
   }
@@ -93,7 +93,7 @@ public class ElasticsearchSinkConnectorConfigTest {
   }
 
   @Test(expected = ConfigException.class)
-  public void shouldNotAllowTooLongDataStreamDataset() {
+  public void shouldNotAllowLongDataStreamDataset() {
     props.put(DATA_STREAM_DATASET_CONFIG, String.format("%d%100d", 1, 1));
     new ElasticsearchSinkConnectorConfig(props);
   }

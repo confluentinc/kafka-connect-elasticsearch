@@ -124,7 +124,7 @@ public class Validator {
   private void validateDataStreamFields() {
     if (config.dataStreamType() == DataStreamType.NONE ^ config.dataStreamDataset() == null) {
       String errorMessage = String.format(
-          "'%s' must be set if '%s' is set.", DATA_STREAM_DATASET_CONFIG, DATA_STREAM_TYPE_CONFIG
+          "Either both or neither '%s' and '%s' must be set.", DATA_STREAM_DATASET_CONFIG, DATA_STREAM_TYPE_CONFIG
       );
       addErrorMessage(DATA_STREAM_TYPE_CONFIG, errorMessage);
       addErrorMessage(DATA_STREAM_DATASET_CONFIG, errorMessage);

@@ -84,14 +84,14 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
 
   public static final String DATA_STREAM_DATASET_CONFIG = "data.stream.dataset";
   private static final String DATA_STREAM_DATASET_DOC =
-      "Generic name describing data ingested and its structure to be written to data stream. "
+      "Generic name describing data ingested and its structure to be written to a data stream. "
       + "Can be any arbitrary string that is no longer than 100 characters, is in all lowercase, "
       + "and does not contain spaces or any of these special characters ``/\\*\"<>|,#:-``. "
-      + "Otherwise, the default is ``null`` which indicates the connector will write "
+      + "Otherwise, no value indicates the connector will write "
       + "to regular indices instead. If filled, this configuration will be used alongside "
       + "``data.stream.type`` to construct the index name.";
   private static final String DATA_STREAM_DATASET_DISPLAY = "Data stream dataset";
-  private static final String DATA_STREAM_DATASET_DEFAULT = null;
+  private static final String DATA_STREAM_DATASET_DEFAULT = "";
 
   public static final String DATA_STREAM_TYPE_CONFIG = "data.stream.type";
   private static final String DATA_STREAM_TYPE_DOC =
@@ -102,7 +102,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
       + " which indicates the connector will write to regular indices instead. "
       + "If set, this configuration will be used alongside " + DATA_STREAM_DATASET_CONFIG
       + " to construct the index name.";
-  private static final String DATA_STREAM_TYPE_DISPLAY = "Data stream type";
+  private static final String DATA_STREAM_TYPE_DISPLAY = "Data Stream Type";
   private static final DataStreamType DATA_STREAM_TYPE_DEFAULT = DataStreamType.NONE;
 
   public static final String MAX_IN_FLIGHT_REQUESTS_CONFIG = "max.in.flight.requests";
@@ -973,28 +973,28 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
 
       if (((String) value).length() > 100) {
         throw new ConfigException(
-            name, value, "The specified dataset must no longer than 100 characters."
+            name, value, "The specified dataset must be no longer than 100 characters."
         );
       }
 
       if (!value.equals(((String) value).toLowerCase())) {
         throw new ConfigException(
-            name, value, "The specified dataset must be in lowercase."
+            name, value, "The specified dataset must be in all lowercase."
         );
       }
 
       if (((String) value).matches(".*[\\\\\\/\\*\\?\\\"<>| ,#\\-:]+.*")) {
         throw new ConfigException(
             name, value,
-            "The specified dataset contains a space or at least one "
-            + "invalid character \\/*?\"<>|,#-:"
+            "The specified dataset must not contain any spaces or "
+            + "invalid characters \\/*?\"<>|,#-:"
         );
       }
     }
 
     @Override
     public String toString() {
-      return "Valid Data stream dataset name.";
+      return "A valid dataset name that is less than 100 characters and does not contain any spaces or invalid characters \\/*?\"<>|,#-:";
     }
   }
 
