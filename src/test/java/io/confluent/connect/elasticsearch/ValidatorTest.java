@@ -75,10 +75,26 @@ public class ValidatorTest {
   }
 
   @Test
+  public void testValidDefaultConfig() {
+    validator = new Validator(props, () -> mockClient);
+    Config result = validator.validate();
+    assertNoErrors(result);
+  }
+
+  @Test
   public void testInvalidIndividualConfigs() {
     validator = new Validator(new HashMap<>(), () -> mockClient);
     Config result = validator.validate();
     assertHasErrorMessage(result, CONNECTION_URL_CONFIG, "Missing required configuration");
+  }
+
+  @Test
+  public void testValidUpsertDeleteOnDefaultConfig() {
+    props.put(BEHAVIOR_ON_NULL_VALUES_CONFIG, "delete");
+    props.put(WRITE_METHOD_CONFIG, "upsert");
+    validator = new Validator(props, () -> mockClient);
+    Config result = validator.validate();
+    assertNoErrors(result);
   }
 
   @Test
@@ -116,6 +132,15 @@ public class ValidatorTest {
   }
 
   @Test
+  public void testInvalidMissingOneDataStreamConfig() {
+    props.put(DATA_STREAM_DATASET_CONFIG, "a_valid_dataset");
+    validator = new Validator(props, () -> mockClient);
+    Config result = validator.validate();
+    assertHasErrorMessage(result, DATA_STREAM_DATASET_CONFIG, "must be set");
+    assertHasErrorMessage(result, DATA_STREAM_TYPE_CONFIG, "must be set");
+  }
+
+  @Test
   public void testInvalidUpsertDeleteOnValidDataStreamConfigs() {
     props.put(DATA_STREAM_DATASET_CONFIG, "a_valid_dataset");
     props.put(DATA_STREAM_TYPE_CONFIG, "logs");
@@ -124,30 +149,6 @@ public class ValidatorTest {
     validator = new Validator(props, () -> mockClient);
     Config result = validator.validate();
     assertNoErrors(result);
-
-    props.put(BEHAVIOR_ON_NULL_VALUES_CONFIG, "delete");
-    props.put(WRITE_METHOD_CONFIG, "upsert");
-    validator = new Validator(props, () -> mockClient);
-
-    result = validator.validate();
-    assertHasErrorMessage(result, BEHAVIOR_ON_NULL_VALUES_CONFIG, "must not be");
-    assertHasErrorMessage(result, WRITE_METHOD_CONFIG, "must not be");
-  }
-
-  @Test
-  public void testValidDefaultConfig() {
-    validator = new Validator(props, () -> mockClient);
-    Config result = validator.validate();
-    assertNoErrors(result);
-  }
-
-  @Test
-  public void testInvalidMissingOneDataStreamConfig() {
-    props.put(DATA_STREAM_DATASET_CONFIG, "a_valid_dataset");
-    validator = new Validator(props, () -> mockClient);
-    Config result = validator.validate();
-    assertHasErrorMessage(result, DATA_STREAM_DATASET_CONFIG, "must be set");
-    assertHasErrorMessage(result, DATA_STREAM_TYPE_CONFIG, "must be set");
 
     props.put(BEHAVIOR_ON_NULL_VALUES_CONFIG, "delete");
     props.put(WRITE_METHOD_CONFIG, "upsert");

@@ -797,6 +797,10 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
     return !getString(PROXY_HOST_CONFIG).isEmpty();
   }
 
+  public boolean isDataStream() {
+    return dataStreamType() != DataStreamType.NONE && !dataStreamDataset().equals("");
+  }
+
   public boolean isProxyWithAuthenticationConfigured() {
     return isBasicProxyConfigured()
         && !getString(PROXY_USERNAME_CONFIG).isEmpty()

@@ -95,7 +95,7 @@ public class Validator {
 
     try (RestHighLevelClient client = clientFactory.client()) {
       validateCredentials();
-      validateDataStreamFields();
+      validateDataStreamConfigs();
       validateIgnoreConfigs();
       validateKerberos();
       validateLingerMs();
@@ -125,7 +125,7 @@ public class Validator {
     }
   }
 
-  private void validateDataStreamFields() {
+  private void validateDataStreamConfigs() {
     if (config.dataStreamType() == DataStreamType.NONE ^ config.dataStreamDataset().equals("")) {
       String errorMessage = String.format(
           "Either both or neither '%s' and '%s' must be set.",
@@ -135,10 +135,8 @@ public class Validator {
       addErrorMessage(DATA_STREAM_TYPE_CONFIG, errorMessage);
       addErrorMessage(DATA_STREAM_DATASET_CONFIG, errorMessage);
     }
-    boolean atLeastOneSet = config.dataStreamType() != DataStreamType.NONE
-        || !config.dataStreamDataset().equals("");
 
-    if (atLeastOneSet && config.writeMethod() == WriteMethod.UPSERT) {
+    if (config.isDataStream() && config.writeMethod() == WriteMethod.UPSERT) {
       String errorMessage = String.format(
           "Upserts are not supported with data streams. %s must not be %s if %s and %s are set.",
           WRITE_METHOD_CONFIG,
@@ -149,7 +147,7 @@ public class Validator {
       addErrorMessage(WRITE_METHOD_CONFIG, errorMessage);
     }
 
-    if (atLeastOneSet && config.behaviorOnNullValues() == BehaviorOnNullValues.DELETE) {
+    if (config.isDataStream() && config.behaviorOnNullValues() == BehaviorOnNullValues.DELETE) {
       String errorMessage = String.format(
           "Deletes are not supported with data streams. %s must not be %s if %s and %s are set.",
           BEHAVIOR_ON_NULL_VALUES_CONFIG,
