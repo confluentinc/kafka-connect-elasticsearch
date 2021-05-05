@@ -17,9 +17,12 @@
 package io.confluent.connect.elasticsearch;
 
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BATCH_SIZE_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BEHAVIOR_ON_NULL_VALUES_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_PASSWORD_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_USERNAME_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.DATA_STREAM_DATASET_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.DATA_STREAM_TYPE_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.FLUSH_TIMEOUT_MS_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_KEY_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_KEY_TOPICS_CONFIG;
@@ -35,6 +38,7 @@ import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfi
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.SECURITY_PROTOCOL_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.SSL_CONFIG_PREFIX;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.KERBEROS_PRINCIPAL_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.WRITE_METHOD_CONFIG;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -71,10 +75,26 @@ public class ValidatorTest {
   }
 
   @Test
+  public void testValidDefaultConfig() {
+    validator = new Validator(props, () -> mockClient);
+    Config result = validator.validate();
+    assertNoErrors(result);
+  }
+
+  @Test
   public void testInvalidIndividualConfigs() {
     validator = new Validator(new HashMap<>(), () -> mockClient);
     Config result = validator.validate();
     assertHasErrorMessage(result, CONNECTION_URL_CONFIG, "Missing required configuration");
+  }
+
+  @Test
+  public void testValidUpsertDeleteOnDefaultConfig() {
+    props.put(BEHAVIOR_ON_NULL_VALUES_CONFIG, "delete");
+    props.put(WRITE_METHOD_CONFIG, "upsert");
+    validator = new Validator(props, () -> mockClient);
+    Config result = validator.validate();
+    assertNoErrors(result);
   }
 
   @Test
@@ -109,6 +129,32 @@ public class ValidatorTest {
 
     result = validator.validate();
     assertNoErrors(result);
+  }
+
+  @Test
+  public void testInvalidMissingOneDataStreamConfig() {
+    props.put(DATA_STREAM_DATASET_CONFIG, "a_valid_dataset");
+    validator = new Validator(props, () -> mockClient);
+    Config result = validator.validate();
+    assertHasErrorMessage(result, DATA_STREAM_DATASET_CONFIG, "must be set");
+    assertHasErrorMessage(result, DATA_STREAM_TYPE_CONFIG, "must be set");
+  }
+
+  @Test
+  public void testInvalidUpsertDeleteOnValidDataStreamConfigs() {
+    props.put(DATA_STREAM_DATASET_CONFIG, "a_valid_dataset");
+    props.put(DATA_STREAM_TYPE_CONFIG, "logs");
+    validator = new Validator(props, () -> mockClient);
+    Config result = validator.validate();
+    assertNoErrors(result);
+
+    props.put(BEHAVIOR_ON_NULL_VALUES_CONFIG, "delete");
+    props.put(WRITE_METHOD_CONFIG, "upsert");
+    validator = new Validator(props, () -> mockClient);
+
+    result = validator.validate();
+    assertHasErrorMessage(result, BEHAVIOR_ON_NULL_VALUES_CONFIG, "must not be");
+    assertHasErrorMessage(result, WRITE_METHOD_CONFIG, "must not be");
   }
 
   @Test
