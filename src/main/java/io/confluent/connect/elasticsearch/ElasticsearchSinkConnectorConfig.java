@@ -798,7 +798,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   }
 
   public boolean isDataStream() {
-    return dataStreamType() != DataStreamType.NONE && !dataStreamDataset().equals("");
+    return dataStreamType() != DataStreamType.NONE && !dataStreamDataset().isEmpty();
   }
 
   public boolean isProxyWithAuthenticationConfigured() {
