@@ -28,7 +28,7 @@ import org.elasticsearch.client.core.CountRequest;
 import org.elasticsearch.client.indices.GetIndexRequest;
 import org.elasticsearch.client.indices.GetMappingsRequest;
 import org.elasticsearch.client.indices.GetMappingsResponse;
-import org.elasticsearch.cluster.metadata.MappingMetaData;
+import org.elasticsearch.cluster.metadata.MappingMetadata;
 import org.elasticsearch.search.SearchHits;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -59,7 +59,7 @@ public class ElasticsearchHelperClient {
     return client.count(request, RequestOptions.DEFAULT).getCount();
   }
 
-  public MappingMetaData getMapping(String index) throws IOException {
+  public MappingMetadata getMapping(String index) throws IOException {
     GetMappingsRequest request = new GetMappingsRequest().indices(index);
     GetMappingsResponse response = client.indices().getMapping(request, RequestOptions.DEFAULT);
     return response.mappings().get(index);
