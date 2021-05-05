@@ -16,6 +16,7 @@
 package io.confluent.connect.elasticsearch;
 
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BehaviorOnNullValues;
+import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.DataStreamType;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.connect.errors.ConnectException;
@@ -87,7 +88,7 @@ public class ElasticsearchSinkTask extends SinkTask {
 
       logTrace("Writing {} to Elasticsearch.", record);
 
-      ensureIndexExists(convertTopicToIndexName(record.topic()));
+      ensureIndexExists(createIndexName(record.topic()));
       checkMapping(record);
       tryWriteRecord(record);
     }
@@ -115,7 +116,7 @@ public class ElasticsearchSinkTask extends SinkTask {
   }
 
   private void checkMapping(SinkRecord record) {
-    String index = convertTopicToIndexName(record.topic());
+    String index = createIndexName(record.topic());
     if (!config.shouldIgnoreSchema(record.topic()) && !existingMappings.contains(index)) {
       if (!client.hasMapping(index)) {
         client.createMapping(index, record.valueSchema());
@@ -123,6 +124,28 @@ public class ElasticsearchSinkTask extends SinkTask {
       log.debug("Caching mapping for index '{}' locally.", index);
       existingMappings.add(index);
     }
+  }
+
+  private String convertUsingIndexTemplate(String topic) {
+    topic = topic.toLowerCase();
+
+    if (topic.length() > 100) {
+      topic = topic.substring(0, 100);
+    }
+    String index = String.format(
+        "%s-%s-%s",
+        config.dataStreamType().name(),
+        config.dataStreamDataset(),
+        topic
+    );
+    return index;
+  }
+
+  private String createIndexName(String topic) {
+    if (config.dataStreamDataset() == null || config.dataStreamType() == DataStreamType.NONE) {
+      return convertTopicToIndexName(topic);
+    }
+    return convertUsingIndexTemplate(topic);
   }
 
   /**
@@ -184,7 +207,7 @@ public class ElasticsearchSinkTask extends SinkTask {
   private void tryWriteRecord(SinkRecord sinkRecord) {
     DocWriteRequest<?> record = null;
     try {
-      record = converter.convertRecord(sinkRecord, convertTopicToIndexName(sinkRecord.topic()));
+      record = converter.convertRecord(sinkRecord, createIndexName(sinkRecord.topic()));
     } catch (DataException convertException) {
       reportBadRecord(sinkRecord, convertException);
 

@@ -16,6 +16,8 @@
 package io.confluent.connect.elasticsearch;
 
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BEHAVIOR_ON_NULL_VALUES_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.DATA_STREAM_DATASET_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.DATA_STREAM_TYPE_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.DROP_INVALID_MESSAGE_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_KEY_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_SCHEMA_CONFIG;
@@ -306,6 +308,43 @@ public class ElasticsearchSinkTaskTest {
     record = record(dots, true, false, 0);
     task.put(Collections.singletonList(record));
     verify(client, times(1)).createIndex(eq("dotdot"));
+  }
+
+  private String convertUsingIndexTemplate(String type, String dataset, String namespace) {
+    return String.format("%s-%s-%s", type, dataset, namespace);
+  }
+
+  @Test
+  public void testConvertUsingIndexTemplate() {
+    final String TYPE = "LOGS";
+    final String DATASET = "a_valid_dataset";
+    props.put(DATA_STREAM_TYPE_CONFIG, TYPE);
+    props.put(DATA_STREAM_DATASET_CONFIG, DATASET);
+    setUpTask();
+
+    String upperCaseTopic = "UPPERCASE";
+    SinkRecord record = record(upperCaseTopic, true, false, 0);
+    task.put(Collections.singletonList(record));
+    String indexName = convertUsingIndexTemplate(TYPE, DATASET, upperCaseTopic.toLowerCase());
+    verify(client, times(1)).createIndex(eq(indexName));
+
+    String tooLongTopic = String.format("%0101d", 1);
+    record = record(tooLongTopic, true, false, 0);
+    task.put(Collections.singletonList(record));
+    indexName = convertUsingIndexTemplate(TYPE, DATASET, tooLongTopic.substring(0, 100));
+    verify(client, times(1)).createIndex(eq(indexName));
+
+    String startsWithDash = "-dash";
+    record = record(startsWithDash, true, false, 0);
+    task.put(Collections.singletonList(record));
+    indexName = convertUsingIndexTemplate(TYPE, DATASET, startsWithDash);
+    verify(client, times(1)).createIndex(eq(indexName));
+
+    String startsWithUnderscore = "_underscore";
+    record = record(startsWithUnderscore, true, false, 0);
+    task.put(Collections.singletonList(record));
+    indexName = convertUsingIndexTemplate(TYPE, DATASET, startsWithUnderscore);
+    verify(client, times(1)).createIndex(eq(indexName));
   }
 
   @Test
