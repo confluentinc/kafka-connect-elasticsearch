@@ -318,7 +318,7 @@ public class ElasticsearchSinkTaskTest {
   public void testConvertUsingIndexTemplate() {
     final String type = "logs";
     final String dataset = "a_valid_dataset";
-    props.put(DATA_STREAM_TYPE_CONFIG, type.toUpperCase());
+    props.put(DATA_STREAM_TYPE_CONFIG, type);
     props.put(DATA_STREAM_DATASET_CONFIG, dataset);
     setUpTask();
 
@@ -344,6 +344,12 @@ public class ElasticsearchSinkTaskTest {
     record = record(startsWithUnderscore, true, false, 0);
     task.put(Collections.singletonList(record));
     indexName = convertUsingIndexTemplate(type, dataset, startsWithUnderscore);
+    verify(client, times(1)).createIndex(eq(indexName));
+
+    String emptyStr = "";
+    record = record(emptyStr, true, false, 0);
+    task.put(Collections.singletonList(record));
+    indexName = convertUsingIndexTemplate(type, dataset, emptyStr);
     verify(client, times(1)).createIndex(eq(indexName));
   }
 
