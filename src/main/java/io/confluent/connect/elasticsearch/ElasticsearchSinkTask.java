@@ -144,9 +144,9 @@ public class ElasticsearchSinkTask extends SinkTask {
 
   private String createIndexName(String topic) {
     if (config.isDataStream()) {
-      return convertTopicToIndexName(topic);
+      return convertUsingIndexTemplate(topic);
     }
-    return convertUsingIndexTemplate(topic);
+    return convertTopicToIndexName(topic);
   }
 
   /**
