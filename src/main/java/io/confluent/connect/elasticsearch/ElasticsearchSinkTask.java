@@ -88,7 +88,7 @@ public class ElasticsearchSinkTask extends SinkTask {
 
       logTrace("Writing {} to Elasticsearch.", record);
 
-      ensureIndexExists(createIndexName(record.topic()));
+      ensureIndexExists(createIndexNameWith(record.topic()));
       checkMapping(record);
       tryWriteRecord(record);
     }
@@ -116,7 +116,7 @@ public class ElasticsearchSinkTask extends SinkTask {
   }
 
   private void checkMapping(SinkRecord record) {
-    String index = createIndexName(record.topic());
+    String index = createIndexNameWith(record.topic());
     if (!config.shouldIgnoreSchema(record.topic()) && !existingMappings.contains(index)) {
       if (!client.hasMapping(index)) {
         client.createMapping(index, record.valueSchema());
@@ -142,7 +142,7 @@ public class ElasticsearchSinkTask extends SinkTask {
     return index;
   }
 
-  private String createIndexName(String topic) {
+  private String createIndexNameWith(String topic) {
     if (config.isDataStream()) {
       return convertUsingIndexTemplate(topic);
     }
@@ -208,7 +208,7 @@ public class ElasticsearchSinkTask extends SinkTask {
   private void tryWriteRecord(SinkRecord sinkRecord) {
     DocWriteRequest<?> record = null;
     try {
-      record = converter.convertRecord(sinkRecord, createIndexName(sinkRecord.topic()));
+      record = converter.convertRecord(sinkRecord, createIndexNameWith(sinkRecord.topic()));
     } catch (DataException convertException) {
       reportBadRecord(sinkRecord, convertException);
 
