@@ -316,34 +316,34 @@ public class ElasticsearchSinkTaskTest {
 
   @Test
   public void testConvertUsingIndexTemplate() {
-    final String TYPE = "LOGS";
-    final String DATASET = "a_valid_dataset";
-    props.put(DATA_STREAM_TYPE_CONFIG, TYPE);
-    props.put(DATA_STREAM_DATASET_CONFIG, DATASET);
+    final String type = "logs";
+    final String dataset = "a_valid_dataset";
+    props.put(DATA_STREAM_TYPE_CONFIG, type.toUpperCase());
+    props.put(DATA_STREAM_DATASET_CONFIG, dataset);
     setUpTask();
 
     String upperCaseTopic = "UPPERCASE";
     SinkRecord record = record(upperCaseTopic, true, false, 0);
     task.put(Collections.singletonList(record));
-    String indexName = convertUsingIndexTemplate(TYPE, DATASET, upperCaseTopic.toLowerCase());
+    String indexName = convertUsingIndexTemplate(type, dataset, upperCaseTopic.toLowerCase());
     verify(client, times(1)).createIndex(eq(indexName));
 
     String tooLongTopic = String.format("%0101d", 1);
     record = record(tooLongTopic, true, false, 0);
     task.put(Collections.singletonList(record));
-    indexName = convertUsingIndexTemplate(TYPE, DATASET, tooLongTopic.substring(0, 100));
+    indexName = convertUsingIndexTemplate(type, dataset, tooLongTopic.substring(0, 100));
     verify(client, times(1)).createIndex(eq(indexName));
 
     String startsWithDash = "-dash";
     record = record(startsWithDash, true, false, 0);
     task.put(Collections.singletonList(record));
-    indexName = convertUsingIndexTemplate(TYPE, DATASET, startsWithDash);
+    indexName = convertUsingIndexTemplate(type, dataset, startsWithDash);
     verify(client, times(1)).createIndex(eq(indexName));
 
     String startsWithUnderscore = "_underscore";
     record = record(startsWithUnderscore, true, false, 0);
     task.put(Collections.singletonList(record));
-    indexName = convertUsingIndexTemplate(TYPE, DATASET, startsWithUnderscore);
+    indexName = convertUsingIndexTemplate(type, dataset, startsWithUnderscore);
     verify(client, times(1)).createIndex(eq(indexName));
   }
 

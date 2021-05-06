@@ -55,6 +55,7 @@ public class ElasticsearchConnectorBaseIT extends BaseConnectorIT {
 
   protected ElasticsearchHelperClient helperClient;
   protected Map<String, String> props;
+  protected String index = TOPIC;
 
   @AfterClass
   public static void cleanupAfterAll() {
@@ -78,7 +79,7 @@ public class ElasticsearchConnectorBaseIT extends BaseConnectorIT {
     stopConnect();
 
     if (helperClient != null) {
-      helperClient.deleteIndex(TOPIC);
+      helperClient.deleteIndex(index);
       helperClient.close();
     }
   }
@@ -118,11 +119,11 @@ public class ElasticsearchConnectorBaseIT extends BaseConnectorIT {
   protected void verifySearchResults(int numRecords) throws Exception {
     waitForRecords(numRecords);
 
-    for (SearchHit hit : helperClient.search(TOPIC)) {
+    for (SearchHit hit : helperClient.search(index)) {
       int id = (Integer) hit.getSourceAsMap().get("doc_num");
       assertNotNull(id);
       assertTrue(id < numRecords);
-      assertEquals(TOPIC, hit.getIndex());
+      assertEquals(index, hit.getIndex());
     }
   }
 
@@ -130,7 +131,7 @@ public class ElasticsearchConnectorBaseIT extends BaseConnectorIT {
     TestUtils.waitForCondition(
         () -> {
           try {
-            return helperClient.getDocCount(TOPIC) == numRecords;
+            return helperClient.getDocCount(index) == numRecords;
           } catch (ElasticsearchStatusException e) {
             if (e.getMessage().contains("index_not_found_exception")) {
               return false;

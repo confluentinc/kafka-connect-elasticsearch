@@ -126,6 +126,7 @@ public class ElasticsearchSinkTask extends SinkTask {
     }
   }
 
+  // TODO: Add method header
   private String convertUsingIndexTemplate(String topic) {
     topic = topic.toLowerCase();
 
@@ -134,7 +135,7 @@ public class ElasticsearchSinkTask extends SinkTask {
     }
     String index = String.format(
         "%s-%s-%s",
-        config.dataStreamType().name(),
+        config.dataStreamType().name().toLowerCase(),
         config.dataStreamDataset(),
         topic
     );
@@ -142,7 +143,7 @@ public class ElasticsearchSinkTask extends SinkTask {
   }
 
   private String createIndexName(String topic) {
-    if (config.dataStreamDataset() == null || config.dataStreamType() == DataStreamType.NONE) {
+    if (config.isDataStream()) {
       return convertTopicToIndexName(topic);
     }
     return convertUsingIndexTemplate(topic);
