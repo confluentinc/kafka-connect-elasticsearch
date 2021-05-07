@@ -113,6 +113,21 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
   }
 
   @Test
+  public void testHappyPathDataStreamtest() throws Exception {
+    props.put(DATA_STREAM_TYPE_CONFIG, "logs");
+    props.put(DATA_STREAM_DATASET_CONFIG, "dataset");
+    index = "logs-dataset-" + TOPIC;
+    runSimpleTest(props);
+    // it seems like it is not being written as data streams for some reason
+    System.out.println(helperClient.getDataStreamCount(index));
+  }
+
+  @Test
+  public void testDataStreamGeneralDeleteLater() throws Exception {
+    helperClient.getDataStreamCount(index);
+  }
+
+  @Test
   public void testNullValue() throws Exception {
     runSimpleTest(props);
 

@@ -18,20 +18,23 @@ package io.confluent.connect.elasticsearch.helper;
 import io.confluent.connect.elasticsearch.ConfigCallbackHandler;
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig;
 import java.io.IOException;
+import java.util.List;
+
 import org.apache.http.HttpHost;
+import org.elasticsearch.ElasticsearchStatusException;
 import org.elasticsearch.action.admin.indices.delete.DeleteIndexRequest;
 import org.elasticsearch.action.search.SearchRequest;
 import org.elasticsearch.client.RequestOptions;
 import org.elasticsearch.client.RestClient;
 import org.elasticsearch.client.RestHighLevelClient;
 import org.elasticsearch.client.core.CountRequest;
-import org.elasticsearch.client.indices.GetIndexRequest;
-import org.elasticsearch.client.indices.GetMappingsRequest;
-import org.elasticsearch.client.indices.GetMappingsResponse;
+import org.elasticsearch.client.indices.*;
 import org.elasticsearch.cluster.metadata.MappingMetadata;
 import org.elasticsearch.search.SearchHits;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import static io.confluent.connect.elasticsearch.RetryUtil.callWithRetries;
 
 public class ElasticsearchHelperClient {
 
@@ -47,6 +50,21 @@ public class ElasticsearchHelperClient {
             .setHttpClientConfigCallback(configCallbackHandler)
             .setRequestConfigCallback(configCallbackHandler)
     );
+  }
+
+  public int getDataStreamCount(String index) throws IOException {
+    // todo: check if data stream was created
+//    GetDataStreamRequest request = new GetDataStreamRequest(index);
+//    List<DataStream> datastreams = client.indices().getDataStream(request, RequestOptions.DEFAULT).getDataStreams();
+//    System.out.println(datastreams.size());
+//    // do debugger here
+//    return datastreams.size();
+    CreateDataStreamRequest createRequest = new CreateDataStreamRequest("logs-dataset-test");
+    client.indices().createDataStream(createRequest, RequestOptions.DEFAULT);
+
+//    DataStreamsStatsRequest request = new DataStreamsStatsRequest("logs-dataset-test");
+//    client.indices().dataStreamsStats(request, RequestOptions.DEFAULT);
+    return 0;
   }
 
   public void deleteIndex(String index) throws IOException {

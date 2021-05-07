@@ -20,6 +20,7 @@ import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfi
 
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BehaviorOnMalformedDoc;
 import java.io.IOException;
+import java.sql.SQLOutput;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;

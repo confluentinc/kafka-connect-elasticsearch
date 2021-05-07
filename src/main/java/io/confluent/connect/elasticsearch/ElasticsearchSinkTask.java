@@ -129,6 +129,7 @@ public class ElasticsearchSinkTask extends SinkTask {
   // TODO: Add method header
   private String convertUsingIndexTemplate(String topic) {
     topic = topic.toLowerCase();
+    System.out.println("HELLO I AM HERE AND VERY STUCK HELP");
 
     if (topic.length() > 100) {
       topic = topic.substring(0, 100);
