@@ -52,8 +52,8 @@ import org.elasticsearch.action.bulk.BulkResponse;
 import org.elasticsearch.client.RequestOptions;
 import org.elasticsearch.client.RestClient;
 import org.elasticsearch.client.RestHighLevelClient;
-import org.elasticsearch.client.indices.CreateIndexRequest;
 import org.elasticsearch.client.indices.CreateDataStreamRequest;
+import org.elasticsearch.client.indices.CreateIndexRequest;
 import org.elasticsearch.client.indices.GetIndexRequest;
 import org.elasticsearch.client.indices.GetMappingsRequest;
 import org.elasticsearch.client.indices.GetMappingsResponse;
@@ -192,7 +192,6 @@ public class ElasticsearchClient {
     }
 
     CreateIndexRequest request = new CreateIndexRequest(index);
-
     return callWithRetries(
         "create index " + index,
         () -> {
@@ -400,7 +399,6 @@ public class ElasticsearchClient {
    */
   private boolean createDataStream(String dataStream) {
     CreateDataStreamRequest request = new CreateDataStreamRequest(dataStream);
-
     return callWithRetries(
         "create data stream " + dataStream,
         () -> {
