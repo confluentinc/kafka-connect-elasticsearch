@@ -127,7 +127,13 @@ public class ElasticsearchConnectorBaseIT extends BaseConnectorIT {
       int id = (Integer) hit.getSourceAsMap().get("doc_num");
       assertNotNull(id);
       assertTrue(id < numRecords);
-      assertEquals(index, hit.getIndex());
+
+      if (isDatastream) {
+        assertTrue(hit.getIndex().contains(index));
+      } else {
+        assertEquals(index, hit.getIndex());
+      }
+      System.out.println("A HIT " + id);
     }
   }
 

@@ -52,11 +52,10 @@ public class ElasticsearchHelperClient {
     );
   }
 
-  public int getDataStreamCount(String index) throws IOException {
-    // todo: check if amoutn is correct
+  public DataStream getDataStream(String index) throws IOException {
     GetDataStreamRequest request = new GetDataStreamRequest(index);
     List<DataStream> datastreams = client.indices().getDataStream(request, RequestOptions.DEFAULT).getDataStreams();
-    return datastreams.size();
+    return datastreams.get(0);
   }
 
   public void deleteIndex(String index, boolean isDataStream) throws IOException {
