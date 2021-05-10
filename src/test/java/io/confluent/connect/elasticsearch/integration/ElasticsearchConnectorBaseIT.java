@@ -133,7 +133,6 @@ public class ElasticsearchConnectorBaseIT extends BaseConnectorIT {
       } else {
         assertEquals(index, hit.getIndex());
       }
-      System.out.println("A HIT " + id);
     }
   }
 

@@ -21,7 +21,6 @@ import java.io.IOException;
 import java.util.List;
 
 import org.apache.http.HttpHost;
-import org.elasticsearch.ElasticsearchStatusException;
 import org.elasticsearch.action.admin.indices.delete.DeleteIndexRequest;
 import org.elasticsearch.action.search.SearchRequest;
 import org.elasticsearch.client.RequestOptions;
@@ -33,8 +32,6 @@ import org.elasticsearch.cluster.metadata.MappingMetadata;
 import org.elasticsearch.search.SearchHits;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import static io.confluent.connect.elasticsearch.RetryUtil.callWithRetries;
 
 public class ElasticsearchHelperClient {
 
