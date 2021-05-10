@@ -30,6 +30,7 @@ import org.apache.kafka.connect.json.JsonConverter;
 import org.apache.kafka.connect.sink.SinkRecord;
 import org.apache.kafka.connect.storage.Converter;
 import org.elasticsearch.action.DocWriteRequest;
+import org.elasticsearch.action.DocWriteRequest.OpType;
 import org.elasticsearch.action.delete.DeleteRequest;
 import org.elasticsearch.action.index.IndexRequest;
 import org.elasticsearch.action.update.UpdateRequest;
@@ -162,8 +163,9 @@ public class DataConverter {
             .upsert(payload, XContentType.JSON)
             .retryOnConflict(Math.min(config.maxInFlightRequests(), 5));
       case INSERT:
+        OpType opType = config.isDataStream() ? OpType.CREATE : OpType.INDEX;
         return maybeAddExternalVersioning(
-            new IndexRequest(index).id(id).source(payload, XContentType.JSON),
+            new IndexRequest(index).id(id).source(payload, XContentType.JSON).opType(opType),
             record
         );
       default:
