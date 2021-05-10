@@ -53,7 +53,9 @@ import org.elasticsearch.action.bulk.BulkResponse;
 import org.elasticsearch.client.RequestOptions;
 import org.elasticsearch.client.RestClient;
 import org.elasticsearch.client.RestHighLevelClient;
+import org.elasticsearch.client.Validatable;
 import org.elasticsearch.client.indices.CreateIndexRequest;
+import org.elasticsearch.client.indices.CreateDataStreamRequest;
 import org.elasticsearch.client.indices.GetIndexRequest;
 import org.elasticsearch.client.indices.GetMappingsRequest;
 import org.elasticsearch.client.indices.GetMappingsResponse;
@@ -186,13 +188,37 @@ public class ElasticsearchClient {
     if (indexExists(index)) {
       return false;
     }
+    if (config.isDataStream()) {
+      return createDataStream(index);
+    }
 
     CreateIndexRequest request = new CreateIndexRequest(index);
+
     return callWithRetries(
         "create index " + index,
         () -> {
           try {
             client.indices().create(request, RequestOptions.DEFAULT);
+          } catch (ElasticsearchStatusException | IOException e) {
+            if (!e.getMessage().contains(RESOURCE_ALREADY_EXISTS_EXCEPTION)) {
+              throw e;
+            }
+            return false;
+          }
+          return true;
+        }
+    );
+  }
+
+  // TODO: add method header
+  private boolean createDataStream(String index) {
+    CreateDataStreamRequest request = new CreateDataStreamRequest(index);
+
+    return callWithRetries(
+        "create index " + index,
+        () -> {
+          try {
+            client.indices().createDataStream(request, RequestOptions.DEFAULT);
           } catch (ElasticsearchStatusException | IOException e) {
             if (!e.getMessage().contains(RESOURCE_ALREADY_EXISTS_EXCEPTION)) {
               throw e;

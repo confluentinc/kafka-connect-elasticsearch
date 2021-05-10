@@ -53,21 +53,18 @@ public class ElasticsearchHelperClient {
   }
 
   public int getDataStreamCount(String index) throws IOException {
-    // todo: check if data stream was created
-//    GetDataStreamRequest request = new GetDataStreamRequest(index);
-//    List<DataStream> datastreams = client.indices().getDataStream(request, RequestOptions.DEFAULT).getDataStreams();
-//    System.out.println(datastreams.size());
-//    // do debugger here
-//    return datastreams.size();
-    CreateDataStreamRequest createRequest = new CreateDataStreamRequest("logs-dataset-test");
-    client.indices().createDataStream(createRequest, RequestOptions.DEFAULT);
-
-//    DataStreamsStatsRequest request = new DataStreamsStatsRequest("logs-dataset-test");
-//    client.indices().dataStreamsStats(request, RequestOptions.DEFAULT);
-    return 0;
+    // todo: check if amoutn is correct
+    GetDataStreamRequest request = new GetDataStreamRequest(index);
+    List<DataStream> datastreams = client.indices().getDataStream(request, RequestOptions.DEFAULT).getDataStreams();
+    return datastreams.size();
   }
 
-  public void deleteIndex(String index) throws IOException {
+  public void deleteIndex(String index, boolean isDataStream) throws IOException {
+    if (isDataStream) {
+      DeleteDataStreamRequest request = new DeleteDataStreamRequest(index);
+      client.indices().deleteDataStream(request, RequestOptions.DEFAULT);
+      return;
+    }
     DeleteIndexRequest request = new DeleteIndexRequest(index);
     client.indices().delete(request, RequestOptions.DEFAULT);
   }

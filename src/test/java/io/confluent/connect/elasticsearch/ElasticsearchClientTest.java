@@ -106,7 +106,7 @@ public class ElasticsearchClientTest {
   @After
   public void cleanup() throws IOException {
     if (helperClient != null && helperClient.indexExists(INDEX)){
-      helperClient.deleteIndex(INDEX);
+      helperClient.deleteIndex(INDEX, config.isDataStream());
     }
   }
 

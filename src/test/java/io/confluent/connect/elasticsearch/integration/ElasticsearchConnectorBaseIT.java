@@ -55,7 +55,8 @@ public class ElasticsearchConnectorBaseIT extends BaseConnectorIT {
 
   protected ElasticsearchHelperClient helperClient;
   protected Map<String, String> props;
-  protected String index = TOPIC;
+  protected String index;
+  protected boolean isDatastream;
 
   @AfterClass
   public static void cleanupAfterAll() {
@@ -64,6 +65,9 @@ public class ElasticsearchConnectorBaseIT extends BaseConnectorIT {
 
   @Before
   public void setup() {
+    index = TOPIC;
+    isDatastream = false;
+
     startConnect();
     connect.kafka().createTopic(TOPIC);
 
@@ -79,7 +83,7 @@ public class ElasticsearchConnectorBaseIT extends BaseConnectorIT {
     stopConnect();
 
     if (helperClient != null) {
-      helperClient.deleteIndex(index);
+      helperClient.deleteIndex(index, isDatastream);
       helperClient.close();
     }
   }

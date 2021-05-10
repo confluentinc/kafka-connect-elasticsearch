@@ -120,6 +120,7 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
     runSimpleTest(props);
     // it seems like it is not being written as data streams for some reason
     System.out.println(helperClient.getDataStreamCount(index));
+    System.out.println("LOCA LOCA");
   }
 
   @Test
