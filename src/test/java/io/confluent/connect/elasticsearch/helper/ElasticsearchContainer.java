@@ -51,7 +51,7 @@ public class ElasticsearchContainer
   /**
    * Default Elasticsearch version.
    */
-  public static final String DEFAULT_ES_VERSION = "7.0.1";
+  public static final String DEFAULT_ES_VERSION = "7.12.0";
 
   /**
    * Default Elasticsearch port.
