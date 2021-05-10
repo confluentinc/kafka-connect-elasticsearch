@@ -177,7 +177,8 @@ public class ElasticsearchClient {
   }
 
   /**
-   * Creates an index. Will not recreate the index if it already exists.
+   * Creates an index. Will not recreate the index if it already exists. If the data stream
+   * configuration is set, will create the index as a data stream instead.
    *
    * @param index the index to create
    * @return true if the index was created, false if it already exists
@@ -392,16 +393,16 @@ public class ElasticsearchClient {
   }
 
   /**
-   * Creates a data stream. Will not recreate the index if it already exists.
+   * Creates a data stream. Will not recreate the data stream if it already exists.
    *
-   * @param index the index to create
-   * @return true if the index was created, false if it already exists
+   * @param dataStream the data stream to create
+   * @return true if the data stream was created, false if it already exists
    */
-  private boolean createDataStream(String index) {
-    CreateDataStreamRequest request = new CreateDataStreamRequest(index);
+  private boolean createDataStream(String dataStream) {
+    CreateDataStreamRequest request = new CreateDataStreamRequest(dataStream);
 
     return callWithRetries(
-        "create index " + index,
+        "create data stream " + dataStream,
         () -> {
           try {
             client.indices().createDataStream(request, RequestOptions.DEFAULT);
