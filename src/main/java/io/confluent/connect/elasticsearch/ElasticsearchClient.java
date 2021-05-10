@@ -208,26 +208,6 @@ public class ElasticsearchClient {
     );
   }
 
-  // TODO: add method header
-  private boolean createDataStream(String index) {
-    CreateDataStreamRequest request = new CreateDataStreamRequest(index);
-
-    return callWithRetries(
-        "create index " + index,
-        () -> {
-          try {
-            client.indices().createDataStream(request, RequestOptions.DEFAULT);
-          } catch (ElasticsearchStatusException | IOException e) {
-            if (!e.getMessage().contains(RESOURCE_ALREADY_EXISTS_EXCEPTION)) {
-              throw e;
-            }
-            return false;
-          }
-          return true;
-        }
-    );
-  }
-
   /**
    * Creates a mapping for the given index and schema.
    *
@@ -409,6 +389,31 @@ public class ElasticsearchClient {
     } catch (IOException e) {
       log.warn("Failed to close Elasticsearch client.", e);
     }
+  }
+
+  /**
+   * Creates a data stream. Will not recreate the index if it already exists.
+   *
+   * @param index the index to create
+   * @return true if the index was created, false if it already exists
+   */
+  private boolean createDataStream(String index) {
+    CreateDataStreamRequest request = new CreateDataStreamRequest(index);
+
+    return callWithRetries(
+        "create index " + index,
+        () -> {
+          try {
+            client.indices().createDataStream(request, RequestOptions.DEFAULT);
+          } catch (ElasticsearchStatusException | IOException e) {
+            if (!e.getMessage().contains(RESOURCE_ALREADY_EXISTS_EXCEPTION)) {
+              throw e;
+            }
+            return false;
+          }
+          return true;
+        }
+    );
   }
 
   /**

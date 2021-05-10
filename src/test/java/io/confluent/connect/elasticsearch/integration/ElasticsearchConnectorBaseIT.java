@@ -53,10 +53,11 @@ public class ElasticsearchConnectorBaseIT extends BaseConnectorIT {
 
   protected static ElasticsearchContainer container;
 
+  protected boolean isDataStream;
   protected ElasticsearchHelperClient helperClient;
   protected Map<String, String> props;
   protected String index;
-  protected boolean isDatastream;
+
 
   @AfterClass
   public static void cleanupAfterAll() {
@@ -66,7 +67,7 @@ public class ElasticsearchConnectorBaseIT extends BaseConnectorIT {
   @Before
   public void setup() {
     index = TOPIC;
-    isDatastream = false;
+    isDataStream = false;
 
     startConnect();
     connect.kafka().createTopic(TOPIC);
@@ -83,7 +84,7 @@ public class ElasticsearchConnectorBaseIT extends BaseConnectorIT {
     stopConnect();
 
     if (helperClient != null) {
-      helperClient.deleteIndex(index, isDatastream);
+      helperClient.deleteIndex(index, isDataStream);
       helperClient.close();
     }
   }
@@ -128,7 +129,7 @@ public class ElasticsearchConnectorBaseIT extends BaseConnectorIT {
       assertNotNull(id);
       assertTrue(id < numRecords);
 
-      if (isDatastream) {
+      if (isDataStream) {
         assertTrue(hit.getIndex().contains(index));
       } else {
         assertEquals(index, hit.getIndex());

@@ -106,7 +106,7 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
 
   @Test
   public void testHappyPathDataStream() throws Exception {
-    isDatastream = true;
+    isDataStream = true;
     props.put(DATA_STREAM_TYPE_CONFIG, "logs");
     props.put(DATA_STREAM_DATASET_CONFIG, "dataset");
     index = "logs-dataset-" + TOPIC;

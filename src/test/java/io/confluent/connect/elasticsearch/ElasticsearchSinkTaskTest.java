@@ -310,12 +310,8 @@ public class ElasticsearchSinkTaskTest {
     verify(client, times(1)).createIndex(eq("dotdot"));
   }
 
-  private String convertUsingIndexTemplate(String type, String dataset, String namespace) {
-    return String.format("%s-%s-%s", type, dataset, namespace);
-  }
-
   @Test
-  public void testConvertUsingIndexTemplate() {
+  public void testConvertTopicToIndexTemplate() {
     final String type = "logs";
     final String dataset = "a_valid_dataset";
     props.put(DATA_STREAM_TYPE_CONFIG, type);
@@ -325,31 +321,31 @@ public class ElasticsearchSinkTaskTest {
     String upperCaseTopic = "UPPERCASE";
     SinkRecord record = record(upperCaseTopic, true, false, 0);
     task.put(Collections.singletonList(record));
-    String indexName = convertUsingIndexTemplate(type, dataset, upperCaseTopic.toLowerCase());
+    String indexName = convertToIndexTemplate(type, dataset, upperCaseTopic.toLowerCase());
     verify(client, times(1)).createIndex(eq(indexName));
 
     String tooLongTopic = String.format("%0101d", 1);
     record = record(tooLongTopic, true, false, 0);
     task.put(Collections.singletonList(record));
-    indexName = convertUsingIndexTemplate(type, dataset, tooLongTopic.substring(0, 100));
+    indexName = convertToIndexTemplate(type, dataset, tooLongTopic.substring(0, 100));
     verify(client, times(1)).createIndex(eq(indexName));
 
     String startsWithDash = "-dash";
     record = record(startsWithDash, true, false, 0);
     task.put(Collections.singletonList(record));
-    indexName = convertUsingIndexTemplate(type, dataset, startsWithDash);
+    indexName = convertToIndexTemplate(type, dataset, startsWithDash);
     verify(client, times(1)).createIndex(eq(indexName));
 
     String startsWithUnderscore = "_underscore";
     record = record(startsWithUnderscore, true, false, 0);
     task.put(Collections.singletonList(record));
-    indexName = convertUsingIndexTemplate(type, dataset, startsWithUnderscore);
+    indexName = convertToIndexTemplate(type, dataset, startsWithUnderscore);
     verify(client, times(1)).createIndex(eq(indexName));
 
     String emptyStr = "";
     record = record(emptyStr, true, false, 0);
     task.put(Collections.singletonList(record));
-    indexName = convertUsingIndexTemplate(type, dataset, emptyStr);
+    indexName = convertToIndexTemplate(type, dataset, emptyStr);
     verify(client, times(1)).createIndex(eq(indexName));
   }
 
@@ -362,6 +358,10 @@ public class ElasticsearchSinkTaskTest {
     // call start twice for both exceptions
     setUpTask();
     setUpTask();
+  }
+
+  private String convertToIndexTemplate(String type, String dataset, String namespace) {
+    return String.format("%s-%s-%s", type, dataset, namespace);
   }
 
   private SinkRecord record() {

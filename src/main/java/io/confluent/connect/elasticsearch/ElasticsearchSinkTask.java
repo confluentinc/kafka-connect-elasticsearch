@@ -16,7 +16,6 @@
 package io.confluent.connect.elasticsearch;
 
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BehaviorOnNullValues;
-import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.DataStreamType;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.connect.errors.ConnectException;
@@ -126,28 +125,6 @@ public class ElasticsearchSinkTask extends SinkTask {
     }
   }
 
-  // TODO: Add method header
-  private String convertUsingIndexTemplate(String topic) {
-    topic = topic.toLowerCase();
-    if (topic.length() > 100) {
-      topic = topic.substring(0, 100);
-    }
-    String index = String.format(
-        "%s-%s-%s",
-        config.dataStreamType().name().toLowerCase(),
-        config.dataStreamDataset(),
-        topic
-    );
-    return index;
-  }
-
-  private String createIndexNameWith(String topic) {
-    if (config.isDataStream()) {
-      return convertUsingIndexTemplate(topic);
-    }
-    return convertTopicToIndexName(topic);
-  }
-
   /**
    * Returns the converted index name from a given topic name. Elasticsearch accepts:
    * <ul>
@@ -178,6 +155,48 @@ public class ElasticsearchSinkTask extends SinkTask {
     }
 
     return index;
+  }
+
+  /**
+   * Returns the converted index name from a given topic name in the form {type}-{dataset}-{topic}.
+   * For the <code>topic</code>, Elasticsearch accepts:
+   * <ul>
+   *   <li>all lowercase</li>
+   *   <li>no longer than 100 bytes</li>
+   * </ul>
+   * (<a href="https://github.com/elastic/ecs/blob/master/rfcs/text/0009-data_stream-fields.md#restrictions-on-values">ref</a>_.)
+   */
+  private String convertUsingIndexTemplate(String topic) {
+    topic = topic.toLowerCase();
+    if (topic.length() > 100) {
+      topic = topic.substring(0, 100);
+    }
+    String index = String.format(
+        "%s-%s-%s",
+        config.dataStreamType().name().toLowerCase(),
+        config.dataStreamDataset(),
+        topic
+    );
+    return index;
+  }
+
+  /**
+   * Returns the converted index name from a given topic name. If writing to a data stream,
+   * returns the index name in the form {type}-{dataset}-{topic}. For both cases, Elasticsearch
+   * accepts:
+   * <ul>
+   *   <li>all lowercase</li>
+   *   <li>less than 256 bytes</li>
+   *   <li>does not start with - or _</li>
+   *   <li>is not . or ..</li>
+   * </ul>
+   * (<a href="https://www.elastic.co/guide/en/elasticsearch/reference/current/indices-create-index.html#indices-create-api-path-params">ref</a>_.)
+   */
+  private String createIndexNameWith(String topic) {
+    if (config.isDataStream()) {
+      return convertUsingIndexTemplate(topic);
+    }
+    return convertTopicToIndexName(topic);
   }
 
   private void ensureIndexExists(String index) {

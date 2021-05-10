@@ -27,7 +27,12 @@ import org.elasticsearch.client.RequestOptions;
 import org.elasticsearch.client.RestClient;
 import org.elasticsearch.client.RestHighLevelClient;
 import org.elasticsearch.client.core.CountRequest;
-import org.elasticsearch.client.indices.*;
+import org.elasticsearch.client.indices.DataStream;
+import org.elasticsearch.client.indices.DeleteDataStreamRequest;
+import org.elasticsearch.client.indices.GetDataStreamRequest;
+import org.elasticsearch.client.indices.GetIndexRequest;
+import org.elasticsearch.client.indices.GetMappingsRequest;
+import org.elasticsearch.client.indices.GetMappingsResponse;
 import org.elasticsearch.cluster.metadata.MappingMetadata;
 import org.elasticsearch.search.SearchHits;
 import org.slf4j.Logger;
@@ -49,12 +54,6 @@ public class ElasticsearchHelperClient {
     );
   }
 
-  public DataStream getDataStream(String index) throws IOException {
-    GetDataStreamRequest request = new GetDataStreamRequest(index);
-    List<DataStream> datastreams = client.indices().getDataStream(request, RequestOptions.DEFAULT).getDataStreams();
-    return datastreams.get(0);
-  }
-
   public void deleteIndex(String index, boolean isDataStream) throws IOException {
     if (isDataStream) {
       DeleteDataStreamRequest request = new DeleteDataStreamRequest(index);
@@ -63,6 +62,14 @@ public class ElasticsearchHelperClient {
     }
     DeleteIndexRequest request = new DeleteIndexRequest(index);
     client.indices().delete(request, RequestOptions.DEFAULT);
+  }
+
+  public DataStream getDataStream(String index) throws IOException {
+    GetDataStreamRequest request = new GetDataStreamRequest(index);
+    List<DataStream> datastreams = client.indices()
+        .getDataStream(request, RequestOptions.DEFAULT)
+        .getDataStreams();
+    return datastreams.get(0);
   }
 
   public long getDocCount(String index) throws IOException {
