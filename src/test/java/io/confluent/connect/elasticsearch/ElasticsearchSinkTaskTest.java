@@ -291,21 +291,6 @@ public class ElasticsearchSinkTaskTest {
   }
 
   @Test
-  public void testConvertTopicToDataStream_allowEmpty() {
-    final String type = "logs";
-    final String dataset = "a_valid_dataset";
-    props.put(DATA_STREAM_TYPE_CONFIG, type);
-    props.put(DATA_STREAM_DATASET_CONFIG, dataset);
-    setUpTask();
-
-    String emptyStr = "";
-    SinkRecord record = record(emptyStr, true, false, 0);
-    task.put(Collections.singletonList(record));
-    String indexName = convertToIndexTemplate(type, dataset, emptyStr);
-    verify(client, times(1)).createIndex(eq(indexName));
-  }
-
-  @Test
   public void testConvertTopicToDataStream_allowUnderscores() {
     final String type = "logs";
     final String dataset = "a_valid_dataset";
