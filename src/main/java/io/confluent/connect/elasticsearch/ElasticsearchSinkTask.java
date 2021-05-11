@@ -87,7 +87,7 @@ public class ElasticsearchSinkTask extends SinkTask {
 
       logTrace("Writing {} to Elasticsearch.", record);
 
-      ensureIndexExists(createIndexNameWith(record.topic()));
+      ensureIndexExists(createIndexName(record.topic()));
       checkMapping(record);
       tryWriteRecord(record);
     }
@@ -115,7 +115,7 @@ public class ElasticsearchSinkTask extends SinkTask {
   }
 
   private void checkMapping(SinkRecord record) {
-    String index = createIndexNameWith(record.topic());
+    String index = createIndexName(record.topic());
     if (!config.shouldIgnoreSchema(record.topic()) && !existingMappings.contains(index)) {
       if (!client.hasMapping(index)) {
         client.createMapping(index, record.valueSchema());
@@ -171,13 +171,13 @@ public class ElasticsearchSinkTask extends SinkTask {
     if (topic.length() > 100) {
       topic = topic.substring(0, 100);
     }
-    String index = String.format(
+    String dataStream = String.format(
         "%s-%s-%s",
         config.dataStreamType().name().toLowerCase(),
         config.dataStreamDataset(),
         topic
     );
-    return index;
+    return dataStream;
   }
 
   /**
@@ -192,7 +192,7 @@ public class ElasticsearchSinkTask extends SinkTask {
    * </ul>
    * (<a href="https://www.elastic.co/guide/en/elasticsearch/reference/current/indices-create-index.html#indices-create-api-path-params">ref</a>_.)
    */
-  private String createIndexNameWith(String topic) {
+  private String createIndexName(String topic) {
     return config.isDataStream() ? convertTopicToDataStreamName(topic) : convertTopicToIndexName(topic);
   }
 
@@ -223,7 +223,7 @@ public class ElasticsearchSinkTask extends SinkTask {
   private void tryWriteRecord(SinkRecord sinkRecord) {
     DocWriteRequest<?> record = null;
     try {
-      record = converter.convertRecord(sinkRecord, createIndexNameWith(sinkRecord.topic()));
+      record = converter.convertRecord(sinkRecord, createIndexName(sinkRecord.topic()));
     } catch (DataException convertException) {
       reportBadRecord(sinkRecord, convertException);
 
