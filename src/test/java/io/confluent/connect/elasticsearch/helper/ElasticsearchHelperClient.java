@@ -64,8 +64,8 @@ public class ElasticsearchHelperClient {
     client.indices().delete(request, RequestOptions.DEFAULT);
   }
 
-  public DataStream getDataStream(String index) throws IOException {
-    GetDataStreamRequest request = new GetDataStreamRequest(index);
+  public DataStream getDataStream(String dataStream) throws IOException {
+    GetDataStreamRequest request = new GetDataStreamRequest(dataStream);
     List<DataStream> datastreams = client.indices()
         .getDataStream(request, RequestOptions.DEFAULT)
         .getDataStreams();

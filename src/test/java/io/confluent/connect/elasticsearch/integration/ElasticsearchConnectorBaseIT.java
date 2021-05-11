@@ -156,14 +156,16 @@ public class ElasticsearchConnectorBaseIT extends BaseConnectorIT {
   }
 
   protected void writeRecords(int numRecords) {
-    for (int i = 0; i < numRecords; i++) {
-      connect.kafka().produce(TOPIC, String.valueOf(i), String.format("{\"doc_num\":%d,\"@timestamp\":%s}", i, "\"2021-04-28T11:11:22.000Z\""));
-    }
+    writeRecordsFromStartIndex(0, numRecords);
   }
 
   protected void writeRecordsFromStartIndex(int start, int numRecords) {
     for (int i  = start; i < start + numRecords; i++) {
-      connect.kafka().produce(TOPIC, String.valueOf(i), String.format("{\"doc_num\":%d,\"@timestamp\":\"2021-04-28T11:11:22.%03dZ\"}", i, i));
+      connect.kafka().produce(
+          TOPIC,
+          String.valueOf(i),
+          String.format("{\"doc_num\":%d,\"@timestamp\":\"2021-04-28T11:11:22.%03dZ\"}", i, i)
+      );
     }
   }
 }
