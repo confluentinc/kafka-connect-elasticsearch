@@ -193,10 +193,7 @@ public class ElasticsearchSinkTask extends SinkTask {
    * (<a href="https://www.elastic.co/guide/en/elasticsearch/reference/current/indices-create-index.html#indices-create-api-path-params">ref</a>_.)
    */
   private String createIndexNameWith(String topic) {
-    if (config.isDataStream()) {
-      return convertTopicToDataStreamName(topic);
-    }
-    return convertTopicToIndexName(topic);
+    return config.isDataStream() ? convertTopicToDataStreamName(topic) : convertTopicToIndexName(topic);
   }
 
   private void ensureIndexExists(String index) {
