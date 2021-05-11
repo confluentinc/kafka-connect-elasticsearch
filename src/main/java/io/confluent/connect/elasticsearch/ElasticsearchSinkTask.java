@@ -166,7 +166,7 @@ public class ElasticsearchSinkTask extends SinkTask {
    * </ul>
    * (<a href="https://github.com/elastic/ecs/blob/master/rfcs/text/0009-data_stream-fields.md#restrictions-on-values">ref</a>_.)
    */
-  private String convertUsingIndexTemplate(String topic) {
+  private String convertTopicToDataStreamName(String topic) {
     topic = topic.toLowerCase();
     if (topic.length() > 100) {
       topic = topic.substring(0, 100);
@@ -194,7 +194,7 @@ public class ElasticsearchSinkTask extends SinkTask {
    */
   private String createIndexNameWith(String topic) {
     if (config.isDataStream()) {
-      return convertUsingIndexTemplate(topic);
+      return convertTopicToDataStreamName(topic);
     }
     return convertTopicToIndexName(topic);
   }
