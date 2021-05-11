@@ -131,17 +131,7 @@ public class DataConverter {
           break;
         case FAIL:
         default:
-          throw new DataException(
-              String.format(
-                  "%s with key of %s and null value encountered (to ignore future records like"
-                      + " this change the configuration property '%s' from '%s' to '%s')",
-                  recordString(record),
-                  record.key(),
-                  ElasticsearchSinkConnectorConfig.BEHAVIOR_ON_NULL_VALUES_CONFIG,
-                  BehaviorOnNullValues.FAIL,
-                  BehaviorOnNullValues.IGNORE
-              )
-          );
+          throwNullRecordFailException(record);
       }
     }
 
@@ -393,6 +383,20 @@ public class DataConverter {
         record.topic(),
         record.kafkaPartition(),
         record.kafkaOffset()
+    );
+  }
+
+  private void throwNullRecordFailException(SinkRecord record) {
+    throw new DataException(
+        String.format(
+            "%s with key of %s and null value encountered (to ignore future records like"
+                + " this change the configuration property '%s' from '%s' to '%s')",
+            recordString(record),
+            record.key(),
+            ElasticsearchSinkConnectorConfig.BEHAVIOR_ON_NULL_VALUES_CONFIG,
+            BehaviorOnNullValues.FAIL,
+            BehaviorOnNullValues.IGNORE
+        )
     );
   }
 }
