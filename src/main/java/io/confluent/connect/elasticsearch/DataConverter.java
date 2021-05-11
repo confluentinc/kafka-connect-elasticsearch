@@ -107,7 +107,7 @@ public class DataConverter {
 
   public DocWriteRequest<?> convertRecord(SinkRecord record, String index) {
     if (record.value() == null) {
-      handleNullRecord(record);
+      handleNullRecordValue(record);
       return null;
     }
 
@@ -139,7 +139,7 @@ public class DataConverter {
     }
   }
 
-  private void handleNullRecord(SinkRecord record) {
+  private void handleNullRecordValue(SinkRecord record) {
     switch (config.behaviorOnNullValues()) {
       case IGNORE:
         log.trace("Ignoring {} with null value.", recordString(record));
