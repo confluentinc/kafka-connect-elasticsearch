@@ -153,26 +153,34 @@ public class ElasticsearchClientTest {
 
   @Test
   public void testCreateExistingDataStream() throws Exception {
-    props.put(DATA_STREAM_TYPE_CONFIG, "logs");
-    props.put(DATA_STREAM_DATASET_CONFIG, "dataset");
+    String type = "logs";
+    String dataset = "dataset";
+    String dataStream = String.format("%s-%s-%s", type, dataset, INDEX);
+    props.put(DATA_STREAM_TYPE_CONFIG, type);
+    props.put(DATA_STREAM_DATASET_CONFIG, dataset);
     config = new ElasticsearchSinkConnectorConfig(props);
     ElasticsearchClient client = new ElasticsearchClient(config, null);
 
-    client.createIndexOrDataStream(INDEX);
-    assertTrue(helperClient.indexExists(INDEX));
-    assertFalse(client.createIndexOrDataStream(INDEX));
+    client.createIndexOrDataStream(dataStream);
+
+    assertTrue(helperClient.indexExists(dataStream));
+    assertFalse(client.createIndexOrDataStream(dataStream));
     client.close();
   }
 
   @Test
   public void testCreateNewDataStream() throws Exception {
-    props.put(DATA_STREAM_TYPE_CONFIG, "logs");
-    props.put(DATA_STREAM_DATASET_CONFIG, "dataset");
+    String type = "logs";
+    String dataset = "dataset";
+    String dataStream = String.format("%s-%s-%s", type, dataset, INDEX);
+    props.put(DATA_STREAM_TYPE_CONFIG, type);
+    props.put(DATA_STREAM_DATASET_CONFIG, dataset);
     config = new ElasticsearchSinkConnectorConfig(props);
     ElasticsearchClient client = new ElasticsearchClient(config, null);
 
-    client.createIndexOrDataStream(INDEX);
-    assertTrue(helperClient.indexExists(INDEX));
+    client.createIndexOrDataStream(dataStream);
+
+    assertTrue(helperClient.indexExists(dataStream));
     client.close();
   }
 
