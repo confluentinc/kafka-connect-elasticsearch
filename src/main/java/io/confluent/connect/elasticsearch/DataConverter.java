@@ -107,8 +107,42 @@ public class DataConverter {
 
   public DocWriteRequest<?> convertRecord(SinkRecord record, String index) {
     if (record.value() == null) {
-      handleNullRecordValue(record);
-      return null;
+      switch (config.behaviorOnNullValues()) {
+        case IGNORE:
+          log.trace("Ignoring {} with null value.", recordString(record));
+          return null;
+        case DELETE:
+          if (record.key() == null) {
+            // Since the record key is used as the ID of the index to delete and we don't have a key
+            // for this record, we can't delete anything anyways, so we ignore the record.
+            // We can also disregard the value of the ignoreKey parameter, since even if it's true
+            // the resulting index we'd try to delete would be based solely off topic/partition/
+            // offset information for the SinkRecord. Since that information is guaranteed to be
+            // unique per message, we can be confident that there wouldn't be any corresponding
+            // index present in ES to delete anyways.
+            log.trace(
+                "Ignoring {} with null key, since the record key is used as the ID of the index",
+                recordString(record)
+            );
+            return null;
+          }
+          // Will proceed as normal, ultimately creating a DeleteRequest
+          log.trace("Deleting {} from Elasticsearch", recordString(record));
+          break;
+        case FAIL:
+        default:
+          throw new DataException(
+              String.format(
+                  "%s with key of %s and null value encountered (to ignore future records like"
+                      + " this change the configuration property '%s' from '%s' to '%s')",
+                  recordString(record),
+                  record.key(),
+                  ElasticsearchSinkConnectorConfig.BEHAVIOR_ON_NULL_VALUES_CONFIG,
+                  BehaviorOnNullValues.FAIL,
+                  BehaviorOnNullValues.IGNORE
+              )
+          );
+      }
     }
 
     final String payload = getPayload(record);
@@ -136,43 +170,6 @@ public class DataConverter {
         );
       default:
         return null; // shouldn't happen
-    }
-  }
-
-  private void handleNullRecordValue(SinkRecord record) {
-    switch (config.behaviorOnNullValues()) {
-      case IGNORE:
-        log.trace("Ignoring {} with null value.", recordString(record));
-      case DELETE:
-        if (record.key() == null) {
-          // Since the record key is used as the ID of the index to delete and we don't have a key
-          // for this record, we can't delete anything anyways, so we ignore the record.
-          // We can also disregard the value of the ignoreKey parameter, since even if it's true
-          // the resulting index we'd try to delete would be based solely off topic/partition/
-          // offset information for the SinkRecord. Since that information is guaranteed to be
-          // unique per message, we can be confident that there wouldn't be any corresponding
-          // index present in ES to delete anyways.
-          log.trace(
-              "Ignoring {} with null key, since the record key is used as the ID of the index",
-              recordString(record)
-          );
-        }
-        // Will proceed as normal, ultimately creating a DeleteRequest
-        log.trace("Deleting {} from Elasticsearch", recordString(record));
-        break;
-      case FAIL:
-      default:
-        throw new DataException(
-            String.format(
-                "%s with key of %s and null value encountered (to ignore future records like"
-                    + " this change the configuration property '%s' from '%s' to '%s')",
-                recordString(record),
-                record.key(),
-                ElasticsearchSinkConnectorConfig.BEHAVIOR_ON_NULL_VALUES_CONFIG,
-                BehaviorOnNullValues.FAIL,
-                BehaviorOnNullValues.IGNORE
-            )
-        );
     }
   }
 
