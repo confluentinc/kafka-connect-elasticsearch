@@ -124,7 +124,7 @@ public class ElasticsearchSinkTaskTest {
   }
 
   @Test
-  public void testcreateIndexOrDataStream() {
+  public void testCreateIndex() {
     task.put(Collections.singletonList(record()));
     verify(client, times(1)).createIndexOrDataStream(eq(TOPIC));
   }

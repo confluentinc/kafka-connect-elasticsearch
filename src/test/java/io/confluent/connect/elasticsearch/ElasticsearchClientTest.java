@@ -141,7 +141,7 @@ public class ElasticsearchClientTest {
   }
 
   @Test
-  public void testcreateIndexOrDataStream() throws IOException {
+  public void testCreateIndex() throws IOException {
     ElasticsearchClient client = new ElasticsearchClient(config, null);
     assertFalse(helperClient.indexExists(INDEX));
 
