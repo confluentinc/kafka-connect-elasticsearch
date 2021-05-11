@@ -284,8 +284,7 @@ public class ElasticsearchSinkTaskTest {
     setUpTask();
 
     String topic = "-dash";
-    SinkRecord record = record(topic, true, false, 0);
-    task.put(Collections.singletonList(record));
+    task.put(Collections.singletonList(record(topic, true, false, 0)));
     String indexName = convertToIndexTemplate(type, dataset, topic);
     verify(client, times(1)).createIndex(eq(indexName));
   }
@@ -299,8 +298,7 @@ public class ElasticsearchSinkTaskTest {
     setUpTask();
 
     String topic = "_underscore";
-    SinkRecord record = record(topic, true, false, 0);
-    task.put(Collections.singletonList(record));
+    task.put(Collections.singletonList(record(topic, true, false, 0)));
     String indexName = convertToIndexTemplate(type, dataset, topic);
     verify(client, times(1)).createIndex(eq(indexName));
   }
@@ -314,8 +312,7 @@ public class ElasticsearchSinkTaskTest {
     setUpTask();
 
     String topic = String.format("%0101d", 1);
-    SinkRecord record = record(topic, true, false, 0);
-    task.put(Collections.singletonList(record));
+    task.put(Collections.singletonList(record(topic, true, false, 0)));
     String indexName = convertToIndexTemplate(type, dataset, topic.substring(0, 100));
     verify(client, times(1)).createIndex(eq(indexName));
   }
@@ -329,8 +326,7 @@ public class ElasticsearchSinkTaskTest {
     setUpTask();
 
     String topic = "UPPERCASE";
-    SinkRecord record = record(topic, true, false, 0);
-    task.put(Collections.singletonList(record));
+    task.put(Collections.singletonList(record(topic, true, false, 0)));
     String indexName = convertToIndexTemplate(type, dataset, topic.toLowerCase());
     verify(client, times(1)).createIndex(eq(indexName));
   }
