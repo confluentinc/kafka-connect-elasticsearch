@@ -141,11 +141,11 @@ public class ElasticsearchClientTest {
   }
 
   @Test
-  public void testCreateIndex() throws IOException {
+  public void testcreateIndexOrDataStream() throws IOException {
     ElasticsearchClient client = new ElasticsearchClient(config, null);
     assertFalse(helperClient.indexExists(INDEX));
 
-    client.createIndex(INDEX);
+    client.createIndexOrDataStream(INDEX);
     assertTrue(helperClient.indexExists(INDEX));
     client.close();
   }
@@ -155,10 +155,10 @@ public class ElasticsearchClientTest {
     ElasticsearchClient client = new ElasticsearchClient(config, null);
     assertFalse(helperClient.indexExists(INDEX));
 
-    assertTrue(client.createIndex(INDEX));
+    assertTrue(client.createIndexOrDataStream(INDEX));
     assertTrue(helperClient.indexExists(INDEX));
 
-    assertFalse(client.createIndex(INDEX));
+    assertFalse(client.createIndexOrDataStream(INDEX));
     assertTrue(helperClient.indexExists(INDEX));
     client.close();
   }
@@ -168,7 +168,7 @@ public class ElasticsearchClientTest {
     ElasticsearchClient client = new ElasticsearchClient(config, null);
     assertFalse(helperClient.indexExists(INDEX));
 
-    assertTrue(client.createIndex(INDEX));
+    assertTrue(client.createIndexOrDataStream(INDEX));
     assertTrue(client.indexExists(INDEX));
     client.close();
   }
@@ -186,7 +186,7 @@ public class ElasticsearchClientTest {
   @SuppressWarnings("unchecked")
   public void testCreateMapping() throws IOException {
     ElasticsearchClient client = new ElasticsearchClient(config, null);
-    client.createIndex(INDEX);
+    client.createIndexOrDataStream(INDEX);
 
     client.createMapping(INDEX, schema());
 
@@ -209,7 +209,7 @@ public class ElasticsearchClientTest {
   @Test
   public void testHasMapping() {
     ElasticsearchClient client = new ElasticsearchClient(config, null);
-    client.createIndex(INDEX);
+    client.createIndexOrDataStream(INDEX);
 
     client.createMapping(INDEX, schema());
 
@@ -220,7 +220,7 @@ public class ElasticsearchClientTest {
   @Test
   public void testDoesNotHaveMapping() {
     ElasticsearchClient client = new ElasticsearchClient(config, null);
-    client.createIndex(INDEX);
+    client.createIndexOrDataStream(INDEX);
 
     assertFalse(client.hasMapping(INDEX));
     client.close();
@@ -232,7 +232,7 @@ public class ElasticsearchClientTest {
     props.put(MAX_BUFFERED_RECORDS_CONFIG, "1");
     config = new ElasticsearchSinkConnectorConfig(props);
     ElasticsearchClient client = new ElasticsearchClient(config, null);
-    client.createIndex(INDEX);
+    client.createIndexOrDataStream(INDEX);
 
     writeRecord(sinkRecord(0), client);
     assertEquals(1, client.numRecords.get());
@@ -258,7 +258,7 @@ public class ElasticsearchClientTest {
     props.put(LINGER_MS_CONFIG, String.valueOf(TimeUnit.DAYS.toMillis(1)));
     config = new ElasticsearchSinkConnectorConfig(props);
     ElasticsearchClient client = new ElasticsearchClient(config, null);
-    client.createIndex(INDEX);
+    client.createIndexOrDataStream(INDEX);
 
     writeRecord(sinkRecord(0), client);
     assertEquals(0, helperClient.getDocCount(INDEX)); // should be empty before flush
@@ -271,7 +271,7 @@ public class ElasticsearchClientTest {
   @Test
   public void testIndexRecord() throws Exception {
     ElasticsearchClient client = new ElasticsearchClient(config, null);
-    client.createIndex(INDEX);
+    client.createIndexOrDataStream(INDEX);
 
     writeRecord(sinkRecord(0), client);
     client.flush();
@@ -288,7 +288,7 @@ public class ElasticsearchClientTest {
     config = new ElasticsearchSinkConnectorConfig(props);
     converter = new DataConverter(config);
     ElasticsearchClient client = new ElasticsearchClient(config, null);
-    client.createIndex(INDEX);
+    client.createIndexOrDataStream(INDEX);
 
     writeRecord(sinkRecord("key0", 0), client);
     writeRecord(sinkRecord("key1", 1), client);
@@ -311,7 +311,7 @@ public class ElasticsearchClientTest {
     config = new ElasticsearchSinkConnectorConfig(props);
     converter = new DataConverter(config);
     ElasticsearchClient client = new ElasticsearchClient(config, null);
-    client.createIndex(INDEX);
+    client.createIndexOrDataStream(INDEX);
 
     writeRecord(sinkRecord("key0", 0), client);
     writeRecord(sinkRecord("key1", 1), client);
@@ -357,7 +357,7 @@ public class ElasticsearchClientTest {
     converter = new DataConverter(config);
 
     ElasticsearchClient client = new ElasticsearchClient(config, null);
-    client.createIndex(INDEX);
+    client.createIndexOrDataStream(INDEX);
     client.createMapping(INDEX, schema());
 
     Schema schema = SchemaBuilder
@@ -385,7 +385,7 @@ public class ElasticsearchClientTest {
   @Test(expected = ConnectException.class)
   public void testFailOnBadRecord() throws Exception {
     ElasticsearchClient client = new ElasticsearchClient(config, null);
-    client.createIndex(INDEX);
+    client.createIndexOrDataStream(INDEX);
     client.createMapping(INDEX, schema());
 
     Schema schema = SchemaBuilder
@@ -428,7 +428,7 @@ public class ElasticsearchClientTest {
 
     // mock bulk processor to throw errors
     ElasticsearchClient client = new ElasticsearchClient(config, null);
-    client.createIndex(INDEX);
+    client.createIndexOrDataStream(INDEX);
 
     // bring down ES service
     NetworkErrorContainer delay = new NetworkErrorContainer(container.getContainerName());
@@ -456,7 +456,7 @@ public class ElasticsearchClientTest {
 
     ErrantRecordReporter reporter = mock(ErrantRecordReporter.class);
     ElasticsearchClient client = new ElasticsearchClient(config, reporter);
-    client.createIndex(INDEX);
+    client.createIndexOrDataStream(INDEX);
     client.createMapping(INDEX, schema());
 
     Schema schema = SchemaBuilder
@@ -489,7 +489,7 @@ public class ElasticsearchClientTest {
   public void testReporterNotCalled() throws Exception {
     ErrantRecordReporter reporter = mock(ErrantRecordReporter.class);
     ElasticsearchClient client = new ElasticsearchClient(config, reporter);
-    client.createIndex(INDEX);
+    client.createIndexOrDataStream(INDEX);
 
     writeRecord(sinkRecord(0), client);
     writeRecord(sinkRecord(1), client);
@@ -514,7 +514,7 @@ public class ElasticsearchClientTest {
     ElasticsearchClient client = new ElasticsearchClient(config, reporter);
     ElasticsearchClient client2 = new ElasticsearchClient(config, reporter2);
 
-    client.createIndex(INDEX);
+    client.createIndexOrDataStream(INDEX);
 
     writeRecord(sinkRecord(0), client);
     writeRecord(sinkRecord(1), client2);
@@ -552,7 +552,7 @@ public class ElasticsearchClientTest {
 
     ElasticsearchClient client = new ElasticsearchClient(config, null);
     helperClient = new ElasticsearchHelperClient(address, config);
-    client.createIndex(INDEX);
+    client.createIndexOrDataStream(INDEX);
 
     writeRecord(sinkRecord(0), client);
     client.flush();

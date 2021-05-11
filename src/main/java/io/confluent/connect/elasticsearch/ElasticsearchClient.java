@@ -177,35 +177,18 @@ public class ElasticsearchClient {
   }
 
   /**
-   * Creates an index. Will not recreate the index if it already exists. If the data stream
-   * configuration is set, will create the index as a data stream instead.
+   * Creates an index or data stream. Will not recreate the index or data stream if
+   * it already exists. Will create a data stream instead of an index if the data stream
+   * configurations are set.
    *
-   * @param index the index to create
-   * @return true if the index was created, false if it already exists
+   * @param name the name of the index or data stream to create
+   * @return true if the index or data stream was created, false if it already exists
    */
-  public boolean createIndex(String index) {
-    if (indexExists(index)) {
+  public boolean createIndexOrDataStream(String name) {
+    if (indexExists(name)) {
       return false;
     }
-    if (config.isDataStream()) {
-      return createDataStream(index);
-    }
-
-    CreateIndexRequest request = new CreateIndexRequest(index);
-    return callWithRetries(
-        "create index " + index,
-        () -> {
-          try {
-            client.indices().create(request, RequestOptions.DEFAULT);
-          } catch (ElasticsearchStatusException | IOException e) {
-            if (!e.getMessage().contains(RESOURCE_ALREADY_EXISTS_EXCEPTION)) {
-              throw e;
-            }
-            return false;
-          }
-          return true;
-        }
-    );
+    return config.isDataStream() ? createDataStream(name) : createIndex(name);
   }
 
   /**
@@ -404,6 +387,30 @@ public class ElasticsearchClient {
         () -> {
           try {
             client.indices().createDataStream(request, RequestOptions.DEFAULT);
+          } catch (ElasticsearchStatusException | IOException e) {
+            if (!e.getMessage().contains(RESOURCE_ALREADY_EXISTS_EXCEPTION)) {
+              throw e;
+            }
+            return false;
+          }
+          return true;
+        }
+    );
+  }
+
+  /**
+   * Creates an index. Will not recreate the index if it already exists.
+   *
+   * @param index the index to create
+   * @return true if the index was created, false if it already exists
+   */
+  private boolean createIndex(String index) {
+    CreateIndexRequest request = new CreateIndexRequest(index);
+    return callWithRetries(
+        "create index " + index,
+        () -> {
+          try {
+            client.indices().create(request, RequestOptions.DEFAULT);
           } catch (ElasticsearchStatusException | IOException e) {
             if (!e.getMessage().contains(RESOURCE_ALREADY_EXISTS_EXCEPTION)) {
               throw e;

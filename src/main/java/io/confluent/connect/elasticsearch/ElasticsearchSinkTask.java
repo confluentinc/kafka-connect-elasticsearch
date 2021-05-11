@@ -201,7 +201,7 @@ public class ElasticsearchSinkTask extends SinkTask {
   private void ensureIndexExists(String index) {
     if (!indexCache.contains(index)) {
       log.info("Creating index {}.", index);
-      client.createIndex(index);
+      client.createIndexOrDataStream(index);
       indexCache.add(index);
     }
   }
