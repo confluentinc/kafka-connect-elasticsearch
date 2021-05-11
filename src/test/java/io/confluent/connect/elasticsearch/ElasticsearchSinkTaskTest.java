@@ -276,6 +276,81 @@ public class ElasticsearchSinkTaskTest {
   }
 
   @Test
+  public void testConvertTopicToDataStream_allowDashes() {
+    final String type = "logs";
+    final String dataset = "a_valid_dataset";
+    props.put(DATA_STREAM_TYPE_CONFIG, type);
+    props.put(DATA_STREAM_DATASET_CONFIG, dataset);
+    setUpTask();
+
+    String startsWithDash = "-dash";
+    SinkRecord record = record(startsWithDash, true, false, 0);
+    task.put(Collections.singletonList(record));
+    String indexName = convertToIndexTemplate(type, dataset, startsWithDash);
+    verify(client, times(1)).createIndex(eq(indexName));
+  }
+
+  @Test
+  public void testConvertTopicToDataStream_allowEmpty() {
+    final String type = "logs";
+    final String dataset = "a_valid_dataset";
+    props.put(DATA_STREAM_TYPE_CONFIG, type);
+    props.put(DATA_STREAM_DATASET_CONFIG, dataset);
+    setUpTask();
+
+    String emptyStr = "";
+    SinkRecord record = record(emptyStr, true, false, 0);
+    task.put(Collections.singletonList(record));
+    String indexName = convertToIndexTemplate(type, dataset, emptyStr);
+    verify(client, times(1)).createIndex(eq(indexName));
+  }
+
+  @Test
+  public void testConvertTopicToDataStream_allowUnderscores() {
+    final String type = "logs";
+    final String dataset = "a_valid_dataset";
+    props.put(DATA_STREAM_TYPE_CONFIG, type);
+    props.put(DATA_STREAM_DATASET_CONFIG, dataset);
+    setUpTask();
+
+    String startsWithUnderscore = "_underscore";
+    SinkRecord record = record(startsWithUnderscore, true, false, 0);
+    task.put(Collections.singletonList(record));
+    String indexName = convertToIndexTemplate(type, dataset, startsWithUnderscore);
+    verify(client, times(1)).createIndex(eq(indexName));
+  }
+
+  @Test
+  public void testConvertTopicToDataStream_tooLong() {
+    final String type = "logs";
+    final String dataset = "a_valid_dataset";
+    props.put(DATA_STREAM_TYPE_CONFIG, type);
+    props.put(DATA_STREAM_DATASET_CONFIG, dataset);
+    setUpTask();
+
+    String tooLongTopic = String.format("%0101d", 1);
+    SinkRecord record = record(tooLongTopic, true, false, 0);
+    task.put(Collections.singletonList(record));
+    String indexName = convertToIndexTemplate(type, dataset, tooLongTopic.substring(0, 100));
+    verify(client, times(1)).createIndex(eq(indexName));
+  }
+
+  @Test
+  public void testConvertTopicToDataStream_upperCase() {
+    final String type = "logs";
+    final String dataset = "a_valid_dataset";
+    props.put(DATA_STREAM_TYPE_CONFIG, type);
+    props.put(DATA_STREAM_DATASET_CONFIG, dataset);
+    setUpTask();
+
+    String upperCaseTopic = "UPPERCASE";
+    SinkRecord record = record(upperCaseTopic, true, false, 0);
+    task.put(Collections.singletonList(record));
+    String indexName = convertToIndexTemplate(type, dataset, upperCaseTopic.toLowerCase());
+    verify(client, times(1)).createIndex(eq(indexName));
+  }
+
+  @Test
   public void testConvertTopicToIndexName() {
     setUpTask();
 
@@ -308,80 +383,6 @@ public class ElasticsearchSinkTaskTest {
     record = record(dots, true, false, 0);
     task.put(Collections.singletonList(record));
     verify(client, times(1)).createIndex(eq("dotdot"));
-  }
-  @Test
-  public void testConvertTopicToDataStream_upperCase() {
-    final String type = "logs";
-    final String dataset = "a_valid_dataset";
-    props.put(DATA_STREAM_TYPE_CONFIG, type);
-    props.put(DATA_STREAM_DATASET_CONFIG, dataset);
-    setUpTask();
-
-    String upperCaseTopic = "UPPERCASE";
-    SinkRecord record = record(upperCaseTopic, true, false, 0);
-    task.put(Collections.singletonList(record));
-    String indexName = convertToIndexTemplate(type, dataset, upperCaseTopic.toLowerCase());
-    verify(client, times(1)).createIndex(eq(indexName));
-  }
-
-  @Test
-  public void testConvertTopicToDataStream_tooLong() {
-    final String type = "logs";
-    final String dataset = "a_valid_dataset";
-    props.put(DATA_STREAM_TYPE_CONFIG, type);
-    props.put(DATA_STREAM_DATASET_CONFIG, dataset);
-    setUpTask();
-
-    String tooLongTopic = String.format("%0101d", 1);
-    SinkRecord record = record(tooLongTopic, true, false, 0);
-    task.put(Collections.singletonList(record));
-    String indexName = convertToIndexTemplate(type, dataset, tooLongTopic.substring(0, 100));
-    verify(client, times(1)).createIndex(eq(indexName));
-  }
-
-  @Test
-  public void testConvertTopicToDataStream_allowDashes() {
-    final String type = "logs";
-    final String dataset = "a_valid_dataset";
-    props.put(DATA_STREAM_TYPE_CONFIG, type);
-    props.put(DATA_STREAM_DATASET_CONFIG, dataset);
-    setUpTask();
-
-    String startsWithDash = "-dash";
-    SinkRecord record = record(startsWithDash, true, false, 0);
-    task.put(Collections.singletonList(record));
-    String indexName = convertToIndexTemplate(type, dataset, startsWithDash);
-    verify(client, times(1)).createIndex(eq(indexName));
-  }
-
-  @Test
-  public void testConvertTopicToDataStream_allowUnderscores() {
-    final String type = "logs";
-    final String dataset = "a_valid_dataset";
-    props.put(DATA_STREAM_TYPE_CONFIG, type);
-    props.put(DATA_STREAM_DATASET_CONFIG, dataset);
-    setUpTask();
-
-    String startsWithUnderscore = "_underscore";
-    SinkRecord record = record(startsWithUnderscore, true, false, 0);
-    task.put(Collections.singletonList(record));
-    String indexName = convertToIndexTemplate(type, dataset, startsWithUnderscore);
-    verify(client, times(1)).createIndex(eq(indexName));
-  }
-
-  @Test
-  public void testConvertTopicToDataStream_allowEmpty() {
-    final String type = "logs";
-    final String dataset = "a_valid_dataset";
-    props.put(DATA_STREAM_TYPE_CONFIG, type);
-    props.put(DATA_STREAM_DATASET_CONFIG, dataset);
-    setUpTask();
-
-    String emptyStr = "";
-    SinkRecord record = record(emptyStr, true, false, 0);
-    task.put(Collections.singletonList(record));
-    String indexName = convertToIndexTemplate(type, dataset, emptyStr);
-    verify(client, times(1)).createIndex(eq(indexName));
   }
 
   @Test
