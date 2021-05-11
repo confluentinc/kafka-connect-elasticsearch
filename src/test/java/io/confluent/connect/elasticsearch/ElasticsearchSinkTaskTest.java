@@ -277,8 +277,8 @@ public class ElasticsearchSinkTaskTest {
 
   @Test
   public void testConvertTopicToDataStreamAllowsDashes() {
-    final String type = "logs";
-    final String dataset = "a_valid_dataset";
+    String type = "logs";
+    String dataset = "a_valid_dataset";
     props.put(DATA_STREAM_TYPE_CONFIG, type);
     props.put(DATA_STREAM_DATASET_CONFIG, dataset);
     setUpTask();
@@ -292,8 +292,8 @@ public class ElasticsearchSinkTaskTest {
 
   @Test
   public void testConvertTopicToDataStreamAllowUnderscores() {
-    final String type = "logs";
-    final String dataset = "a_valid_dataset";
+    String type = "logs";
+    String dataset = "a_valid_dataset";
     props.put(DATA_STREAM_TYPE_CONFIG, type);
     props.put(DATA_STREAM_DATASET_CONFIG, dataset);
     setUpTask();
@@ -307,8 +307,8 @@ public class ElasticsearchSinkTaskTest {
 
   @Test
   public void testConvertTopicToDataStreamTooLong() {
-    final String type = "logs";
-    final String dataset = "a_valid_dataset";
+    String type = "logs";
+    String dataset = "a_valid_dataset";
     props.put(DATA_STREAM_TYPE_CONFIG, type);
     props.put(DATA_STREAM_DATASET_CONFIG, dataset);
     setUpTask();
@@ -322,8 +322,8 @@ public class ElasticsearchSinkTaskTest {
 
   @Test
   public void testConvertTopicToDataStreamUpperCase() {
-    final String type = "logs";
-    final String dataset = "a_valid_dataset";
+    String type = "logs";
+    String dataset = "a_valid_dataset";
     props.put(DATA_STREAM_TYPE_CONFIG, type);
     props.put(DATA_STREAM_DATASET_CONFIG, dataset);
     setUpTask();
