@@ -291,7 +291,7 @@ public class ElasticsearchSinkTaskTest {
   }
 
   @Test
-  public void testConvertTopicToDataStream_allowUnderscores() {
+  public void testConvertTopicToDataStreamAllowUnderscores() {
     final String type = "logs";
     final String dataset = "a_valid_dataset";
     props.put(DATA_STREAM_TYPE_CONFIG, type);
@@ -306,7 +306,7 @@ public class ElasticsearchSinkTaskTest {
   }
 
   @Test
-  public void testConvertTopicToDataStream_tooLong() {
+  public void testConvertTopicToDataStreamTooLong() {
     final String type = "logs";
     final String dataset = "a_valid_dataset";
     props.put(DATA_STREAM_TYPE_CONFIG, type);
@@ -321,7 +321,7 @@ public class ElasticsearchSinkTaskTest {
   }
 
   @Test
-  public void testConvertTopicToDataStream_upperCase() {
+  public void testConvertTopicToDataStreamUpperCase() {
     final String type = "logs";
     final String dataset = "a_valid_dataset";
     props.put(DATA_STREAM_TYPE_CONFIG, type);
