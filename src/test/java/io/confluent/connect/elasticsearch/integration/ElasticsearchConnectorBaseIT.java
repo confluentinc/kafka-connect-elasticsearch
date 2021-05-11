@@ -58,7 +58,6 @@ public class ElasticsearchConnectorBaseIT extends BaseConnectorIT {
   protected Map<String, String> props;
   protected String index;
 
-
   @AfterClass
   public static void cleanupAfterAll() {
     container.close();
