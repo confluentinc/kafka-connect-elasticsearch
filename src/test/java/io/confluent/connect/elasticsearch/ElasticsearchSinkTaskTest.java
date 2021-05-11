@@ -276,7 +276,7 @@ public class ElasticsearchSinkTaskTest {
   }
 
   @Test
-  public void testConvertTopicToDataStream_allowDashes() {
+  public void testConvertTopicToDataStreamAllowsDashes() {
     final String type = "logs";
     final String dataset = "a_valid_dataset";
     props.put(DATA_STREAM_TYPE_CONFIG, type);
