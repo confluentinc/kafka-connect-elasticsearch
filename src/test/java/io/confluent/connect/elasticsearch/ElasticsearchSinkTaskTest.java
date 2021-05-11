@@ -283,10 +283,10 @@ public class ElasticsearchSinkTaskTest {
     props.put(DATA_STREAM_DATASET_CONFIG, dataset);
     setUpTask();
 
-    String startsWithDash = "-dash";
-    SinkRecord record = record(startsWithDash, true, false, 0);
+    String topic = "-dash";
+    SinkRecord record = record(topic, true, false, 0);
     task.put(Collections.singletonList(record));
-    String indexName = convertToIndexTemplate(type, dataset, startsWithDash);
+    String indexName = convertToIndexTemplate(type, dataset, topic);
     verify(client, times(1)).createIndex(eq(indexName));
   }
 
@@ -298,10 +298,10 @@ public class ElasticsearchSinkTaskTest {
     props.put(DATA_STREAM_DATASET_CONFIG, dataset);
     setUpTask();
 
-    String startsWithUnderscore = "_underscore";
-    SinkRecord record = record(startsWithUnderscore, true, false, 0);
+    String topic = "_underscore";
+    SinkRecord record = record(topic, true, false, 0);
     task.put(Collections.singletonList(record));
-    String indexName = convertToIndexTemplate(type, dataset, startsWithUnderscore);
+    String indexName = convertToIndexTemplate(type, dataset, topic);
     verify(client, times(1)).createIndex(eq(indexName));
   }
 
@@ -313,10 +313,10 @@ public class ElasticsearchSinkTaskTest {
     props.put(DATA_STREAM_DATASET_CONFIG, dataset);
     setUpTask();
 
-    String tooLongTopic = String.format("%0101d", 1);
-    SinkRecord record = record(tooLongTopic, true, false, 0);
+    String topic = String.format("%0101d", 1);
+    SinkRecord record = record(topic, true, false, 0);
     task.put(Collections.singletonList(record));
-    String indexName = convertToIndexTemplate(type, dataset, tooLongTopic.substring(0, 100));
+    String indexName = convertToIndexTemplate(type, dataset, topic.substring(0, 100));
     verify(client, times(1)).createIndex(eq(indexName));
   }
 
@@ -328,10 +328,10 @@ public class ElasticsearchSinkTaskTest {
     props.put(DATA_STREAM_DATASET_CONFIG, dataset);
     setUpTask();
 
-    String upperCaseTopic = "UPPERCASE";
-    SinkRecord record = record(upperCaseTopic, true, false, 0);
+    String topic = "UPPERCASE";
+    SinkRecord record = record(topic, true, false, 0);
     task.put(Collections.singletonList(record));
-    String indexName = convertToIndexTemplate(type, dataset, upperCaseTopic.toLowerCase());
+    String indexName = convertToIndexTemplate(type, dataset, topic.toLowerCase());
     verify(client, times(1)).createIndex(eq(indexName));
   }
 
