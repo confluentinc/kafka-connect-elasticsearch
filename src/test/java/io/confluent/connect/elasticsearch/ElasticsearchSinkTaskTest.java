@@ -285,7 +285,7 @@ public class ElasticsearchSinkTaskTest {
 
     String topic = "-dash";
     task.put(Collections.singletonList(record(topic, true, false, 0)));
-    String indexName = convertToIndexTemplate(type, dataset, topic);
+    String indexName = dataStreamName(type, dataset, topic);
     verify(client, times(1)).createIndex(eq(indexName));
   }
 
@@ -299,7 +299,7 @@ public class ElasticsearchSinkTaskTest {
 
     String topic = "_underscore";
     task.put(Collections.singletonList(record(topic, true, false, 0)));
-    String indexName = convertToIndexTemplate(type, dataset, topic);
+    String indexName = dataStreamName(type, dataset, topic);
     verify(client, times(1)).createIndex(eq(indexName));
   }
 
@@ -313,7 +313,7 @@ public class ElasticsearchSinkTaskTest {
 
     String topic = String.format("%0101d", 1);
     task.put(Collections.singletonList(record(topic, true, false, 0)));
-    String indexName = convertToIndexTemplate(type, dataset, topic.substring(0, 100));
+    String indexName = dataStreamName(type, dataset, topic.substring(0, 100));
     verify(client, times(1)).createIndex(eq(indexName));
   }
 
@@ -327,7 +327,7 @@ public class ElasticsearchSinkTaskTest {
 
     String topic = "UPPERCASE";
     task.put(Collections.singletonList(record(topic, true, false, 0)));
-    String indexName = convertToIndexTemplate(type, dataset, topic.toLowerCase());
+    String indexName = dataStreamName(type, dataset, topic.toLowerCase());
     verify(client, times(1)).createIndex(eq(indexName));
   }
 
@@ -377,7 +377,7 @@ public class ElasticsearchSinkTaskTest {
     setUpTask();
   }
 
-  private String convertToIndexTemplate(String type, String dataset, String namespace) {
+  private String dataStreamName(String type, String dataset, String namespace) {
     return String.format("%s-%s-%s", type, dataset, namespace);
   }
 
