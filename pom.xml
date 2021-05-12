@@ -243,7 +243,7 @@
                             <logo>logos/elasticsearch.jpg</logo>
 
                             <supportProviderName>Confluent, Inc.</supportProviderName>
-                            <supportSummary>Confluent supports the Elasticsearch sink connector alongside community members as part of its Confluent Platform offering.</supportSummary>
+                            <supportSummary><![CDATA[This connector is <a href="https://www.confluent.io/subscription/">supported by Confluent</a> as part of a <a href="https://www.confluent.io/product/confluent-platform/">Confluent Platform</a> subscription.]]></supportSummary>
                             <supportUrl>https://docs.confluent.io/home/overview.html</supportUrl>
                             <supportLogo>logos/confluent.png</supportLogo>
 
