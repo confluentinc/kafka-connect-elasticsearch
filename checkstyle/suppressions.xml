@@ -13,6 +13,11 @@
     />
 
     <suppress
+            checks="(CyclomaticComplexity)"
+            files="DataConverter.java"
+    />
+
+    <suppress
       checks="(ClassDataAbstractionCoupling)"
       files="(ElasticsearchClient|ConfigCallbackHandler).java"
     />
