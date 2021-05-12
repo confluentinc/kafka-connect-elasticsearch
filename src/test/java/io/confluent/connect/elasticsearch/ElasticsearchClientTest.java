@@ -153,36 +153,36 @@ public class ElasticsearchClientTest {
     client.close();
   }
 
-  @Test
-  public void testCreateExistingDataStream() throws Exception {
-    String type = "logs";
-    String dataset = "dataset";
-    index = String.format("%s-%s-%s", type, dataset, TOPIC); // data stream name
-    props.put(DATA_STREAM_TYPE_CONFIG, type);
-    props.put(DATA_STREAM_DATASET_CONFIG, dataset);
-    config = new ElasticsearchSinkConnectorConfig(props);
-    ElasticsearchClient client = new ElasticsearchClient(config, null);
-
-    assertTrue(client.createIndexOrDataStream(index));
-    assertTrue(helperClient.indexExists(index));
-    assertFalse(client.createIndexOrDataStream(index));
-    client.close();
-  }
-
-  @Test
-  public void testCreateNewDataStream() throws Exception {
-    String type = "logs";
-    String dataset = "dataset";
-    index = String.format("%s-%s-%s", type, dataset, TOPIC); // data stream name
-    props.put(DATA_STREAM_TYPE_CONFIG, type);
-    props.put(DATA_STREAM_DATASET_CONFIG, dataset);
-    config = new ElasticsearchSinkConnectorConfig(props);
-    ElasticsearchClient client = new ElasticsearchClient(config, null);
-
-    assertTrue(client.createIndexOrDataStream(index));
-    assertTrue(helperClient.indexExists(index));
-    client.close();
-  }
+//  @Test
+//  public void testCreateExistingDataStream() throws Exception {
+//    String type = "logs";
+//    String dataset = "dataset";
+//    index = String.format("%s-%s-%s", type, dataset, TOPIC); // data stream name
+//    props.put(DATA_STREAM_TYPE_CONFIG, type);
+//    props.put(DATA_STREAM_DATASET_CONFIG, dataset);
+//    config = new ElasticsearchSinkConnectorConfig(props);
+//    ElasticsearchClient client = new ElasticsearchClient(config, null);
+//
+//    assertTrue(client.createIndexOrDataStream(index));
+//    assertTrue(helperClient.indexExists(index));
+//    assertFalse(client.createIndexOrDataStream(index));
+//    client.close();
+//  }
+//
+//  @Test
+//  public void testCreateNewDataStream() throws Exception {
+//    String type = "logs";
+//    String dataset = "dataset";
+//    index = String.format("%s-%s-%s", type, dataset, TOPIC); // data stream name
+//    props.put(DATA_STREAM_TYPE_CONFIG, type);
+//    props.put(DATA_STREAM_DATASET_CONFIG, dataset);
+//    config = new ElasticsearchSinkConnectorConfig(props);
+//    ElasticsearchClient client = new ElasticsearchClient(config, null);
+//
+//    assertTrue(client.createIndexOrDataStream(index));
+//    assertTrue(helperClient.indexExists(index));
+//    client.close();
+//  }
 
   @Test
   public void testDoesNotCreateAlreadyExistingIndex() throws IOException {
