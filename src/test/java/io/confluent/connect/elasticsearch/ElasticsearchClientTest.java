@@ -161,7 +161,7 @@ public class ElasticsearchClientTest {
     config = new ElasticsearchSinkConnectorConfig(props);
     ElasticsearchClient client = new ElasticsearchClient(config, null);
 
-    client.createIndexOrDataStream(dataStream);
+    assertTrue(client.createIndexOrDataStream(dataStream));
 
     assertTrue(helperClient.indexExists(dataStream));
     assertFalse(client.createIndexOrDataStream(dataStream));
@@ -178,7 +178,7 @@ public class ElasticsearchClientTest {
     config = new ElasticsearchSinkConnectorConfig(props);
     ElasticsearchClient client = new ElasticsearchClient(config, null);
 
-    client.createIndexOrDataStream(dataStream);
+    assertTrue(client.createIndexOrDataStream(dataStream));
 
     assertTrue(helperClient.indexExists(dataStream));
     client.close();
