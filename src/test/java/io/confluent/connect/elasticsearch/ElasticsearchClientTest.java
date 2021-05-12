@@ -73,7 +73,7 @@ import org.junit.Test;
 
 public class ElasticsearchClientTest {
 
-  private static final String INDEX = "index";
+  private static final String TOPIC = "index";
 
   private static ElasticsearchContainer container;
 
@@ -81,6 +81,7 @@ public class ElasticsearchClientTest {
   private ElasticsearchHelperClient helperClient;
   private ElasticsearchSinkConnectorConfig config;
   private Map<String, String> props;
+  private String index;
 
   @BeforeClass
   public static void setupBeforeAll() {
@@ -95,6 +96,7 @@ public class ElasticsearchClientTest {
 
   @Before
   public void setup() {
+    index = TOPIC;
     props = ElasticsearchSinkConnectorConfigTest.addNecessaryProps(new HashMap<>());
     props.put(CONNECTION_URL_CONFIG, container.getConnectionUrl());
     props.put(IGNORE_KEY_CONFIG, "true");
@@ -106,8 +108,8 @@ public class ElasticsearchClientTest {
 
   @After
   public void cleanup() throws IOException {
-    if (helperClient != null && helperClient.indexExists(INDEX)){
-      helperClient.deleteIndex(INDEX, config.isDataStream());
+    if (helperClient != null && helperClient.indexExists(index)){
+      helperClient.deleteIndex(index, config.isDataStream());
     }
   }
 
@@ -144,10 +146,10 @@ public class ElasticsearchClientTest {
   @Test
   public void testCreateIndex() throws IOException {
     ElasticsearchClient client = new ElasticsearchClient(config, null);
-    assertFalse(helperClient.indexExists(INDEX));
+    assertFalse(helperClient.indexExists(index));
 
-    client.createIndexOrDataStream(INDEX);
-    assertTrue(helperClient.indexExists(INDEX));
+    client.createIndexOrDataStream(index);
+    assertTrue(helperClient.indexExists(index));
     client.close();
   }
 
@@ -155,16 +157,15 @@ public class ElasticsearchClientTest {
   public void testCreateExistingDataStream() throws Exception {
     String type = "logs";
     String dataset = "dataset";
-    String dataStream = String.format("%s-%s-%s", type, dataset, INDEX);
+    index = String.format("%s-%s-%s", type, dataset, TOPIC); // data stream name
     props.put(DATA_STREAM_TYPE_CONFIG, type);
     props.put(DATA_STREAM_DATASET_CONFIG, dataset);
     config = new ElasticsearchSinkConnectorConfig(props);
     ElasticsearchClient client = new ElasticsearchClient(config, null);
 
-    assertTrue(client.createIndexOrDataStream(dataStream));
-
-    assertTrue(helperClient.indexExists(dataStream));
-    assertFalse(client.createIndexOrDataStream(dataStream));
+    assertTrue(client.createIndexOrDataStream(index));
+    assertTrue(helperClient.indexExists(index));
+    assertFalse(client.createIndexOrDataStream(index));
     client.close();
   }
 
@@ -172,47 +173,46 @@ public class ElasticsearchClientTest {
   public void testCreateNewDataStream() throws Exception {
     String type = "logs";
     String dataset = "dataset";
-    String dataStream = String.format("%s-%s-%s", type, dataset, INDEX);
+    index = String.format("%s-%s-%s", type, dataset, TOPIC); // data stream name
     props.put(DATA_STREAM_TYPE_CONFIG, type);
     props.put(DATA_STREAM_DATASET_CONFIG, dataset);
     config = new ElasticsearchSinkConnectorConfig(props);
     ElasticsearchClient client = new ElasticsearchClient(config, null);
 
-    assertTrue(client.createIndexOrDataStream(dataStream));
-
-    assertTrue(helperClient.indexExists(dataStream));
+    assertTrue(client.createIndexOrDataStream(index));
+    assertTrue(helperClient.indexExists(index));
     client.close();
   }
 
   @Test
   public void testDoesNotCreateAlreadyExistingIndex() throws IOException {
     ElasticsearchClient client = new ElasticsearchClient(config, null);
-    assertFalse(helperClient.indexExists(INDEX));
+    assertFalse(helperClient.indexExists(index));
 
-    assertTrue(client.createIndexOrDataStream(INDEX));
-    assertTrue(helperClient.indexExists(INDEX));
+    assertTrue(client.createIndexOrDataStream(index));
+    assertTrue(helperClient.indexExists(index));
 
-    assertFalse(client.createIndexOrDataStream(INDEX));
-    assertTrue(helperClient.indexExists(INDEX));
+    assertFalse(client.createIndexOrDataStream(index));
+    assertTrue(helperClient.indexExists(index));
     client.close();
   }
 
   @Test
   public void testIndexExists() throws IOException {
     ElasticsearchClient client = new ElasticsearchClient(config, null);
-    assertFalse(helperClient.indexExists(INDEX));
+    assertFalse(helperClient.indexExists(index));
 
-    assertTrue(client.createIndexOrDataStream(INDEX));
-    assertTrue(client.indexExists(INDEX));
+    assertTrue(client.createIndexOrDataStream(index));
+    assertTrue(client.indexExists(index));
     client.close();
   }
 
   @Test
   public void testIndexDoesNotExist() throws IOException {
     ElasticsearchClient client = new ElasticsearchClient(config, null);
-    assertFalse(helperClient.indexExists(INDEX));
+    assertFalse(helperClient.indexExists(index));
 
-    assertFalse(client.indexExists(INDEX));
+    assertFalse(client.indexExists(index));
     client.close();
   }
 
@@ -220,13 +220,13 @@ public class ElasticsearchClientTest {
   @SuppressWarnings("unchecked")
   public void testCreateMapping() throws IOException {
     ElasticsearchClient client = new ElasticsearchClient(config, null);
-    client.createIndexOrDataStream(INDEX);
+    client.createIndexOrDataStream(index);
 
-    client.createMapping(INDEX, schema());
+    client.createMapping(index, schema());
 
-    assertTrue(client.hasMapping(INDEX));
+    assertTrue(client.hasMapping(index));
 
-    Map<String, Object> mapping = helperClient.getMapping(INDEX).sourceAsMap();
+    Map<String, Object> mapping = helperClient.getMapping(index).sourceAsMap();
     assertTrue(mapping.containsKey("properties"));
     Map<String, Object> props = (Map<String, Object>) mapping.get("properties");
     assertTrue(props.containsKey("offset"));
@@ -243,20 +243,20 @@ public class ElasticsearchClientTest {
   @Test
   public void testHasMapping() {
     ElasticsearchClient client = new ElasticsearchClient(config, null);
-    client.createIndexOrDataStream(INDEX);
+    client.createIndexOrDataStream(index);
 
-    client.createMapping(INDEX, schema());
+    client.createMapping(index, schema());
 
-    assertTrue(client.hasMapping(INDEX));
+    assertTrue(client.hasMapping(index));
     client.close();
   }
 
   @Test
   public void testDoesNotHaveMapping() {
     ElasticsearchClient client = new ElasticsearchClient(config, null);
-    client.createIndexOrDataStream(INDEX);
+    client.createIndexOrDataStream(index);
 
-    assertFalse(client.hasMapping(INDEX));
+    assertFalse(client.hasMapping(index));
     client.close();
   }
 
@@ -266,14 +266,14 @@ public class ElasticsearchClientTest {
     props.put(MAX_BUFFERED_RECORDS_CONFIG, "1");
     config = new ElasticsearchSinkConnectorConfig(props);
     ElasticsearchClient client = new ElasticsearchClient(config, null);
-    client.createIndexOrDataStream(INDEX);
+    client.createIndexOrDataStream(index);
 
     writeRecord(sinkRecord(0), client);
     assertEquals(1, client.numRecords.get());
     client.flush();
 
     waitUntilRecordsInES(1);
-    assertEquals(1, helperClient.getDocCount(INDEX));
+    assertEquals(1, helperClient.getDocCount(index));
     assertEquals(0, client.numRecords.get());
 
     writeRecord(sinkRecord(1), client);
@@ -292,26 +292,26 @@ public class ElasticsearchClientTest {
     props.put(LINGER_MS_CONFIG, String.valueOf(TimeUnit.DAYS.toMillis(1)));
     config = new ElasticsearchSinkConnectorConfig(props);
     ElasticsearchClient client = new ElasticsearchClient(config, null);
-    client.createIndexOrDataStream(INDEX);
+    client.createIndexOrDataStream(index);
 
     writeRecord(sinkRecord(0), client);
-    assertEquals(0, helperClient.getDocCount(INDEX)); // should be empty before flush
+    assertEquals(0, helperClient.getDocCount(index)); // should be empty before flush
     client.flush();
     waitUntilRecordsInES(1);
-    assertEquals(1, helperClient.getDocCount(INDEX));
+    assertEquals(1, helperClient.getDocCount(index));
     client.close();
   }
 
   @Test
   public void testIndexRecord() throws Exception {
     ElasticsearchClient client = new ElasticsearchClient(config, null);
-    client.createIndexOrDataStream(INDEX);
+    client.createIndexOrDataStream(index);
 
     writeRecord(sinkRecord(0), client);
     client.flush();
 
     waitUntilRecordsInES(1);
-    assertEquals(1, helperClient.getDocCount(INDEX));
+    assertEquals(1, helperClient.getDocCount(index));
     client.close();
   }
 
@@ -322,7 +322,7 @@ public class ElasticsearchClientTest {
     config = new ElasticsearchSinkConnectorConfig(props);
     converter = new DataConverter(config);
     ElasticsearchClient client = new ElasticsearchClient(config, null);
-    client.createIndexOrDataStream(INDEX);
+    client.createIndexOrDataStream(index);
 
     writeRecord(sinkRecord("key0", 0), client);
     writeRecord(sinkRecord("key1", 1), client);
@@ -331,7 +331,7 @@ public class ElasticsearchClientTest {
     waitUntilRecordsInES(2);
 
     // delete 1
-    SinkRecord deleteRecord = new SinkRecord(INDEX, 0, Schema.STRING_SCHEMA, "key0", null, null, 3);
+    SinkRecord deleteRecord = new SinkRecord(TOPIC, 0, Schema.STRING_SCHEMA, "key0", null, null, 3);
     writeRecord(deleteRecord, client);
 
     waitUntilRecordsInES(1);
@@ -345,7 +345,7 @@ public class ElasticsearchClientTest {
     config = new ElasticsearchSinkConnectorConfig(props);
     converter = new DataConverter(config);
     ElasticsearchClient client = new ElasticsearchClient(config, null);
-    client.createIndexOrDataStream(INDEX);
+    client.createIndexOrDataStream(index);
 
     writeRecord(sinkRecord("key0", 0), client);
     writeRecord(sinkRecord("key1", 1), client);
@@ -362,9 +362,9 @@ public class ElasticsearchClientTest {
         .build();
 
     Struct value = new Struct(schema).put("offset", 2);
-    SinkRecord upsertRecord = new SinkRecord(INDEX, 0, Schema.STRING_SCHEMA, "key0", schema, value, 2);
+    SinkRecord upsertRecord = new SinkRecord(index, 0, Schema.STRING_SCHEMA, "key0", schema, value, 2);
     Struct value2 = new Struct(schema).put("offset", 3);
-    SinkRecord upsertRecord2 = new SinkRecord(INDEX, 0, Schema.STRING_SCHEMA, "key0", schema, value2, 3);
+    SinkRecord upsertRecord2 = new SinkRecord(index, 0, Schema.STRING_SCHEMA, "key0", schema, value2, 3);
 
 
     // upsert 2, write another
@@ -374,7 +374,7 @@ public class ElasticsearchClientTest {
     client.flush();
 
     waitUntilRecordsInES(3);
-    for (SearchHit hit : helperClient.search(INDEX)) {
+    for (SearchHit hit : helperClient.search(index)) {
       if (hit.getId().equals("key0")) {
         assertEquals(3, hit.getSourceAsMap().get("offset"));
         assertEquals(0, hit.getSourceAsMap().get("another"));
@@ -391,8 +391,8 @@ public class ElasticsearchClientTest {
     converter = new DataConverter(config);
 
     ElasticsearchClient client = new ElasticsearchClient(config, null);
-    client.createIndexOrDataStream(INDEX);
-    client.createMapping(INDEX, schema());
+    client.createIndexOrDataStream(index);
+    client.createMapping(index, schema());
 
     Schema schema = SchemaBuilder
         .struct()
@@ -400,7 +400,7 @@ public class ElasticsearchClientTest {
         .field("not_mapped_field", SchemaBuilder.int32().defaultValue(0).build())
         .build();
     Struct value = new Struct(schema).put("not_mapped_field", 420);
-    SinkRecord badRecord = new SinkRecord(INDEX, 0, Schema.STRING_SCHEMA, "key", schema, value, 0);
+    SinkRecord badRecord = new SinkRecord(TOPIC, 0, Schema.STRING_SCHEMA, "key", schema, value, 0);
 
     writeRecord(sinkRecord(0), client);
     client.flush();
@@ -412,15 +412,15 @@ public class ElasticsearchClientTest {
     client.flush();
 
     waitUntilRecordsInES(2);
-    assertEquals(2, helperClient.getDocCount(INDEX));
+    assertEquals(2, helperClient.getDocCount(index));
     client.close();
   }
 
   @Test(expected = ConnectException.class)
   public void testFailOnBadRecord() throws Exception {
     ElasticsearchClient client = new ElasticsearchClient(config, null);
-    client.createIndexOrDataStream(INDEX);
-    client.createMapping(INDEX, schema());
+    client.createIndexOrDataStream(index);
+    client.createMapping(index, schema());
 
     Schema schema = SchemaBuilder
         .struct()
@@ -428,7 +428,7 @@ public class ElasticsearchClientTest {
         .field("offset", SchemaBuilder.bool().defaultValue(false).build())
         .build();
     Struct value = new Struct(schema).put("offset", false);
-    SinkRecord badRecord = new SinkRecord(INDEX, 0, Schema.STRING_SCHEMA, "key", schema, value, 0);
+    SinkRecord badRecord = new SinkRecord(TOPIC, 0, Schema.STRING_SCHEMA, "key", schema, value, 0);
 
     writeRecord(sinkRecord(0), client);
     client.flush();
@@ -462,7 +462,7 @@ public class ElasticsearchClientTest {
 
     // mock bulk processor to throw errors
     ElasticsearchClient client = new ElasticsearchClient(config, null);
-    client.createIndexOrDataStream(INDEX);
+    client.createIndexOrDataStream(index);
 
     // bring down ES service
     NetworkErrorContainer delay = new NetworkErrorContainer(container.getContainerName());
@@ -490,8 +490,8 @@ public class ElasticsearchClientTest {
 
     ErrantRecordReporter reporter = mock(ErrantRecordReporter.class);
     ElasticsearchClient client = new ElasticsearchClient(config, reporter);
-    client.createIndexOrDataStream(INDEX);
-    client.createMapping(INDEX, schema());
+    client.createIndexOrDataStream(index);
+    client.createMapping(index, schema());
 
     Schema schema = SchemaBuilder
         .struct()
@@ -499,7 +499,7 @@ public class ElasticsearchClientTest {
         .field("offset", SchemaBuilder.bool().defaultValue(false).build())
         .build();
     Struct value = new Struct(schema).put("offset", false);
-    SinkRecord badRecord = new SinkRecord(INDEX, 0, Schema.STRING_SCHEMA, "key0", schema, value, 1);
+    SinkRecord badRecord = new SinkRecord(index, 0, Schema.STRING_SCHEMA, "key0", schema, value, 1);
 
     writeRecord(sinkRecord("key0", 0), client);
     client.flush();
@@ -523,7 +523,7 @@ public class ElasticsearchClientTest {
   public void testReporterNotCalled() throws Exception {
     ErrantRecordReporter reporter = mock(ErrantRecordReporter.class);
     ElasticsearchClient client = new ElasticsearchClient(config, reporter);
-    client.createIndexOrDataStream(INDEX);
+    client.createIndexOrDataStream(index);
 
     writeRecord(sinkRecord(0), client);
     writeRecord(sinkRecord(1), client);
@@ -531,7 +531,7 @@ public class ElasticsearchClientTest {
     client.flush();
 
     waitUntilRecordsInES(3);
-    assertEquals(3, helperClient.getDocCount(INDEX));
+    assertEquals(3, helperClient.getDocCount(index));
     verify(reporter, never()).report(eq(sinkRecord(0)), any(Throwable.class));
     client.close();
   }
@@ -548,7 +548,7 @@ public class ElasticsearchClientTest {
     ElasticsearchClient client = new ElasticsearchClient(config, reporter);
     ElasticsearchClient client2 = new ElasticsearchClient(config, reporter2);
 
-    client.createIndexOrDataStream(INDEX);
+    client.createIndexOrDataStream(index);
 
     writeRecord(sinkRecord(0), client);
     writeRecord(sinkRecord(1), client2);
@@ -558,7 +558,7 @@ public class ElasticsearchClientTest {
     writeRecord(sinkRecord(5), client2);
 
     waitUntilRecordsInES(1);
-    assertEquals(1, helperClient.getDocCount(INDEX));
+    assertEquals(1, helperClient.getDocCount(index));
     verify(reporter, never()).report(any(SinkRecord.class), any(Throwable.class));
     verify(reporter2, never()).report(any(SinkRecord.class), any(Throwable.class));
     client.close();
@@ -586,13 +586,13 @@ public class ElasticsearchClientTest {
 
     ElasticsearchClient client = new ElasticsearchClient(config, null);
     helperClient = new ElasticsearchHelperClient(address, config);
-    client.createIndexOrDataStream(INDEX);
+    client.createIndexOrDataStream(index);
 
     writeRecord(sinkRecord(0), client);
     client.flush();
 
     waitUntilRecordsInES(1);
-    assertEquals(1, helperClient.getDocCount(INDEX));
+    assertEquals(1, helperClient.getDocCount(index));
     client.close();
     helperClient = null;
 
@@ -616,14 +616,14 @@ public class ElasticsearchClientTest {
 
   private static SinkRecord sinkRecord(String key, int offset) {
     Struct value = new Struct(schema()).put("offset", offset).put("another", offset + 1);
-    return new SinkRecord(INDEX, 0, Schema.STRING_SCHEMA, key, schema(), value, offset);
+    return new SinkRecord(TOPIC, 0, Schema.STRING_SCHEMA, key, schema(), value, offset);
   }
 
   private void waitUntilRecordsInES(int expectedRecords) throws InterruptedException {
     TestUtils.waitForCondition(
         () -> {
           try {
-            return helperClient.getDocCount(INDEX) == expectedRecords;
+            return helperClient.getDocCount(index) == expectedRecords;
           } catch (ElasticsearchStatusException e) {
             if (e.getMessage().contains("index_not_found_exception")) {
               return false;
