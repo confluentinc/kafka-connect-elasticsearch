@@ -57,11 +57,14 @@ import org.apache.kafka.common.config.ConfigValue;
 import org.apache.kafka.common.config.SslConfigs;
 import org.elasticsearch.client.RequestOptions;
 import org.elasticsearch.client.RestHighLevelClient;
+import org.elasticsearch.client.core.MainResponse;
 import org.junit.Before;
 import org.junit.Test;
+import org.mockito.Mockito;
 
 public class ValidatorTest {
 
+  private MainResponse mockInfoResponse;
   private Map<String, String> props;
   private RestHighLevelClient mockClient;
   private Validator validator;
@@ -72,6 +75,9 @@ public class ValidatorTest {
 
     mockClient = mock(RestHighLevelClient.class);
     when(mockClient.ping(any(RequestOptions.class))).thenReturn(true);
+    mockInfoResponse = mock(MainResponse.class, Mockito.RETURNS_DEEP_STUBS);
+    when(mockClient.info(any(RequestOptions.class))).thenReturn(mockInfoResponse);
+    when(mockInfoResponse.getVersion().getNumber()).thenReturn("7.9.3");
   }
 
   @Test
@@ -399,6 +405,38 @@ public class ValidatorTest {
 
     Config result = validator.validate();
     assertHasErrorMessage(result, CONNECTION_URL_CONFIG, "Could not connect to Elasticsearch.");
+  }
+
+  @Test
+  public void testInvalidVersionDataStreamSet() {
+    props.put(DATA_STREAM_DATASET_CONFIG, "a_valid_dataset");
+    props.put(DATA_STREAM_TYPE_CONFIG, "logs");
+    validator = new Validator(props, () -> mockClient);
+    when(mockInfoResponse.getVersion().getNumber()).thenReturn("7.8.1");
+
+    Config result = validator.validate();
+    assertHasErrorMessage(result, CONNECTION_URL_CONFIG, "not compatible with data streams");
+    assertHasErrorMessage(result, DATA_STREAM_TYPE_CONFIG, "not compatible with data streams");
+    assertHasErrorMessage(result, DATA_STREAM_DATASET_CONFIG, "not compatible with data streams");
+  }
+
+  @Test
+  public void testValidVersionDataStreamNotSet() {
+    validator = new Validator(props, () -> mockClient);
+    when(mockInfoResponse.getVersion().getNumber()).thenReturn("7.8.1");
+
+    Config result = validator.validate();
+    assertNoErrors(result);
+  }
+
+  @Test
+  public void testValidVersionDataStreamSet() {
+    props.put(DATA_STREAM_DATASET_CONFIG, "a_valid_dataset");
+    props.put(DATA_STREAM_TYPE_CONFIG, "logs");
+    validator = new Validator(props, () -> mockClient);
+
+    Config result = validator.validate();
+    assertNoErrors(result);
   }
 
   private static void assertHasErrorMessage(Config config, String property, String msg) {
