@@ -309,7 +309,7 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
                 <configuration>
-                    <forkCount>0</forkCount>
+                    <reuseForks>true</reuseForks>
                     <argLine>@{argLine} -Djava.awt.headless=true -Dtests.security.manager=false -Dtests.jarhell.check=false</argLine>
                 </configuration>
             </plugin>
