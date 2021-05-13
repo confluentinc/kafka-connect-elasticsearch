@@ -33,10 +33,7 @@ import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfi
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.SSL_CONFIG_PREFIX;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.WRITE_METHOD_CONFIG;
 import static io.confluent.connect.elasticsearch.helper.ElasticsearchContainer.*;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertThrows;
-import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -583,19 +580,19 @@ public class ElasticsearchClientTest {
 
     ElasticsearchClient client = new ElasticsearchClient(config, null);
     helperClient = new ElasticsearchHelperClient(address, config);
-    client.createIndexOrDataStream(index);
-
-    writeRecord(sinkRecord(0), client);
-    client.flush();
-
-    waitUntilRecordsInES(1);
-    assertEquals(1, helperClient.getDocCount(index));
+    boolean succees = false;
+    try {
+      client.createIndexOrDataStream(index);
+    } catch (ConnectException e) {
+      succees = true;
+    }
     client.close();
     helperClient = null;
 
     container.close();
     container = ElasticsearchContainer.fromSystemProperties();
     container.start();
+    assertTrue("Can not create a data stream if the Elasticsearch version is below 7.9", succees);
   }
 
 
