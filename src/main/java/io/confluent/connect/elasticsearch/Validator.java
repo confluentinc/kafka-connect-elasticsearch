@@ -66,7 +66,7 @@ public class Validator {
 
   private static final Logger log = LoggerFactory.getLogger(Validator.class);
 
-  private static final String ES_VERSION_FOR_DATASTREAM = "7.9.0";
+  private static final String DATA_STREAM_COMPATIBLE_ES_VERSION = "7.9.0";
 
   private ElasticsearchSinkConnectorConfig config;
   private Map<String, ConfigValue> values;
@@ -319,12 +319,12 @@ public class Validator {
       return;
     }
     String versionNumber = response.getVersion().getNumber();
-    if (config.isDataStream() && versionNumber.compareTo(ES_VERSION_FOR_DATASTREAM) < 0) {
+    if (config.isDataStream() && versionNumber.compareTo(DATA_STREAM_COMPATIBLE_ES_VERSION) < 0) {
       String errorMessage = String.format(
           "Given Elasticsearch version %s is not compatible with data streams. Elasticsearch"
               + "version must be at least %s",
           versionNumber,
-          ES_VERSION_FOR_DATASTREAM
+          DATA_STREAM_COMPATIBLE_ES_VERSION
       );
       addErrorMessage(CONNECTION_URL_CONFIG, errorMessage);
       addErrorMessage(DATA_STREAM_TYPE_CONFIG, errorMessage);
