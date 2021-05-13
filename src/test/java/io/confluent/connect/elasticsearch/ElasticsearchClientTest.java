@@ -32,8 +32,8 @@ import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfi
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.SECURITY_PROTOCOL_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.SSL_CONFIG_PREFIX;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.WRITE_METHOD_CONFIG;
-import static io.confluent.connect.elasticsearch.helper.ElasticsearchContainer.*;
 import static io.confluent.connect.elasticsearch.helper.ElasticsearchContainer.ELASTIC_PASSWORD;
+import static io.confluent.connect.elasticsearch.helper.ElasticsearchContainer.DEFAULT_DOCKER_IMAGE_NAME;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertThrows;
@@ -567,7 +567,7 @@ public class ElasticsearchClientTest {
   }
 
   @Test
-  public void testIncompatibleESVersionEnableDataStream() throws Exception {
+  public void testIncompatibleESVersionDataStreamSet() throws Exception {
     container.close();
     container = new ElasticsearchContainer(DEFAULT_DOCKER_IMAGE_NAME + ":" + "7.8.1");
     container.start();
@@ -581,27 +581,27 @@ public class ElasticsearchClientTest {
     config = new ElasticsearchSinkConnectorConfig(props);
     converter = new DataConverter(config);
     index = createIndexName(TOPIC);
+    boolean succeess = false;
 
     ElasticsearchClient client = new ElasticsearchClient(config, null);
     helperClient = new ElasticsearchHelperClient(address, config);
-    boolean succees = false;
     try {
       client.createIndexOrDataStream(index);
     } catch (ConnectException e) {
-      succees = true;
+      succeess = true;
     }
+
     client.close();
     helperClient = null;
-
     container.close();
     container = ElasticsearchContainer.fromSystemProperties();
     container.start();
-    assertTrue("Can not create a data stream if the Elasticsearch version is below 7.9", succees);
+    assertTrue("Can not create a data stream if the Elasticsearch version is below 7.9", succeess);
   }
 
 
   @Test
-  public void testIncompatibleESVersionDisableDataStream() throws Exception {
+  public void testIncompatibleESVersionDataStreamNotSet() throws Exception {
     container.close();
     container = new ElasticsearchContainer(DEFAULT_DOCKER_IMAGE_NAME + ":" + "7.8.1");
     container.start();
@@ -631,7 +631,7 @@ public class ElasticsearchClientTest {
   }
 
   @Test
-  public void testCompatibleESVersionEnableDataStream() throws Exception {
+  public void testCompatibleESVersionDataStreamSet() throws Exception {
     container.close();
     String esVersion = "7.9.3";
     container = new ElasticsearchContainer(DEFAULT_DOCKER_IMAGE_NAME + ":" + esVersion);
@@ -665,7 +665,7 @@ public class ElasticsearchClientTest {
   }
 
   @Test
-  public void testCompatibleESVersionDisableDataStream() throws Exception {
+  public void testCompatibleESVersionDataStreamNotSet() throws Exception {
     container.close();
     String esVersion = "7.9.3";
     container = new ElasticsearchContainer(DEFAULT_DOCKER_IMAGE_NAME + ":" + esVersion);
