@@ -611,14 +611,14 @@ public class ElasticsearchClientTest {
     config = new ElasticsearchSinkConnectorConfig(props);
     converter = new DataConverter(config);
     index = createIndexName(TOPIC);
-    boolean succeess = false;
+    boolean success = false;
 
     ElasticsearchClient client = new ElasticsearchClient(config, null);
     helperClient = new ElasticsearchHelperClient(address, config);
     try {
       client.createIndexOrDataStream(index);
     } catch (ConnectException e) {
-      succeess = true;
+      success = true;
     }
 
     client.close();
@@ -626,7 +626,7 @@ public class ElasticsearchClientTest {
     container.close();
     container = ElasticsearchContainer.fromSystemProperties();
     container.start();
-    assertTrue("Can not create a data stream if the Elasticsearch version is below 7.9", succeess);
+    assertTrue("Can not create a data stream if the Elasticsearch version is below 7.9", success);
   }
 
   @Test
