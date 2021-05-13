@@ -632,8 +632,8 @@ public class ElasticsearchClientTest {
   @Test
   public void testCompatibleESVersionDataStreamNotSet() throws Exception {
     container.close();
-    String esVersion = "7.9.3";
-    container = new ElasticsearchContainer(DEFAULT_DOCKER_IMAGE_NAME + ":" + esVersion);
+    String ESVersion = "7.9.3";
+    container = new ElasticsearchContainer(DEFAULT_DOCKER_IMAGE_NAME + ":" + ESVersion);
     container.start();
 
     String address = container.getConnectionUrl().replace(container.getContainerIpAddress(), container.hostMachineIpAddress());
@@ -664,8 +664,8 @@ public class ElasticsearchClientTest {
   @Test
   public void testCompatibleESVersionDataStreamSet() throws Exception {
     container.close();
-    String esVersion = "7.9.3";
-    container = new ElasticsearchContainer(DEFAULT_DOCKER_IMAGE_NAME + ":" + esVersion);
+    String ESVersion = "7.9.3";
+    container = new ElasticsearchContainer(DEFAULT_DOCKER_IMAGE_NAME + ":" + ESVersion);
     container.start();
 
     String address = container.getConnectionUrl().replace(container.getContainerIpAddress(), container.hostMachineIpAddress());
