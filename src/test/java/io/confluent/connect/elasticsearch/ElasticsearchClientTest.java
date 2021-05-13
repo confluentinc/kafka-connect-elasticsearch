@@ -596,38 +596,38 @@ public class ElasticsearchClientTest {
     container.start();
   }
 
-  @Test
-  public void testIncompatibleESVersionDataStreamSet() throws Exception {
-    container.close();
-    container = new ElasticsearchContainer(DEFAULT_DOCKER_IMAGE_NAME + ":" + "7.8.1");
-    container.start();
-
-    String address = container.getConnectionUrl().replace(container.getContainerIpAddress(), container.hostMachineIpAddress());
-    props.put(CONNECTION_URL_CONFIG, address);
-    props.put(DATA_STREAM_TYPE_CONFIG, DATA_STREAM_TYPE);
-    props.put(DATA_STREAM_DATASET_CONFIG, DATA_STREAM_DATASET);
-    props.put(CONNECTION_USERNAME_CONFIG, "elastic");
-    props.put(CONNECTION_PASSWORD_CONFIG, ELASTIC_PASSWORD);
-    config = new ElasticsearchSinkConnectorConfig(props);
-    converter = new DataConverter(config);
-    index = createIndexName(TOPIC);
-    boolean success = false;
-
-    ElasticsearchClient client = new ElasticsearchClient(config, null);
-    helperClient = new ElasticsearchHelperClient(address, config);
-    try {
-      client.createIndexOrDataStream(index);
-    } catch (ConnectException e) {
-      success = true;
-    }
-
-    client.close();
-    helperClient = null;
-    container.close();
-    container = ElasticsearchContainer.fromSystemProperties();
-    container.start();
-    assertTrue("Can not create a data stream if the Elasticsearch version is below 7.9", success);
-  }
+//  @Test
+//  public void testIncompatibleESVersionDataStreamSet() throws Exception {
+//    container.close();
+//    container = new ElasticsearchContainer(DEFAULT_DOCKER_IMAGE_NAME + ":" + "7.8.1");
+//    container.start();
+//
+//    String address = container.getConnectionUrl().replace(container.getContainerIpAddress(), container.hostMachineIpAddress());
+//    props.put(CONNECTION_URL_CONFIG, address);
+//    props.put(DATA_STREAM_TYPE_CONFIG, DATA_STREAM_TYPE);
+//    props.put(DATA_STREAM_DATASET_CONFIG, DATA_STREAM_DATASET);
+//    props.put(CONNECTION_USERNAME_CONFIG, "elastic");
+//    props.put(CONNECTION_PASSWORD_CONFIG, ELASTIC_PASSWORD);
+//    config = new ElasticsearchSinkConnectorConfig(props);
+//    converter = new DataConverter(config);
+//    index = createIndexName(TOPIC);
+//    boolean success = false;
+//
+//    ElasticsearchClient client = new ElasticsearchClient(config, null);
+//    helperClient = new ElasticsearchHelperClient(address, config);
+//    try {
+//      client.createIndexOrDataStream(index);
+//    } catch (ConnectException e) {
+//      success = true;
+//    }
+//
+//    client.close();
+//    helperClient = null;
+//    container.close();
+//    container = ElasticsearchContainer.fromSystemProperties();
+//    container.start();
+//    assertTrue("Can not create a data stream if the Elasticsearch version is below 7.9", success);
+//  }
 
   @Test
   public void testCompatibleESVersionDataStreamNotSet() throws Exception {
