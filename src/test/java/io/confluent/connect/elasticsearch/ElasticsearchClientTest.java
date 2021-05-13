@@ -32,7 +32,7 @@ import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfi
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.SECURITY_PROTOCOL_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.SSL_CONFIG_PREFIX;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.WRITE_METHOD_CONFIG;
-import static io.confluent.connect.elasticsearch.helper.ElasticsearchContainer.ELASTIC_PASSWORD;
+import static io.confluent.connect.elasticsearch.helper.ElasticsearchContainer.*;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertThrows;
@@ -74,6 +74,8 @@ import org.junit.Test;
 public class ElasticsearchClientTest {
 
   private static final String TOPIC = "index";
+  private static final String DATA_STREAM_TYPE = "logs";
+  private static final String DATA_STREAM_DATASET = "dataset";
 
   private static ElasticsearchContainer container;
 
@@ -171,12 +173,10 @@ public class ElasticsearchClientTest {
 
   @Test
   public void testCreateNewDataStream() throws Exception {
-    String type = "logs";
-    String dataset = "dataset";
-    index = String.format("%s-%s-%s", type, dataset, TOPIC); // data stream name
-    props.put(DATA_STREAM_TYPE_CONFIG, type);
-    props.put(DATA_STREAM_DATASET_CONFIG, dataset);
+    props.put(DATA_STREAM_TYPE_CONFIG, DATA_STREAM_TYPE);
+    props.put(DATA_STREAM_DATASET_CONFIG, DATA_STREAM_DATASET);
     config = new ElasticsearchSinkConnectorConfig(props);
+    index = createIndexName(TOPIC);
     ElasticsearchClient client = new ElasticsearchClient(config, null);
 
     assertTrue(client.createIndexOrDataStream(index));
@@ -566,6 +566,136 @@ public class ElasticsearchClientTest {
   }
 
   @Test
+  public void testIncompatibleESVersionEnableDataStream() throws Exception {
+    container.close();
+    container = new ElasticsearchContainer(DEFAULT_DOCKER_IMAGE_NAME + ":" + "7.8.1");
+    container.start();
+
+    String address = container.getConnectionUrl().replace(container.getContainerIpAddress(), container.hostMachineIpAddress());
+    props.put(CONNECTION_URL_CONFIG, address);
+    props.put(DATA_STREAM_TYPE_CONFIG, DATA_STREAM_TYPE);
+    props.put(DATA_STREAM_DATASET_CONFIG, DATA_STREAM_DATASET);
+    props.put(CONNECTION_USERNAME_CONFIG, "elastic");
+    props.put(CONNECTION_PASSWORD_CONFIG, ELASTIC_PASSWORD);
+    config = new ElasticsearchSinkConnectorConfig(props);
+    converter = new DataConverter(config);
+    index = createIndexName(TOPIC);
+
+    ElasticsearchClient client = new ElasticsearchClient(config, null);
+    helperClient = new ElasticsearchHelperClient(address, config);
+    client.createIndexOrDataStream(index);
+
+    writeRecord(sinkRecord(0), client);
+    client.flush();
+
+    waitUntilRecordsInES(1);
+    assertEquals(1, helperClient.getDocCount(index));
+    client.close();
+    helperClient = null;
+
+    container.close();
+    container = ElasticsearchContainer.fromSystemProperties();
+    container.start();
+  }
+
+
+  @Test
+  public void testIncompatibleESVersionDisableDataStream() throws Exception {
+    container.close();
+    container = new ElasticsearchContainer(DEFAULT_DOCKER_IMAGE_NAME + ":" + "7.8.1");
+    container.start();
+
+    String address = container.getConnectionUrl().replace(container.getContainerIpAddress(), container.hostMachineIpAddress());
+    props.put(CONNECTION_URL_CONFIG, address);
+    props.put(CONNECTION_USERNAME_CONFIG, "elastic");
+    props.put(CONNECTION_PASSWORD_CONFIG, ELASTIC_PASSWORD);
+    config = new ElasticsearchSinkConnectorConfig(props);
+    converter = new DataConverter(config);
+
+    ElasticsearchClient client = new ElasticsearchClient(config, null);
+    helperClient = new ElasticsearchHelperClient(address, config);
+    client.createIndexOrDataStream(index);
+
+    writeRecord(sinkRecord(0), client);
+    client.flush();
+
+    waitUntilRecordsInES(1);
+    assertEquals(1, helperClient.getDocCount(index));
+    client.close();
+    helperClient = null;
+
+    container.close();
+    container = ElasticsearchContainer.fromSystemProperties();
+    container.start();
+  }
+
+  @Test
+  public void testCompatibleESVersionEnableDataStream() throws Exception {
+    container.close();
+    String esVersion = "7.9.3";
+    container = new ElasticsearchContainer(DEFAULT_DOCKER_IMAGE_NAME + ":" + esVersion);
+    container.start();
+
+    String address = container.getConnectionUrl().replace(container.getContainerIpAddress(), container.hostMachineIpAddress());
+    props.put(CONNECTION_URL_CONFIG, address);
+    props.put(DATA_STREAM_TYPE_CONFIG, DATA_STREAM_TYPE);
+    props.put(DATA_STREAM_DATASET_CONFIG, DATA_STREAM_DATASET);
+    props.put(CONNECTION_USERNAME_CONFIG, "elastic");
+    props.put(CONNECTION_PASSWORD_CONFIG, ELASTIC_PASSWORD);
+    config = new ElasticsearchSinkConnectorConfig(props);
+    converter = new DataConverter(config);
+    index = createIndexName(TOPIC);
+
+    ElasticsearchClient client = new ElasticsearchClient(config, null);
+    helperClient = new ElasticsearchHelperClient(address, config);
+    client.createIndexOrDataStream(index);
+
+    writeRecord(sinkRecord(0), client);
+    client.flush();
+
+    waitUntilRecordsInES(1);
+    assertEquals(1, helperClient.getDocCount(index));
+    client.close();
+    helperClient = null;
+
+    container.close();
+    container = ElasticsearchContainer.fromSystemProperties();
+    container.start();
+  }
+
+  @Test
+  public void testCompatibleESVersionDisableDataStream() throws Exception {
+    container.close();
+    String esVersion = "7.9.3";
+    container = new ElasticsearchContainer(DEFAULT_DOCKER_IMAGE_NAME + ":" + esVersion);
+    container.start();
+
+    String address = container.getConnectionUrl().replace(container.getContainerIpAddress(), container.hostMachineIpAddress());
+    props.put(CONNECTION_URL_CONFIG, address);
+    props.put(CONNECTION_USERNAME_CONFIG, "elastic");
+    props.put(CONNECTION_PASSWORD_CONFIG, ELASTIC_PASSWORD);
+    config = new ElasticsearchSinkConnectorConfig(props);
+    converter = new DataConverter(config);
+    index = createIndexName(TOPIC);
+
+    ElasticsearchClient client = new ElasticsearchClient(config, null);
+    helperClient = new ElasticsearchHelperClient(address, config);
+    client.createIndexOrDataStream(index);
+
+    writeRecord(sinkRecord(0), client);
+    client.flush();
+
+    waitUntilRecordsInES(1);
+    assertEquals(1, helperClient.getDocCount(index));
+    client.close();
+    helperClient = null;
+
+    container.close();
+    container = ElasticsearchContainer.fromSystemProperties();
+    container.start();
+  }
+
+  @Test
   public void testSsl() throws Exception {
     container.close();
     container = ElasticsearchContainer.fromSystemProperties().withSslEnabled(true);
@@ -601,12 +731,19 @@ public class ElasticsearchClientTest {
     container.start();
   }
 
+  private String createIndexName(String name) {
+    return config.isDataStream()
+        ? String.format("%s-%s-%s", DATA_STREAM_TYPE, DATA_STREAM_DATASET, name)
+        : name;
+  }
+
   private static Schema schema() {
     return SchemaBuilder
         .struct()
         .name("record")
         .field("offset", SchemaBuilder.int32().defaultValue(0).build())
         .field("another", SchemaBuilder.int32().defaultValue(0).build())
+        .field("@timestamp", SchemaBuilder.string().build())
         .build();
   }
 
@@ -615,7 +752,7 @@ public class ElasticsearchClientTest {
   }
 
   private static SinkRecord sinkRecord(String key, int offset) {
-    Struct value = new Struct(schema()).put("offset", offset).put("another", offset + 1);
+    Struct value = new Struct(schema()).put("offset", offset).put("another", offset + 1).put("@timestamp","2021-04-28T11:11:22.000Z");
     return new SinkRecord(TOPIC, 0, Schema.STRING_SCHEMA, key, schema(), value, offset);
   }
 
@@ -638,6 +775,6 @@ public class ElasticsearchClientTest {
   }
 
   private void writeRecord(SinkRecord record, ElasticsearchClient client) {
-    client.index(record, converter.convertRecord(record, record.topic()));
+    client.index(record, converter.convertRecord(record, createIndexName(record.topic())));
   }
 }
