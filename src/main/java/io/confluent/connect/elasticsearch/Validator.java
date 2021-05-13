@@ -30,6 +30,7 @@ import org.apache.kafka.common.config.SslConfigs;
 import org.elasticsearch.client.RequestOptions;
 import org.elasticsearch.client.RestClient;
 import org.elasticsearch.client.RestHighLevelClient;
+import org.elasticsearch.client.core.MainResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -64,6 +65,8 @@ import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfi
 public class Validator {
 
   private static final Logger log = LoggerFactory.getLogger(Validator.class);
+
+  private static final String ES_VERSION_FOR_DATASTREAM = "7.9.0";
 
   private ElasticsearchSinkConnectorConfig config;
   private Map<String, ConfigValue> values;
@@ -102,6 +105,7 @@ public class Validator {
       validateMaxBufferedRecords();
       validateProxy();
       validateSsl();
+      validateVersion(client);
 
       if (!hasErrors()) {
         // no point if previous configs are invalid
@@ -303,6 +307,28 @@ public class Validator {
         );
         addErrorMessage(SECURITY_PROTOCOL_CONFIG, errorMessage);
       }
+    }
+  }
+
+  private void validateVersion(RestHighLevelClient client) {
+    MainResponse response;
+    try {
+      response = client.info(RequestOptions.DEFAULT);
+    } catch (IOException e) {
+      // Same error messages as from validating the connection.
+      return;
+    }
+    String versionNumber = response.getVersion().getNumber();
+    if (config.isDataStream() && versionNumber.compareTo(ES_VERSION_FOR_DATASTREAM) < 0) {
+      String errorMessage = String.format(
+          "Given Elasticsearch version %s is not compatible with data streams. Elasticsearch"
+              + "version must be at least %s",
+          versionNumber,
+          ES_VERSION_FOR_DATASTREAM
+      );
+      addErrorMessage(CONNECTION_URL_CONFIG, errorMessage);
+      addErrorMessage(DATA_STREAM_TYPE_CONFIG, errorMessage);
+      addErrorMessage(DATA_STREAM_DATASET_CONFIG, errorMessage);
     }
   }
 
