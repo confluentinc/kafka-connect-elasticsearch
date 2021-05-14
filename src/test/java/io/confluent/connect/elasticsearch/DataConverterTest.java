@@ -361,4 +361,17 @@ public class DataConverterTest {
   public SinkRecord createSinkRecordWithValue(Object value) {
     return new SinkRecord(topic, partition, Schema.STRING_SCHEMA, key, schema, value, offset);
   }
+
+  @Test
+  public void testInjectPayloadTimestamp() {
+    props.put(ElasticsearchSinkConnectorConfig.DATA_STREAM_TYPE_CONFIG, "logs");
+    props.put(ElasticsearchSinkConnectorConfig.DATA_STREAM_DATASET_CONFIG, "dataset");
+    props.put(ElasticsearchSinkConnectorConfig.IGNORE_SCHEMA_CONFIG, "true");
+    converter = new DataConverter(new ElasticsearchSinkConnectorConfig(props));
+
+    Schema preProcessedSchema = converter.preProcessSchema(schema);
+    Struct value = new Struct(preProcessedSchema).put("string", "whaddup");
+    SinkRecord sinkRecord = createSinkRecordWithValue(value);
+    converter.convertRecord(sinkRecord, index);
+  }
 }
