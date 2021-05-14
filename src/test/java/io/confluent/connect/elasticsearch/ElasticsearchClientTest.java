@@ -108,13 +108,6 @@ public class ElasticsearchClientTest {
     helperClient = new ElasticsearchHelperClient(container.getConnectionUrl(), config);
   }
 
-  protected void setupFromContainer() {
-    String address = container.getConnectionUrl();
-    props.put(CONNECTION_URL_CONFIG, address);
-    config = new ElasticsearchSinkConnectorConfig(props);
-    helperClient = new ElasticsearchHelperClient(props.get(CONNECTION_URL_CONFIG), config);
-  }
-
   @After
   public void cleanup() throws IOException {
     if (helperClient != null && helperClient.indexExists(index)){
@@ -166,7 +159,7 @@ public class ElasticsearchClientTest {
   public void testCreateExistingDataStream() throws Exception {
     String type = "logs";
     String dataset = "dataset";
-    index = String.format("%s-%s-%s", type, dataset, TOPIC); // data stream name
+    index = createIndexName(TOPIC);
     props.put(DATA_STREAM_TYPE_CONFIG, type);
     props.put(DATA_STREAM_DATASET_CONFIG, dataset);
     config = new ElasticsearchSinkConnectorConfig(props);
