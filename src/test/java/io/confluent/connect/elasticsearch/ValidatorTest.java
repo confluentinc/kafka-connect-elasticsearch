@@ -434,6 +434,7 @@ public class ValidatorTest {
     props.put(DATA_STREAM_DATASET_CONFIG, "a_valid_dataset");
     props.put(DATA_STREAM_TYPE_CONFIG, "logs");
     validator = new Validator(props, () -> mockClient);
+    when(mockInfoResponse.getVersion().getNumber()).thenReturn("7.9.0");
 
     Config result = validator.validate();
     assertNoErrors(result);
