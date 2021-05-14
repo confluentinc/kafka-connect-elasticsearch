@@ -19,10 +19,7 @@ import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfi
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG;
 import static org.apache.kafka.connect.runtime.ConnectorConfig.VALUE_CONVERTER_CLASS_CONFIG;
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNull;
 
-import io.confluent.connect.elasticsearch.DataConverter;
-import io.confluent.connect.elasticsearch.ElasticsearchClient;
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig;
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BehaviorOnNullValues;
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.WriteMethod;
@@ -105,10 +102,7 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
 
   @Test
   public void testHappyPathDataStream() throws Exception {
-    isDataStream = true;
-    props.put(DATA_STREAM_TYPE_CONFIG, "logs");
-    props.put(DATA_STREAM_DATASET_CONFIG, "dataset");
-    index = "logs-dataset-" + TOPIC;
+    setDataStream();
 
     runSimpleTest(props);
 
@@ -203,14 +197,11 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
 
   @Test
   public void testCompatibleESVersionDataStreamSet() throws Exception {
-    isDataStream = true;
     container.close();
     container = ElasticsearchContainer.withESVersion("7.9.3");
     container.start();
     setupFromContainer();
-    props.put(DATA_STREAM_TYPE_CONFIG, "logs");
-    props.put(DATA_STREAM_DATASET_CONFIG, "dataset");
-    index = "logs-dataset-" + TOPIC;
+    setDataStream();
 
     runSimpleTest(props);
 
@@ -220,6 +211,14 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
     container = ElasticsearchContainer.fromSystemProperties();
     container.start();
   }
+
+  private void setDataStream() {
+    isDataStream = true;
+    props.put(DATA_STREAM_TYPE_CONFIG, "logs");
+    props.put(DATA_STREAM_DATASET_CONFIG, "dataset");
+    index = "logs-dataset-" + TOPIC;
+  }
+
   protected void setupFromContainer() {
     String address = container.getConnectionUrl();
     props.put(CONNECTION_URL_CONFIG, address);
