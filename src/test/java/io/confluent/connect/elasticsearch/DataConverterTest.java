@@ -20,10 +20,12 @@ import org.apache.kafka.connect.data.*;
 import org.apache.kafka.connect.errors.DataException;
 import org.apache.kafka.connect.sink.SinkRecord;
 import org.elasticsearch.action.delete.DeleteRequest;
+import org.elasticsearch.action.index.IndexRequest;
 import org.junit.Before;
 import org.junit.Test;
 
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
@@ -33,9 +35,7 @@ import java.util.Map;
 
 import static io.confluent.connect.elasticsearch.DataConverter.MAP_KEY;
 import static io.confluent.connect.elasticsearch.DataConverter.MAP_VALUE;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNull;
-import static org.junit.Assert.fail;
+import static org.junit.Assert.*;
 
 public class DataConverterTest {
   
@@ -366,12 +366,25 @@ public class DataConverterTest {
   public void testInjectPayloadTimestamp() {
     props.put(ElasticsearchSinkConnectorConfig.DATA_STREAM_TYPE_CONFIG, "logs");
     props.put(ElasticsearchSinkConnectorConfig.DATA_STREAM_DATASET_CONFIG, "dataset");
-    props.put(ElasticsearchSinkConnectorConfig.IGNORE_SCHEMA_CONFIG, "true");
     converter = new DataConverter(new ElasticsearchSinkConnectorConfig(props));
-
     Schema preProcessedSchema = converter.preProcessSchema(schema);
-    Struct value = new Struct(preProcessedSchema).put("string", "whaddup");
+    Struct value = new Struct(preProcessedSchema).put("string", "myValue");
     SinkRecord sinkRecord = createSinkRecordWithValue(value);
-    converter.convertRecord(sinkRecord, index);
+
+    IndexRequest actualRecord = (IndexRequest) converter.convertRecord(sinkRecord, index);
+
+    assertTrue(actualRecord.sourceAsMap().containsKey("@timestamp"));
+  }
+
+  @Test
+  public void testDoNotInjectPayloadTimestamp() {
+    converter = new DataConverter(new ElasticsearchSinkConnectorConfig(props));
+    Schema preProcessedSchema = converter.preProcessSchema(schema);
+    Struct value = new Struct(preProcessedSchema).put("string", "myValue");
+    SinkRecord sinkRecord = createSinkRecordWithValue(value);
+
+    IndexRequest actualRecord = (IndexRequest) converter.convertRecord(sinkRecord, index);
+
+    assertFalse(actualRecord.sourceAsMap().containsKey("@timestamp"));
   }
 }
