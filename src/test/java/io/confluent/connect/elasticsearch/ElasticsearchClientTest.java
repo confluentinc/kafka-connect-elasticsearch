@@ -33,7 +33,6 @@ import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfi
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.SSL_CONFIG_PREFIX;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.WRITE_METHOD_CONFIG;
 import static io.confluent.connect.elasticsearch.helper.ElasticsearchContainer.ELASTIC_PASSWORD;
-import static io.confluent.connect.elasticsearch.helper.ElasticsearchContainer.DEFAULT_DOCKER_IMAGE_NAME;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertThrows;
@@ -107,6 +106,13 @@ public class ElasticsearchClientTest {
     config = new ElasticsearchSinkConnectorConfig(props);
     converter = new DataConverter(config);
     helperClient = new ElasticsearchHelperClient(container.getConnectionUrl(), config);
+  }
+
+  protected void setupFromContainer() {
+    String address = container.getConnectionUrl();
+    props.put(CONNECTION_URL_CONFIG, address);
+    config = new ElasticsearchSinkConnectorConfig(props);
+    helperClient = new ElasticsearchHelperClient(props.get(CONNECTION_URL_CONFIG), config);
   }
 
   @After
@@ -564,15 +570,6 @@ public class ElasticsearchClientTest {
     verify(reporter2, never()).report(any(SinkRecord.class), any(Throwable.class));
     client.close();
     client2.close();
-  }
-
-  private void setupFromContainer() {
-    String address = container.getConnectionUrl();
-    props.put(CONNECTION_URL_CONFIG, address);
-    config = new ElasticsearchSinkConnectorConfig(props);
-    converter = new DataConverter(config);
-
-    helperClient = new ElasticsearchHelperClient(props.get(CONNECTION_URL_CONFIG), config);
   }
 
   @Test

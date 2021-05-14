@@ -15,20 +15,19 @@
 
 package io.confluent.connect.elasticsearch.integration;
 
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BATCH_SIZE_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BEHAVIOR_ON_NULL_VALUES_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.DATA_STREAM_DATASET_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.DATA_STREAM_TYPE_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_KEY_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.LINGER_MS_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BULK_SIZE_BYTES_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.WRITE_METHOD_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.*;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG;
 import static org.apache.kafka.connect.runtime.ConnectorConfig.VALUE_CONVERTER_CLASS_CONFIG;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
 
+import io.confluent.connect.elasticsearch.DataConverter;
+import io.confluent.connect.elasticsearch.ElasticsearchClient;
+import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig;
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BehaviorOnNullValues;
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.WriteMethod;
 import io.confluent.connect.elasticsearch.helper.ElasticsearchContainer;
+import io.confluent.connect.elasticsearch.helper.ElasticsearchHelperClient;
 import org.apache.kafka.connect.storage.StringConverter;
 import org.apache.kafka.test.IntegrationTest;
 import org.elasticsearch.search.SearchHit;
@@ -170,5 +169,60 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
         assertEquals(0, docNum);
       }
     }
+  }
+
+  @Test
+  public void testIncompatibleESVersionDataStreamNotSet() throws Exception {
+    container.close();
+    container = ElasticsearchContainer.withESVersion("7.8.1");
+    container.start();
+    setupFromContainer();
+
+    runSimpleTest(props);
+    helperClient = null;
+
+    container.close();
+    container = ElasticsearchContainer.fromSystemProperties();
+    container.start();
+  }
+
+  @Test
+  public void testCompatibleESVersionDataStreamNotSet() throws Exception {
+    container.close();
+    container = ElasticsearchContainer.withESVersion("7.9.3");
+    container.start();
+    setupFromContainer();
+
+    runSimpleTest(props);
+
+    helperClient = null;
+    container.close();
+    container = ElasticsearchContainer.fromSystemProperties();
+    container.start();
+  }
+
+  @Test
+  public void testCompatibleESVersionDataStreamSet() throws Exception {
+    isDataStream = true;
+    container.close();
+    container = ElasticsearchContainer.withESVersion("7.9.3");
+    container.start();
+    setupFromContainer();
+    props.put(DATA_STREAM_TYPE_CONFIG, "logs");
+    props.put(DATA_STREAM_DATASET_CONFIG, "dataset");
+    index = "logs-dataset-" + TOPIC;
+
+    runSimpleTest(props);
+
+    assertEquals(index, helperClient.getDataStream(index).getName());
+    helperClient = null;
+    container.close();
+    container = ElasticsearchContainer.fromSystemProperties();
+    container.start();
+  }
+  protected void setupFromContainer() {
+    String address = container.getConnectionUrl();
+    props.put(CONNECTION_URL_CONFIG, address);
+    helperClient = new ElasticsearchHelperClient(props.get(CONNECTION_URL_CONFIG), new ElasticsearchSinkConnectorConfig(props));
   }
 }
