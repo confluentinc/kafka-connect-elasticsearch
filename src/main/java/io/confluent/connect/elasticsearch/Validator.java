@@ -105,11 +105,11 @@ public class Validator {
       validateMaxBufferedRecords();
       validateProxy();
       validateSsl();
-      validateVersion(client);
 
       if (!hasErrors()) {
         // no point if previous configs are invalid
         validateConnection(client);
+        validateVersion(client);
       }
     } catch (IOException e) {
       log.warn("Closing the client failed.", e);
@@ -311,6 +311,9 @@ public class Validator {
   }
 
   private void validateVersion(RestHighLevelClient client) {
+    if (!config.isDataStream()) {
+      return;
+    }
     MainResponse response;
     try {
       response = client.info(RequestOptions.DEFAULT);

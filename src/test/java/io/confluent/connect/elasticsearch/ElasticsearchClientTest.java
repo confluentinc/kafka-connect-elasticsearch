@@ -566,21 +566,23 @@ public class ElasticsearchClientTest {
     client2.close();
   }
 
-  @Test
-  public void testIncompatibleESVersionDataStreamNotSet() throws Exception {
-    container.close();
-    container = new ElasticsearchContainer(DEFAULT_DOCKER_IMAGE_NAME + ":" + "7.8.1");
-    container.start();
-
-    String address = container.getConnectionUrl().replace(container.getContainerIpAddress(), container.hostMachineIpAddress());
+  private void setupFromContainer() {
+    String address = container.getConnectionUrl();
     props.put(CONNECTION_URL_CONFIG, address);
-    props.put(CONNECTION_USERNAME_CONFIG, "elastic");
-    props.put(CONNECTION_PASSWORD_CONFIG, ELASTIC_PASSWORD);
     config = new ElasticsearchSinkConnectorConfig(props);
     converter = new DataConverter(config);
 
+    helperClient = new ElasticsearchHelperClient(props.get(CONNECTION_URL_CONFIG), config);
+  }
+
+  @Test
+  public void testIncompatibleESVersionDataStreamNotSet() throws Exception {
+    container.close();
+    container = ElasticsearchContainer.withESVersion("7.8.1");
+    container.start();
+    setupFromContainer();
+
     ElasticsearchClient client = new ElasticsearchClient(config, null);
-    helperClient = new ElasticsearchHelperClient(address, config);
     client.createIndexOrDataStream(index);
 
     writeRecord(sinkRecord(0), client);
@@ -601,17 +603,10 @@ public class ElasticsearchClientTest {
     container.close();
     container = ElasticsearchContainer.withESVersion("7.9.3");
     container.start();
-
-    String address = container.getConnectionUrl().replace(container.getContainerIpAddress(), container.hostMachineIpAddress());
-    props.put(CONNECTION_URL_CONFIG, address);
-    props.put(CONNECTION_USERNAME_CONFIG, "elastic");
-    props.put(CONNECTION_PASSWORD_CONFIG, ELASTIC_PASSWORD);
-    config = new ElasticsearchSinkConnectorConfig(props);
-    converter = new DataConverter(config);
-    index = createIndexName(TOPIC);
+    setupFromContainer();
 
     ElasticsearchClient client = new ElasticsearchClient(config, null);
-    helperClient = new ElasticsearchHelperClient(address, config);
+    index = createIndexName(TOPIC);
     client.createIndexOrDataStream(index);
 
     writeRecord(sinkRecord(0), client);
@@ -632,19 +627,10 @@ public class ElasticsearchClientTest {
     container.close();
     container = ElasticsearchContainer.withESVersion("7.9.3");
     container.start();
+    setupFromContainer();
 
-    String address = container.getConnectionUrl().replace(container.getContainerIpAddress(), container.hostMachineIpAddress());
-    props.put(CONNECTION_URL_CONFIG, address);
-    props.put(DATA_STREAM_TYPE_CONFIG, DATA_STREAM_TYPE);
-    props.put(DATA_STREAM_DATASET_CONFIG, DATA_STREAM_DATASET);
-    props.put(CONNECTION_USERNAME_CONFIG, "elastic");
-    props.put(CONNECTION_PASSWORD_CONFIG, ELASTIC_PASSWORD);
-    config = new ElasticsearchSinkConnectorConfig(props);
-    converter = new DataConverter(config);
     index = createIndexName(TOPIC);
-
     ElasticsearchClient client = new ElasticsearchClient(config, null);
-    helperClient = new ElasticsearchHelperClient(address, config);
     client.createIndexOrDataStream(index);
 
     writeRecord(sinkRecord(0), client);
