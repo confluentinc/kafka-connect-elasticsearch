@@ -363,7 +363,7 @@ public class DataConverterTest {
   }
 
   @Test
-  public void testInjectPayloadTimestamp() {
+  public void testInjectPayloadTimestampIfDataStream() {
     props.put(ElasticsearchSinkConnectorConfig.DATA_STREAM_TYPE_CONFIG, "logs");
     props.put(ElasticsearchSinkConnectorConfig.DATA_STREAM_DATASET_CONFIG, "dataset");
     converter = new DataConverter(new ElasticsearchSinkConnectorConfig(props));
@@ -377,7 +377,7 @@ public class DataConverterTest {
   }
 
   @Test
-  public void testDoNotInjectPayloadTimestamp() {
+  public void testDoNotInjectPayloadTimestampIfNotDataStream() {
     converter = new DataConverter(new ElasticsearchSinkConnectorConfig(props));
     Schema preProcessedSchema = converter.preProcessSchema(schema);
     Struct value = new Struct(preProcessedSchema).put("string", "myValue");
@@ -386,5 +386,25 @@ public class DataConverterTest {
     IndexRequest actualRecord = (IndexRequest) converter.convertRecord(sinkRecord, index);
 
     assertFalse(actualRecord.sourceAsMap().containsKey("@timestamp"));
+  }
+
+  @Test
+  public void testDoNotInjectPayloadTimestampIfAlreadyExists() {
+    props.put(ElasticsearchSinkConnectorConfig.DATA_STREAM_TYPE_CONFIG, "logs");
+    props.put(ElasticsearchSinkConnectorConfig.DATA_STREAM_DATASET_CONFIG, "dataset");
+    converter = new DataConverter(new ElasticsearchSinkConnectorConfig(props));
+    schema = SchemaBuilder
+        .struct()
+        .name("struct")
+        .field("@timestamp", Schema.STRING_SCHEMA)
+        .build();
+    Schema preProcessedSchema = converter.preProcessSchema(schema);
+    String timestamp = "2021-05-14T11:11:22.000Z";
+    Struct value = new Struct(preProcessedSchema).put("@timestamp", timestamp);
+    SinkRecord sinkRecord = createSinkRecordWithValue(value);
+
+    IndexRequest actualRecord = (IndexRequest) converter.convertRecord(sinkRecord, index);
+
+    assertEquals(timestamp, actualRecord.sourceAsMap().get("@timestamp"));
   }
 }

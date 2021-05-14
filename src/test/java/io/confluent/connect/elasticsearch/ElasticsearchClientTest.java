@@ -638,6 +638,7 @@ public class ElasticsearchClientTest {
     );
   }
 
+  @Test
   public void testInjectTimestamp() throws Exception {
     String type = "logs";
     String dataset = "dataset";
@@ -650,7 +651,7 @@ public class ElasticsearchClientTest {
     assertTrue(client.createIndexOrDataStream(index));
     assertTrue(helperClient.indexExists(index));
 
-    writeRecord(sinkRecord(0), client); // update sink record to be with or without timestamp
+    writeRecord(sinkRecord(0), client);
     client.flush();
 
     waitUntilRecordsInES(1);
