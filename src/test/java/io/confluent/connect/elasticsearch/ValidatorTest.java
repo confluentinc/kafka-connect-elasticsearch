@@ -408,7 +408,7 @@ public class ValidatorTest {
   }
 
   @Test
-  public void testInvalidVersionDataStreamSet() {
+  public void testIncompatibleVersionDataStreamSet() {
     props.put(DATA_STREAM_DATASET_CONFIG, "a_valid_dataset");
     props.put(DATA_STREAM_TYPE_CONFIG, "logs");
     validator = new Validator(props, () -> mockClient);
@@ -421,7 +421,7 @@ public class ValidatorTest {
   }
 
   @Test
-  public void testValidVersionDataStreamNotSet() {
+  public void testIncompatibleVersionDataStreamNotSet() {
     validator = new Validator(props, () -> mockClient);
     when(mockInfoResponse.getVersion().getNumber()).thenReturn("7.8.1");
 
@@ -430,7 +430,16 @@ public class ValidatorTest {
   }
 
   @Test
-  public void testValidVersionDataStreamSet() {
+  public void testCompatibleVersionDataStreamNotSet() {
+    validator = new Validator(props, () -> mockClient);
+    when(mockInfoResponse.getVersion().getNumber()).thenReturn("7.9.0");
+
+    Config result = validator.validate();
+    assertNoErrors(result);
+  }
+
+  @Test
+  public void testCompatibleVersionDataStreamSet() {
     props.put(DATA_STREAM_DATASET_CONFIG, "a_valid_dataset");
     props.put(DATA_STREAM_TYPE_CONFIG, "logs");
     validator = new Validator(props, () -> mockClient);
