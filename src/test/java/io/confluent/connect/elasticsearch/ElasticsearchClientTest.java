@@ -691,7 +691,6 @@ public class ElasticsearchClientTest {
         .name("record")
         .field("offset", SchemaBuilder.int32().defaultValue(0).build())
         .field("another", SchemaBuilder.int32().defaultValue(0).build())
-        .field("@timestamp", SchemaBuilder.string().build())
         .build();
   }
 
@@ -700,7 +699,7 @@ public class ElasticsearchClientTest {
   }
 
   private static SinkRecord sinkRecord(String key, int offset) {
-    Struct value = new Struct(schema()).put("offset", offset).put("another", offset + 1).put("@timestamp","2021-04-28T11:11:22.000Z");
+    Struct value = new Struct(schema()).put("offset", offset).put("another", offset + 1);
     return new SinkRecord(TOPIC, 0, Schema.STRING_SCHEMA, key, schema(), value, offset);
   }
 
