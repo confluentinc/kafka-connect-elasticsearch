@@ -63,6 +63,7 @@ import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.sink.ErrantRecordReporter;
 import org.apache.kafka.connect.sink.SinkRecord;
 import org.apache.kafka.test.TestUtils;
+import org.eclipse.jetty.util.IO;
 import org.elasticsearch.ElasticsearchStatusException;
 import org.elasticsearch.search.SearchHit;
 import org.junit.After;
@@ -635,6 +636,26 @@ public class ElasticsearchClientTest {
         TimeUnit.MINUTES.toMillis(1),
         String.format("Could not find expected documents (%d) in time.", expectedRecords)
     );
+  }
+
+  public void testInjectTimestamp() throws Exception {
+    String type = "logs";
+    String dataset = "dataset";
+    index = String.format("%s-%s-%s", type, dataset, TOPIC); // data stream name
+    props.put(DATA_STREAM_TYPE_CONFIG, type);
+    props.put(DATA_STREAM_DATASET_CONFIG, dataset);
+    config = new ElasticsearchSinkConnectorConfig(props);
+    ElasticsearchClient client = new ElasticsearchClient(config, null);
+
+    assertTrue(client.createIndexOrDataStream(index));
+    assertTrue(helperClient.indexExists(index));
+
+    writeRecord(sinkRecord(0), client); // update sink record to be with or without timestamp
+    client.flush();
+
+    waitUntilRecordsInES(1);
+    assertEquals(1, helperClient.getDocCount(index));
+    client.close();
   }
 
   private void writeRecord(SinkRecord record, ElasticsearchClient client) {

@@ -15,6 +15,11 @@
 
 package io.confluent.connect.elasticsearch;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonMappingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BehaviorOnNullValues;
 import org.apache.kafka.connect.data.ConnectSchema;
 import org.apache.kafka.connect.data.Date;
@@ -146,6 +151,19 @@ public class DataConverter {
     }
 
     final String payload = getPayload(record);
+//     udpddate payloadd or convert to JSOn
+    ObjectMapper objectMapper = new ObjectMapper();
+    try {
+      JsonNode jsonNode = objectMapper.readTree(payload);
+      jsonNode.get("@timestamp");
+      ((ObjectNode)jsonNode).put("@timestamp", "NO"); // do I need to save the casted version anywhere
+      String jsonStr = jsonNode.asText();
+    } catch (JsonProcessingException e) {
+      System.out.println("oops");
+    }
+
+//        ((Map) record.value()).putIfAbsent("@timestamp", record.timestamp());
+
     final String id = config.shouldIgnoreKey(record.topic())
         ? String.format("%s+%d+%d", record.topic(), record.kafkaPartition(), record.kafkaOffset())
         : convertKey(record.keySchema(), record.key());
@@ -177,14 +195,13 @@ public class DataConverter {
     if (record.value() == null) {
       return null;
     }
-
+    record.valueSchema(); // create a new schema builder and add it here??? but also has something for ignoring schema
     Schema schema = config.shouldIgnoreSchema(record.topic())
         ? record.valueSchema()
         : preProcessSchema(record.valueSchema());
     Object value = config.shouldIgnoreSchema(record.topic())
         ? record.value()
         : preProcessValue(record.value(), record.valueSchema(), schema);
-    ((HashMap) record.value()).putIfAbsent("@timestamp", record.timestamp());
 
     byte[] rawJsonPayload = JSON_CONVERTER.fromConnectData(record.topic(), schema, value);
     return new String(rawJsonPayload, StandardCharsets.UTF_8);
