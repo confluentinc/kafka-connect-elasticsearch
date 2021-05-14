@@ -184,6 +184,7 @@ public class DataConverter {
     Object value = config.shouldIgnoreSchema(record.topic())
         ? record.value()
         : preProcessValue(record.value(), record.valueSchema(), schema);
+    ((HashMap) record.value()).putIfAbsent("@timestamp", record.timestamp());
 
     byte[] rawJsonPayload = JSON_CONVERTER.fromConnectData(record.topic(), schema, value);
     return new String(rawJsonPayload, StandardCharsets.UTF_8);
