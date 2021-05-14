@@ -16,15 +16,12 @@
 package io.confluent.connect.elasticsearch.integration;
 
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.*;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG;
 import static org.apache.kafka.connect.runtime.ConnectorConfig.VALUE_CONVERTER_CLASS_CONFIG;
 import static org.junit.Assert.assertEquals;
 
-import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig;
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BehaviorOnNullValues;
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.WriteMethod;
 import io.confluent.connect.elasticsearch.helper.ElasticsearchContainer;
-import io.confluent.connect.elasticsearch.helper.ElasticsearchHelperClient;
 import org.apache.kafka.connect.storage.StringConverter;
 import org.apache.kafka.test.IntegrationTest;
 import org.elasticsearch.search.SearchHit;
@@ -210,18 +207,5 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
     container.close();
     container = ElasticsearchContainer.fromSystemProperties();
     container.start();
-  }
-
-  private void setDataStream() {
-    isDataStream = true;
-    props.put(DATA_STREAM_TYPE_CONFIG, "logs");
-    props.put(DATA_STREAM_DATASET_CONFIG, "dataset");
-    index = "logs-dataset-" + TOPIC;
-  }
-
-  protected void setupFromContainer() {
-    String address = container.getConnectionUrl();
-    props.put(CONNECTION_URL_CONFIG, address);
-    helperClient = new ElasticsearchHelperClient(props.get(CONNECTION_URL_CONFIG), new ElasticsearchSinkConnectorConfig(props));
   }
 }
