@@ -150,19 +150,8 @@ public class DataConverter {
       }
     }
 
-    final String payload = getPayload(record);
-//     udpddate payloadd or convert to JSOn
-    ObjectMapper objectMapper = new ObjectMapper();
-    try {
-      JsonNode jsonNode = objectMapper.readTree(payload);
-      jsonNode.get("@timestamp");
-      ((ObjectNode)jsonNode).put("@timestamp", "NO"); // do I need to save the casted version anywhere
-      String jsonStr = jsonNode.asText();
-    } catch (JsonProcessingException e) {
-      System.out.println("oops");
-    }
-
-//        ((Map) record.value()).putIfAbsent("@timestamp", record.timestamp());
+    String payload = getPayload(record);
+    payload = injectTimestampIfDataStreamAndAbsent(payload, record);
 
     final String id = config.shouldIgnoreKey(record.topic())
         ? String.format("%s+%d+%d", record.topic(), record.kafkaPartition(), record.kafkaOffset())
@@ -191,11 +180,28 @@ public class DataConverter {
     }
   }
 
+  private String injectTimestampIfDataStreamAndAbsent(String payload, SinkRecord record) {
+    if (!config.isDataStream()) {
+      return payload;
+    }
+    ObjectMapper objectMapper = new ObjectMapper();
+    try {
+      JsonNode jsonNode = objectMapper.readTree(payload);
+      if (jsonNode.get("@timestamp") == null) {
+        ((ObjectNode)jsonNode).put("@timestamp", record.timestamp());
+        payload = objectMapper.writeValueAsString(jsonNode);
+      }
+    } catch (JsonProcessingException e) {
+      // Should not happen if payload was retrieved correctly
+    }
+    return payload;
+  }
+
   private String getPayload(SinkRecord record) {
     if (record.value() == null) {
       return null;
     }
-    record.valueSchema(); // create a new schema builder and add it here??? but also has something for ignoring schema
+    record.valueSchema();
     Schema schema = config.shouldIgnoreSchema(record.topic())
         ? record.valueSchema()
         : preProcessSchema(record.valueSchema());
