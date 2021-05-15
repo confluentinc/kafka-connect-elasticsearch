@@ -56,6 +56,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import org.apache.kafka.common.config.SslConfigs;
+import org.apache.kafka.common.record.TimestampType;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Struct;
@@ -75,6 +76,8 @@ import org.junit.Test;
 public class ElasticsearchClientTest {
 
   private static final String TOPIC = "index";
+  private static final String DATA_STREAM_TYPE = "logs";
+  private static final String DATA_STREAM_DATASET = "dataset";
 
   private static ElasticsearchContainer container;
 
@@ -617,7 +620,7 @@ public class ElasticsearchClientTest {
 
   private static SinkRecord sinkRecord(String key, int offset) {
     Struct value = new Struct(schema()).put("offset", offset).put("another", offset + 1);
-    return new SinkRecord(TOPIC, 0, Schema.STRING_SCHEMA, key, schema(), value, offset);
+    return new SinkRecord(TOPIC, 0, Schema.STRING_SCHEMA, key, schema(), value, offset, System.currentTimeMillis(), TimestampType.CREATE_TIME);
   }
 
   private void waitUntilRecordsInES(int expectedRecords) throws InterruptedException {
@@ -640,13 +643,12 @@ public class ElasticsearchClientTest {
 
   @Test
   public void testInjectTimestamp() throws Exception {
-    String type = "logs";
-    String dataset = "dataset";
-    index = String.format("%s-%s-%s", type, dataset, TOPIC); // data stream name
-    props.put(DATA_STREAM_TYPE_CONFIG, type);
-    props.put(DATA_STREAM_DATASET_CONFIG, dataset);
+    props.put(DATA_STREAM_TYPE_CONFIG, DATA_STREAM_TYPE);
+    props.put(DATA_STREAM_DATASET_CONFIG, DATA_STREAM_DATASET);
     config = new ElasticsearchSinkConnectorConfig(props);
+    converter = new DataConverter(config);
     ElasticsearchClient client = new ElasticsearchClient(config, null);
+    index = createIndexName(TOPIC);
 
     assertTrue(client.createIndexOrDataStream(index));
     assertTrue(helperClient.indexExists(index));
@@ -660,6 +662,10 @@ public class ElasticsearchClientTest {
   }
 
   private void writeRecord(SinkRecord record, ElasticsearchClient client) {
-    client.index(record, converter.convertRecord(record, record.topic()));
+    client.index(record, converter.convertRecord(record, createIndexName(record.topic())));
+  }
+
+  private String createIndexName(String name) {
+    return config.isDataStream() ?  String.format("%s-%s-%s", DATA_STREAM_TYPE, DATA_STREAM_DATASET, name) : name;
   }
 }

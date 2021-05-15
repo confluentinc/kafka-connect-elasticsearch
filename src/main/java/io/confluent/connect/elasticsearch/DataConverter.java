@@ -188,7 +188,7 @@ public class DataConverter {
     try {
       JsonNode jsonNode = objectMapper.readTree(payload);
       if (jsonNode.get("@timestamp") == null) {
-        ((ObjectNode)jsonNode).put("@timestamp", record.timestamp());
+        ((ObjectNode)jsonNode).put("@timestamp", String.valueOf(record.timestamp()));
         payload = objectMapper.writeValueAsString(jsonNode);
       }
     } catch (JsonProcessingException e) {
