@@ -451,27 +451,6 @@ public class ElasticsearchClientTest {
   }
 
   @Test
-  public void testInjectTimestamp() throws Exception {
-    props.put(DATA_STREAM_TYPE_CONFIG, DATA_STREAM_TYPE);
-    props.put(DATA_STREAM_DATASET_CONFIG, DATA_STREAM_DATASET);
-    config = new ElasticsearchSinkConnectorConfig(props);
-    converter = new DataConverter(config);
-    ElasticsearchClient client = new ElasticsearchClient(config, null);
-    index = createIndexName(TOPIC);
-
-    assertTrue(client.createIndexOrDataStream(index));
-    assertTrue(helperClient.indexExists(index));
-
-    // Sink Record does not include timestamp field in value.
-    writeRecord(sinkRecord(0), client);
-    client.flush();
-
-    waitUntilRecordsInES(1);
-    assertEquals(1, helperClient.getDocCount(index));
-    client.close();
-  }
-
-  @Test
   public void testRetryRecordsOnFailure() throws Exception {
     props.put(LINGER_MS_CONFIG, "60000");
     props.put(BATCH_SIZE_CONFIG, "2");
@@ -620,6 +599,27 @@ public class ElasticsearchClientTest {
     container.close();
     container = ElasticsearchContainer.fromSystemProperties();
     container.start();
+  }
+
+  @Test
+  public void testWriteDataStreamInjectTimestamp() throws Exception {
+    props.put(DATA_STREAM_TYPE_CONFIG, DATA_STREAM_TYPE);
+    props.put(DATA_STREAM_DATASET_CONFIG, DATA_STREAM_DATASET);
+    config = new ElasticsearchSinkConnectorConfig(props);
+    converter = new DataConverter(config);
+    ElasticsearchClient client = new ElasticsearchClient(config, null);
+    index = createIndexName(TOPIC);
+
+    assertTrue(client.createIndexOrDataStream(index));
+    assertTrue(helperClient.indexExists(index));
+
+    // Sink Record does not include timestamp field in value.
+    writeRecord(sinkRecord(0), client);
+    client.flush();
+
+    waitUntilRecordsInES(1);
+    assertEquals(1, helperClient.getDocCount(index));
+    client.close();
   }
 
   private String createIndexName(String name) {
