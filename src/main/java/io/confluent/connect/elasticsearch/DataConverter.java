@@ -202,7 +202,7 @@ public class DataConverter {
     ObjectMapper objectMapper = new ObjectMapper();
     try {
       JsonNode jsonNode = objectMapper.readTree(payload);
-      if (jsonNode.get("@timestamp") == null) {
+      if (jsonNode.get("@timestamp").isNull()) {
         ((ObjectNode)jsonNode).put("@timestamp", String.valueOf(record.timestamp()));
         payload = objectMapper.writeValueAsString(jsonNode);
       }

@@ -622,6 +622,10 @@ public class ElasticsearchClientTest {
     container.start();
   }
 
+  private String createIndexName(String name) {
+    return config.isDataStream() ?  String.format("%s-%s-%s", DATA_STREAM_TYPE, DATA_STREAM_DATASET, name) : name;
+  }
+
   private static Schema schema() {
     return SchemaBuilder
         .struct()
@@ -660,9 +664,5 @@ public class ElasticsearchClientTest {
 
   private void writeRecord(SinkRecord record, ElasticsearchClient client) {
     client.index(record, converter.convertRecord(record, createIndexName(record.topic())));
-  }
-
-  private String createIndexName(String name) {
-    return config.isDataStream() ?  String.format("%s-%s-%s", DATA_STREAM_TYPE, DATA_STREAM_DATASET, name) : name;
   }
 }
