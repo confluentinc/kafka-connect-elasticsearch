@@ -180,6 +180,22 @@ public class DataConverter {
     }
   }
 
+  private String getPayload(SinkRecord record) {
+    if (record.value() == null) {
+      return null;
+    }
+
+    Schema schema = config.shouldIgnoreSchema(record.topic())
+        ? record.valueSchema()
+        : preProcessSchema(record.valueSchema());
+    Object value = config.shouldIgnoreSchema(record.topic())
+        ? record.value()
+        : preProcessValue(record.value(), record.valueSchema(), schema);
+
+    byte[] rawJsonPayload = JSON_CONVERTER.fromConnectData(record.topic(), schema, value);
+    return new String(rawJsonPayload, StandardCharsets.UTF_8);
+  }
+
   private String injectTimestampIfDataStreamAndAbsent(String payload, SinkRecord record) {
     if (!config.isDataStream()) {
       return payload;
@@ -192,24 +208,9 @@ public class DataConverter {
         payload = objectMapper.writeValueAsString(jsonNode);
       }
     } catch (JsonProcessingException e) {
-      // Should not happen if payload was retrieved correctly
+      // Should not happen if payload was retrieved correctly.
     }
     return payload;
-  }
-
-  private String getPayload(SinkRecord record) {
-    if (record.value() == null) {
-      return null;
-    }
-    Schema schema = config.shouldIgnoreSchema(record.topic())
-        ? record.valueSchema()
-        : preProcessSchema(record.valueSchema());
-    Object value = config.shouldIgnoreSchema(record.topic())
-        ? record.value()
-        : preProcessValue(record.value(), record.valueSchema(), schema);
-
-    byte[] rawJsonPayload = JSON_CONVERTER.fromConnectData(record.topic(), schema, value);
-    return new String(rawJsonPayload, StandardCharsets.UTF_8);
   }
 
   private DocWriteRequest<?> maybeAddExternalVersioning(

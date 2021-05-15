@@ -163,6 +163,7 @@ public class ElasticsearchClientTest {
     props.put(DATA_STREAM_DATASET_CONFIG, DATA_STREAM_DATASET);
     config = new ElasticsearchSinkConnectorConfig(props);
     ElasticsearchClient client = new ElasticsearchClient(config, null);
+    index = createIndexName(TOPIC);
 
     assertTrue(client.createIndexOrDataStream(index));
     assertTrue(helperClient.indexExists(index));
