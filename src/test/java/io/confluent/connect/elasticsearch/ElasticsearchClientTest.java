@@ -461,6 +461,7 @@ public class ElasticsearchClientTest {
     assertTrue(client.createIndexOrDataStream(index));
     assertTrue(helperClient.indexExists(index));
 
+    // Sink Record does not include timestamp field in value.
     writeRecord(sinkRecord(0), client);
     client.flush();
 

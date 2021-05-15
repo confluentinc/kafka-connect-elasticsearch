@@ -201,7 +201,6 @@ public class DataConverter {
     if (record.value() == null) {
       return null;
     }
-    record.valueSchema();
     Schema schema = config.shouldIgnoreSchema(record.topic())
         ? record.valueSchema()
         : preProcessSchema(record.valueSchema());
