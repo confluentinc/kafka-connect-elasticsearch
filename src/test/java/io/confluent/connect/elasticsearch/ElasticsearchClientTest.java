@@ -26,7 +26,6 @@ import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfi
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.MAX_BUFFERED_RECORDS_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.MAX_IN_FLIGHT_REQUESTS_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.MAX_RETRIES_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.READ_TIMEOUT_MS_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.RETRY_BACKOFF_MS_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.SECURITY_PROTOCOL_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.SSL_CONFIG_PREFIX;
@@ -68,9 +67,18 @@ import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
+import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.TestName;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class ElasticsearchClientTest {
+
+  @Rule
+  public TestName name = new TestName();
+
+  private static final Logger log = LoggerFactory.getLogger(ElasticsearchClient.class);
 
   private static final String INDEX = "index";
 
@@ -89,11 +97,14 @@ public class ElasticsearchClientTest {
 
   @AfterClass
   public static void cleanupAfterAll() {
+    log.warn("I STUCK :(");
     container.close();
+    log.warn("I NO LONGER STUCK :)");
   }
 
   @Before
   public void setup() {
+    log.info("setting up for {}", name.getMethodName());
     props = ElasticsearchSinkConnectorConfigTest.addNecessaryProps(new HashMap<>());
     props.put(CONNECTION_URL_CONFIG, container.getConnectionUrl());
     props.put(IGNORE_KEY_CONFIG, "true");
@@ -101,13 +112,17 @@ public class ElasticsearchClientTest {
     config = new ElasticsearchSinkConnectorConfig(props);
     converter = new DataConverter(config);
     helperClient = new ElasticsearchHelperClient(container.getConnectionUrl(), config);
+    log.info("finished setting up for {}", name.getMethodName());
   }
 
   @After
   public void cleanup() throws IOException {
+    log.info("cleaning up for {}", name.getMethodName());
+
     if (helperClient != null && helperClient.indexExists(INDEX)){
       helperClient.deleteIndex(INDEX);
     }
+    log.info("finished cleaning up for {}", name.getMethodName());
   }
 
   @Test
@@ -429,6 +444,7 @@ public class ElasticsearchClientTest {
     // mock bulk processor to throw errors
     ElasticsearchClient client = new ElasticsearchClient(config, null);
     client.createIndex(INDEX);
+    log.info("I created!");
 
     // bring down ES service
     NetworkErrorContainer delay = new NetworkErrorContainer(container.getContainerName());

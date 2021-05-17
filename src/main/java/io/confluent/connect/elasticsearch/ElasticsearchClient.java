@@ -182,10 +182,13 @@ public class ElasticsearchClient {
    * @return true if the index was created, false if it already exists
    */
   public boolean createIndex(String index) {
+    log.info("checking index");
     if (indexExists(index)) {
+      log.info("index found");
       return false;
     }
 
+    log.info("creating index");
     CreateIndexRequest request = new CreateIndexRequest(index);
     return callWithRetries(
         "create index " + index,
