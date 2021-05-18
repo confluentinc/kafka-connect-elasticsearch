@@ -57,6 +57,7 @@ public class DataConverter {
   private static final Logger log = LoggerFactory.getLogger(DataConverter.class);
 
   private static final Converter JSON_CONVERTER;
+  private static final String TIMESTAMP_FIELD = "@timestamp";
   protected static final String MAP_KEY = "key";
   protected static final String MAP_VALUE = "value";
 
@@ -150,7 +151,7 @@ public class DataConverter {
     }
 
     String payload = getPayload(record);
-    payload = injectTimestampIfDataStreamAndAbsent(payload, record);
+    payload = maybeAddTimestamp(payload, record.timestamp());
 
     final String id = config.shouldIgnoreKey(record.topic())
         ? String.format("%s+%d+%d", record.topic(), record.kafkaPartition(), record.kafkaOffset())
@@ -195,16 +196,16 @@ public class DataConverter {
     return new String(rawJsonPayload, StandardCharsets.UTF_8);
   }
 
-  private String injectTimestampIfDataStreamAndAbsent(String payload, SinkRecord record) {
+  private String maybeAddTimestamp(String payload, long timestamp) {
     if (!config.isDataStream()) {
       return payload;
     }
     ObjectMapper objectMapper = new ObjectMapper();
     try {
       JsonNode jsonNode = objectMapper.readTree(payload);
-      if (jsonNode.get("@timestamp").isNull()) {
-        ((ObjectNode)jsonNode).put("@timestamp", String.valueOf(record.timestamp()));
-        payload = objectMapper.writeValueAsString(jsonNode);
+      if (jsonNode.get(TIMESTAMP_FIELD) == null) {
+        ((ObjectNode) jsonNode).put(TIMESTAMP_FIELD, String.valueOf(timestamp));
+        return objectMapper.writeValueAsString(jsonNode);
       }
     } catch (JsonProcessingException e) {
       // Should not happen if payload was retrieved correctly.

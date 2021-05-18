@@ -16,6 +16,7 @@
 package io.confluent.connect.elasticsearch;
 
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BehaviorOnNullValues;
+import org.apache.kafka.common.record.TimestampType;
 import org.apache.kafka.connect.data.*;
 import org.apache.kafka.connect.errors.DataException;
 import org.apache.kafka.connect.sink.SinkRecord;
@@ -362,7 +363,7 @@ public class DataConverterTest {
   }
 
   public SinkRecord createSinkRecordWithValue(Object value) {
-    return new SinkRecord(topic, partition, Schema.STRING_SCHEMA, key, schema, value, offset);
+    return new SinkRecord(topic, partition, Schema.STRING_SCHEMA, key, schema, value, offset, System.currentTimeMillis(), TimestampType.CREATE_TIME);
   }
 
   @Test
@@ -371,8 +372,8 @@ public class DataConverterTest {
     props.put(ElasticsearchSinkConnectorConfig.DATA_STREAM_DATASET_CONFIG, "dataset");
     converter = new DataConverter(new ElasticsearchSinkConnectorConfig(props));
     Schema preProcessedSchema = converter.preProcessSchema(schema);
-    Struct value = new Struct(preProcessedSchema).put("string", "myValue");
-    SinkRecord sinkRecord = createSinkRecordWithValue(value);
+    Struct struct = new Struct(preProcessedSchema).put("string", "myValue");
+    SinkRecord sinkRecord = createSinkRecordWithValue(struct);
 
     IndexRequest actualRecord = (IndexRequest) converter.convertRecord(sinkRecord, index);
 
@@ -383,8 +384,8 @@ public class DataConverterTest {
   public void testDoNotInjectPayloadTimestampIfNotDataStream() {
     converter = new DataConverter(new ElasticsearchSinkConnectorConfig(props));
     Schema preProcessedSchema = converter.preProcessSchema(schema);
-    Struct value = new Struct(preProcessedSchema).put("string", "myValue");
-    SinkRecord sinkRecord = createSinkRecordWithValue(value);
+    Struct struct = new Struct(preProcessedSchema).put("string", "myValue");
+    SinkRecord sinkRecord = createSinkRecordWithValue(struct);
 
     IndexRequest actualRecord = (IndexRequest) converter.convertRecord(sinkRecord, index);
 
