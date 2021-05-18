@@ -336,21 +336,26 @@ public class Validator {
   }
 
   /**
-   * Compares <code>versionNumber</code> to <code>compatibleVersion</code>.
-   * Returns a negative integer, zero, or a positive integer if
-   * <code>versionNumber</code> is less than, equal to, or greater
-   * than <code>compatibleVersion</code>.
+   * Compares <code>versionNumber</code> to <code>compatibleVersion</code>. Ignores
+   * the patch version number.
+   *
+   * @return  a negative integer, zero, or a positive integer if
+   *          <code>versionNumber</code> is less than, equal to, or greater
+   *          than <code>compatibleVersion</code>.
    */
-  private int compareVersions(String versionNumber, String compatibleVersion) {
-    String[] versionSplit = versionNumber.split(".");
-    String[] compatibleSplit = compatibleVersion.split(".");
+  public int compareVersions(String versionNumber, String compatibleVersion) {
+    String[] versionSplit = versionNumber.split("\\.");
+    String[] compatibleSplit = compatibleVersion.split("\\.");
 
-    for (int i = 0; i < compatibleSplit.length; i++) {
-      int compare = versionSplit[i].compareTo(compatibleSplit[i]);
-      if (compare == 0) {
+    for (int i = 0; i < 2; i++) {
+      int comparison = Integer.compare(
+          Integer.parseInt(versionSplit[i]),
+          Integer.parseInt(compatibleSplit[i])
+      );
+      if (comparison == 0) {
         continue;
       }
-      return compare;
+      return comparison;
     }
     return 0;
   }
