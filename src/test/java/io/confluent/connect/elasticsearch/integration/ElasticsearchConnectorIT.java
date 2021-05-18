@@ -168,46 +168,14 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
   }
 
   @Test
-  public void testIncompatibleESVersionDataStreamNotSet() throws Exception {
+  public void testBackwardsCompatibilityDataStream() throws Exception {
     container.close();
-    container = ElasticsearchContainer.withESVersion("7.8.1");
+    container = ElasticsearchContainer.withESVersion("7.0.1");
     container.start();
     setupFromContainer();
 
     runSimpleTest(props);
 
-    helperClient = null;
-    container.close();
-    container = ElasticsearchContainer.fromSystemProperties();
-    container.start();
-  }
-
-  @Test
-  public void testCompatibleESVersionDataStreamNotSet() throws Exception {
-    container.close();
-    container = ElasticsearchContainer.withESVersion("7.9.3");
-    container.start();
-    setupFromContainer();
-
-    runSimpleTest(props);
-
-    helperClient = null;
-    container.close();
-    container = ElasticsearchContainer.fromSystemProperties();
-    container.start();
-  }
-
-  @Test
-  public void testCompatibleESVersionDataStreamSet() throws Exception {
-    container.close();
-    container = ElasticsearchContainer.withESVersion("7.9.3");
-    container.start();
-    setupFromContainer();
-    setDataStream();
-
-    runSimpleTest(props);
-
-    assertEquals(index, helperClient.getDataStream(index).getName());
     helperClient = null;
     container.close();
     container = ElasticsearchContainer.fromSystemProperties();
