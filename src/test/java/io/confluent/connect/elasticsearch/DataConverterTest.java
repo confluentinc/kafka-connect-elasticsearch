@@ -35,6 +35,7 @@ import java.util.Map;
 
 import static io.confluent.connect.elasticsearch.DataConverter.MAP_KEY;
 import static io.confluent.connect.elasticsearch.DataConverter.MAP_VALUE;
+import static io.confluent.connect.elasticsearch.DataConverter.TIMESTAMP_FIELD;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
@@ -363,7 +364,8 @@ public class DataConverterTest {
   }
 
   public SinkRecord createSinkRecordWithValue(Object value) {
-    return new SinkRecord(topic, partition, Schema.STRING_SCHEMA, key, schema, value, offset, System.currentTimeMillis(), TimestampType.CREATE_TIME);
+    return new SinkRecord(topic, partition, Schema.STRING_SCHEMA, key, schema, value, offset,
+        System.currentTimeMillis(), TimestampType.CREATE_TIME);
   }
 
   @Test
@@ -377,7 +379,7 @@ public class DataConverterTest {
 
     IndexRequest actualRecord = (IndexRequest) converter.convertRecord(sinkRecord, index);
 
-    assertTrue(actualRecord.sourceAsMap().containsKey("@timestamp"));
+    assertTrue(actualRecord.sourceAsMap().containsKey(TIMESTAMP_FIELD));
   }
 
   @Test
@@ -389,7 +391,7 @@ public class DataConverterTest {
 
     IndexRequest actualRecord = (IndexRequest) converter.convertRecord(sinkRecord, index);
 
-    assertFalse(actualRecord.sourceAsMap().containsKey("@timestamp"));
+    assertFalse(actualRecord.sourceAsMap().containsKey(TIMESTAMP_FIELD));
   }
 
   @Test
@@ -400,15 +402,15 @@ public class DataConverterTest {
     schema = SchemaBuilder
         .struct()
         .name("struct")
-        .field("@timestamp", Schema.STRING_SCHEMA)
+        .field(TIMESTAMP_FIELD, Schema.STRING_SCHEMA)
         .build();
     Schema preProcessedSchema = converter.preProcessSchema(schema);
     String timestamp = "2021-05-14T11:11:22.000Z";
-    Struct value = new Struct(preProcessedSchema).put("@timestamp", timestamp);
+    Struct value = new Struct(preProcessedSchema).put(TIMESTAMP_FIELD, timestamp);
     SinkRecord sinkRecord = createSinkRecordWithValue(value);
 
     IndexRequest actualRecord = (IndexRequest) converter.convertRecord(sinkRecord, index);
 
-    assertEquals(timestamp, actualRecord.sourceAsMap().get("@timestamp"));
+    assertEquals(timestamp, actualRecord.sourceAsMap().get(TIMESTAMP_FIELD));
   }
 }

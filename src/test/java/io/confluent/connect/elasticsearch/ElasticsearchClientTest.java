@@ -64,7 +64,6 @@ import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.sink.ErrantRecordReporter;
 import org.apache.kafka.connect.sink.SinkRecord;
 import org.apache.kafka.test.TestUtils;
-import org.eclipse.jetty.util.IO;
 import org.elasticsearch.ElasticsearchStatusException;
 import org.elasticsearch.search.SearchHit;
 import org.junit.After;
@@ -618,7 +617,7 @@ public class ElasticsearchClientTest {
     assertTrue(client.createIndexOrDataStream(index));
     assertTrue(helperClient.indexExists(index));
 
-    // Sink Record does not include timestamp field in value.
+    // Sink Record does not include the @timestamp field in its value.
     writeRecord(sinkRecord(0), client);
     client.flush();
 
@@ -646,7 +645,8 @@ public class ElasticsearchClientTest {
 
   private static SinkRecord sinkRecord(String key, int offset) {
     Struct value = new Struct(schema()).put("offset", offset).put("another", offset + 1);
-    return new SinkRecord(TOPIC, 0, Schema.STRING_SCHEMA, key, schema(), value, offset, System.currentTimeMillis(), TimestampType.CREATE_TIME);
+    return new SinkRecord(TOPIC, 0, Schema.STRING_SCHEMA, key, schema(), value, offset,
+        System.currentTimeMillis(), TimestampType.CREATE_TIME);
   }
 
   private void waitUntilRecordsInES(int expectedRecords) throws InterruptedException {

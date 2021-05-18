@@ -57,9 +57,9 @@ public class DataConverter {
   private static final Logger log = LoggerFactory.getLogger(DataConverter.class);
 
   private static final Converter JSON_CONVERTER;
-  private static final String TIMESTAMP_FIELD = "@timestamp";
   protected static final String MAP_KEY = "key";
   protected static final String MAP_VALUE = "value";
+  protected static final String TIMESTAMP_FIELD = "@timestamp";
 
   static {
     JSON_CONVERTER = new JsonConverter();
