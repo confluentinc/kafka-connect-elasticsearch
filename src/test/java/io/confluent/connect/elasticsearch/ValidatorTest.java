@@ -443,10 +443,12 @@ public class ValidatorTest {
     props.put(DATA_STREAM_DATASET_CONFIG, "a_valid_dataset");
     props.put(DATA_STREAM_TYPE_CONFIG, "logs");
     validator = new Validator(props, () -> mockClient);
-    when(mockInfoResponse.getVersion().getNumber()).thenReturn("7.9.0");
-
-    Config result = validator.validate();
-    assertNoErrors(result);
+    String[] compatibleESVersions = {"7.9.0", "7.9.3", "7.10.0", "7.10.2", "7.11.0", "7.11.2", "7.12.0"};
+    for (String version : compatibleESVersions) {
+      when(mockInfoResponse.getVersion().getNumber()).thenReturn(version);
+      Config result = validator.validate();
+      assertNoErrors(result);
+    }
   }
 
   private static void assertHasErrorMessage(Config config, String property, String msg) {

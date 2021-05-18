@@ -322,7 +322,7 @@ public class Validator {
       return;
     }
     String versionNumber = response.getVersion().getNumber();
-    if (versionNumber.compareTo(DATA_STREAM_COMPATIBLE_ES_VERSION) < 0) {
+    if (compareVersion(versionNumber, DATA_STREAM_COMPATIBLE_ES_VERSION) < 0) {
       String errorMessage = String.format(
           "Elasticsearch version %s is not compatible with data streams. Elasticsearch"
               + "version must be at least %s.",
@@ -333,6 +333,21 @@ public class Validator {
       addErrorMessage(DATA_STREAM_TYPE_CONFIG, errorMessage);
       addErrorMessage(DATA_STREAM_DATASET_CONFIG, errorMessage);
     }
+  }
+
+  // todo: add javadoc and relocate
+  private int compareVersion(String versionNumber, String compatibleVersion) {
+    String[] versionSplit = versionNumber.split(".");
+    String[] compatibleSplit = compatibleVersion.split(".");
+
+    for (int i = 0; i < compatibleSplit.length; i++) {
+      int compare = versionSplit[i].compareTo(compatibleSplit[i]);
+      if (compare == 0) {
+        continue;
+      }
+      return compare;
+    }
+    return 0;
   }
 
   private void validateConnection(RestHighLevelClient client) {
