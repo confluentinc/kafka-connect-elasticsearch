@@ -406,8 +406,8 @@ public class DataConverterTest {
         .build();
     Schema preProcessedSchema = converter.preProcessSchema(schema);
     String timestamp = "2021-05-14T11:11:22.000Z";
-    Struct value = new Struct(preProcessedSchema).put(TIMESTAMP_FIELD, timestamp);
-    SinkRecord sinkRecord = createSinkRecordWithValue(value);
+    Struct struct = new Struct(preProcessedSchema).put(TIMESTAMP_FIELD, timestamp);
+    SinkRecord sinkRecord = createSinkRecordWithValue(struct);
 
     IndexRequest actualRecord = (IndexRequest) converter.convertRecord(sinkRecord, index);
 
