@@ -34,6 +34,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BehaviorOnNullValues;
+import org.apache.kafka.common.record.TimestampType;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Struct;
@@ -410,7 +411,9 @@ public class ElasticsearchSinkTaskTest {
       nullKey ? null : "key",
       schema,
       nullValue ? null : struct,
-      offset
+      offset,
+      System.currentTimeMillis(),
+      TimestampType.CREATE_TIME
   );
 }
 }
