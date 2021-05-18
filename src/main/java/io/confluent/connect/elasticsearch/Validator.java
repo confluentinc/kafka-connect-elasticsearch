@@ -324,8 +324,8 @@ public class Validator {
     String versionNumber = response.getVersion().getNumber();
     if (versionNumber.compareTo(DATA_STREAM_COMPATIBLE_ES_VERSION) < 0) {
       String errorMessage = String.format(
-          "Given Elasticsearch version %s is not compatible with data streams. Elasticsearch"
-              + "version must be at least %s",
+          "Elasticsearch version %s is not compatible with data streams. Elasticsearch"
+              + "version must be at least %s.",
           versionNumber,
           DATA_STREAM_COMPATIBLE_ES_VERSION
       );
