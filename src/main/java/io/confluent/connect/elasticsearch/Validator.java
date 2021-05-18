@@ -322,7 +322,7 @@ public class Validator {
       return;
     }
     String versionNumber = response.getVersion().getNumber();
-    if (compareVersion(versionNumber, DATA_STREAM_COMPATIBLE_ES_VERSION) < 0) {
+    if (compareVersions(versionNumber, DATA_STREAM_COMPATIBLE_ES_VERSION) < 0) {
       String errorMessage = String.format(
           "Elasticsearch version %s is not compatible with data streams. Elasticsearch"
               + "version must be at least %s.",
@@ -335,8 +335,13 @@ public class Validator {
     }
   }
 
-  // todo: add javadoc and relocate
-  private int compareVersion(String versionNumber, String compatibleVersion) {
+  /**
+   * Compares <code>versionNumber</code> to <code>compatibleVersion</code>.
+   * Returns a negative integer, zero, or a positive integer if
+   * <code>versionNumber</code> is less than, equal to, or greater
+   * than <code>compatibleVersion</code>.
+   */
+  private int compareVersions(String versionNumber, String compatibleVersion) {
     String[] versionSplit = versionNumber.split(".");
     String[] compatibleSplit = compatibleVersion.split(".");
 
