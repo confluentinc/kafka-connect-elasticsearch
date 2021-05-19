@@ -57,6 +57,7 @@ public class DataConverter {
   private static final Logger log = LoggerFactory.getLogger(DataConverter.class);
 
   private static final Converter JSON_CONVERTER;
+  private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
   protected static final String MAP_KEY = "key";
   protected static final String MAP_VALUE = "value";
   protected static final String TIMESTAMP_FIELD = "@timestamp";
@@ -151,9 +152,6 @@ public class DataConverter {
     }
 
     String payload = getPayload(record);
-    System.out.println("HELLO");
-    System.out.println(record);
-    System.out.println(record.timestamp());
     payload = maybeAddTimestamp(payload, record.timestamp());
 
     final String id = config.shouldIgnoreKey(record.topic())
@@ -203,12 +201,11 @@ public class DataConverter {
     if (!config.isDataStream()) {
       return payload;
     }
-    ObjectMapper objectMapper = new ObjectMapper();
     try {
-      JsonNode jsonNode = objectMapper.readTree(payload);
+      JsonNode jsonNode = OBJECT_MAPPER.readTree(payload);
       if (jsonNode.get(TIMESTAMP_FIELD) == null) {
         ((ObjectNode) jsonNode).put(TIMESTAMP_FIELD, timestamp);
-        return objectMapper.writeValueAsString(jsonNode);
+        return OBJECT_MAPPER.writeValueAsString(jsonNode);
       }
     } catch (JsonProcessingException e) {
       // Should not happen if payload was retrieved correctly.
