@@ -347,10 +347,11 @@ public class Validator {
     String[] compatibleSplit = compatibleVersion.split("\\.");
 
     for (int i = 0; i < Math.min(versionSplit.length, compatibleSplit.length); i++) {
-      String beforeSuffix = versionSplit[i].split("-")[0];
+      String versionSplitBeforeSuffix = versionSplit[i].split("-")[0];
+      String compatibleSplitBeforeSuffix = compatibleSplit[i].split("-")[0];
       int comparison = Integer.compare(
-          Integer.parseInt(beforeSuffix),
-          Integer.parseInt(compatibleSplit[i])
+          Integer.parseInt(versionSplitBeforeSuffix),
+          Integer.parseInt(compatibleSplitBeforeSuffix)
       );
       if (comparison != 0) {
         return comparison;
