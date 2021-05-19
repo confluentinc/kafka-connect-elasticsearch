@@ -435,7 +435,8 @@ public class ValidatorTest {
   @Test
   public void testCompatibleVersionDataStreamNotSet() {
     validator = new Validator(props, () -> mockClient);
-    String[] compatibleESVersions = {"7.9.0", "7.9.3", "7.9.3-amd64", "7.10.0", "7.10.2", "7.11.0", "7.11.2", "7.12.0", "7.12.1"};
+    String[] compatibleESVersions = {"7.9.0", "7.9.3", "7.9.3-amd64", "7.10.0", "7.10.2", "7.11.0", "7.11.2", "7.12.0", "7.12.1",
+        "8.0.0", "10.10.10", "10.1.10", "10.1.1", "8.10.10"};
     for (String version : compatibleESVersions) {
       when(mockInfoResponse.getVersion().getNumber()).thenReturn(version);
       Config result = validator.validate();
@@ -449,7 +450,8 @@ public class ValidatorTest {
     props.put(DATA_STREAM_DATASET_CONFIG, "a_valid_dataset");
     props.put(DATA_STREAM_TYPE_CONFIG, "logs");
     validator = new Validator(props, () -> mockClient);
-    String[] compatibleESVersions = {"7.9.0", "7.9.3", "7.9.3-amd64", "7.10.0", "7.10.2", "7.11.0", "7.11.2", "7.12.0", "7.12.1"};
+    String[] compatibleESVersions = {"7.9.0", "7.9.3", "7.9.3-amd64", "7.10.0", "7.10.2", "7.11.0", "7.11.2", "7.12.0", "7.12.1",
+        "8.0.0", "10.10.10", "10.1.10", "10.1.1", "8.10.10"};
     for (String version : compatibleESVersions) {
       when(mockInfoResponse.getVersion().getNumber()).thenReturn(version);
       Config result = validator.validate();
