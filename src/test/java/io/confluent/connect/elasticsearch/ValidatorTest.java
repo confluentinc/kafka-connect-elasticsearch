@@ -423,19 +423,25 @@ public class ValidatorTest {
   @Test
   public void testIncompatibleVersionDataStreamNotSet() {
     validator = new Validator(props, () -> mockClient);
-    when(mockInfoResponse.getVersion().getNumber()).thenReturn("7.8.1");
+    String[] incompatibleESVersions = {"7.8.0", "7.7.1", "7.6.2", "7.2.0", "7.1.1", "7.0.0-rc2"};
+    for (String version : incompatibleESVersions) {
+      when(mockInfoResponse.getVersion().getNumber()).thenReturn(version);
+      Config result = validator.validate();
 
-    Config result = validator.validate();
-    assertNoErrors(result);
+      assertNoErrors(result);
+    }
   }
 
   @Test
   public void testCompatibleVersionDataStreamNotSet() {
     validator = new Validator(props, () -> mockClient);
-    when(mockInfoResponse.getVersion().getNumber()).thenReturn("7.9.0");
+    String[] compatibleESVersions = {"7.9.0", "7.9.3", "7.9.3-amd64", "7.10.0", "7.10.2", "7.11.0", "7.11.2", "7.12.0", "7.12.1"};
+    for (String version : compatibleESVersions) {
+      when(mockInfoResponse.getVersion().getNumber()).thenReturn(version);
+      Config result = validator.validate();
 
-    Config result = validator.validate();
-    assertNoErrors(result);
+      assertNoErrors(result);
+    }
   }
 
   @Test
@@ -447,6 +453,7 @@ public class ValidatorTest {
     for (String version : compatibleESVersions) {
       when(mockInfoResponse.getVersion().getNumber()).thenReturn(version);
       Config result = validator.validate();
+
       assertNoErrors(result);
     }
   }
