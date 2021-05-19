@@ -57,7 +57,7 @@ public class DataConverter {
   private static final Logger log = LoggerFactory.getLogger(DataConverter.class);
 
   private static final Converter JSON_CONVERTER;
-  private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+  private static final ObjectMapper OBJECT_MAPPER;
   protected static final String MAP_KEY = "key";
   protected static final String MAP_VALUE = "value";
   protected static final String TIMESTAMP_FIELD = "@timestamp";
@@ -65,6 +65,7 @@ public class DataConverter {
   static {
     JSON_CONVERTER = new JsonConverter();
     JSON_CONVERTER.configure(Collections.singletonMap("schemas.enable", "false"), false);
+    OBJECT_MAPPER = new ObjectMapper();
   }
 
   private final ElasticsearchSinkConnectorConfig config;
