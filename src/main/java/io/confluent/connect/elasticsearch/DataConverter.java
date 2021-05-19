@@ -57,15 +57,15 @@ public class DataConverter {
   private static final Logger log = LoggerFactory.getLogger(DataConverter.class);
 
   private static final Converter JSON_CONVERTER;
-  private static final ObjectMapper OBJECT_MAPPER;
   protected static final String MAP_KEY = "key";
   protected static final String MAP_VALUE = "value";
   protected static final String TIMESTAMP_FIELD = "@timestamp";
 
+  private ObjectMapper objectMapper;
+
   static {
     JSON_CONVERTER = new JsonConverter();
     JSON_CONVERTER.configure(Collections.singletonMap("schemas.enable", "false"), false);
-    OBJECT_MAPPER = new ObjectMapper();
   }
 
   private final ElasticsearchSinkConnectorConfig config;
@@ -81,6 +81,7 @@ public class DataConverter {
    */
   public DataConverter(ElasticsearchSinkConnectorConfig config) {
     this.config = config;
+    this.objectMapper = new ObjectMapper();
   }
 
   private String convertKey(Schema keySchema, Object key) {
@@ -203,10 +204,10 @@ public class DataConverter {
       return payload;
     }
     try {
-      JsonNode jsonNode = OBJECT_MAPPER.readTree(payload);
+      JsonNode jsonNode = objectMapper.readTree(payload);
       if (jsonNode.get(TIMESTAMP_FIELD) == null) {
         ((ObjectNode) jsonNode).put(TIMESTAMP_FIELD, timestamp);
-        return OBJECT_MAPPER.writeValueAsString(jsonNode);
+        return objectMapper.writeValueAsString(jsonNode);
       }
     } catch (JsonProcessingException e) {
       // Should not happen if payload was retrieved correctly.
