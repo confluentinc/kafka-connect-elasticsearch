@@ -157,12 +157,10 @@ public class ElasticsearchClientTest {
 
   @Test
   public void testCreateExistingDataStream() throws Exception {
-    String type = "logs";
-    String dataset = "dataset";
-    index = createIndexName(TOPIC);
-    props.put(DATA_STREAM_TYPE_CONFIG, type);
-    props.put(DATA_STREAM_DATASET_CONFIG, dataset);
+    props.put(DATA_STREAM_TYPE_CONFIG, DATA_STREAM_TYPE);
+    props.put(DATA_STREAM_DATASET_CONFIG, DATA_STREAM_DATASET);
     config = new ElasticsearchSinkConnectorConfig(props);
+    index = createIndexName(TOPIC);
     ElasticsearchClient client = new ElasticsearchClient(config, null);
 
     assertTrue(client.createIndexOrDataStream(index));
