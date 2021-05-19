@@ -343,21 +343,20 @@ public class Validator {
    *          <code>versionNumber</code> is less than, equal to, or greater
    *          than <code>compatibleVersion</code>.
    */
-  public int compareVersions(String versionNumber, String compatibleVersion) {
+  private int compareVersions(String versionNumber, String compatibleVersion) {
     String[] versionSplit = versionNumber.split("\\.");
     String[] compatibleSplit = compatibleVersion.split("\\.");
 
-    for (int i = 0; i < 2; i++) {
+    for (int i = 0; i < Math.min(versionSplit.length, compatibleSplit.length); i++) {
       int comparison = Integer.compare(
           Integer.parseInt(versionSplit[i]),
           Integer.parseInt(compatibleSplit[i])
       );
-      if (comparison == 0) {
-        continue;
+      if (comparison != 0) {
+        return comparison;
       }
-      return comparison;
     }
-    return 0;
+    return versionSplit.length - compatibleSplit.length;
   }
 
   private void validateConnection(RestHighLevelClient client) {
