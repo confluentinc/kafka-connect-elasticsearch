@@ -330,17 +330,7 @@ public class ElasticsearchClientTest {
     waitUntilRecordsInES(2);
 
     // delete 1
-    SinkRecord deleteRecord = new SinkRecord(
-        TOPIC,
-        0,
-        Schema.STRING_SCHEMA,
-        "key0",
-        null,
-        null,
-        3,
-        System.currentTimeMillis(),
-        TimestampType.CREATE_TIME
-    );
+    SinkRecord deleteRecord = sinkRecord("key0", null, null, 3);
     writeRecord(deleteRecord, client);
 
     waitUntilRecordsInES(1);
@@ -371,29 +361,9 @@ public class ElasticsearchClientTest {
         .build();
 
     Struct value = new Struct(schema).put("offset", 2);
-    SinkRecord upsertRecord = new SinkRecord(
-        index,
-        0,
-        Schema.STRING_SCHEMA,
-        "key0",
-        schema,
-        value,
-        2,
-        System.currentTimeMillis(),
-        TimestampType.CREATE_TIME
-    );
+    SinkRecord upsertRecord = sinkRecord("key0", schema, value, 2);
     Struct value2 = new Struct(schema).put("offset", 3);
-    SinkRecord upsertRecord2 = new SinkRecord(
-        index,
-        0,
-        Schema.STRING_SCHEMA,
-        "key0",
-        schema,
-        value2,
-        3,
-        System.currentTimeMillis(),
-        TimestampType.CREATE_TIME
-    );
+    SinkRecord upsertRecord2 = sinkRecord("key0", schema, value2, 3);
 
     // upsert 2, write another
     writeRecord(upsertRecord, client);
@@ -428,17 +398,7 @@ public class ElasticsearchClientTest {
         .field("not_mapped_field", SchemaBuilder.int32().defaultValue(0).build())
         .build();
     Struct value = new Struct(schema).put("not_mapped_field", 420);
-    SinkRecord badRecord = new SinkRecord(
-        TOPIC,
-        0,
-        Schema.STRING_SCHEMA,
-        "key",
-        schema,
-        value,
-        0,
-        System.currentTimeMillis(),
-        TimestampType.CREATE_TIME
-    );
+    SinkRecord badRecord = sinkRecord("key", schema, value, 0);
 
     writeRecord(sinkRecord(0), client);
     client.flush();
@@ -466,17 +426,7 @@ public class ElasticsearchClientTest {
         .field("offset", SchemaBuilder.bool().defaultValue(false).build())
         .build();
     Struct value = new Struct(schema).put("offset", false);
-    SinkRecord badRecord = new SinkRecord(
-        TOPIC,
-        0,
-        Schema.STRING_SCHEMA,
-        "key",
-        schema,
-        value,
-        0,
-        System.currentTimeMillis(),
-        TimestampType.CREATE_TIME
-    );
+    SinkRecord badRecord = sinkRecord("key", schema, value, 0);
 
     writeRecord(sinkRecord(0), client);
     client.flush();
@@ -547,17 +497,7 @@ public class ElasticsearchClientTest {
         .field("offset", SchemaBuilder.bool().defaultValue(false).build())
         .build();
     Struct value = new Struct(schema).put("offset", false);
-    SinkRecord badRecord = new SinkRecord(
-        index,
-        0,
-        Schema.STRING_SCHEMA,
-        "key0",
-        schema,
-        value,
-        1,
-        System.currentTimeMillis(),
-        TimestampType.CREATE_TIME
-    );
+    SinkRecord badRecord = sinkRecord("key0", schema, value, 1);
 
     writeRecord(sinkRecord("key0", 0), client);
     client.flush();
@@ -699,12 +639,16 @@ public class ElasticsearchClientTest {
 
   private static SinkRecord sinkRecord(String key, int offset) {
     Struct value = new Struct(schema()).put("offset", offset).put("another", offset + 1);
+    return sinkRecord(key, schema(), value, offset);
+  }
+
+  private static SinkRecord sinkRecord(String key, Schema schema, Struct value, int offset) {
     return new SinkRecord(
         TOPIC,
         0,
         Schema.STRING_SCHEMA,
         key,
-        schema(),
+        schema,
         value,
         offset,
         System.currentTimeMillis(),
