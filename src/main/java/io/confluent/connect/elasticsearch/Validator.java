@@ -336,8 +336,7 @@ public class Validator {
   }
 
   /**
-   * Compares <code>versionNumber</code> to <code>compatibleVersion</code>. Ignores
-   * the patch version number.
+   * Compares <code>versionNumber</code> to <code>compatibleVersion</code>.
    *
    * @return  a negative integer, zero, or a positive integer if
    *          <code>versionNumber</code> is less than, equal to, or greater
@@ -348,8 +347,9 @@ public class Validator {
     String[] compatibleSplit = compatibleVersion.split("\\.");
 
     for (int i = 0; i < Math.min(versionSplit.length, compatibleSplit.length); i++) {
+      String beforeSuffix = versionSplit[i].split("-")[0];
       int comparison = Integer.compare(
-          Integer.parseInt(versionSplit[i]),
+          Integer.parseInt(beforeSuffix),
           Integer.parseInt(compatibleSplit[i])
       );
       if (comparison != 0) {
