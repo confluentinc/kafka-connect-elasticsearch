@@ -364,8 +364,16 @@ public class DataConverterTest {
   }
 
   public SinkRecord createSinkRecordWithValue(Object value) {
-    return new SinkRecord(topic, partition, Schema.STRING_SCHEMA, key, schema, value, offset,
-        System.currentTimeMillis(), TimestampType.CREATE_TIME);
+    return new SinkRecord(
+         topic, 
+         partition, 
+         Schema.STRING_SCHEMA, 
+         key, schema, 
+         value, 
+         offset,
+         System.currentTimeMillis(), 
+         TimestampType.CREATE_TIME
+    );
   }
 
   @Test
