@@ -151,6 +151,9 @@ public class DataConverter {
     }
 
     String payload = getPayload(record);
+    System.out.println("HELLO");
+    System.out.println(record);
+    System.out.println(record.timestamp());
     payload = maybeAddTimestamp(payload, record.timestamp());
 
     final String id = config.shouldIgnoreKey(record.topic())
@@ -204,7 +207,7 @@ public class DataConverter {
     try {
       JsonNode jsonNode = objectMapper.readTree(payload);
       if (jsonNode.get(TIMESTAMP_FIELD) == null) {
-        ((ObjectNode) jsonNode).put(TIMESTAMP_FIELD, String.valueOf(timestamp));
+        ((ObjectNode) jsonNode).put(TIMESTAMP_FIELD, timestamp);
         return objectMapper.writeValueAsString(jsonNode);
       }
     } catch (JsonProcessingException e) {
