@@ -39,7 +39,6 @@ import static io.confluent.connect.elasticsearch.DataConverter.TIMESTAMP_FIELD;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 public class DataConverterTest {
@@ -51,6 +50,7 @@ public class DataConverterTest {
   private String topic;
   private int partition;
   private long offset;
+  private long timestamp;
   private String index;
   private Schema schema;
 
@@ -65,6 +65,7 @@ public class DataConverterTest {
     topic = "topic";
     partition = 0;
     offset = 0;
+    timestamp = System.currentTimeMillis();
     index = "index";
     schema = SchemaBuilder
         .struct()
@@ -371,7 +372,7 @@ public class DataConverterTest {
          key, schema, 
          value, 
          offset,
-         System.currentTimeMillis(), 
+         timestamp,
          TimestampType.CREATE_TIME
     );
   }
@@ -387,7 +388,7 @@ public class DataConverterTest {
 
     IndexRequest actualRecord = (IndexRequest) converter.convertRecord(sinkRecord, index);
 
-    assertTrue(actualRecord.sourceAsMap().containsKey(TIMESTAMP_FIELD));
+    assertEquals(timestamp, actualRecord.sourceAsMap().get(TIMESTAMP_FIELD));
   }
 
   @Test
