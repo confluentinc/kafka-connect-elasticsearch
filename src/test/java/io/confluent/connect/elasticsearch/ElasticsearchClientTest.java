@@ -56,6 +56,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import org.apache.kafka.common.config.SslConfigs;
+import org.apache.kafka.common.record.TimestampType;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Struct;
@@ -162,6 +163,7 @@ public class ElasticsearchClientTest {
     config = new ElasticsearchSinkConnectorConfig(props);
     index = createIndexName(TOPIC);
     ElasticsearchClient client = new ElasticsearchClient(config, null);
+    index = createIndexName(TOPIC);
 
     assertTrue(client.createIndexOrDataStream(index));
     assertTrue(helperClient.indexExists(index));
@@ -176,6 +178,7 @@ public class ElasticsearchClientTest {
     config = new ElasticsearchSinkConnectorConfig(props);
     index = createIndexName(TOPIC);
     ElasticsearchClient client = new ElasticsearchClient(config, null);
+    index = createIndexName(TOPIC);
 
     assertTrue(client.createIndexOrDataStream(index));
     assertTrue(helperClient.indexExists(index));
@@ -329,7 +332,7 @@ public class ElasticsearchClientTest {
     waitUntilRecordsInES(2);
 
     // delete 1
-    SinkRecord deleteRecord = new SinkRecord(TOPIC, 0, Schema.STRING_SCHEMA, "key0", null, null, 3);
+    SinkRecord deleteRecord = sinkRecord("key0", null, null, 3);
     writeRecord(deleteRecord, client);
 
     waitUntilRecordsInES(1);
@@ -360,10 +363,9 @@ public class ElasticsearchClientTest {
         .build();
 
     Struct value = new Struct(schema).put("offset", 2);
-    SinkRecord upsertRecord = new SinkRecord(index, 0, Schema.STRING_SCHEMA, "key0", schema, value, 2);
+    SinkRecord upsertRecord = sinkRecord("key0", schema, value, 2);
     Struct value2 = new Struct(schema).put("offset", 3);
-    SinkRecord upsertRecord2 = new SinkRecord(index, 0, Schema.STRING_SCHEMA, "key0", schema, value2, 3);
-
+    SinkRecord upsertRecord2 = sinkRecord("key0", schema, value2, 3);
 
     // upsert 2, write another
     writeRecord(upsertRecord, client);
@@ -398,7 +400,7 @@ public class ElasticsearchClientTest {
         .field("not_mapped_field", SchemaBuilder.int32().defaultValue(0).build())
         .build();
     Struct value = new Struct(schema).put("not_mapped_field", 420);
-    SinkRecord badRecord = new SinkRecord(TOPIC, 0, Schema.STRING_SCHEMA, "key", schema, value, 0);
+    SinkRecord badRecord = sinkRecord("key", schema, value, 0);
 
     writeRecord(sinkRecord(0), client);
     client.flush();
@@ -426,7 +428,7 @@ public class ElasticsearchClientTest {
         .field("offset", SchemaBuilder.bool().defaultValue(false).build())
         .build();
     Struct value = new Struct(schema).put("offset", false);
-    SinkRecord badRecord = new SinkRecord(TOPIC, 0, Schema.STRING_SCHEMA, "key", schema, value, 0);
+    SinkRecord badRecord = sinkRecord("key", schema, value, 0);
 
     writeRecord(sinkRecord(0), client);
     client.flush();
@@ -497,7 +499,7 @@ public class ElasticsearchClientTest {
         .field("offset", SchemaBuilder.bool().defaultValue(false).build())
         .build();
     Struct value = new Struct(schema).put("offset", false);
-    SinkRecord badRecord = new SinkRecord(index, 0, Schema.STRING_SCHEMA, "key0", schema, value, 1);
+    SinkRecord badRecord = sinkRecord("key0", schema, value, 1);
 
     writeRecord(sinkRecord("key0", 0), client);
     client.flush();
@@ -599,6 +601,27 @@ public class ElasticsearchClientTest {
     container.start();
   }
 
+  @Test
+  public void testWriteDataStreamInjectTimestamp() throws Exception {
+    props.put(DATA_STREAM_TYPE_CONFIG, DATA_STREAM_TYPE);
+    props.put(DATA_STREAM_DATASET_CONFIG, DATA_STREAM_DATASET);
+    config = new ElasticsearchSinkConnectorConfig(props);
+    converter = new DataConverter(config);
+    ElasticsearchClient client = new ElasticsearchClient(config, null);
+    index = createIndexName(TOPIC);
+
+    assertTrue(client.createIndexOrDataStream(index));
+    assertTrue(helperClient.indexExists(index));
+
+    // Sink Record does not include the @timestamp field in its value.
+    writeRecord(sinkRecord(0), client);
+    client.flush();
+
+    waitUntilRecordsInES(1);
+    assertEquals(1, helperClient.getDocCount(index));
+    client.close();
+  }
+
   private String createIndexName(String name) {
     return config.isDataStream()
         ? String.format("%s-%s-%s", DATA_STREAM_TYPE, DATA_STREAM_DATASET, name)
@@ -620,7 +643,21 @@ public class ElasticsearchClientTest {
 
   private static SinkRecord sinkRecord(String key, int offset) {
     Struct value = new Struct(schema()).put("offset", offset).put("another", offset + 1);
-    return new SinkRecord(TOPIC, 0, Schema.STRING_SCHEMA, key, schema(), value, offset);
+    return sinkRecord(key, schema(), value, offset);
+  }
+
+  private static SinkRecord sinkRecord(String key, Schema schema, Struct value, int offset) {
+    return new SinkRecord(
+        TOPIC,
+        0,
+        Schema.STRING_SCHEMA,
+        key,
+        schema,
+        value,
+        offset,
+        System.currentTimeMillis(),
+        TimestampType.CREATE_TIME
+    );
   }
 
   private void waitUntilRecordsInES(int expectedRecords) throws InterruptedException {

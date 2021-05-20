@@ -16,10 +16,12 @@
 package io.confluent.connect.elasticsearch;
 
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BehaviorOnNullValues;
+import org.apache.kafka.common.record.TimestampType;
 import org.apache.kafka.connect.data.*;
 import org.apache.kafka.connect.errors.DataException;
 import org.apache.kafka.connect.sink.SinkRecord;
 import org.elasticsearch.action.delete.DeleteRequest;
+import org.elasticsearch.action.index.IndexRequest;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -33,7 +35,9 @@ import java.util.Map;
 
 import static io.confluent.connect.elasticsearch.DataConverter.MAP_KEY;
 import static io.confluent.connect.elasticsearch.DataConverter.MAP_VALUE;
+import static io.confluent.connect.elasticsearch.DataConverter.TIMESTAMP_FIELD;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.fail;
 
@@ -46,6 +50,7 @@ public class DataConverterTest {
   private String topic;
   private int partition;
   private long offset;
+  private long timestamp;
   private String index;
   private Schema schema;
 
@@ -60,6 +65,7 @@ public class DataConverterTest {
     topic = "topic";
     partition = 0;
     offset = 0;
+    timestamp = System.currentTimeMillis();
     index = "index";
     schema = SchemaBuilder
         .struct()
@@ -359,6 +365,61 @@ public class DataConverterTest {
   }
 
   public SinkRecord createSinkRecordWithValue(Object value) {
-    return new SinkRecord(topic, partition, Schema.STRING_SCHEMA, key, schema, value, offset);
+    return new SinkRecord(
+         topic, 
+         partition, 
+         Schema.STRING_SCHEMA, 
+         key, schema, 
+         value, 
+         offset,
+         timestamp,
+         TimestampType.CREATE_TIME
+    );
+  }
+
+  @Test
+  public void testInjectPayloadTimestampIfDataStream() {
+    props.put(ElasticsearchSinkConnectorConfig.DATA_STREAM_TYPE_CONFIG, "logs");
+    props.put(ElasticsearchSinkConnectorConfig.DATA_STREAM_DATASET_CONFIG, "dataset");
+    converter = new DataConverter(new ElasticsearchSinkConnectorConfig(props));
+    Schema preProcessedSchema = converter.preProcessSchema(schema);
+    Struct struct = new Struct(preProcessedSchema).put("string", "myValue");
+    SinkRecord sinkRecord = createSinkRecordWithValue(struct);
+
+    IndexRequest actualRecord = (IndexRequest) converter.convertRecord(sinkRecord, index);
+
+    assertEquals(timestamp, actualRecord.sourceAsMap().get(TIMESTAMP_FIELD));
+  }
+
+  @Test
+  public void testDoNotInjectPayloadTimestampIfNotDataStream() {
+    converter = new DataConverter(new ElasticsearchSinkConnectorConfig(props));
+    Schema preProcessedSchema = converter.preProcessSchema(schema);
+    Struct struct = new Struct(preProcessedSchema).put("string", "myValue");
+    SinkRecord sinkRecord = createSinkRecordWithValue(struct);
+
+    IndexRequest actualRecord = (IndexRequest) converter.convertRecord(sinkRecord, index);
+
+    assertFalse(actualRecord.sourceAsMap().containsKey(TIMESTAMP_FIELD));
+  }
+
+  @Test
+  public void testDoNotInjectPayloadTimestampIfAlreadyExists() {
+    props.put(ElasticsearchSinkConnectorConfig.DATA_STREAM_TYPE_CONFIG, "logs");
+    props.put(ElasticsearchSinkConnectorConfig.DATA_STREAM_DATASET_CONFIG, "dataset");
+    converter = new DataConverter(new ElasticsearchSinkConnectorConfig(props));
+    schema = SchemaBuilder
+        .struct()
+        .name("struct")
+        .field(TIMESTAMP_FIELD, Schema.STRING_SCHEMA)
+        .build();
+    Schema preProcessedSchema = converter.preProcessSchema(schema);
+    String timestamp = "2021-05-14T11:11:22.000Z";
+    Struct struct = new Struct(preProcessedSchema).put(TIMESTAMP_FIELD, timestamp);
+    SinkRecord sinkRecord = createSinkRecordWithValue(struct);
+
+    IndexRequest actualRecord = (IndexRequest) converter.convertRecord(sinkRecord, index);
+
+    assertEquals(timestamp, actualRecord.sourceAsMap().get(TIMESTAMP_FIELD));
   }
 }
