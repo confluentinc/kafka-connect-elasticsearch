@@ -210,7 +210,7 @@ public class DataConverter {
         return objectMapper.writeValueAsString(jsonNode);
       }
     } catch (JsonProcessingException e) {
-      // Should not happen if payload was retrieved correctly.
+      // Should not happen if the payload was retrieved correctly.
     }
     return payload;
   }
