@@ -69,7 +69,7 @@ public class ElasticsearchHelperClient {
     List<DataStream> datastreams = client.indices()
         .getDataStream(request, RequestOptions.DEFAULT)
         .getDataStreams();
-    return datastreams.get(0);
+    return datastreams.size() == 0 ? null : datastreams.get(0);
   }
 
   public long getDocCount(String index) throws IOException {

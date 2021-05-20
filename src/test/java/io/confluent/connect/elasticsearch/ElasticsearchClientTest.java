@@ -74,6 +74,8 @@ import org.junit.Test;
 public class ElasticsearchClientTest {
 
   private static final String TOPIC = "index";
+  private static final String DATA_STREAM_TYPE = "logs";
+  private static final String DATA_STREAM_DATASET = "dataset";
 
   private static ElasticsearchContainer container;
 
@@ -155,12 +157,10 @@ public class ElasticsearchClientTest {
 
   @Test
   public void testCreateExistingDataStream() throws Exception {
-    String type = "logs";
-    String dataset = "dataset";
-    index = String.format("%s-%s-%s", type, dataset, TOPIC); // data stream name
-    props.put(DATA_STREAM_TYPE_CONFIG, type);
-    props.put(DATA_STREAM_DATASET_CONFIG, dataset);
+    props.put(DATA_STREAM_TYPE_CONFIG, DATA_STREAM_TYPE);
+    props.put(DATA_STREAM_DATASET_CONFIG, DATA_STREAM_DATASET);
     config = new ElasticsearchSinkConnectorConfig(props);
+    index = createIndexName(TOPIC);
     ElasticsearchClient client = new ElasticsearchClient(config, null);
 
     assertTrue(client.createIndexOrDataStream(index));
@@ -171,12 +171,10 @@ public class ElasticsearchClientTest {
 
   @Test
   public void testCreateNewDataStream() throws Exception {
-    String type = "logs";
-    String dataset = "dataset";
-    index = String.format("%s-%s-%s", type, dataset, TOPIC); // data stream name
-    props.put(DATA_STREAM_TYPE_CONFIG, type);
-    props.put(DATA_STREAM_DATASET_CONFIG, dataset);
+    props.put(DATA_STREAM_TYPE_CONFIG, DATA_STREAM_TYPE);
+    props.put(DATA_STREAM_DATASET_CONFIG, DATA_STREAM_DATASET);
     config = new ElasticsearchSinkConnectorConfig(props);
+    index = createIndexName(TOPIC);
     ElasticsearchClient client = new ElasticsearchClient(config, null);
 
     assertTrue(client.createIndexOrDataStream(index));
@@ -601,6 +599,12 @@ public class ElasticsearchClientTest {
     container.start();
   }
 
+  private String createIndexName(String name) {
+    return config.isDataStream()
+        ? String.format("%s-%s-%s", DATA_STREAM_TYPE, DATA_STREAM_DATASET, name)
+        : name;
+  }
+
   private static Schema schema() {
     return SchemaBuilder
         .struct()
@@ -638,6 +642,6 @@ public class ElasticsearchClientTest {
   }
 
   private void writeRecord(SinkRecord record, ElasticsearchClient client) {
-    client.index(record, converter.convertRecord(record, record.topic()));
+    client.index(record, converter.convertRecord(record, createIndexName(record.topic())));
   }
 }

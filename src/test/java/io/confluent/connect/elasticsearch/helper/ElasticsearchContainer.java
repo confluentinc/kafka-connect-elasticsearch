@@ -101,6 +101,15 @@ public class ElasticsearchContainer
     return new ElasticsearchContainer(imageName + ":" + version);
   }
 
+  public static ElasticsearchContainer withESVersion(String ESVersion) {
+    String imageName = getSystemOrEnvProperty(
+        "elasticsearch.image",
+        "ELASTICSEARCH_IMAGE",
+        DEFAULT_DOCKER_IMAGE_NAME
+    );
+    return new ElasticsearchContainer(imageName + ":" + ESVersion);
+  }
+
   private static final String KEY_PASSWORD = "asdfasdf";
   public static final String ELASTIC_PASSWORD = "elastic";
   private static final String KEYSTORE_PASSWORD = KEY_PASSWORD;
