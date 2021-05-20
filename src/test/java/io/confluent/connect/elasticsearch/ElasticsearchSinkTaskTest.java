@@ -16,6 +16,8 @@
 package io.confluent.connect.elasticsearch;
 
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BEHAVIOR_ON_NULL_VALUES_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.DATA_STREAM_DATASET_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.DATA_STREAM_TYPE_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.DROP_INVALID_MESSAGE_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_KEY_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_SCHEMA_CONFIG;
@@ -124,22 +126,22 @@ public class ElasticsearchSinkTaskTest {
   @Test
   public void testCreateIndex() {
     task.put(Collections.singletonList(record()));
-    verify(client, times(1)).createIndex(eq(TOPIC));
+    verify(client, times(1)).createIndexOrDataStream(eq(TOPIC));
   }
 
   @Test
   public void testCreateUpperCaseIndex() {
     task.put(Collections.singletonList(record()));
-    verify(client, times(1)).createIndex(eq(TOPIC.toLowerCase()));
+    verify(client, times(1)).createIndexOrDataStream(eq(TOPIC.toLowerCase()));
   }
 
   @Test
   public void testDoNotCreateCachedIndex() {
     task.put(Collections.singletonList(record()));
-    verify(client, times(1)).createIndex(eq(TOPIC));
+    verify(client, times(1)).createIndexOrDataStream(eq(TOPIC));
 
     task.put(Collections.singletonList(record()));
-    verify(client, times(1)).createIndex(eq(TOPIC));
+    verify(client, times(1)).createIndexOrDataStream(eq(TOPIC));
   }
 
   @Test
@@ -274,38 +276,94 @@ public class ElasticsearchSinkTaskTest {
   }
 
   @Test
+  public void testConvertTopicToDataStreamAllowsDashes() {
+    String type = "logs";
+    String dataset = "a_valid_dataset";
+    props.put(DATA_STREAM_TYPE_CONFIG, type);
+    props.put(DATA_STREAM_DATASET_CONFIG, dataset);
+    setUpTask();
+
+    String topic = "-dash";
+    task.put(Collections.singletonList(record(topic, true, false, 0)));
+    String indexName = dataStreamName(type, dataset, topic);
+    verify(client, times(1)).createIndexOrDataStream(eq(indexName));
+  }
+
+  @Test
+  public void testConvertTopicToDataStreamAllowUnderscores() {
+    String type = "logs";
+    String dataset = "a_valid_dataset";
+    props.put(DATA_STREAM_TYPE_CONFIG, type);
+    props.put(DATA_STREAM_DATASET_CONFIG, dataset);
+    setUpTask();
+
+    String topic = "_underscore";
+    task.put(Collections.singletonList(record(topic, true, false, 0)));
+    String indexName = dataStreamName(type, dataset, topic);
+    verify(client, times(1)).createIndexOrDataStream(eq(indexName));
+  }
+
+  @Test
+  public void testConvertTopicToDataStreamTooLong() {
+    String type = "logs";
+    String dataset = "a_valid_dataset";
+    props.put(DATA_STREAM_TYPE_CONFIG, type);
+    props.put(DATA_STREAM_DATASET_CONFIG, dataset);
+    setUpTask();
+
+    String topic = String.format("%0101d", 1);
+    task.put(Collections.singletonList(record(topic, true, false, 0)));
+    String indexName = dataStreamName(type, dataset, topic.substring(0, 100));
+    verify(client, times(1)).createIndexOrDataStream(eq(indexName));
+  }
+
+  @Test
+  public void testConvertTopicToDataStreamUpperCase() {
+    String type = "logs";
+    String dataset = "a_valid_dataset";
+    props.put(DATA_STREAM_TYPE_CONFIG, type);
+    props.put(DATA_STREAM_DATASET_CONFIG, dataset);
+    setUpTask();
+
+    String topic = "UPPERCASE";
+    task.put(Collections.singletonList(record(topic, true, false, 0)));
+    String indexName = dataStreamName(type, dataset, topic.toLowerCase());
+    verify(client, times(1)).createIndexOrDataStream(eq(indexName));
+  }
+
+  @Test
   public void testConvertTopicToIndexName() {
     setUpTask();
 
     String upperCaseTopic = "UPPERCASE";
     SinkRecord record = record(upperCaseTopic, true, false, 0);
     task.put(Collections.singletonList(record));
-    verify(client, times(1)).createIndex(eq(upperCaseTopic.toLowerCase()));
+    verify(client, times(1)).createIndexOrDataStream(eq(upperCaseTopic.toLowerCase()));
 
     String tooLongTopic = String.format("%0256d", 1);
     record = record(tooLongTopic, true, false, 0);
     task.put(Collections.singletonList(record));
-    verify(client, times(1)).createIndex(eq(tooLongTopic.substring(0, 255)));
+    verify(client, times(1)).createIndexOrDataStream(eq(tooLongTopic.substring(0, 255)));
 
     String startsWithDash = "-dash";
     record = record(startsWithDash, true, false, 0);
     task.put(Collections.singletonList(record));
-    verify(client, times(1)).createIndex(eq("dash"));
+    verify(client, times(1)).createIndexOrDataStream(eq("dash"));
 
     String startsWithUnderscore = "_underscore";
     record = record(startsWithUnderscore, true, false, 0);
     task.put(Collections.singletonList(record));
-    verify(client, times(1)).createIndex(eq("underscore"));
+    verify(client, times(1)).createIndexOrDataStream(eq("underscore"));
 
     String dot = ".";
     record = record(dot, true, false, 0);
     task.put(Collections.singletonList(record));
-    verify(client, times(1)).createIndex(eq("dot"));
+    verify(client, times(1)).createIndexOrDataStream(eq("dot"));
 
     String dots = "..";
     record = record(dots, true, false, 0);
     task.put(Collections.singletonList(record));
-    verify(client, times(1)).createIndex(eq("dotdot"));
+    verify(client, times(1)).createIndexOrDataStream(eq("dotdot"));
   }
 
   @Test
@@ -317,6 +375,10 @@ public class ElasticsearchSinkTaskTest {
     // call start twice for both exceptions
     setUpTask();
     setUpTask();
+  }
+
+  private String dataStreamName(String type, String dataset, String namespace) {
+    return String.format("%s-%s-%s", type, dataset, namespace);
   }
 
   private SinkRecord record() {

@@ -53,8 +53,10 @@ public class ElasticsearchConnectorBaseIT extends BaseConnectorIT {
 
   protected static ElasticsearchContainer container;
 
+  protected boolean isDataStream;
   protected ElasticsearchHelperClient helperClient;
   protected Map<String, String> props;
+  protected String index;
 
   @AfterClass
   public static void cleanupAfterAll() {
@@ -63,6 +65,9 @@ public class ElasticsearchConnectorBaseIT extends BaseConnectorIT {
 
   @Before
   public void setup() {
+    index = TOPIC;
+    isDataStream = false;
+
     startConnect();
     connect.kafka().createTopic(TOPIC);
 
@@ -78,7 +83,7 @@ public class ElasticsearchConnectorBaseIT extends BaseConnectorIT {
     stopConnect();
 
     if (helperClient != null) {
-      helperClient.deleteIndex(TOPIC);
+      helperClient.deleteIndex(index, isDataStream);
       helperClient.close();
     }
   }
@@ -118,11 +123,16 @@ public class ElasticsearchConnectorBaseIT extends BaseConnectorIT {
   protected void verifySearchResults(int numRecords) throws Exception {
     waitForRecords(numRecords);
 
-    for (SearchHit hit : helperClient.search(TOPIC)) {
+    for (SearchHit hit : helperClient.search(index)) {
       int id = (Integer) hit.getSourceAsMap().get("doc_num");
       assertNotNull(id);
       assertTrue(id < numRecords);
-      assertEquals(TOPIC, hit.getIndex());
+
+      if (isDataStream) {
+        assertTrue(hit.getIndex().contains(index));
+      } else {
+        assertEquals(index, hit.getIndex());
+      }
     }
   }
 
@@ -130,7 +140,7 @@ public class ElasticsearchConnectorBaseIT extends BaseConnectorIT {
     TestUtils.waitForCondition(
         () -> {
           try {
-            return helperClient.getDocCount(TOPIC) == numRecords;
+            return helperClient.getDocCount(index) == numRecords;
           } catch (ElasticsearchStatusException e) {
             if (e.getMessage().contains("index_not_found_exception")) {
               return false;
@@ -145,14 +155,16 @@ public class ElasticsearchConnectorBaseIT extends BaseConnectorIT {
   }
 
   protected void writeRecords(int numRecords) {
-    for (int i = 0; i < numRecords; i++) {
-      connect.kafka().produce(TOPIC, String.valueOf(i), String.format("{\"doc_num\":%d}", i));
-    }
+    writeRecordsFromStartIndex(0, numRecords);
   }
 
   protected void writeRecordsFromStartIndex(int start, int numRecords) {
     for (int i  = start; i < start + numRecords; i++) {
-      connect.kafka().produce(TOPIC, String.valueOf(i), String.format("{\"doc_num\":%d}", i));
+      connect.kafka().produce(
+          TOPIC,
+          String.valueOf(i),
+          String.format("{\"doc_num\":%d,\"@timestamp\":\"2021-04-28T11:11:22.%03dZ\"}", i, i)
+      );
     }
   }
 }
