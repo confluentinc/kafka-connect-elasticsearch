@@ -161,6 +161,7 @@ public class ElasticsearchClientTest {
     props.put(DATA_STREAM_TYPE_CONFIG, DATA_STREAM_TYPE);
     props.put(DATA_STREAM_DATASET_CONFIG, DATA_STREAM_DATASET);
     config = new ElasticsearchSinkConnectorConfig(props);
+    index = createIndexName(TOPIC);
     ElasticsearchClient client = new ElasticsearchClient(config, null);
     index = createIndexName(TOPIC);
 
@@ -175,6 +176,7 @@ public class ElasticsearchClientTest {
     props.put(DATA_STREAM_TYPE_CONFIG, DATA_STREAM_TYPE);
     props.put(DATA_STREAM_DATASET_CONFIG, DATA_STREAM_DATASET);
     config = new ElasticsearchSinkConnectorConfig(props);
+    index = createIndexName(TOPIC);
     ElasticsearchClient client = new ElasticsearchClient(config, null);
     index = createIndexName(TOPIC);
 
@@ -621,7 +623,9 @@ public class ElasticsearchClientTest {
   }
 
   private String createIndexName(String name) {
-    return config.isDataStream() ?  String.format("%s-%s-%s", DATA_STREAM_TYPE, DATA_STREAM_DATASET, name) : name;
+    return config.isDataStream()
+        ? String.format("%s-%s-%s", DATA_STREAM_TYPE, DATA_STREAM_DATASET, name)
+        : name;
   }
 
   private static Schema schema() {

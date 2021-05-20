@@ -17,8 +17,6 @@ package io.confluent.connect.elasticsearch.integration;
 
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BATCH_SIZE_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BEHAVIOR_ON_NULL_VALUES_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.DATA_STREAM_DATASET_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.DATA_STREAM_TYPE_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_KEY_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.LINGER_MS_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BULK_SIZE_BYTES_CONFIG;
@@ -106,10 +104,7 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
 
   @Test
   public void testHappyPathDataStream() throws Exception {
-    isDataStream = true;
-    props.put(DATA_STREAM_TYPE_CONFIG, "logs");
-    props.put(DATA_STREAM_DATASET_CONFIG, "dataset");
-    index = "logs-dataset-" + TOPIC;
+    setDataStream();
 
     runSimpleTest(props);
 
@@ -170,5 +165,20 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
         assertEquals(0, docNum);
       }
     }
+  }
+
+  @Test
+  public void testBackwardsCompatibilityDataStream() throws Exception {
+    container.close();
+    container = ElasticsearchContainer.withESVersion("7.0.1");
+    container.start();
+    setupFromContainer();
+
+    runSimpleTest(props);
+
+    helperClient = null;
+    container.close();
+    container = ElasticsearchContainer.fromSystemProperties();
+    container.start();
   }
 }

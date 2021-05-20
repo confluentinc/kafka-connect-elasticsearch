@@ -30,6 +30,7 @@ import org.apache.kafka.common.config.SslConfigs;
 import org.elasticsearch.client.RequestOptions;
 import org.elasticsearch.client.RestClient;
 import org.elasticsearch.client.RestHighLevelClient;
+import org.elasticsearch.client.core.MainResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -64,6 +65,8 @@ import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfi
 public class Validator {
 
   private static final Logger log = LoggerFactory.getLogger(Validator.class);
+
+  private static final String DATA_STREAM_COMPATIBLE_ES_VERSION = "7.9.0";
 
   private ElasticsearchSinkConnectorConfig config;
   private Map<String, ConfigValue> values;
@@ -106,6 +109,7 @@ public class Validator {
       if (!hasErrors()) {
         // no point if previous configs are invalid
         validateConnection(client);
+        validateVersion(client);
       }
     } catch (IOException e) {
       log.warn("Closing the client failed.", e);
@@ -304,6 +308,56 @@ public class Validator {
         addErrorMessage(SECURITY_PROTOCOL_CONFIG, errorMessage);
       }
     }
+  }
+
+  private void validateVersion(RestHighLevelClient client) {
+    if (!config.isDataStream()) {
+      return;
+    }
+    MainResponse response;
+    try {
+      response = client.info(RequestOptions.DEFAULT);
+    } catch (IOException e) {
+      // Same error messages as from validating the connection.
+      return;
+    }
+    String versionNumber = response.getVersion().getNumber();
+    if (compareVersions(versionNumber, DATA_STREAM_COMPATIBLE_ES_VERSION) < 0) {
+      String errorMessage = String.format(
+          "Elasticsearch version %s is not compatible with data streams. Elasticsearch"
+              + "version must be at least %s.",
+          versionNumber,
+          DATA_STREAM_COMPATIBLE_ES_VERSION
+      );
+      addErrorMessage(CONNECTION_URL_CONFIG, errorMessage);
+      addErrorMessage(DATA_STREAM_TYPE_CONFIG, errorMessage);
+      addErrorMessage(DATA_STREAM_DATASET_CONFIG, errorMessage);
+    }
+  }
+
+  /**
+   * Compares <code>versionNumber</code> to <code>compatibleVersion</code>.
+   *
+   * @return  a negative integer, zero, or a positive integer if
+   *          <code>versionNumber</code> is less than, equal to, or greater
+   *          than <code>compatibleVersion</code>.
+   */
+  private int compareVersions(String versionNumber, String compatibleVersion) {
+    String[] versionSplit = versionNumber.split("\\.");
+    String[] compatibleSplit = compatibleVersion.split("\\.");
+
+    for (int i = 0; i < Math.min(versionSplit.length, compatibleSplit.length); i++) {
+      String versionSplitBeforeSuffix = versionSplit[i].split("-")[0];
+      String compatibleSplitBeforeSuffix = compatibleSplit[i].split("-")[0];
+      int comparison = Integer.compare(
+          Integer.parseInt(versionSplitBeforeSuffix),
+          Integer.parseInt(compatibleSplitBeforeSuffix)
+      );
+      if (comparison != 0) {
+        return comparison;
+      }
+    }
+    return versionSplit.length - compatibleSplit.length;
   }
 
   private void validateConnection(RestHighLevelClient client) {

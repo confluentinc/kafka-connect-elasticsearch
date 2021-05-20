@@ -18,6 +18,8 @@ package io.confluent.connect.elasticsearch.integration;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_KEY_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_SCHEMA_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.DATA_STREAM_DATASET_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.DATA_STREAM_TYPE_CONFIG;
 import static org.apache.kafka.connect.json.JsonConverterConfig.SCHEMAS_ENABLE_CONFIG;
 import static org.apache.kafka.connect.runtime.ConnectorConfig.CONNECTOR_CLASS_CONFIG;
 import static org.apache.kafka.connect.runtime.ConnectorConfig.KEY_CONVERTER_CLASS_CONFIG;
@@ -119,6 +121,21 @@ public class ElasticsearchConnectorBaseIT extends BaseConnectorIT {
     verifySearchResults(NUM_RECORDS);
   }
 
+  protected void setDataStream() {
+    isDataStream = true;
+    props.put(DATA_STREAM_TYPE_CONFIG, "logs");
+    props.put(DATA_STREAM_DATASET_CONFIG, "dataset");
+    index = "logs-dataset-" + TOPIC;
+  }
+
+  protected void setupFromContainer() {
+    String address = container.getConnectionUrl();
+    props.put(CONNECTION_URL_CONFIG, address);
+    helperClient = new ElasticsearchHelperClient(
+        props.get(CONNECTION_URL_CONFIG),
+        new ElasticsearchSinkConnectorConfig(props)
+    );
+  }
 
   protected void verifySearchResults(int numRecords) throws Exception {
     waitForRecords(numRecords);
