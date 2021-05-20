@@ -52,12 +52,13 @@ import org.elasticsearch.action.bulk.BulkResponse;
 import org.elasticsearch.client.RequestOptions;
 import org.elasticsearch.client.RestClient;
 import org.elasticsearch.client.RestHighLevelClient;
+import org.elasticsearch.client.indices.CreateDataStreamRequest;
 import org.elasticsearch.client.indices.CreateIndexRequest;
 import org.elasticsearch.client.indices.GetIndexRequest;
 import org.elasticsearch.client.indices.GetMappingsRequest;
 import org.elasticsearch.client.indices.GetMappingsResponse;
 import org.elasticsearch.client.indices.PutMappingRequest;
-import org.elasticsearch.cluster.metadata.MappingMetaData;
+import org.elasticsearch.cluster.metadata.MappingMetadata;
 import org.elasticsearch.common.unit.TimeValue;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -176,31 +177,18 @@ public class ElasticsearchClient {
   }
 
   /**
-   * Creates an index. Will not recreate the index if it already exists.
+   * Creates an index or data stream. Will not recreate the index or data stream if
+   * it already exists. Will create a data stream instead of an index if the data stream
+   * configurations are set.
    *
-   * @param index the index to create
-   * @return true if the index was created, false if it already exists
+   * @param name the name of the index or data stream to create
+   * @return true if the index or data stream was created, false if it already exists
    */
-  public boolean createIndex(String index) {
-    if (indexExists(index)) {
+  public boolean createIndexOrDataStream(String name) {
+    if (indexExists(name)) {
       return false;
     }
-
-    CreateIndexRequest request = new CreateIndexRequest(index);
-    return callWithRetries(
-        "create index " + index,
-        () -> {
-          try {
-            client.indices().create(request, RequestOptions.DEFAULT);
-          } catch (ElasticsearchStatusException | IOException e) {
-            if (!e.getMessage().contains(RESOURCE_ALREADY_EXISTS_EXCEPTION)) {
-              throw e;
-            }
-            return false;
-          }
-          return true;
-        }
-    );
+    return config.isDataStream() ? createDataStream(name) : createIndex(name);
   }
 
   /**
@@ -230,7 +218,7 @@ public class ElasticsearchClient {
    * @return true if a mapping exists, false if it does not
    */
   public boolean hasMapping(String index) {
-    MappingMetaData mapping = mapping(index);
+    MappingMetadata mapping = mapping(index);
     return mapping != null && mapping.sourceAsMap() != null && !mapping.sourceAsMap().isEmpty();
   }
 
@@ -387,6 +375,54 @@ public class ElasticsearchClient {
   }
 
   /**
+   * Creates a data stream. Will not recreate the data stream if it already exists.
+   *
+   * @param dataStream the data stream to create given in the form {type}-{dataset}-{topic}
+   * @return true if the data stream was created, false if it already exists
+   */
+  private boolean createDataStream(String dataStream) {
+    CreateDataStreamRequest request = new CreateDataStreamRequest(dataStream);
+    return callWithRetries(
+        "create data stream " + dataStream,
+        () -> {
+          try {
+            client.indices().createDataStream(request, RequestOptions.DEFAULT);
+          } catch (ElasticsearchStatusException | IOException e) {
+            if (!e.getMessage().contains(RESOURCE_ALREADY_EXISTS_EXCEPTION)) {
+              throw e;
+            }
+            return false;
+          }
+          return true;
+        }
+    );
+  }
+
+  /**
+   * Creates an index. Will not recreate the index if it already exists.
+   *
+   * @param index the index to create
+   * @return true if the index was created, false if it already exists
+   */
+  private boolean createIndex(String index) {
+    CreateIndexRequest request = new CreateIndexRequest(index);
+    return callWithRetries(
+        "create index " + index,
+        () -> {
+          try {
+            client.indices().create(request, RequestOptions.DEFAULT);
+          } catch (ElasticsearchStatusException | IOException e) {
+            if (!e.getMessage().contains(RESOURCE_ALREADY_EXISTS_EXCEPTION)) {
+              throw e;
+            }
+            return false;
+          }
+          return true;
+        }
+    );
+  }
+
+  /**
    * Processes a response from a {@link org.elasticsearch.action.bulk.BulkItemRequest}.
    * Successful responses are ignored. Failed responses are reported to the DLQ and handled
    * according to configuration (ignore or fail). Version conflicts are ignored.
@@ -473,7 +509,7 @@ public class ElasticsearchClient {
    * @param index the index to fetch the mapping for
    * @return the MappingMetaData for the index
    */
-  private MappingMetaData mapping(String index) {
+  private MappingMetadata mapping(String index) {
     GetMappingsRequest request = new GetMappingsRequest().indices(index);
     GetMappingsResponse response = callWithRetries(
         "get mapping for index " + index,
