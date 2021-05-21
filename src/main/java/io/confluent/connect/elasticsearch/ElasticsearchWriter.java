@@ -40,6 +40,7 @@ public class ElasticsearchWriter {
   private final ElasticsearchClient client;
   private final String type;
   private final boolean ignoreKey;
+  private final boolean ignoreVersion;
   private final Set<String> ignoreKeyTopics;
   private final boolean ignoreSchema;
   private final Set<String> ignoreSchemaTopics;
@@ -55,27 +56,28 @@ public class ElasticsearchWriter {
   private final BehaviorOnMalformedDoc behaviorOnMalformedDoc;
 
   ElasticsearchWriter(
-      ElasticsearchClient client,
-      String type,
-      boolean useCompactMapEntries,
-      boolean ignoreKey,
-      Set<String> ignoreKeyTopics,
-      boolean ignoreSchema,
-      Set<String> ignoreSchemaTopics,
-      Map<String, String> topicToIndexMap,
-      long flushTimeoutMs,
-      int maxBufferedRecords,
-      int maxInFlightRequests,
-      int batchSize,
-      long lingerMs,
-      int maxRetries,
-      long retryBackoffMs,
-      boolean dropInvalidMessage,
-      BehaviorOnNullValues behaviorOnNullValues,
-      BehaviorOnMalformedDoc behaviorOnMalformedDoc
+          ElasticsearchClient client,
+          String type,
+          boolean ignoreVersion, boolean useCompactMapEntries,
+          boolean ignoreKey,
+          Set<String> ignoreKeyTopics,
+          boolean ignoreSchema,
+          Set<String> ignoreSchemaTopics,
+          Map<String, String> topicToIndexMap,
+          long flushTimeoutMs,
+          int maxBufferedRecords,
+          int maxInFlightRequests,
+          int batchSize,
+          long lingerMs,
+          int maxRetries,
+          long retryBackoffMs,
+          boolean dropInvalidMessage,
+          BehaviorOnNullValues behaviorOnNullValues,
+          BehaviorOnMalformedDoc behaviorOnMalformedDoc
   ) {
     this.client = client;
     this.type = type;
+    this.ignoreVersion = ignoreVersion;
     this.ignoreKey = ignoreKey;
     this.ignoreKeyTopics = ignoreKeyTopics;
     this.ignoreSchema = ignoreSchema;
@@ -107,6 +109,7 @@ public class ElasticsearchWriter {
     private String type;
     private boolean useCompactMapEntries = true;
     private boolean ignoreKey = false;
+    private boolean ignoreVersion = false;
     private Set<String> ignoreKeyTopics = Collections.emptySet();
     private boolean ignoreSchema = false;
     private Set<String> ignoreSchemaTopics = Collections.emptySet();
@@ -134,6 +137,11 @@ public class ElasticsearchWriter {
     public Builder setIgnoreKey(boolean ignoreKey, Set<String> ignoreKeyTopics) {
       this.ignoreKey = ignoreKey;
       this.ignoreKeyTopics = ignoreKeyTopics;
+      return this;
+    }
+
+    public Builder setIgnoreVersion(boolean ignoreVersion) {
+      this.ignoreVersion = ignoreVersion;
       return this;
     }
 
@@ -214,7 +222,7 @@ public class ElasticsearchWriter {
       return new ElasticsearchWriter(
           client,
           type,
-          useCompactMapEntries,
+              ignoreVersion, useCompactMapEntries,
           ignoreKey,
           ignoreKeyTopics,
           ignoreSchema,
@@ -254,6 +262,7 @@ public class ElasticsearchWriter {
 
       final String index = convertTopicToIndexName(sinkRecord.topic());
       final boolean ignoreKey = ignoreKeyTopics.contains(sinkRecord.topic()) || this.ignoreKey;
+      final boolean ignoreVersion = this.ignoreVersion;
       final boolean ignoreSchema =
           ignoreSchemaTopics.contains(sinkRecord.topic()) || this.ignoreSchema;
 
@@ -273,7 +282,7 @@ public class ElasticsearchWriter {
         existingMappings.add(index);
       }
 
-      tryWriteRecord(sinkRecord, index, ignoreKey, ignoreSchema);
+      tryWriteRecord(sinkRecord, index, ignoreKey, ignoreSchema, ignoreVersion);
     }
   }
 
@@ -282,10 +291,11 @@ public class ElasticsearchWriter {
   }
 
   private void tryWriteRecord(
-      SinkRecord sinkRecord,
-      String index,
-      boolean ignoreKey,
-      boolean ignoreSchema) {
+          SinkRecord sinkRecord,
+          String index,
+          boolean ignoreKey,
+          boolean ignoreSchema,
+          boolean ignoreVersion) {
     IndexableRecord record = null;
     try {
       record = converter.convertRecord(
@@ -293,7 +303,8 @@ public class ElasticsearchWriter {
               index,
               type,
               ignoreKey,
-              ignoreSchema);
+              ignoreSchema,
+              ignoreVersion);
     } catch (ConnectException convertException) {
       if (dropInvalidMessage) {
         log.error(

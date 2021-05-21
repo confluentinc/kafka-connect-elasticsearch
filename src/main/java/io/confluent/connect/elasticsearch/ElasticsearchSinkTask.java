@@ -61,6 +61,8 @@ public class ElasticsearchSinkTask extends SinkTask {
       String type = config.getString(ElasticsearchSinkConnectorConfig.TYPE_NAME_CONFIG);
       boolean ignoreKey =
           config.getBoolean(ElasticsearchSinkConnectorConfig.KEY_IGNORE_CONFIG);
+      boolean ignoreVersion =
+              config.getBoolean(ElasticsearchSinkConnectorConfig.VERSION_IGNORE_CONFIG);
       boolean ignoreSchema =
           config.getBoolean(ElasticsearchSinkConnectorConfig.SCHEMA_IGNORE_CONFIG);
       boolean useCompactMapEntries =
@@ -125,6 +127,7 @@ public class ElasticsearchSinkTask extends SinkTask {
       ElasticsearchWriter.Builder builder = new ElasticsearchWriter.Builder(this.client)
           .setType(type)
           .setIgnoreKey(ignoreKey, topicIgnoreKey)
+          .setIgnoreVersion(ignoreVersion)
           .setIgnoreSchema(ignoreSchema, topicIgnoreSchema)
           .setCompactMapEntries(useCompactMapEntries)
           .setTopicToIndexMap(topicToIndexMap)

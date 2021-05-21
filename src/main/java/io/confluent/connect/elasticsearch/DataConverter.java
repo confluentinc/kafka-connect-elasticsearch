@@ -109,12 +109,12 @@ public class DataConverter {
   }
 
   public IndexableRecord convertRecord(
-      SinkRecord record,
-      String index,
-      String type,
-      boolean ignoreKey,
-      boolean ignoreSchema
-  ) {
+          SinkRecord record,
+          String index,
+          String type,
+          boolean ignoreKey,
+          boolean ignoreSchema,
+          boolean ignoreVersion) {
     if (record.value() == null) {
       switch (behaviorOnNullValues) {
         case IGNORE:
@@ -183,7 +183,8 @@ public class DataConverter {
     }
 
     final String payload = getPayload(record, ignoreSchema);
-    final Long version = ignoreKey ? null : record.kafkaOffset();
+    Long version = ignoreKey ? null : record.kafkaOffset();
+    version = ignoreVersion ? null : version;
     return new IndexableRecord(new Key(index, type, id), payload, version);
   }
 

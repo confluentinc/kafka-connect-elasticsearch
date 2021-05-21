@@ -98,6 +98,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
           + "a list of ``topic:index`` pairs.";
   public static final String KEY_IGNORE_CONFIG = "key.ignore";
   public static final String TOPIC_KEY_IGNORE_CONFIG = "topic.key.ignore";
+  public static final String VERSION_IGNORE_CONFIG = "version.ignore";
   public static final String SCHEMA_IGNORE_CONFIG = "schema.ignore";
   public static final String TOPIC_SCHEMA_IGNORE_CONFIG = "topic.schema.ignore";
   public static final String DROP_INVALID_MESSAGE_CONFIG = "drop.invalid.message";
@@ -392,6 +393,16 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
         ++order,
         Width.SHORT,
         "Ignore Key mode"
+    ).define(
+            VERSION_IGNORE_CONFIG,
+            Type.BOOLEAN,
+            false,
+            Importance.HIGH,
+            KEY_IGNORE_DOC,
+            group,
+            ++order,
+            Width.SHORT,
+            "Ignore Version mode"
     ).define(
         SCHEMA_IGNORE_CONFIG,
         Type.BOOLEAN,
