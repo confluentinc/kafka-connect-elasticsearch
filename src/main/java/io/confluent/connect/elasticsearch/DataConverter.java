@@ -219,7 +219,7 @@ public class DataConverter {
       DocWriteRequest<?> request,
       SinkRecord record
   ) {
-    if (!config.shouldIgnoreKey(record.topic())) {
+    if (!config.shouldIgnoreKey(record.topic()) && !config.isDataStream()) {
       request.versionType(VersionType.EXTERNAL);
       request.version(record.kafkaOffset());
     }
