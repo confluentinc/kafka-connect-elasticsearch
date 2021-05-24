@@ -22,6 +22,7 @@ import org.apache.kafka.connect.errors.DataException;
 import org.apache.kafka.connect.sink.SinkRecord;
 import org.elasticsearch.action.delete.DeleteRequest;
 import org.elasticsearch.action.index.IndexRequest;
+import org.elasticsearch.index.VersionType;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -421,5 +422,20 @@ public class DataConverterTest {
     IndexRequest actualRecord = (IndexRequest) converter.convertRecord(sinkRecord, index);
 
     assertEquals(timestamp, actualRecord.sourceAsMap().get(TIMESTAMP_FIELD));
+  }
+
+  @Test
+  public void testDoNotAddExternalVersioningIfDataStream() {
+    props.put(ElasticsearchSinkConnectorConfig.DATA_STREAM_TYPE_CONFIG, "logs");
+    props.put(ElasticsearchSinkConnectorConfig.DATA_STREAM_DATASET_CONFIG, "dataset");
+    props.put(ElasticsearchSinkConnectorConfig.IGNORE_KEY_CONFIG, "false");
+    converter = new DataConverter(new ElasticsearchSinkConnectorConfig(props));
+    Schema preProcessedSchema = converter.preProcessSchema(schema);
+    Struct struct = new Struct(preProcessedSchema).put("string", "myValue");
+    SinkRecord sinkRecord = createSinkRecordWithValue(struct);
+
+    IndexRequest actualRecord = (IndexRequest) converter.convertRecord(sinkRecord, index);
+
+    assertEquals(VersionType.INTERNAL, actualRecord.versionType());
   }
 }
