@@ -200,7 +200,7 @@ public class DataConverter {
   }
 
   private String maybeAddTimestamp(String payload, long timestamp) {
-    if (config.injectDataStreamTimestampIfMissing()) {
+    if (!config.injectDataStreamTimestampIfMissing()) {
       return payload;
     }
     try {

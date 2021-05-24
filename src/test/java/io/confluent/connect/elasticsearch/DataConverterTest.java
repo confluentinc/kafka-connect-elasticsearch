@@ -382,6 +382,7 @@ public class DataConverterTest {
   public void testInjectPayloadTimestampIfDataStream() {
     props.put(ElasticsearchSinkConnectorConfig.DATA_STREAM_TYPE_CONFIG, "logs");
     props.put(ElasticsearchSinkConnectorConfig.DATA_STREAM_DATASET_CONFIG, "dataset");
+    props.put(ElasticsearchSinkConnectorConfig.INJECT_DATA_STREAM_TIMESTAMP_IF_MISSING_CONFIG, "true");
     converter = new DataConverter(new ElasticsearchSinkConnectorConfig(props));
     Schema preProcessedSchema = converter.preProcessSchema(schema);
     Struct struct = new Struct(preProcessedSchema).put("string", "myValue");
