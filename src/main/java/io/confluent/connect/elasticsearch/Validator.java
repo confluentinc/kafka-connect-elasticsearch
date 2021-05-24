@@ -48,6 +48,7 @@ import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfi
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_KEY_TOPICS_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_SCHEMA_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_SCHEMA_TOPICS_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.INJECT_DATA_STREAM_TIMESTAMP_IF_MISSING_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.KERBEROS_KEYTAB_PATH_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.LINGER_MS_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.MAX_BUFFERED_RECORDS_CONFIG;
@@ -160,6 +161,16 @@ public class Validator {
           DATA_STREAM_DATASET_CONFIG
       );
       addErrorMessage(BEHAVIOR_ON_NULL_VALUES_CONFIG, errorMessage);
+    }
+
+    if (config.injectDataStreamTimestampIfMissing() && !config.isDataStream()) {
+      String errorMessage = String.format(
+          "Injecting the @timestamp is only necessary for data streams. %s must not be `true` if %s and %s are set.",
+          INJECT_DATA_STREAM_TIMESTAMP_IF_MISSING_CONFIG,
+          DATA_STREAM_TYPE_CONFIG,
+          DATA_STREAM_DATASET_CONFIG
+      );
+      addErrorMessage(INJECT_DATA_STREAM_TIMESTAMP_IF_MISSING_CONFIG, errorMessage);
     }
   }
 

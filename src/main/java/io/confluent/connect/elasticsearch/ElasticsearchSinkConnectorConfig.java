@@ -224,7 +224,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
       "Whether to inject the @timestamp field with the record timestamp if that field is missing "
           + "from the message. When this is set to ``true``, messages that do not have an "
           + "@timestamp field will be injected with the record timestamp. This configuration "
-          + "can only be set if ``" + DATA_STREAM_TYPE_CONFIG + "`` and ``"
+          + "can only be set to ``true`` if ``" + DATA_STREAM_TYPE_CONFIG + "`` and ``"
           + DATA_STREAM_TYPE_DISPLAY + "`` are set since it is only applicable to data stream."
           + " Note that if a message does not have an @timestamp field and data stream is "
           + "enable, the message would not be sent.";
@@ -914,6 +914,10 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
 
   public Set<String> ignoreSchemaTopics() {
     return new HashSet<>(getList(IGNORE_SCHEMA_TOPICS_CONFIG));
+  }
+
+  public boolean injectDataStreamTimestampIfMissing() {
+    return getBoolean(INJECT_DATA_STREAM_TIMESTAMP_IF_MISSING_CONFIG);
   }
 
   public String kerberosUserPrincipal() {
