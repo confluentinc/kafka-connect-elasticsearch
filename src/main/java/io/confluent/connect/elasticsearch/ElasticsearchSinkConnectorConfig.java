@@ -569,7 +569,8 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
             DATA_CONVERSION_GROUP,
             ++order,
             Width.SHORT,
-            BEHAVIOR_ON_NULL_VALUES_DISPLAY
+            BEHAVIOR_ON_NULL_VALUES_DISPLAY,
+            new EnumRecommender<>(BehaviorOnNullValues.class)
         ).define(
             BEHAVIOR_ON_MALFORMED_DOCS_CONFIG,
             Type.STRING,
@@ -585,7 +586,8 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
             DATA_CONVERSION_GROUP,
             ++order,
             Width.SHORT,
-            BEHAVIOR_ON_MALFORMED_DOCS_DISPLAY
+            BEHAVIOR_ON_MALFORMED_DOCS_DISPLAY,
+            new EnumRecommender<>(BehaviorOnMalformedDoc.class)
         ).define(
             WRITE_METHOD_CONFIG,
             Type.STRING,
@@ -601,7 +603,8 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
             DATA_CONVERSION_GROUP,
             ++order,
             Width.SHORT,
-            WRITE_METHOD_DISPLAY
+            WRITE_METHOD_DISPLAY,
+            new EnumRecommender<>(WriteMethod.class)
     );
   }
 
@@ -671,7 +674,8 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
         SSL_GROUP,
         ++order,
         Width.SHORT,
-        SECURITY_PROTOCOL_DISPLAY
+        SECURITY_PROTOCOL_DISPLAY,
+        new EnumRecommender<>(SecurityProtocol.class)
     );
     configDef.embed(SSL_CONFIG_PREFIX, SSL_GROUP, configDef.configKeys().size() + 2, sslConfigDef);
   }
