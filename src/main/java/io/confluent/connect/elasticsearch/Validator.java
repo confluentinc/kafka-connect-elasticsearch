@@ -165,7 +165,8 @@ public class Validator {
 
     if (config.injectDataStreamTimestampIfMissing() && !config.isDataStream()) {
       String errorMessage = String.format(
-          "Injecting the @timestamp is only necessary for data streams. %s must not be `true` if %s and %s are set.",
+          "Injecting the @timestamp field is only necessary for data streams. %s must "
+          + "not be `true` if %s and %s are set.",
           INJECT_DATA_STREAM_TIMESTAMP_IF_MISSING_CONFIG,
           DATA_STREAM_TYPE_CONFIG,
           DATA_STREAM_DATASET_CONFIG
