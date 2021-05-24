@@ -31,10 +31,7 @@ class EnumRecommender<T extends Enum> implements ConfigDef.Validator, ConfigDef.
   private final Set<String> validValues;
   private final Class<T> enumClass;
 
-  public EnumRecommender(
-      Class<T> enumClass
-  ) {
-
+  public EnumRecommender(Class<T> enumClass) {
     this.enumClass = enumClass;
     Set<String> validEnums = new LinkedHashSet<>();
     for (Object o : enumClass.getEnumConstants()) {
