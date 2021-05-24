@@ -218,6 +218,20 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   private static final String IGNORE_SCHEMA_DISPLAY = "Ignore Schema mode";
   private static final boolean IGNORE_SCHEMA_DEFAULT = false;
 
+  public static final String INJECT_DATA_STREAM_TIMESTAMP_IF_MISSING_CONFIG =
+      "inject.data.stream.timestamp.if.missing";
+  private static final String INJECT_DATA_STREAM_TIMESTAMP_IF_MISSING_DOC =
+      "Whether to inject the @timestamp field with the record timestamp if that field is missing "
+          + "from the message. When this is set to ``true``, messages that do not have an "
+          + "@timestamp field will be injected with the record timestamp. This configuration "
+          + "can only be set if ``" + DATA_STREAM_TYPE_CONFIG + "`` and ``"
+          + DATA_STREAM_TYPE_DISPLAY + "`` are set since it is only applicable to data stream."
+          + " Note that if a message does not have an @timestamp field and data stream is "
+          + "enable, the message would not be sent.";
+  private static final String INJECT_DATA_STREAM_TIMESTAMP_IF_MISSING_DISPLAY =
+      "Inject Data Stream Timestamp if Missing";
+  private static final boolean INJECT_DATA_STREAM_TIMESTAMP_IF_MISSING_DEFAULT = false;
+
   public static final String COMPACT_MAP_ENTRIES_CONFIG = "compact.map.entries";
   private static final String COMPACT_MAP_ENTRIES_DOC =
       "Defines how map entries with string keys within record values should be written to JSON. "
@@ -594,6 +608,16 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
             ++order,
             Width.SHORT,
             IGNORE_SCHEMA_DISPLAY
+        ).define(
+            INJECT_DATA_STREAM_TIMESTAMP_IF_MISSING_CONFIG,
+            Type.BOOLEAN,
+            INJECT_DATA_STREAM_TIMESTAMP_IF_MISSING_DEFAULT,
+            Importance.LOW,
+            INJECT_DATA_STREAM_TIMESTAMP_IF_MISSING_DOC,
+            DATA_CONVERSION_GROUP,
+            ++order,
+            Width.SHORT,
+            INJECT_DATA_STREAM_TIMESTAMP_IF_MISSING_DISPLAY
         ).define(
             COMPACT_MAP_ENTRIES_CONFIG,
             Type.BOOLEAN,
