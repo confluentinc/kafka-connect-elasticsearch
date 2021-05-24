@@ -857,7 +857,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   }
 
   private SecurityProtocol securityProtocol() {
-    return SecurityProtocol.valueOf(getString(SECURITY_PROTOCOL_CONFIG));
+    return SecurityProtocol.valueOf(getString(SECURITY_PROTOCOL_CONFIG).toUpperCase());
   }
 
   public Map<String, Object> sslConfigs() {
