@@ -43,9 +43,9 @@ class EnumRecommender<T extends Enum<?>> implements ConfigDef.Validator, ConfigD
 
   @Override
   public void ensureValid(String key, Object value) {
-    // calling toString on itself because IDE complains if the Object is passed.
-    if (value != null && !validValues.contains(value.toString())) {
-      throw new ConfigException(key, value, "Invalid enumerator");
+    String enum = value.toString().toUpperCase();
+    if (value != null && !validValues.contains(enum)) {
+      throw new ConfigException(key, value, "Value must be one of: " + toString());
     }
   }
 
@@ -56,7 +56,7 @@ class EnumRecommender<T extends Enum<?>> implements ConfigDef.Validator, ConfigD
 
   @Override
   public List<Object> validValues(String name, Map<String, Object> connectorConfigs) {
-    return Collections.unmodifiableList(Arrays.asList(validValues.toArray()));
+    return Collections.unmodifiableList(new ArrayList<>(validValues)));
   }
 
   @Override
