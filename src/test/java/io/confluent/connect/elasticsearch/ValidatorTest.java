@@ -28,6 +28,7 @@ import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfi
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_KEY_TOPICS_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_SCHEMA_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_SCHEMA_TOPICS_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.INJECT_DATA_STREAM_TIMESTAMP_IF_MISSING_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.KERBEROS_KEYTAB_PATH_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.LINGER_MS_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.MAX_BUFFERED_RECORDS_CONFIG;
@@ -161,6 +162,16 @@ public class ValidatorTest {
     result = validator.validate();
     assertHasErrorMessage(result, BEHAVIOR_ON_NULL_VALUES_CONFIG, "must not be");
     assertHasErrorMessage(result, WRITE_METHOD_CONFIG, "must not be");
+  }
+
+  @Test
+  public void testInvalidInjectDataStreamTimestamp() {
+    props.put(INJECT_DATA_STREAM_TIMESTAMP_IF_MISSING_CONFIG, "true");
+    validator = new Validator(props, () -> mockClient);
+
+    Config result = validator.validate();
+    
+    assertHasErrorMessage(result, INJECT_DATA_STREAM_TIMESTAMP_IF_MISSING_CONFIG, "only necessary for data streams");
   }
 
   @Test
