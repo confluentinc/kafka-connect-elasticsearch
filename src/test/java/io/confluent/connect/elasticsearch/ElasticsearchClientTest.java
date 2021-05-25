@@ -24,6 +24,7 @@ import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfi
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.DATA_STREAM_DATASET_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.DATA_STREAM_TYPE_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_KEY_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.INJECT_DATA_STREAM_TIMESTAMP_IF_MISSING_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.LINGER_MS_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.MAX_BUFFERED_RECORDS_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.MAX_IN_FLIGHT_REQUESTS_CONFIG;
@@ -605,6 +606,7 @@ public class ElasticsearchClientTest {
   public void testWriteDataStreamInjectTimestamp() throws Exception {
     props.put(DATA_STREAM_TYPE_CONFIG, DATA_STREAM_TYPE);
     props.put(DATA_STREAM_DATASET_CONFIG, DATA_STREAM_DATASET);
+    props.put(INJECT_DATA_STREAM_TIMESTAMP_IF_MISSING_CONFIG, "true");
     config = new ElasticsearchSinkConnectorConfig(props);
     converter = new DataConverter(config);
     ElasticsearchClient client = new ElasticsearchClient(config, null);
