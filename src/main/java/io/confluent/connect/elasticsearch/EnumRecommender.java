@@ -15,7 +15,7 @@
 
 package io.confluent.connect.elasticsearch;
 
-import java.util.Arrays;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -43,9 +43,12 @@ class EnumRecommender<T extends Enum<?>> implements ConfigDef.Validator, ConfigD
 
   @Override
   public void ensureValid(String key, Object value) {
-    String enum = value.toString().toUpperCase();
-    if (value != null && !validValues.contains(enum)) {
-      throw new ConfigException(key, value, "Value must be one of: " + toString());
+    if (value == null) {
+      return;
+    }
+    String enumValue = value.toString().toUpperCase();
+    if (value != null && !validValues.contains(enumValue)) {
+      throw new ConfigException(key, value, "Value must be one of: " + this);
     }
   }
 
@@ -56,7 +59,7 @@ class EnumRecommender<T extends Enum<?>> implements ConfigDef.Validator, ConfigD
 
   @Override
   public List<Object> validValues(String name, Map<String, Object> connectorConfigs) {
-    return Collections.unmodifiableList(new ArrayList<>(validValues)));
+    return Collections.unmodifiableList(new ArrayList<>(validValues));
   }
 
   @Override
