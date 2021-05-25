@@ -46,7 +46,7 @@ class EnumRecommender<T extends Enum<?>> implements ConfigDef.Validator, ConfigD
     if (value == null) {
       return;
     }
-    String enumValue = value.toString().toUpperCase();
+    String enumValue = value.toString().toLowerCase();
     if (value != null && !validValues.contains(enumValue)) {
       throw new ConfigException(key, value, "Value must be one of: " + this);
     }

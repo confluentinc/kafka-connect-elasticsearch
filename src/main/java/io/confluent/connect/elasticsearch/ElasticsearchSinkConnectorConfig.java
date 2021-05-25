@@ -18,15 +18,12 @@ package io.confluent.connect.elasticsearch;
 import java.io.File;
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
 import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.common.config.ConfigDef;
-import org.apache.kafka.common.config.ConfigDef.CaseInsensitiveValidString;
 import org.apache.kafka.common.config.ConfigDef.Importance;
 import org.apache.kafka.common.config.ConfigDef.Type;
 import org.apache.kafka.common.config.ConfigDef.Validator;
@@ -558,12 +555,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
             BEHAVIOR_ON_NULL_VALUES_CONFIG,
             Type.STRING,
             BEHAVIOR_ON_NULL_VALUES_DEFAULT.name(),
-            ConfigDef.CaseInsensitiveValidString.in(
-                Arrays.stream(BehaviorOnNullValues.values())
-                    .map(BehaviorOnNullValues::name)
-                    .collect(Collectors.toList())
-                    .toArray(new String[BehaviorOnNullValues.values().length])
-            ),
+            new EnumRecommender<>(BehaviorOnNullValues.class),
             Importance.LOW,
             BEHAVIOR_ON_NULL_VALUES_DOC,
             DATA_CONVERSION_GROUP,
@@ -575,12 +567,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
             BEHAVIOR_ON_MALFORMED_DOCS_CONFIG,
             Type.STRING,
             BEHAVIOR_ON_MALFORMED_DOCS_DEFAULT.name(),
-            ConfigDef.CaseInsensitiveValidString.in(
-                Arrays.stream(BehaviorOnMalformedDoc.values())
-                    .map(BehaviorOnMalformedDoc::name)
-                    .collect(Collectors.toList())
-                    .toArray(new String[BehaviorOnMalformedDoc.values().length])
-            ),
+            new EnumRecommender<>(BehaviorOnMalformedDoc.class),
             Importance.LOW,
             BEHAVIOR_ON_MALFORMED_DOCS_DOC,
             DATA_CONVERSION_GROUP,
@@ -592,12 +579,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
             WRITE_METHOD_CONFIG,
             Type.STRING,
             WRITE_METHOD_DEFAULT,
-            ConfigDef.CaseInsensitiveValidString.in(
-                Arrays.stream(WriteMethod.values())
-                    .map(WriteMethod::name)
-                    .collect(Collectors.toList())
-                    .toArray(new String[WriteMethod.values().length])
-            ),
+            new EnumRecommender<>(WriteMethod.class),
             Importance.LOW,
             WRITE_METHOD_DOC,
             DATA_CONVERSION_GROUP,
@@ -663,12 +645,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
         SECURITY_PROTOCOL_CONFIG,
         Type.STRING,
         SECURITY_PROTOCOL_DEFAULT,
-        CaseInsensitiveValidString.in(
-            Arrays.stream(SecurityProtocol.values())
-                .map(SecurityProtocol::name)
-                .collect(Collectors.toList())
-                .toArray(new String[SecurityProtocol.values().length])
-        ),
+        new EnumRecommender<>(SecurityProtocol.class),
         Importance.MEDIUM,
         SECURITY_PROTOCOL_DOC,
         SSL_GROUP,
