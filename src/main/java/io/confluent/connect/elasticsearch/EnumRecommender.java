@@ -25,8 +25,7 @@ import java.util.Set;
 import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.common.config.ConfigException;
 
-@SuppressWarnings("rawtypes")
-class EnumRecommender<T extends Enum> implements ConfigDef.Validator, ConfigDef.Recommender {
+class EnumRecommender<T extends Enum<?>> implements ConfigDef.Validator, ConfigDef.Recommender {
 
   private final Set<String> validValues;
   private final Class<T> enumClass;
