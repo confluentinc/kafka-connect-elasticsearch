@@ -380,8 +380,7 @@ public class DataConverterTest {
 
   @Test
   public void testInjectPayloadTimestampIfEnabledAndDataStream() {
-    props.put(ElasticsearchSinkConnectorConfig.DATA_STREAM_TYPE_CONFIG, "logs");
-    props.put(ElasticsearchSinkConnectorConfig.DATA_STREAM_DATASET_CONFIG, "dataset");
+    setDataStream();
     props.put(ElasticsearchSinkConnectorConfig.INJECT_DATA_STREAM_TIMESTAMP_IF_MISSING_CONFIG, "true");
     converter = new DataConverter(new ElasticsearchSinkConnectorConfig(props));
     Schema preProcessedSchema = converter.preProcessSchema(schema);
@@ -395,8 +394,7 @@ public class DataConverterTest {
 
   @Test
   public void testDoNotInjectPayloadTimestampIfDisabledAndDataStream() {
-    props.put(ElasticsearchSinkConnectorConfig.DATA_STREAM_TYPE_CONFIG, "logs");
-    props.put(ElasticsearchSinkConnectorConfig.DATA_STREAM_DATASET_CONFIG, "dataset");
+    setDataStream();
     props.put(ElasticsearchSinkConnectorConfig.INJECT_DATA_STREAM_TIMESTAMP_IF_MISSING_CONFIG, "false");
     converter = new DataConverter(new ElasticsearchSinkConnectorConfig(props));
     Schema preProcessedSchema = converter.preProcessSchema(schema);
@@ -422,15 +420,10 @@ public class DataConverterTest {
 
   @Test
   public void testDoNotInjectPayloadTimestampIfEnabledAndAlreadyExists() {
-    props.put(ElasticsearchSinkConnectorConfig.DATA_STREAM_TYPE_CONFIG, "logs");
-    props.put(ElasticsearchSinkConnectorConfig.DATA_STREAM_DATASET_CONFIG, "dataset");
+    setDataStream();
     props.put(ElasticsearchSinkConnectorConfig.INJECT_DATA_STREAM_TIMESTAMP_IF_MISSING_CONFIG, "true");
     converter = new DataConverter(new ElasticsearchSinkConnectorConfig(props));
-    schema = SchemaBuilder
-        .struct()
-        .name("struct")
-        .field(TIMESTAMP_FIELD, Schema.STRING_SCHEMA)
-        .build();
+    schema = createSchemaWithTimestampField();
     Schema preProcessedSchema = converter.preProcessSchema(schema);
     String timestamp = "2021-05-14T11:11:22.000Z";
     Struct struct = new Struct(preProcessedSchema).put(TIMESTAMP_FIELD, timestamp);
@@ -443,15 +436,10 @@ public class DataConverterTest {
 
   @Test
   public void testDoNotInjectPayloadTimestampIfDisabledAndAlreadyExists() {
-    props.put(ElasticsearchSinkConnectorConfig.DATA_STREAM_TYPE_CONFIG, "logs");
-    props.put(ElasticsearchSinkConnectorConfig.DATA_STREAM_DATASET_CONFIG, "dataset");
+    setDataStream();
     props.put(ElasticsearchSinkConnectorConfig.INJECT_DATA_STREAM_TIMESTAMP_IF_MISSING_CONFIG, "false");
     converter = new DataConverter(new ElasticsearchSinkConnectorConfig(props));
-    schema = SchemaBuilder
-        .struct()
-        .name("struct")
-        .field(TIMESTAMP_FIELD, Schema.STRING_SCHEMA)
-        .build();
+    schema = createSchemaWithTimestampField();
     Schema preProcessedSchema = converter.preProcessSchema(schema);
     String timestamp = "2021-05-14T11:11:22.000Z";
     Struct struct = new Struct(preProcessedSchema).put(TIMESTAMP_FIELD, timestamp);
@@ -464,8 +452,7 @@ public class DataConverterTest {
 
   @Test
   public void testDoNotAddExternalVersioningIfDataStream() {
-    props.put(ElasticsearchSinkConnectorConfig.DATA_STREAM_TYPE_CONFIG, "logs");
-    props.put(ElasticsearchSinkConnectorConfig.DATA_STREAM_DATASET_CONFIG, "dataset");
+    setDataStream();
     props.put(ElasticsearchSinkConnectorConfig.IGNORE_KEY_CONFIG, "false");
     converter = new DataConverter(new ElasticsearchSinkConnectorConfig(props));
     Schema preProcessedSchema = converter.preProcessSchema(schema);
@@ -475,5 +462,18 @@ public class DataConverterTest {
     IndexRequest actualRecord = (IndexRequest) converter.convertRecord(sinkRecord, index);
 
     assertEquals(VersionType.INTERNAL, actualRecord.versionType());
+  }
+
+  private Schema createSchemaWithTimestampField() {
+    return SchemaBuilder
+        .struct()
+        .name("struct")
+        .field(TIMESTAMP_FIELD, Schema.STRING_SCHEMA)
+        .build();
+  }
+
+  private void setDataStream() {
+    props.put(ElasticsearchSinkConnectorConfig.DATA_STREAM_TYPE_CONFIG, "logs");
+    props.put(ElasticsearchSinkConnectorConfig.DATA_STREAM_DATASET_CONFIG, "dataset");
   }
 }
