@@ -379,7 +379,7 @@ public class DataConverterTest {
   }
 
   @Test
-  public void testInjectPayloadTimestampIfDataStream() {
+  public void testInjectPayloadTimestampIfEnabledAndDataStream() {
     props.put(ElasticsearchSinkConnectorConfig.DATA_STREAM_TYPE_CONFIG, "logs");
     props.put(ElasticsearchSinkConnectorConfig.DATA_STREAM_DATASET_CONFIG, "dataset");
     props.put(ElasticsearchSinkConnectorConfig.INJECT_DATA_STREAM_TIMESTAMP_IF_MISSING_CONFIG, "true");
@@ -391,6 +391,21 @@ public class DataConverterTest {
     IndexRequest actualRecord = (IndexRequest) converter.convertRecord(sinkRecord, index);
 
     assertEquals(timestamp, actualRecord.sourceAsMap().get(TIMESTAMP_FIELD));
+  }
+
+  @Test
+  public void testDoNotInjectPayloadTimestampIfDisabledAndDataStream() {
+    props.put(ElasticsearchSinkConnectorConfig.DATA_STREAM_TYPE_CONFIG, "logs");
+    props.put(ElasticsearchSinkConnectorConfig.DATA_STREAM_DATASET_CONFIG, "dataset");
+    props.put(ElasticsearchSinkConnectorConfig.INJECT_DATA_STREAM_TIMESTAMP_IF_MISSING_CONFIG, "false");
+    converter = new DataConverter(new ElasticsearchSinkConnectorConfig(props));
+    Schema preProcessedSchema = converter.preProcessSchema(schema);
+    Struct struct = new Struct(preProcessedSchema).put("string", "myValue");
+    SinkRecord sinkRecord = createSinkRecordWithValue(struct);
+
+    IndexRequest actualRecord = (IndexRequest) converter.convertRecord(sinkRecord, index);
+
+    assertFalse(actualRecord.sourceAsMap().containsKey(TIMESTAMP_FIELD));
   }
 
   @Test
@@ -406,9 +421,31 @@ public class DataConverterTest {
   }
 
   @Test
-  public void testDoNotInjectPayloadTimestampIfAlreadyExists() {
+  public void testDoNotInjectPayloadTimestampIfEnabledAndAlreadyExists() {
     props.put(ElasticsearchSinkConnectorConfig.DATA_STREAM_TYPE_CONFIG, "logs");
     props.put(ElasticsearchSinkConnectorConfig.DATA_STREAM_DATASET_CONFIG, "dataset");
+    props.put(ElasticsearchSinkConnectorConfig.INJECT_DATA_STREAM_TIMESTAMP_IF_MISSING_CONFIG, "true");
+    converter = new DataConverter(new ElasticsearchSinkConnectorConfig(props));
+    schema = SchemaBuilder
+        .struct()
+        .name("struct")
+        .field(TIMESTAMP_FIELD, Schema.STRING_SCHEMA)
+        .build();
+    Schema preProcessedSchema = converter.preProcessSchema(schema);
+    String timestamp = "2021-05-14T11:11:22.000Z";
+    Struct struct = new Struct(preProcessedSchema).put(TIMESTAMP_FIELD, timestamp);
+    SinkRecord sinkRecord = createSinkRecordWithValue(struct);
+
+    IndexRequest actualRecord = (IndexRequest) converter.convertRecord(sinkRecord, index);
+
+    assertEquals(timestamp, actualRecord.sourceAsMap().get(TIMESTAMP_FIELD));
+  }
+
+  @Test
+  public void testDoNotInjectPayloadTimestampIfDisabledAndAlreadyExists() {
+    props.put(ElasticsearchSinkConnectorConfig.DATA_STREAM_TYPE_CONFIG, "logs");
+    props.put(ElasticsearchSinkConnectorConfig.DATA_STREAM_DATASET_CONFIG, "dataset");
+    props.put(ElasticsearchSinkConnectorConfig.INJECT_DATA_STREAM_TIMESTAMP_IF_MISSING_CONFIG, "false");
     converter = new DataConverter(new ElasticsearchSinkConnectorConfig(props));
     schema = SchemaBuilder
         .struct()
