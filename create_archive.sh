@@ -23,7 +23,7 @@ mkdir -p ${DESTDIR}${BINPATH}
 mkdir -p ${DESTDIR}${LIBPATH}
 mkdir -p ${DESTDIR}${SYSCONFDIR}
 
-PREPACKAGED="target/kafka-connect-elasticsearch-${VERSION}-package"
+PREPACKAGED="target/kafka-connect-elasticsearch-${VERSION}${SECURITY_SUFFIX}-package"
 pushd ${PREPACKAGED}
 find bin/ -type f | grep -v README[.]rpm | xargs -I XXX ${INSTALL_X} -o root -g root XXX ${DESTDIR}${PREFIX}/XXX
 find share/ -type f | grep -v README[.]rpm | xargs -I XXX ${INSTALL} -o root -g root XXX ${DESTDIR}${PREFIX}/XXX
