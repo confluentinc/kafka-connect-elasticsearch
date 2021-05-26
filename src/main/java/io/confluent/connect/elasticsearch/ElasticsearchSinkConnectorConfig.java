@@ -447,18 +447,14 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
             DATA_STREAM_TYPE_CONFIG,
             Type.STRING,
             DATA_STREAM_TYPE_DEFAULT.name(),
-            ConfigDef.CaseInsensitiveValidString.in(
-                Arrays.stream(DataStreamType.values())
-                    .map(DataStreamType::name)
-                    .collect(Collectors.toList())
-                    .toArray(new String[DataStreamType.values().length])
-            ),
+            new EnumRecommender<>(DataStreamType.class),
             Importance.LOW,
             DATA_STREAM_TYPE_DOC,
             CONNECTOR_GROUP,
             ++order,
             Width.SHORT,
-            DATA_STREAM_TYPE_DISPLAY
+            DATA_STREAM_TYPE_DISPLAY,
+            new EnumRecommender<>(DataStreamType.class)
         ).define(
             MAX_IN_FLIGHT_REQUESTS_CONFIG,
             Type.INT,
