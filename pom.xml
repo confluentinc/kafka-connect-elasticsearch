@@ -34,7 +34,7 @@
         <connection>scm:git:git://github.com/confluentinc/kafka-connect-elasticsearch.git</connection>
         <developerConnection>scm:git:git@github.com:confluentinc/kafka-connect-elasticsearch.git</developerConnection>
         <url>https://github.com/confluentinc/kafka-connect-elasticsearch</url>
-        <tag>HEAD</tag>
+        <tag>11.0.x</tag>
     </scm>
 
     <properties>
@@ -51,13 +51,19 @@
         <!-- temporary fix by pinning the version until we upgrade to a version of common that contains this or newer version.
             See https://github.com/confluentinc/common/pull/332 for details -->
         <dependency.check.version>6.1.6</dependency.check.version>
+        <aws-java-sdk.version>1.11.602</aws-java-sdk.version>
     </properties>
 
     <repositories>
         <repository>
             <id>confluent</id>
             <name>Confluent</name>
-            <url>https://packages.confluent.io/maven/</url>
+            <url>http://packages.confluent.io/maven/</url>
+        </repository>
+        <repository>
+            <id>mulesoft</id>
+            <name>Mulesoft</name>
+            <url>https://repository.mulesoft.org/nexus/content/repositories/public/</url>
         </repository>
     </repositories>
 
@@ -111,6 +117,19 @@
             <artifactId>httpclient</artifactId>
             <version>4.5.13</version>
         </dependency>
+        <!-- AWS signer -->
+        <dependency>
+            <groupId>com.amazonaws</groupId>
+            <artifactId>aws-java-sdk-core</artifactId>
+            <version>${aws-java-sdk.version}</version>
+            <scope>compile</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.github.awslabs</groupId>
+            <artifactId>aws-request-signing-apache-interceptor</artifactId>
+            <version>b3772780da</version>
+        </dependency>
+        <!-- AWS signer -->
         <!-- Force commons-codec (httpclient transitive dependency) version to address CVE CCMSG-835 -->
         <dependency>
             <groupId>commons-codec</groupId>

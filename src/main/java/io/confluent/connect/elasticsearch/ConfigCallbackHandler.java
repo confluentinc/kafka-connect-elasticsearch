@@ -15,6 +15,8 @@
 
 package io.confluent.connect.elasticsearch;
 
+import com.amazonaws.auth.AWS4Signer;
+import com.amazonaws.http.AWSRequestSigningApacheInterceptor;
 import com.sun.security.auth.module.Krb5LoginModule;
 import java.security.AccessController;
 import java.security.PrivilegedActionException;
@@ -31,6 +33,7 @@ import javax.security.auth.login.AppConfigurationEntry;
 import javax.security.auth.login.Configuration;
 import javax.security.auth.login.LoginContext;
 import org.apache.http.HttpHost;
+import org.apache.http.HttpRequestInterceptor;
 import org.apache.http.auth.AuthSchemeProvider;
 import org.apache.http.auth.AuthScope;
 import org.apache.http.auth.KerberosCredentials;
@@ -91,7 +94,18 @@ public class ConfigCallbackHandler implements HttpClientConfigCallback, RequestC
     builder.setConnectionManager(connectionManager);
     builder.setMaxConnPerRoute(config.maxInFlightRequests());
     builder.setMaxConnTotal(config.maxInFlightRequests());
+    if (config.getBoolean(ElasticsearchSinkConnectorConfig.AWS_SIGNING_ENABLED_CONFIG)) {
+      AWS4Signer signer = new AWS4Signer();
+      signer.setServiceName("es");
+      signer.setRegionName(config.getString(ElasticsearchSinkConnectorConfig.AWS_REGION_CONFIG));
 
+      HttpRequestInterceptor interceptor = new AWSRequestSigningApacheInterceptor(
+              "es",
+              signer,
+              config.getCredentialsProvider()
+      );
+      builder.addInterceptorFirst(interceptor);
+    }
     configureAuthentication(builder);
 
     if (config.isKerberosEnabled()) {
