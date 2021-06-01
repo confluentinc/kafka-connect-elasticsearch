@@ -873,6 +873,10 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
     return DataStreamType.valueOf(getString(DATA_STREAM_TYPE_CONFIG).toUpperCase());
   }
 
+  public List<String> dataStreamTimestamp() {
+    return getList(DATA_STREAM_TIMESTAMP_CONFIG);
+  }
+
   public long flushTimeoutMs() {
     return getLong(FLUSH_TIMEOUT_MS_CONFIG);
   }
