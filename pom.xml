@@ -48,13 +48,16 @@
         <hadoop.version>3.3.0</hadoop.version>
         <apacheds-jdbm1.version>2.0.0-M2</apacheds-jdbm1.version>
         <jackson.databind.version>2.10.5.1</jackson.databind.version>
+        <!-- temporary fix by pinning the version until we upgrade to a version of common that contains this or newer version.
+            See https://github.com/confluentinc/common/pull/332 for details -->
+        <dependency.check.version>6.1.6</dependency.check.version>
     </properties>
 
     <repositories>
         <repository>
             <id>confluent</id>
             <name>Confluent</name>
-            <url>http://packages.confluent.io/maven/</url>
+            <url>https://packages.confluent.io/maven/</url>
         </repository>
     </repositories>
 
@@ -240,7 +243,7 @@
                             <logo>logos/elasticsearch.jpg</logo>
 
                             <supportProviderName>Confluent, Inc.</supportProviderName>
-                            <supportSummary>Confluent supports the Elasticsearch sink connector alongside community members as part of its Confluent Platform offering.</supportSummary>
+                            <supportSummary><![CDATA[This connector is <a href="https://www.confluent.io/subscription/">supported by Confluent</a> as part of a <a href="https://www.confluent.io/product/confluent-platform/">Confluent Platform</a> subscription.]]></supportSummary>
                             <supportUrl>https://docs.confluent.io/home/overview.html</supportUrl>
                             <supportLogo>logos/confluent.png</supportLogo>
 

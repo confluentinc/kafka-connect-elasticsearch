@@ -43,7 +43,7 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.fail;
 
 public class DataConverterTest {
-  
+
   private DataConverter converter;
   private Map<String, String> props;
 
@@ -367,11 +367,11 @@ public class DataConverterTest {
 
   public SinkRecord createSinkRecordWithValue(Object value) {
     return new SinkRecord(
-         topic, 
-         partition, 
-         Schema.STRING_SCHEMA, 
-         key, schema, 
-         value, 
+         topic,
+         partition,
+         Schema.STRING_SCHEMA,
+         key, schema,
+         value,
          offset,
          recordTimestamp,
          TimestampType.CREATE_TIME
@@ -402,7 +402,6 @@ public class DataConverterTest {
     SinkRecord sinkRecord = createSinkRecordWithValue(struct);
 
     IndexRequest actualRecord = (IndexRequest) converter.convertRecord(sinkRecord, index);
-
     assertFalse(actualRecord.sourceAsMap().containsKey(TIMESTAMP_FIELD));
   }
 
@@ -476,4 +475,5 @@ public class DataConverterTest {
     props.put(ElasticsearchSinkConnectorConfig.DATA_STREAM_TYPE_CONFIG, "logs");
     props.put(ElasticsearchSinkConnectorConfig.DATA_STREAM_DATASET_CONFIG, "dataset");
   }
+}
 }

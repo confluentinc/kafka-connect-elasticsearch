@@ -18,21 +18,17 @@ package io.confluent.connect.elasticsearch;
 import java.io.File;
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
 import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.common.config.ConfigDef;
-import org.apache.kafka.common.config.ConfigDef.CaseInsensitiveValidString;
 import org.apache.kafka.common.config.ConfigDef.Importance;
 import org.apache.kafka.common.config.ConfigDef.Type;
 import org.apache.kafka.common.config.ConfigDef.Validator;
 import org.apache.kafka.common.config.ConfigDef.Width;
-
-import java.util.Map;
 import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.config.types.Password;
 import org.elasticsearch.common.unit.ByteSizeValue;
@@ -461,18 +457,14 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
             DATA_STREAM_TYPE_CONFIG,
             Type.STRING,
             DATA_STREAM_TYPE_DEFAULT.name(),
-            ConfigDef.CaseInsensitiveValidString.in(
-                Arrays.stream(DataStreamType.values())
-                    .map(DataStreamType::name)
-                    .collect(Collectors.toList())
-                    .toArray(new String[DataStreamType.values().length])
-            ),
+            new EnumRecommender<>(DataStreamType.class),
             Importance.LOW,
             DATA_STREAM_TYPE_DOC,
             CONNECTOR_GROUP,
             ++order,
             Width.SHORT,
-            DATA_STREAM_TYPE_DISPLAY
+            DATA_STREAM_TYPE_DISPLAY,
+            new EnumRecommender<>(DataStreamType.class)
         ).define(
             MAX_IN_FLIGHT_REQUESTS_CONFIG,
             Type.INT,
@@ -662,50 +654,38 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
             BEHAVIOR_ON_NULL_VALUES_CONFIG,
             Type.STRING,
             BEHAVIOR_ON_NULL_VALUES_DEFAULT.name(),
-            ConfigDef.CaseInsensitiveValidString.in(
-                Arrays.stream(BehaviorOnNullValues.values())
-                    .map(BehaviorOnNullValues::name)
-                    .collect(Collectors.toList())
-                    .toArray(new String[BehaviorOnNullValues.values().length])
-            ),
+            new EnumRecommender<>(BehaviorOnNullValues.class),
             Importance.LOW,
             BEHAVIOR_ON_NULL_VALUES_DOC,
             DATA_CONVERSION_GROUP,
             ++order,
             Width.SHORT,
-            BEHAVIOR_ON_NULL_VALUES_DISPLAY
+            BEHAVIOR_ON_NULL_VALUES_DISPLAY,
+            new EnumRecommender<>(BehaviorOnNullValues.class)
         ).define(
             BEHAVIOR_ON_MALFORMED_DOCS_CONFIG,
             Type.STRING,
             BEHAVIOR_ON_MALFORMED_DOCS_DEFAULT.name(),
-            ConfigDef.CaseInsensitiveValidString.in(
-                Arrays.stream(BehaviorOnMalformedDoc.values())
-                    .map(BehaviorOnMalformedDoc::name)
-                    .collect(Collectors.toList())
-                    .toArray(new String[BehaviorOnMalformedDoc.values().length])
-            ),
+            new EnumRecommender<>(BehaviorOnMalformedDoc.class),
             Importance.LOW,
             BEHAVIOR_ON_MALFORMED_DOCS_DOC,
             DATA_CONVERSION_GROUP,
             ++order,
             Width.SHORT,
-            BEHAVIOR_ON_MALFORMED_DOCS_DISPLAY
+            BEHAVIOR_ON_MALFORMED_DOCS_DISPLAY,
+            new EnumRecommender<>(BehaviorOnMalformedDoc.class)
         ).define(
             WRITE_METHOD_CONFIG,
             Type.STRING,
             WRITE_METHOD_DEFAULT,
-            ConfigDef.CaseInsensitiveValidString.in(
-                Arrays.stream(WriteMethod.values())
-                    .map(WriteMethod::name)
-                    .collect(Collectors.toList())
-                    .toArray(new String[WriteMethod.values().length])
-            ),
+            new EnumRecommender<>(WriteMethod.class),
             Importance.LOW,
             WRITE_METHOD_DOC,
             DATA_CONVERSION_GROUP,
             ++order,
             Width.SHORT,
-            WRITE_METHOD_DISPLAY
+            WRITE_METHOD_DISPLAY,
+            new EnumRecommender<>(WriteMethod.class)
     );
   }
 
@@ -764,18 +744,14 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
         SECURITY_PROTOCOL_CONFIG,
         Type.STRING,
         SECURITY_PROTOCOL_DEFAULT,
-        CaseInsensitiveValidString.in(
-            Arrays.stream(SecurityProtocol.values())
-                .map(SecurityProtocol::name)
-                .collect(Collectors.toList())
-                .toArray(new String[SecurityProtocol.values().length])
-        ),
+        new EnumRecommender<>(SecurityProtocol.class),
         Importance.MEDIUM,
         SECURITY_PROTOCOL_DOC,
         SSL_GROUP,
         ++order,
         Width.SHORT,
-        SECURITY_PROTOCOL_DISPLAY
+        SECURITY_PROTOCOL_DISPLAY,
+        new EnumRecommender<>(SecurityProtocol.class)
     );
     configDef.embed(SSL_CONFIG_PREFIX, SSL_GROUP, configDef.configKeys().size() + 2, sslConfigDef);
   }
@@ -977,7 +953,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   }
 
   private SecurityProtocol securityProtocol() {
-    return SecurityProtocol.valueOf(getString(SECURITY_PROTOCOL_CONFIG));
+    return SecurityProtocol.valueOf(getString(SECURITY_PROTOCOL_CONFIG).toUpperCase());
   }
 
   public Map<String, Object> sslConfigs() {
