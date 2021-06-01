@@ -34,7 +34,7 @@
         <connection>scm:git:git://github.com/confluentinc/kafka-connect-elasticsearch.git</connection>
         <developerConnection>scm:git:git@github.com:confluentinc/kafka-connect-elasticsearch.git</developerConnection>
         <url>https://github.com/confluentinc/kafka-connect-elasticsearch</url>
-        <tag>11.0.x</tag>
+        <tag>HEAD</tag>
     </scm>
 
     <properties>
@@ -51,7 +51,7 @@
         <!-- temporary fix by pinning the version until we upgrade to a version of common that contains this or newer version.
             See https://github.com/confluentinc/common/pull/332 for details -->
         <dependency.check.version>6.1.6</dependency.check.version>
-        <aws-java-sdk.version>1.11.602</aws-java-sdk.version>
+        <aws-java-sdk.version>1.11.1029</aws-java-sdk.version>
     </properties>
 
     <repositories>
@@ -124,10 +124,11 @@
             <version>${aws-java-sdk.version}</version>
             <scope>compile</scope>
         </dependency>
+        <!-- https://mvnrepository.com/artifact/com.github.awslabs/aws-request-signing-apache-interceptor -->
         <dependency>
             <groupId>com.github.awslabs</groupId>
             <artifactId>aws-request-signing-apache-interceptor</artifactId>
-            <version>b3772780da</version>
+            <version>deb7941e85</version>
         </dependency>
         <!-- AWS signer -->
         <!-- Force commons-codec (httpclient transitive dependency) version to address CVE CCMSG-835 -->

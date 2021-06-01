@@ -18,7 +18,6 @@ package io.confluent.connect.elasticsearch;
 import com.amazonaws.auth.AWSCredentialsProvider;
 import com.amazonaws.auth.DefaultAWSCredentialsProviderChain;
 import com.amazonaws.regions.RegionUtils;
-import com.amazonaws.regions.Regions;
 import org.apache.kafka.common.Configurable;
 import java.io.File;
 import java.net.URI;
@@ -322,10 +321,10 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
 
   public static final String AWS_REGION_CONFIG = "aws.region";
   private static final String AWS_REGION_DOC = "The AWS region to be used by the connector.";
-  private static final String AWS_REGION_DEFAULT = Regions.DEFAULT_REGION.getName();
+  private static final String AWS_REGION_DEFAULT = "us-east-1";
 
 
-  private static final String AWS_CREDENTIALS_PROVIDER_CLASS_CONFIG =
+  public static final String AWS_CREDENTIALS_PROVIDER_CLASS_CONFIG =
           "aws.credentials.provider.class";
   private static final Class<? extends AWSCredentialsProvider>
           AWS_CREDENTIALS_PROVIDER_CLASS_DEFAULT = DefaultAWSCredentialsProviderChain.class;
@@ -884,6 +883,10 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
         getString(SSL_CONFIG_PREFIX + SSL_ENDPOINT_IDENTIFICATION_ALGORITHM_CONFIG);
     return sslEndpointIdentificationAlgorithm != null
         && sslEndpointIdentificationAlgorithm.isEmpty();
+  }
+
+  public boolean isAwsSigned() {
+    return getBoolean(AWS_SIGNING_ENABLED_CONFIG);
   }
 
   public boolean shouldIgnoreKey(String topic) {

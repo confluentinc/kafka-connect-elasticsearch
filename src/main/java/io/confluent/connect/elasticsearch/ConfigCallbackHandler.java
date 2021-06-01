@@ -94,18 +94,7 @@ public class ConfigCallbackHandler implements HttpClientConfigCallback, RequestC
     builder.setConnectionManager(connectionManager);
     builder.setMaxConnPerRoute(config.maxInFlightRequests());
     builder.setMaxConnTotal(config.maxInFlightRequests());
-    if (config.getBoolean(ElasticsearchSinkConnectorConfig.AWS_SIGNING_ENABLED_CONFIG)) {
-      AWS4Signer signer = new AWS4Signer();
-      signer.setServiceName("es");
-      signer.setRegionName(config.getString(ElasticsearchSinkConnectorConfig.AWS_REGION_CONFIG));
 
-      HttpRequestInterceptor interceptor = new AWSRequestSigningApacheInterceptor(
-              "es",
-              signer,
-              config.getCredentialsProvider()
-      );
-      builder.addInterceptorFirst(interceptor);
-    }
     configureAuthentication(builder);
 
     if (config.isKerberosEnabled()) {
@@ -181,6 +170,18 @@ public class ConfigCallbackHandler implements HttpClientConfigCallback, RequestC
       }
 
       builder.setDefaultCredentialsProvider(credentialsProvider);
+    }
+    if (config.isAwsSigned()) {
+      log.debug("AWS Signing detected!");
+      AWS4Signer signer = new AWS4Signer();
+      String serviceName = "es";
+      signer.setServiceName(serviceName);
+      signer.setRegionName(config.getString(ElasticsearchSinkConnectorConfig.AWS_REGION_CONFIG));
+
+      HttpRequestInterceptor interceptor = new AWSRequestSigningApacheInterceptor(
+              serviceName, signer, config.getCredentialsProvider()
+      );
+      builder.addInterceptorLast(interceptor);
     }
   }
 

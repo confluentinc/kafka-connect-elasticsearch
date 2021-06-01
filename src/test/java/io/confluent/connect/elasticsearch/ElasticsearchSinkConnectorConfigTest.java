@@ -1,5 +1,8 @@
 package io.confluent.connect.elasticsearch;
 
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.AWS_CREDENTIALS_PROVIDER_CLASS_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.AWS_REGION_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.AWS_SIGNING_ENABLED_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_TIMEOUT_MS_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.KERBEROS_KEYTAB_PATH_CONFIG;
@@ -163,6 +166,23 @@ public class ElasticsearchSinkConnectorConfigTest {
     props.put(SSL_CONFIG_PREFIX + SSL_ENDPOINT_IDENTIFICATION_ALGORITHM_CONFIG, null);
     config = new ElasticsearchSinkConnectorConfig(props);
     assertFalse(config.shouldDisableHostnameVerification());
+  }
+
+  @Test
+  public void testAWSConfig() {
+    props.put(AWS_SIGNING_ENABLED_CONFIG, "true");
+    ElasticsearchSinkConnectorConfig config = new ElasticsearchSinkConnectorConfig(props);
+    assertTrue(config.isAwsSigned());
+
+    props.put(AWS_REGION_CONFIG, "us-east-1");
+    config = new ElasticsearchSinkConnectorConfig(props);
+    assertEquals(config.getString(AWS_REGION_CONFIG), "us-east-1");
+  }
+
+  @Test(expected = ConfigException.class)
+  public void shouldNotAllowInvalidAuthProviderClass() {
+    props.put(AWS_CREDENTIALS_PROVIDER_CLASS_CONFIG, "org.dummy.provider.DummyProvider");
+    new ElasticsearchSinkConnectorConfig(props);
   }
 
   @Test(expected = ConfigException.class)
