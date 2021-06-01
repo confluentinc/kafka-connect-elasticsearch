@@ -425,6 +425,51 @@ public class DataConverterTest {
   }
 
   @Test
+  public void testMapPayloadTimestampIfGivenOneMap() {
+    String timestampFieldMap = "onefield";
+    props.put(ElasticsearchSinkConnectorConfig.DATA_STREAM_TYPE_CONFIG, "logs");
+    props.put(ElasticsearchSinkConnectorConfig.DATA_STREAM_DATASET_CONFIG, "dataset");
+    props.put(ElasticsearchSinkConnectorConfig.DATA_STREAM_TIMESTAMP_CONFIG, timestampFieldMap);
+    converter = new DataConverter(new ElasticsearchSinkConnectorConfig(props));
+    schema = SchemaBuilder
+        .struct()
+        .name("struct")
+        .field(timestampFieldMap, Schema.STRING_SCHEMA)
+        .build();
+    Schema preProcessedSchema = converter.preProcessSchema(schema);
+    String timestamp = "2021-05-14T11:11:22.000Z";
+    Struct struct = new Struct(preProcessedSchema).put(timestampFieldMap, timestamp);
+    SinkRecord sinkRecord = createSinkRecordWithValue(struct);
+
+    IndexRequest actualRecord = (IndexRequest) converter.convertRecord(sinkRecord, index);
+
+    assertEquals(timestamp, actualRecord.sourceAsMap().get(TIMESTAMP_FIELD));
+  }
+
+  @Test
+  public void testMapPayloadTimestampByPriorityIfGivenMultipleMap() {
+    String timestampFieldToUse = "two";
+    props.put(ElasticsearchSinkConnectorConfig.DATA_STREAM_TYPE_CONFIG, "logs");
+    props.put(ElasticsearchSinkConnectorConfig.DATA_STREAM_DATASET_CONFIG, "dataset");
+    props.put(ElasticsearchSinkConnectorConfig.DATA_STREAM_TIMESTAMP_CONFIG, "one, two, field");
+    converter = new DataConverter(new ElasticsearchSinkConnectorConfig(props));
+    schema = SchemaBuilder
+        .struct()
+        .name("struct")
+        .field(timestampFieldToUse, Schema.STRING_SCHEMA)
+        .field("field", Schema.STRING_SCHEMA)
+        .build();
+    Schema preProcessedSchema = converter.preProcessSchema(schema);
+    String timestamp = "2021-05-14T11:11:22.000Z";
+    Struct struct = new Struct(preProcessedSchema).put(timestampFieldToUse, timestamp).put("field", "other");
+    SinkRecord sinkRecord = createSinkRecordWithValue(struct);
+
+    IndexRequest actualRecord = (IndexRequest) converter.convertRecord(sinkRecord, index);
+
+    assertEquals(timestamp, actualRecord.sourceAsMap().get(TIMESTAMP_FIELD));
+  }
+
+  @Test
   public void testDoNotAddExternalVersioningIfDataStream() {
     props.put(ElasticsearchSinkConnectorConfig.DATA_STREAM_TYPE_CONFIG, "logs");
     props.put(ElasticsearchSinkConnectorConfig.DATA_STREAM_DATASET_CONFIG, "dataset");
