@@ -468,17 +468,6 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
             DATA_STREAM_TYPE_DISPLAY,
             new EnumRecommender<>(DataStreamType.class)
         ).define(
-            DATA_STREAM_TIMESTAMP_CONFIG,
-            Type.LIST,
-            DATA_STREAM_TIMESTAMP_DEFAULT,
-            Importance.LOW,
-            DATA_STREAM_TIMESTAMP_DOC,
-            DATA_CONVERSION_GROUP,
-            ++order,
-            Width.LONG,
-            DATA_STREAM_TIMESTAMP_DISPLAY
-
-        ).define(
             MAX_IN_FLIGHT_REQUESTS_CONFIG,
             Type.INT,
             MAX_IN_FLIGHT_REQUESTS_DEFAULT,
@@ -623,6 +612,16 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
             ++order,
             Width.SHORT,
             COMPACT_MAP_ENTRIES_DISPLAY
+        ).define(
+            DATA_STREAM_TIMESTAMP_CONFIG,
+            Type.LIST,
+            DATA_STREAM_TIMESTAMP_DEFAULT,
+            Importance.LOW,
+            DATA_STREAM_TIMESTAMP_DOC,
+            DATA_CONVERSION_GROUP,
+            ++order,
+            Width.LONG,
+            DATA_STREAM_TIMESTAMP_DISPLAY
         ).define(
             IGNORE_KEY_TOPICS_CONFIG,
             Type.LIST,
