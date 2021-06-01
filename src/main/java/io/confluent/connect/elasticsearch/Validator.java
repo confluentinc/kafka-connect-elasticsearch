@@ -41,6 +41,7 @@ import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfi
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_USERNAME_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.DATA_STREAM_DATASET_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.DATA_STREAM_TIMESTAMP_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.DATA_STREAM_TYPE_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.DataStreamType;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.FLUSH_TIMEOUT_MS_CONFIG;
@@ -160,6 +161,17 @@ public class Validator {
           DATA_STREAM_DATASET_CONFIG
       );
       addErrorMessage(BEHAVIOR_ON_NULL_VALUES_CONFIG, errorMessage);
+    }
+
+    if (!config.isDataStream() && !config.dataStreamTimestamp().isEmpty()) {
+      String errorMessage = String.format(
+          "Mapping a field to the @timestamp field is only necessary for data streams. "
+              + "%s must not be set if %s and %s are set.",
+          DATA_STREAM_TIMESTAMP_CONFIG,
+          DATA_STREAM_TYPE_CONFIG,
+          DATA_STREAM_DATASET_CONFIG
+      );
+      addErrorMessage(DATA_STREAM_TIMESTAMP_CONFIG, errorMessage);
     }
   }
 
