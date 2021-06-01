@@ -105,9 +105,8 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   private static final String DATA_STREAM_TYPE_DISPLAY = "Data Stream Type";
   private static final DataStreamType DATA_STREAM_TYPE_DEFAULT = DataStreamType.NONE;
 
-
-  public static final String DATASTREAM_TIMESTAMP_CONFIG = "data.stream.timestamp";
-  private static final String DATASTREAM_TIMESTAMP_DOC = String.format(
+  public static final String DATA_STREAM_TIMESTAMP_CONFIG = "data.stream.timestamp";
+  private static final String DATA_STREAM_TIMESTAMP_DOC = String.format(
       "The timestamp to use for the @timestamp field in messages sent to data streams. "
           + "If multiple fields are listed, the the first field provided that also appears"
           + " in the message would be used. If this field is not set and %s and %s are set, "
@@ -118,9 +117,8 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
       DATA_STREAM_TYPE_CONFIG,
       DATA_STREAM_DATASET_CONFIG
   );
-  private static final String DATASTREAM_TIMESTAMP_DISPLAY = "Data Stream Timestamp";
-  private static final String DATASTREAM_TIMESTAMP_DEFAULT = "";
-
+  private static final String DATA_STREAM_TIMESTAMP_DISPLAY = "Data Stream Timestamp";
+  private static final String DATA_STREAM_TIMESTAMP_DEFAULT = "";
 
   public static final String MAX_IN_FLIGHT_REQUESTS_CONFIG = "max.in.flight.requests";
   private static final String MAX_IN_FLIGHT_REQUESTS_DOC =
@@ -456,6 +454,16 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
             ++order,
             Width.MEDIUM,
             DATA_STREAM_DATASET_DISPLAY
+        ).define(
+            DATA_STREAM_TIMESTAMP_CONFIG,
+            Type.LIST,
+            DATA_STREAM_TIMESTAMP_DEFAULT,
+            Importance.LOW,
+            DATA_STREAM_TIMESTAMP_DOC,
+            DATA_CONVERSION_GROUP,
+            ++order,
+            Width.LONG,
+            DATA_STREAM_TIMESTAMP_DISPLAY
         ).define(
             DATA_STREAM_TYPE_CONFIG,
             Type.STRING,
