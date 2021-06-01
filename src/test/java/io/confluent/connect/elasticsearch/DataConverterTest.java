@@ -380,8 +380,7 @@ public class DataConverterTest {
 
   @Test
   public void testInjectPayloadTimestampIfDataStreamAndTimestampMapNotSet() {
-    props.put(ElasticsearchSinkConnectorConfig.DATA_STREAM_TYPE_CONFIG, "logs");
-    props.put(ElasticsearchSinkConnectorConfig.DATA_STREAM_DATASET_CONFIG, "dataset");
+    setDataStream();
     converter = new DataConverter(new ElasticsearchSinkConnectorConfig(props));
     Schema preProcessedSchema = converter.preProcessSchema(schema);
     Struct struct = new Struct(preProcessedSchema).put("string", "myValue");
@@ -394,8 +393,7 @@ public class DataConverterTest {
 
   @Test
   public void testDoNotInjectMissingPayloadTimestampIfDataStreamAndTimestampMapSet() {
-    props.put(ElasticsearchSinkConnectorConfig.DATA_STREAM_TYPE_CONFIG, "logs");
-    props.put(ElasticsearchSinkConnectorConfig.DATA_STREAM_DATASET_CONFIG, "dataset");
+    setDataStream();
     props.put(ElasticsearchSinkConnectorConfig.DATA_STREAM_TIMESTAMP_CONFIG, "@timestamp");
     converter = new DataConverter(new ElasticsearchSinkConnectorConfig(props));
     Schema preProcessedSchema = converter.preProcessSchema(schema);
@@ -420,8 +418,7 @@ public class DataConverterTest {
 
   @Test
   public void testInjectPayloadTimestampIfAlreadyExistsAndTimestampMapNotSet() {
-    props.put(ElasticsearchSinkConnectorConfig.DATA_STREAM_TYPE_CONFIG, "logs");
-    props.put(ElasticsearchSinkConnectorConfig.DATA_STREAM_DATASET_CONFIG, "dataset");
+    setDataStream();
     converter = new DataConverter(new ElasticsearchSinkConnectorConfig(props));
     schema = SchemaBuilder
         .struct()
@@ -441,8 +438,7 @@ public class DataConverterTest {
   @Test
   public void testMapPayloadTimestampIfGivenOneMap() {
     String timestampFieldMap = "onefield";
-    props.put(ElasticsearchSinkConnectorConfig.DATA_STREAM_TYPE_CONFIG, "logs");
-    props.put(ElasticsearchSinkConnectorConfig.DATA_STREAM_DATASET_CONFIG, "dataset");
+    setDataStream();
     props.put(ElasticsearchSinkConnectorConfig.DATA_STREAM_TIMESTAMP_CONFIG, timestampFieldMap);
     converter = new DataConverter(new ElasticsearchSinkConnectorConfig(props));
     schema = SchemaBuilder
@@ -463,8 +459,7 @@ public class DataConverterTest {
   @Test
   public void testMapPayloadTimestampByPriorityIfGivenMultipleMap() {
     String timestampFieldToUse = "two";
-    props.put(ElasticsearchSinkConnectorConfig.DATA_STREAM_TYPE_CONFIG, "logs");
-    props.put(ElasticsearchSinkConnectorConfig.DATA_STREAM_DATASET_CONFIG, "dataset");
+    setDataStream();
     props.put(ElasticsearchSinkConnectorConfig.DATA_STREAM_TIMESTAMP_CONFIG, "one, two, field");
     converter = new DataConverter(new ElasticsearchSinkConnectorConfig(props));
     schema = SchemaBuilder
@@ -485,8 +480,7 @@ public class DataConverterTest {
 
   @Test
   public void testDoNotAddExternalVersioningIfDataStream() {
-    props.put(ElasticsearchSinkConnectorConfig.DATA_STREAM_TYPE_CONFIG, "logs");
-    props.put(ElasticsearchSinkConnectorConfig.DATA_STREAM_DATASET_CONFIG, "dataset");
+    setDataStream();
     props.put(ElasticsearchSinkConnectorConfig.IGNORE_KEY_CONFIG, "false");
     converter = new DataConverter(new ElasticsearchSinkConnectorConfig(props));
     Schema preProcessedSchema = converter.preProcessSchema(schema);
@@ -496,5 +490,10 @@ public class DataConverterTest {
     IndexRequest actualRecord = (IndexRequest) converter.convertRecord(sinkRecord, index);
 
     assertEquals(VersionType.INTERNAL, actualRecord.versionType());
+  }
+
+  private void setDataStream() {
+    props.put(ElasticsearchSinkConnectorConfig.DATA_STREAM_TYPE_CONFIG, "logs");
+    props.put(ElasticsearchSinkConnectorConfig.DATA_STREAM_DATASET_CONFIG, "dataset");
   }
 }
