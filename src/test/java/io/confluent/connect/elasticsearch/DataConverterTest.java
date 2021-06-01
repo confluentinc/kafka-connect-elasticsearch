@@ -379,7 +379,7 @@ public class DataConverterTest {
   }
 
   @Test
-  public void testInjectPayloadTimestampIfDataStreamAndTimestampMapNotSet() {
+  public void testInjectPayloadTimestampIfDataStreamAndNoTimestampMap() {
     setDataStream();
     converter = new DataConverter(new ElasticsearchSinkConnectorConfig(props));
     Schema preProcessedSchema = converter.preProcessSchema(schema);
@@ -392,9 +392,9 @@ public class DataConverterTest {
   }
 
   @Test
-  public void testDoNotInjectMissingPayloadTimestampIfDataStreamAndTimestampMapSet() {
+  public void testDoNotInjectMissingPayloadTimestampIfDataStreamAndTimestampMapNotFound() {
     setDataStream();
-    props.put(ElasticsearchSinkConnectorConfig.DATA_STREAM_TIMESTAMP_CONFIG, "@timestamp");
+    props.put(ElasticsearchSinkConnectorConfig.DATA_STREAM_TIMESTAMP_CONFIG, "timestampFieldNotPresent");
     converter = new DataConverter(new ElasticsearchSinkConnectorConfig(props));
     Schema preProcessedSchema = converter.preProcessSchema(schema);
     Struct struct = new Struct(preProcessedSchema).put("string", "myValue");
@@ -436,7 +436,7 @@ public class DataConverterTest {
   }
 
   @Test
-  public void testMapPayloadTimestampIfGivenOneMap() {
+  public void testMapPayloadTimestampIfDataStreamSetAndOneTimestampMap() {
     String timestampFieldMap = "onefield";
     setDataStream();
     props.put(ElasticsearchSinkConnectorConfig.DATA_STREAM_TIMESTAMP_CONFIG, timestampFieldMap);
@@ -457,7 +457,7 @@ public class DataConverterTest {
   }
 
   @Test
-  public void testMapPayloadTimestampByPriorityIfGivenMultipleMap() {
+  public void testMapPayloadTimestampByPriorityIfMultipleTimestampMap() {
     String timestampFieldToUse = "two";
     setDataStream();
     props.put(ElasticsearchSinkConnectorConfig.DATA_STREAM_TIMESTAMP_CONFIG, "one, two, field");
