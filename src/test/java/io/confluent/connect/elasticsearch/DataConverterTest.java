@@ -379,7 +379,7 @@ public class DataConverterTest {
   }
 
   @Test
-  public void testInjectPayloadTimestampIfDataStreamAndTimestampNotSet() {
+  public void testInjectPayloadTimestampIfDataStreamAndTimestampMapNotSet() {
     props.put(ElasticsearchSinkConnectorConfig.DATA_STREAM_TYPE_CONFIG, "logs");
     props.put(ElasticsearchSinkConnectorConfig.DATA_STREAM_DATASET_CONFIG, "dataset");
     converter = new DataConverter(new ElasticsearchSinkConnectorConfig(props));
@@ -393,7 +393,7 @@ public class DataConverterTest {
   }
 
   @Test
-  public void testDoNotInjectMissingPayloadTimestampIfDataStreamAndTimestampSet() {
+  public void testDoNotInjectMissingPayloadTimestampIfDataStreamAndTimestampMapSet() {
     props.put(ElasticsearchSinkConnectorConfig.DATA_STREAM_TYPE_CONFIG, "logs");
     props.put(ElasticsearchSinkConnectorConfig.DATA_STREAM_DATASET_CONFIG, "dataset");
     props.put(ElasticsearchSinkConnectorConfig.DATA_STREAM_TIMESTAMP_CONFIG, "@timestamp");
@@ -419,7 +419,7 @@ public class DataConverterTest {
   }
 
   @Test
-  public void testDoNotInjectPayloadTimestampIfAlreadyExists() {
+  public void testInjectPayloadTimestampIfAlreadyExistsAndTimestampMapNotSet() {
     props.put(ElasticsearchSinkConnectorConfig.DATA_STREAM_TYPE_CONFIG, "logs");
     props.put(ElasticsearchSinkConnectorConfig.DATA_STREAM_DATASET_CONFIG, "dataset");
     converter = new DataConverter(new ElasticsearchSinkConnectorConfig(props));
@@ -435,7 +435,7 @@ public class DataConverterTest {
 
     IndexRequest actualRecord = (IndexRequest) converter.convertRecord(sinkRecord, index);
 
-    assertEquals(timestamp, actualRecord.sourceAsMap().get(TIMESTAMP_FIELD));
+    assertEquals(this.timestamp, actualRecord.sourceAsMap().get(TIMESTAMP_FIELD));
   }
 
   @Test

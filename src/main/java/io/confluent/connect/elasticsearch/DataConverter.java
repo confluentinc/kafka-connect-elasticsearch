@@ -212,7 +212,7 @@ public class DataConverter {
             return objectMapper.writeValueAsString(jsonNode);
           }
         }
-      } else if (jsonNode.get(TIMESTAMP_FIELD) == null) {
+      } else {
         ((ObjectNode) jsonNode).put(TIMESTAMP_FIELD, timestamp);
         return objectMapper.writeValueAsString(jsonNode);
       }
