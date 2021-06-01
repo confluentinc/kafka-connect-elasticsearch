@@ -22,6 +22,7 @@ import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfi
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_USERNAME_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.DATA_STREAM_DATASET_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.DATA_STREAM_TIMESTAMP_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.DATA_STREAM_TYPE_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.FLUSH_TIMEOUT_MS_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_KEY_CONFIG;
@@ -408,9 +409,29 @@ public class ValidatorTest {
   }
 
   @Test
+  public void testTimestampMappingsDataStreamSet() {
+    setDataStream();
+    props.put(DATA_STREAM_TIMESTAMP_CONFIG, "one, two, fields");
+    validator = new Validator(props, () -> mockClient);
+
+    Config result = validator.validate();
+
+    assertNoErrors(result);
+  }
+
+  @Test
+  public void testTimestampMappingsDataStreamNotSet() {
+    props.put(DATA_STREAM_TIMESTAMP_CONFIG, "one, two, fields");
+    validator = new Validator(props, () -> mockClient);
+
+    Config result = validator.validate();
+
+    assertHasErrorMessage(result, DATA_STREAM_TIMESTAMP_CONFIG, "only necessary for data streams");
+  }
+
+  @Test
   public void testIncompatibleVersionDataStreamSet() {
-    props.put(DATA_STREAM_DATASET_CONFIG, "a_valid_dataset");
-    props.put(DATA_STREAM_TYPE_CONFIG, "logs");
+    setDataStream();
     validator = new Validator(props, () -> mockClient);
     when(mockInfoResponse.getVersion().getNumber()).thenReturn("7.8.1");
 
@@ -447,8 +468,7 @@ public class ValidatorTest {
 
   @Test
   public void testCompatibleVersionDataStreamSet() {
-    props.put(DATA_STREAM_DATASET_CONFIG, "a_valid_dataset");
-    props.put(DATA_STREAM_TYPE_CONFIG, "logs");
+    setDataStream();
     validator = new Validator(props, () -> mockClient);
     String[] compatibleESVersions = {"7.9.0", "7.9.3", "7.9.3-amd64", "7.10.0", "7.10.2", "7.11.0", "7.11.2", "7.12.0", "7.12.1",
         "8.0.0", "10.10.10", "10.1.10", "10.1.1", "8.10.10"};
@@ -471,5 +491,10 @@ public class ValidatorTest {
 
   private static void assertNoErrors(Config config) {
     config.configValues().forEach(c -> assertTrue(c.errorMessages().isEmpty()));
+  }
+
+  private void setDataStream() {
+    props.put(DATA_STREAM_DATASET_CONFIG, "a_valid_dataset");
+    props.put(DATA_STREAM_TYPE_CONFIG, "logs");
   }
 }
