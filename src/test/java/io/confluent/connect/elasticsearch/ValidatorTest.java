@@ -409,7 +409,7 @@ public class ValidatorTest {
   }
 
   @Test
-  public void testTimestampMappingsDataStreamSet() {
+  public void testTimestampMappingDataStreamSet() {
     setDataStream();
     props.put(DATA_STREAM_TIMESTAMP_CONFIG, "one, two, fields");
     validator = new Validator(props, () -> mockClient);
@@ -420,7 +420,7 @@ public class ValidatorTest {
   }
 
   @Test
-  public void testTimestampMappingsDataStreamNotSet() {
+  public void testTimestampMappingDataStreamNotSet() {
     props.put(DATA_STREAM_TIMESTAMP_CONFIG, "one, two, fields");
     validator = new Validator(props, () -> mockClient);
 

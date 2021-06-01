@@ -51,7 +51,7 @@ public class DataConverterTest {
   private String topic;
   private int partition;
   private long offset;
-  private long timestamp;
+  private long recordTimestamp;
   private String index;
   private Schema schema;
 
@@ -66,7 +66,7 @@ public class DataConverterTest {
     topic = "topic";
     partition = 0;
     offset = 0;
-    timestamp = System.currentTimeMillis();
+    recordTimestamp = System.currentTimeMillis();
     index = "index";
     schema = SchemaBuilder
         .struct()
@@ -373,14 +373,13 @@ public class DataConverterTest {
          key, schema, 
          value, 
          offset,
-         timestamp,
+         recordTimestamp,
          TimestampType.CREATE_TIME
     );
   }
 
   @Test
-  public void testInjectPayloadTimestampIfDataStreamAndNoTimestampMapSet() {
-    setDataStream();
+  public void testDoNotInjectPayloadTimestampIfNotDataStream() {
     converter = new DataConverter(new ElasticsearchSinkConnectorConfig(props));
     Schema preProcessedSchema = converter.preProcessSchema(schema);
     Struct struct = new Struct(preProcessedSchema).put("string", "myValue");
@@ -388,7 +387,7 @@ public class DataConverterTest {
 
     IndexRequest actualRecord = (IndexRequest) converter.convertRecord(sinkRecord, index);
 
-    assertEquals(timestamp, actualRecord.sourceAsMap().get(TIMESTAMP_FIELD));
+    assertFalse(actualRecord.sourceAsMap().containsKey(TIMESTAMP_FIELD));
   }
 
   @Test
@@ -405,7 +404,8 @@ public class DataConverterTest {
   }
 
   @Test
-  public void testDoNotInjectPayloadTimestampIfNotDataStream() {
+  public void testInjectPayloadTimestampIfDataStreamAndNoTimestampMapSet() {
+    setDataStream();
     converter = new DataConverter(new ElasticsearchSinkConnectorConfig(props));
     Schema preProcessedSchema = converter.preProcessSchema(schema);
     Struct struct = new Struct(preProcessedSchema).put("string", "myValue");
@@ -413,7 +413,7 @@ public class DataConverterTest {
 
     IndexRequest actualRecord = (IndexRequest) converter.convertRecord(sinkRecord, index);
 
-    assertFalse(actualRecord.sourceAsMap().containsKey(TIMESTAMP_FIELD));
+    assertEquals(recordTimestamp, actualRecord.sourceAsMap().get(TIMESTAMP_FIELD));
   }
 
   @Test
@@ -432,7 +432,7 @@ public class DataConverterTest {
 
     IndexRequest actualRecord = (IndexRequest) converter.convertRecord(sinkRecord, index);
 
-    assertEquals(this.timestamp, actualRecord.sourceAsMap().get(TIMESTAMP_FIELD));
+    assertEquals(recordTimestamp, actualRecord.sourceAsMap().get(TIMESTAMP_FIELD));
   }
 
   @Test
