@@ -105,6 +105,23 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   private static final String DATA_STREAM_TYPE_DISPLAY = "Data Stream Type";
   private static final DataStreamType DATA_STREAM_TYPE_DEFAULT = DataStreamType.NONE;
 
+
+  public static final String DATASTREAM_TIMESTAMP_CONFIG = "data.stream.timestamp";
+  private static final String DATASTREAM_TIMESTAMP_DOC = String.format(
+      "The timestamp to use for the @timestamp field in messages sent to data streams. "
+          + "If multiple fields are listed, the the first field provided that also appears"
+          + " in the message would be used. If this field is not set and %s and %s are set, "
+          + "all of the messages will be auto-injected with the record timestamp. This "
+          + "field can only be set if %s and %s are set.",
+      DATA_STREAM_TYPE_CONFIG,
+      DATA_STREAM_DATASET_CONFIG,
+      DATA_STREAM_TYPE_CONFIG,
+      DATA_STREAM_DATASET_CONFIG
+  );
+  private static final String DATASTREAM_TIMESTAMP_DISPLAY = "Data Stream Timestamp";
+  private static final String DATASTREAM_TIMESTAMP_DEFAULT = "";
+
+
   public static final String MAX_IN_FLIGHT_REQUESTS_CONFIG = "max.in.flight.requests";
   private static final String MAX_IN_FLIGHT_REQUESTS_DOC =
       "The maximum number of indexing requests that can be in-flight to Elasticsearch before "
