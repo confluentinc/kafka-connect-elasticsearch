@@ -105,9 +105,6 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   private static final String DATA_STREAM_TYPE_DISPLAY = "Data Stream Type";
   private static final DataStreamType DATA_STREAM_TYPE_DEFAULT = DataStreamType.NONE;
 
-  private static final String DATA_STREAM_TIMESTAMP_DISPLAY = "Data Stream Timestamp";
-  private static final String DATA_STREAM_TIMESTAMP_DEFAULT = "";
-
   public static final String MAX_IN_FLIGHT_REQUESTS_CONFIG = "max.in.flight.requests";
   private static final String MAX_IN_FLIGHT_REQUESTS_DOC =
       "The maximum number of indexing requests that can be in-flight to Elasticsearch before "
@@ -243,6 +240,8 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
       DATA_STREAM_TYPE_CONFIG,
       DATA_STREAM_DATASET_CONFIG
   );
+  private static final String DATA_STREAM_TIMESTAMP_DISPLAY = "Data Stream Timestamp";
+  private static final String DATA_STREAM_TIMESTAMP_DEFAULT = "";
 
   private static final String IGNORE_KEY_TOPICS_DOC =
       "List of topics for which ``" + IGNORE_KEY_CONFIG + "`` should be ``true``.";
