@@ -304,8 +304,8 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   // Data stream configs
   public static final String DATA_STREAM_DATASET_CONFIG = "data.stream.dataset";
   private static final String DATA_STREAM_DATASET_DOC =
-      "Generic name describing data ingested and its structure to be written to a data stream. "
-          + "Can be any arbitrary string that is no longer than 100 characters, is in all lowercase, "
+      "Generic name describing data ingested and its structure to be written to a data stream. Can"
+          + " be any arbitrary string that is no longer than 100 characters, is in all lowercase, "
           + "and does not contain spaces or any of these special characters ``/\\*\"<>|,#:-``. "
           + "Otherwise, no value indicates the connector will write to regular indices instead. "
           + "If set, this configuration will be used alongside ``data.stream.type`` to "
