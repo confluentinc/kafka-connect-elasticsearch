@@ -233,11 +233,11 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   public static final String DATA_STREAM_TIMESTAMP_CONFIG = "data.stream.timestamp";
   private static final String DATA_STREAM_TIMESTAMP_DOC = String.format(
       "The timestamp to use for the @timestamp field in messages sent to data stream. "
-          + "If multiple fields are listed, the first field provided that also appears"
-          + " in the message would be used. If this field is not set but %s and %s are set, "
+          + "If multiple fields are provided, the first field listed that also appears"
+          + " in the message would be used. If this field is not set but ``%s`` and ``%s`` are set, "
           + "all of the messages will have the record timestamp as the @timestamp field value. "
           + "Note that the @timestamp field needs to be explicitly listed if messages "
-          + "already have this field. This field can only be set if %s and %s are set.",
+          + "already have this field. This field can only be set if ``%s`` and ``%s`` are set.",
       DATA_STREAM_TYPE_CONFIG,
       DATA_STREAM_DATASET_CONFIG,
       DATA_STREAM_TYPE_CONFIG,
