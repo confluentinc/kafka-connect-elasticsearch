@@ -410,7 +410,7 @@ public class ValidatorTest {
 
   @Test
   public void testTimestampMappingDataStreamSet() {
-    setDataStream();
+    configureDataStream();
     props.put(DATA_STREAM_TIMESTAMP_CONFIG, "one, two, fields");
     validator = new Validator(props, () -> mockClient);
 
@@ -431,7 +431,7 @@ public class ValidatorTest {
 
   @Test
   public void testIncompatibleVersionDataStreamSet() {
-    setDataStream();
+    configureDataStream();
     validator = new Validator(props, () -> mockClient);
     when(mockInfoResponse.getVersion().getNumber()).thenReturn("7.8.1");
 
@@ -468,7 +468,7 @@ public class ValidatorTest {
 
   @Test
   public void testCompatibleVersionDataStreamSet() {
-    setDataStream();
+    configureDataStream();
     validator = new Validator(props, () -> mockClient);
     String[] compatibleESVersions = {"7.9.0", "7.9.3", "7.9.3-amd64", "7.10.0", "7.10.2", "7.11.0", "7.11.2", "7.12.0", "7.12.1",
         "8.0.0", "10.10.10", "10.1.10", "10.1.1", "8.10.10"};
@@ -493,7 +493,7 @@ public class ValidatorTest {
     config.configValues().forEach(c -> assertTrue(c.errorMessages().isEmpty()));
   }
 
-  private void setDataStream() {
+  private void configureDataStream() {
     props.put(DATA_STREAM_DATASET_CONFIG, "a_valid_dataset");
     props.put(DATA_STREAM_TYPE_CONFIG, "logs");
   }
