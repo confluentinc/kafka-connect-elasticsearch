@@ -105,19 +105,6 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   private static final String DATA_STREAM_TYPE_DISPLAY = "Data Stream Type";
   private static final DataStreamType DATA_STREAM_TYPE_DEFAULT = DataStreamType.NONE;
 
-  public static final String DATA_STREAM_TIMESTAMP_CONFIG = "data.stream.timestamp";
-  private static final String DATA_STREAM_TIMESTAMP_DOC = String.format(
-      "The timestamp to use for the @timestamp field in messages sent to data stream. "
-          + "If multiple fields are listed, the first field provided that also appears"
-          + " in the message would be used. If this field is not set but %s and %s are set, "
-          + "all of the messages will have the record timestamp as the @timestamp field value. "
-          + "Note that the @timestamp field needs to be explicitly listed if messages "
-          + "already have this field. This field can only be set if %s and %s are set.",
-      DATA_STREAM_TYPE_CONFIG,
-      DATA_STREAM_DATASET_CONFIG,
-      DATA_STREAM_TYPE_CONFIG,
-      DATA_STREAM_DATASET_CONFIG
-  );
   private static final String DATA_STREAM_TIMESTAMP_DISPLAY = "Data Stream Timestamp";
   private static final String DATA_STREAM_TIMESTAMP_DEFAULT = "";
 
@@ -242,6 +229,20 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
           + "so set this to ``false`` to use that older behavior.";
   private static final String COMPACT_MAP_ENTRIES_DISPLAY = "Compact Map Entries";
   private static final boolean COMPACT_MAP_ENTRIES_DEFAULT = true;
+
+  public static final String DATA_STREAM_TIMESTAMP_CONFIG = "data.stream.timestamp";
+  private static final String DATA_STREAM_TIMESTAMP_DOC = String.format(
+      "The timestamp to use for the @timestamp field in messages sent to data stream. "
+          + "If multiple fields are listed, the first field provided that also appears"
+          + " in the message would be used. If this field is not set but %s and %s are set, "
+          + "all of the messages will have the record timestamp as the @timestamp field value. "
+          + "Note that the @timestamp field needs to be explicitly listed if messages "
+          + "already have this field. This field can only be set if %s and %s are set.",
+      DATA_STREAM_TYPE_CONFIG,
+      DATA_STREAM_DATASET_CONFIG,
+      DATA_STREAM_TYPE_CONFIG,
+      DATA_STREAM_DATASET_CONFIG
+  );
 
   private static final String IGNORE_KEY_TOPICS_DOC =
       "List of topics for which ``" + IGNORE_KEY_CONFIG + "`` should be ``true``.";
