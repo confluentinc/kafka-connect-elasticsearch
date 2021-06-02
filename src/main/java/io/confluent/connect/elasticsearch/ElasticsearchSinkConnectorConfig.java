@@ -78,33 +78,6 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   private static final String BULK_SIZE_BYTES_DISPLAY = "Bulk Size (bytes)";
   private static final int BULK_SIZE_BYTES_DEFAULT = 5 * 1024 * 1024;
 
-  public static final String DATA_STREAM_DATASET_CONFIG = "data.stream.dataset";
-  private static final String DATA_STREAM_DATASET_DOC =
-      "Generic name describing data ingested and its structure to be written to a data stream. "
-      + "Can be any arbitrary string that is no longer than 100 characters, is in all lowercase, "
-      + "and does not contain spaces or any of these special characters ``/\\*\"<>|,#:-``. "
-      + "Otherwise, no value indicates the connector will write to regular indices instead. "
-      + "If set, this configuration will be used alongside ``data.stream.type`` to "
-      + "construct the data stream name in the form of {``data.stream.type``"
-      + "}-{" + DATA_STREAM_DATASET_CONFIG + "}-{topic}.";
-  private static final String DATA_STREAM_DATASET_DISPLAY = "Data Stream Dataset";
-  private static final String DATA_STREAM_DATASET_DEFAULT = "";
-
-  public static final String DATA_STREAM_TYPE_CONFIG = "data.stream.type";
-  private static final String DATA_STREAM_TYPE_DOC = String.format(
-      "Generic type describing the data to be written to data stream. "
-          + "The default is %s which indicates the connector will write "
-          + "to regular indices instead. If set, this configuration will "
-          + "be used alongside %s to construct the data stream name in the form of"
-          + "{%s}-{%s}-{topic}.",
-      DataStreamType.NONE.name(),
-      DATA_STREAM_DATASET_CONFIG,
-      DATA_STREAM_TYPE_CONFIG,
-      DATA_STREAM_DATASET_CONFIG
-  );
-  private static final String DATA_STREAM_TYPE_DISPLAY = "Data Stream Type";
-  private static final DataStreamType DATA_STREAM_TYPE_DEFAULT = DataStreamType.NONE;
-
   public static final String MAX_IN_FLIGHT_REQUESTS_CONFIG = "max.in.flight.requests";
   private static final String MAX_IN_FLIGHT_REQUESTS_DOC =
       "The maximum number of indexing requests that can be in-flight to Elasticsearch before "
@@ -227,22 +200,6 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   private static final String COMPACT_MAP_ENTRIES_DISPLAY = "Compact Map Entries";
   private static final boolean COMPACT_MAP_ENTRIES_DEFAULT = true;
 
-  public static final String DATA_STREAM_TIMESTAMP_CONFIG = "data.stream.timestamp";
-  private static final String DATA_STREAM_TIMESTAMP_DOC = String.format(
-      "The timestamp to use for the @timestamp field in messages sent to data stream. "
-          + "If multiple fields are provided, the first field listed that also appears"
-          + " in the message would be used. If this field is not set but ``%s`` and ``%s`` are set,"
-          + " all of the messages will have the record timestamp as the @timestamp field value. "
-          + "Note that the @timestamp field needs to be explicitly listed if messages "
-          + "already have this field. This field can only be set if ``%s`` and ``%s`` are set.",
-      DATA_STREAM_TYPE_CONFIG,
-      DATA_STREAM_DATASET_CONFIG,
-      DATA_STREAM_TYPE_CONFIG,
-      DATA_STREAM_DATASET_CONFIG
-  );
-  private static final String DATA_STREAM_TIMESTAMP_DISPLAY = "Data Stream Timestamp";
-  private static final String DATA_STREAM_TIMESTAMP_DEFAULT = "";
-
   private static final String IGNORE_KEY_TOPICS_DOC =
       "List of topics for which ``" + IGNORE_KEY_CONFIG + "`` should be ``true``.";
   private static final String IGNORE_KEY_TOPICS_DISPLAY = "Topics for 'Ignore Key' mode";
@@ -344,11 +301,56 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
       + " authentication with Kerberos.";
   private static final String KERBEROS_KEYTAB_PATH_DEFAULT = null;
 
+  // Data stream configs
+  public static final String DATA_STREAM_DATASET_CONFIG = "data.stream.dataset";
+  private static final String DATA_STREAM_DATASET_DOC =
+      "Generic name describing data ingested and its structure to be written to a data stream. "
+          + "Can be any arbitrary string that is no longer than 100 characters, is in all lowercase, "
+          + "and does not contain spaces or any of these special characters ``/\\*\"<>|,#:-``. "
+          + "Otherwise, no value indicates the connector will write to regular indices instead. "
+          + "If set, this configuration will be used alongside ``data.stream.type`` to "
+          + "construct the data stream name in the form of {``data.stream.type``"
+          + "}-{" + DATA_STREAM_DATASET_CONFIG + "}-{topic}.";
+  private static final String DATA_STREAM_DATASET_DISPLAY = "Data Stream Dataset";
+  private static final String DATA_STREAM_DATASET_DEFAULT = "";
+
+  public static final String DATA_STREAM_TYPE_CONFIG = "data.stream.type";
+  private static final String DATA_STREAM_TYPE_DOC = String.format(
+      "Generic type describing the data to be written to data stream. "
+          + "The default is %s which indicates the connector will write "
+          + "to regular indices instead. If set, this configuration will "
+          + "be used alongside %s to construct the data stream name in the form of"
+          + "{%s}-{%s}-{topic}.",
+      DataStreamType.NONE.name(),
+      DATA_STREAM_DATASET_CONFIG,
+      DATA_STREAM_TYPE_CONFIG,
+      DATA_STREAM_DATASET_CONFIG
+  );
+  private static final String DATA_STREAM_TYPE_DISPLAY = "Data Stream Type";
+  private static final DataStreamType DATA_STREAM_TYPE_DEFAULT = DataStreamType.NONE;
+
+  public static final String DATA_STREAM_TIMESTAMP_CONFIG = "data.stream.timestamp.field";
+  private static final String DATA_STREAM_TIMESTAMP_DOC = String.format(
+      "The timestamp to use for the @timestamp field in messages sent to data stream. "
+          + "If multiple fields are provided, the first field listed that also appears"
+          + " in the message would be used. If this field is not set but ``%s`` and ``%s`` are set,"
+          + " all of the messages will have the record timestamp as the @timestamp field value. "
+          + "Note that the @timestamp field needs to be explicitly listed if messages "
+          + "already have this field. This field can only be set if ``%s`` and ``%s`` are set.",
+      DATA_STREAM_TYPE_CONFIG,
+      DATA_STREAM_DATASET_CONFIG,
+      DATA_STREAM_TYPE_CONFIG,
+      DATA_STREAM_DATASET_CONFIG
+  );
+  private static final String DATA_STREAM_TIMESTAMP_DISPLAY = "Data Stream Timestamp";
+  private static final String DATA_STREAM_TIMESTAMP_DEFAULT = "";
+
   private static final String CONNECTOR_GROUP = "Connector";
   private static final String DATA_CONVERSION_GROUP = "Data Conversion";
   private static final String PROXY_GROUP = "Proxy";
   private static final String SSL_GROUP = "Security";
   private static final String KERBEROS_GROUP = "Kerberos";
+  private static final String DATA_STREAM_GROUP = "Data Stream";
 
   public enum BehaviorOnMalformedDoc {
     IGNORE,
@@ -385,6 +387,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
     addProxyConfigs(configDef);
     addSslConfigs(configDef);
     addKerberosConfigs(configDef);
+    addDataStreamConfigs(configDef);
     return configDef;
   }
 
@@ -444,29 +447,6 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
             ++order,
             Width.SHORT,
             BULK_SIZE_BYTES_DISPLAY
-        ).define(
-            DATA_STREAM_DATASET_CONFIG,
-            Type.STRING,
-            DATA_STREAM_DATASET_DEFAULT,
-            new DataStreamDatasetValidator(),
-            Importance.LOW,
-            DATA_STREAM_DATASET_DOC,
-            CONNECTOR_GROUP,
-            ++order,
-            Width.MEDIUM,
-            DATA_STREAM_DATASET_DISPLAY
-        ).define(
-            DATA_STREAM_TYPE_CONFIG,
-            Type.STRING,
-            DATA_STREAM_TYPE_DEFAULT.name(),
-            new EnumRecommender<>(DataStreamType.class),
-            Importance.LOW,
-            DATA_STREAM_TYPE_DOC,
-            CONNECTOR_GROUP,
-            ++order,
-            Width.SHORT,
-            DATA_STREAM_TYPE_DISPLAY,
-            new EnumRecommender<>(DataStreamType.class)
         ).define(
             MAX_IN_FLIGHT_REQUESTS_CONFIG,
             Type.INT,
@@ -612,16 +592,6 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
             ++order,
             Width.SHORT,
             COMPACT_MAP_ENTRIES_DISPLAY
-        ).define(
-            DATA_STREAM_TIMESTAMP_CONFIG,
-            Type.LIST,
-            DATA_STREAM_TIMESTAMP_DEFAULT,
-            Importance.LOW,
-            DATA_STREAM_TIMESTAMP_DOC,
-            DATA_CONVERSION_GROUP,
-            ++order,
-            Width.LONG,
-            DATA_STREAM_TIMESTAMP_DISPLAY
         ).define(
             IGNORE_KEY_TOPICS_CONFIG,
             Type.LIST,
@@ -782,6 +752,45 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
             orderInGroup++,
             Width.LONG,
             KERBEROS_KEYTAB_PATH
+    );
+  }
+
+  private static void addDataStreamConfigs(ConfigDef configDef) {
+    int order = 0;
+    configDef
+        .define(
+            DATA_STREAM_DATASET_CONFIG,
+            Type.STRING,
+            DATA_STREAM_DATASET_DEFAULT,
+            new DataStreamDatasetValidator(),
+            Importance.LOW,
+            DATA_STREAM_DATASET_DOC,
+            DATA_STREAM_GROUP,
+            ++order,
+            Width.MEDIUM,
+            DATA_STREAM_DATASET_DISPLAY
+        ).define(
+            DATA_STREAM_TYPE_CONFIG,
+            Type.STRING,
+            DATA_STREAM_TYPE_DEFAULT.name(),
+            new EnumRecommender<>(DataStreamType.class),
+            Importance.LOW,
+            DATA_STREAM_TYPE_DOC,
+            DATA_STREAM_GROUP,
+            ++order,
+            Width.SHORT,
+            DATA_STREAM_TYPE_DISPLAY,
+            new EnumRecommender<>(DataStreamType.class)
+        ).define(
+            DATA_STREAM_TIMESTAMP_CONFIG,
+            Type.LIST,
+            DATA_STREAM_TIMESTAMP_DEFAULT,
+            Importance.LOW,
+            DATA_STREAM_TIMESTAMP_DOC,
+            DATA_STREAM_GROUP,
+            ++order,
+            Width.LONG,
+            DATA_STREAM_TIMESTAMP_DISPLAY
     );
   }
 
