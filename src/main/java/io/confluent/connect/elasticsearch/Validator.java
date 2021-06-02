@@ -163,7 +163,7 @@ public class Validator {
       addErrorMessage(BEHAVIOR_ON_NULL_VALUES_CONFIG, errorMessage);
     }
 
-    if (!config.isDataStream() && !config.dataStreamTimestamp().isEmpty()) {
+    if (!config.isDataStream() && !config.dataStreamTimestampField().isEmpty()) {
       String errorMessage = String.format(
           "Mapping a field to the @timestamp field is only necessary for data streams. "
               + "%s must not be set if %s and %s are set.",

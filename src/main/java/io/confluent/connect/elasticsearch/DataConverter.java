@@ -205,8 +205,8 @@ public class DataConverter {
     }
     try {
       JsonNode jsonNode = objectMapper.readTree(payload);
-      if (!config.dataStreamTimestamp().isEmpty()) {
-        for (String timestampField : config.dataStreamTimestamp()) {
+      if (!config.dataStreamTimestampField().isEmpty()) {
+        for (String timestampField : config.dataStreamTimestampField()) {
           if (jsonNode.has(timestampField)) {
             ((ObjectNode) jsonNode).put(TIMESTAMP_FIELD, jsonNode.get(timestampField).asText());
             return objectMapper.writeValueAsString(jsonNode);

@@ -887,7 +887,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
     return DataStreamType.valueOf(getString(DATA_STREAM_TYPE_CONFIG).toUpperCase());
   }
 
-  public List<String> dataStreamTimestamp() {
+  public List<String> dataStreamTimestampField() {
     return getList(DATA_STREAM_TIMESTAMP_CONFIG);
   }
 
