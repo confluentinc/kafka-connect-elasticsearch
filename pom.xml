@@ -51,6 +51,7 @@
         <dependency.check.version>6.1.6</dependency.check.version>
         <confluent.maven.repo>http://packages.confluent.io/maven/</confluent.maven.repo>
         <commons.codec.version>1.15</commons.codec.version>
+        <snakeyaml.version>1.28</snakeyaml.version>
     </properties>
 
     <repositories>
@@ -196,6 +197,11 @@
             <artifactId>elasticsearch</artifactId>
             <version>${test.containers.version}</version>
             <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.yaml</groupId>
+            <artifactId>snakeyaml</artifactId>
+            <version>${snakeyaml.version}</version>
         </dependency>
     </dependencies>
 
