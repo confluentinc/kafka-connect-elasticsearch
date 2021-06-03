@@ -95,7 +95,7 @@
         <dependency>
             <groupId>org.yaml</groupId>
             <artifactId>snakeyaml</artifactId>
-            <version>1.27</version>
+            <version>${snakeyaml.version}</version>
         </dependency>
         <!-- pin httpclient for CVE -->
         <dependency>
@@ -210,11 +210,6 @@
             <version>${hadoop.version}</version>
             <scope>test</scope>
             </dependency>
-        <dependency>
-            <groupId>org.yaml</groupId>
-            <artifactId>snakeyaml</artifactId>
-            <version>${snakeyaml.version}</version>
-        </dependency>
     </dependencies>
 
     <dependencyManagement>
