@@ -160,7 +160,7 @@ public class RetryUtil {
         );
         return function.call();
       } catch (IOException e) {
-        log.debug("Failed to {} due to {}. Retrying attempt ({}/{})", description, e, attempt, maxAttempts);
+        log.debug("Failed to {} due to {}. Retrying attempt ({}/{})", description, e.getCause(), attempt, maxAttempts);
         if (attempt >= maxAttempts) {
           throw new ConnectException("Failed to " + description, e);
         }
