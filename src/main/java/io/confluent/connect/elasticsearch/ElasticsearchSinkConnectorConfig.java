@@ -341,8 +341,6 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
           + "already contain this field. This configuration can only be set if ``%s`` and ``%s`` "
           + "are set.",
       DATA_STREAM_TYPE_CONFIG,
-      DATA_STREAM_DATASET_CONFIG,
-      DATA_STREAM_TYPE_CONFIG,
       DATA_STREAM_DATASET_CONFIG
   );
   private static final String DATA_STREAM_TIMESTAMP_DISPLAY = "Data Stream Timestamp Field";
