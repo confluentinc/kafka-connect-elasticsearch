@@ -270,7 +270,7 @@ public class Validator {
     String exceptionMessage = "";
     try {
       successful = client.ping(RequestOptions.DEFAULT);
-    } catch (IOException | ElasticsearchStatusException e) {
+    } catch (IOException | RuntimeException e) {
       successful = false;
       exceptionMessage = String.format("Error message: %s", e.getMessage());
     }
