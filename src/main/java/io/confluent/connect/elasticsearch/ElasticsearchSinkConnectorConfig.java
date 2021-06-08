@@ -334,10 +334,10 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
       "The Kafka record field to use as the timestamp for the ``@timestamp`` field in documents "
           + "sent to a data stream.\n All documents sent to a data stream needs an``@timestamp`` "
           + " field with values of type ``date`` or ``data_nanos``. Otherwise, the document "
-          + " would not be sent. If multiple fields are provided, the first field listed that "
+          + " will not be sent. If multiple fields are provided, the first field listed that "
           + "also appears in the record will be used. If this configuration is left empty,"
-          + " all of the documents will use the record timestamp as the ``@timestamp`` field "
-          + "value. Note that the ``@timestamp`` field needs to be explicitly listed if records "
+          + " all of the documents will use the Kafka record timestamp as the ``@timestamp`` field "
+          + "value. Note that ``@timestamp``still  needs to be explicitly listed if records "
           + "already contain this field. This configuration can only be set if ``%s`` and ``%s`` "
           + "are set.",
       DATA_STREAM_TYPE_CONFIG,
