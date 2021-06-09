@@ -56,9 +56,11 @@ import java.util.Map;
 import org.apache.kafka.common.config.Config;
 import org.apache.kafka.common.config.ConfigValue;
 import org.apache.kafka.common.config.SslConfigs;
+import org.elasticsearch.ElasticsearchStatusException;
 import org.elasticsearch.client.RequestOptions;
 import org.elasticsearch.client.RestHighLevelClient;
 import org.elasticsearch.client.core.MainResponse;
+import org.elasticsearch.rest.RestStatus;
 import org.junit.Before;
 import org.junit.Test;
 import org.mockito.Mockito;
@@ -119,6 +121,14 @@ public class ValidatorTest {
     result = validator.validate();
     assertHasErrorMessage(result, CONNECTION_USERNAME_CONFIG, "must be set");
     assertHasErrorMessage(result, CONNECTION_PASSWORD_CONFIG, "must be set");
+  }
+
+  @Test
+  public void testClientThrowsElasticsearchStatusException() throws IOException {
+    when(mockClient.ping(any(RequestOptions.class))).thenThrow(new ElasticsearchStatusException("Deleted resource.", RestStatus.GONE));
+    validator = new Validator(props, () -> mockClient);
+    Config result = validator.validate();
+    assertHasErrorMessage(result, CONNECTION_URL_CONFIG, "Could not connect to Elasticsearch. Error message: Deleted resource.");
   }
 
   @Test
