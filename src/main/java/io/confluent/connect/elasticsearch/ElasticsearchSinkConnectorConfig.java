@@ -304,13 +304,13 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   // Data stream configs
   public static final String DATA_STREAM_DATASET_CONFIG = "data.stream.dataset";
   private static final String DATA_STREAM_DATASET_DOC =
-      "Generic name describing data ingested and its structure to be written to a data stream. Can"
-          + " be any arbitrary string that is no longer than 100 characters, is in all lowercase, "
+      "Generic name describing data ingested and its structure to be written to a data stream. Can "
+          + "be any arbitrary string that is no longer than 100 characters, is in all lowercase, "
           + "and does not contain spaces or any of these special characters ``/\\*\"<>|,#:-``. "
           + "Otherwise, no value indicates the connector will write to regular indices instead. "
           + "If set, this configuration will be used alongside ``data.stream.type`` to "
           + "construct the data stream name in the form of {``data.stream.type``"
-          + "}-{" + DATA_STREAM_DATASET_CONFIG + "}-{topic}.";
+          + "}-{``" + DATA_STREAM_DATASET_CONFIG + "``}-{topic}.";
   private static final String DATA_STREAM_DATASET_DISPLAY = "Data Stream Dataset";
   private static final String DATA_STREAM_DATASET_DEFAULT = "";
 
@@ -319,8 +319,8 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
       "Generic type describing the data to be written to data stream. "
           + "The default is %s which indicates the connector will write "
           + "to regular indices instead. If set, this configuration will "
-          + "be used alongside %s to construct the data stream name in the form of"
-          + "{%s}-{%s}-{topic}.",
+          + "be used alongside %s to construct the data stream name in the form of "
+          + "{``%s``}-{``%s``}-{topic}.",
       DataStreamType.NONE.name(),
       DATA_STREAM_DATASET_CONFIG,
       DATA_STREAM_TYPE_CONFIG,
@@ -332,12 +332,12 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   public static final String DATA_STREAM_TIMESTAMP_CONFIG = "data.stream.timestamp.field";
   private static final String DATA_STREAM_TIMESTAMP_DOC = String.format(
       "The Kafka record field to use as the timestamp for the ``@timestamp`` field in documents "
-          + "sent to a data stream.\n All documents sent to a data stream needs an``@timestamp`` "
-          + " field with values of type ``date`` or ``data_nanos``. Otherwise, the document "
-          + " will not be sent. If multiple fields are provided, the first field listed that "
-          + "also appears in the record will be used. If this configuration is left empty,"
-          + " all of the documents will use the Kafka record timestamp as the ``@timestamp`` field "
-          + "value. Note that ``@timestamp``still  needs to be explicitly listed if records "
+          + "sent to a data stream.\n All documents sent to a data stream needs an ``@timestamp`` "
+          + "field with values of type ``date`` or ``data_nanos``. Otherwise, the document "
+          + "will not be sent. If multiple fields are provided, the first field listed that "
+          + "also appears in the record will be used. If this configuration is left empty, "
+          + "all of the documents will use the Kafka record timestamp as the ``@timestamp`` field "
+          + "value. Note that ``@timestamp`` still needs to be explicitly listed if records "
           + "already contain this field. This configuration can only be set if ``%s`` and ``%s`` "
           + "are set.",
       DATA_STREAM_TYPE_CONFIG,
