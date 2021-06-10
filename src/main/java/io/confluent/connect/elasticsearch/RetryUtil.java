@@ -161,7 +161,8 @@ public class RetryUtil {
         return function.call();
       } catch (IOException e) {
         if (attempt >= maxAttempts) {
-          log.error("Failed to {} due to {} after total of {} attempt(s)", description, e.getCause(), maxAttempts, e);
+          log.error("Failed to {} due to {} after total of {} attempt(s)",
+              description, e.getCause(), maxAttempts, e.getMessage());
           throw new ConnectException("Failed to " + description, e);
         }
         // Otherwise it is retriable and we should retry
