@@ -3,9 +3,7 @@ package io.confluent.connect.elasticsearch.integration;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.KERBEROS_KEYTAB_PATH_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.KERBEROS_PRINCIPAL_CONFIG;
 
-import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig;
 import io.confluent.connect.elasticsearch.helper.ElasticsearchContainer;
-import io.confluent.connect.elasticsearch.helper.ElasticsearchHelperClient;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -48,10 +46,7 @@ public class ElasticsearchConnectorKerberosIT extends ElasticsearchConnectorBase
   @Test
   public void testKerberos() throws Exception {
     addKerberosConfigs(props);
-    helperClient = new ElasticsearchHelperClient(
-        container.getConnectionUrl(),
-        new ElasticsearchSinkConnectorConfig(props)
-    );
+    helperClient = container.getHelperClient(props);
     runSimpleTest(props);
   }
 

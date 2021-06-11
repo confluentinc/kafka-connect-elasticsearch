@@ -16,22 +16,25 @@
 
 package io.confluent.connect.elasticsearch;
 
-import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.SecurityProtocol;
-import java.io.IOException;
-import java.util.List;
-import java.util.Map;
-import java.util.function.Function;
-import java.util.stream.Collectors;
 import org.apache.http.HttpHost;
 import org.apache.kafka.common.config.Config;
 import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.config.ConfigValue;
 import org.apache.kafka.common.config.SslConfigs;
+import org.elasticsearch.ElasticsearchStatusException;
 import org.elasticsearch.client.RequestOptions;
 import org.elasticsearch.client.RestClient;
 import org.elasticsearch.client.RestHighLevelClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.io.IOException;
+import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+
+import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.SecurityProtocol;
 
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BATCH_SIZE_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_PASSWORD_CONFIG;
@@ -269,6 +272,16 @@ public class Validator {
     String exceptionMessage = "";
     try {
       successful = client.ping(RequestOptions.DEFAULT);
+    } catch (ElasticsearchStatusException e) {
+      switch (e.status()) {
+        case FORBIDDEN:
+          // ES is up, but user is not authorized to ping server
+          successful = true;
+          break;
+        default:
+          successful = false;
+          exceptionMessage = String.format("Error message: %s", e.getMessage());
+      }
     } catch (Exception e) {
       successful = false;
       exceptionMessage = String.format("Error message: %s", e.getMessage());
