@@ -103,6 +103,15 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
   }
 
   @Test
+  public void testHappyPathDataStream() throws Exception {
+    setDataStream();
+
+    runSimpleTest(props);
+
+    assertEquals(index, helperClient.getDataStream(index).getName());
+  }
+
+  @Test
   public void testNullValue() throws Exception {
     runSimpleTest(props);
 
@@ -156,5 +165,20 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
         assertEquals(0, docNum);
       }
     }
+  }
+
+  @Test
+  public void testBackwardsCompatibilityDataStream() throws Exception {
+    container.close();
+    container = ElasticsearchContainer.withESVersion("7.0.1");
+    container.start();
+    setupFromContainer();
+
+    runSimpleTest(props);
+
+    helperClient = null;
+    container.close();
+    container = ElasticsearchContainer.fromSystemProperties();
+    container.start();
   }
 }

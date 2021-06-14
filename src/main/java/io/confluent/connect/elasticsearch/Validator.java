@@ -30,13 +30,20 @@ import org.apache.kafka.common.config.SslConfigs;
 import org.elasticsearch.client.RequestOptions;
 import org.elasticsearch.client.RestClient;
 import org.elasticsearch.client.RestHighLevelClient;
+import org.elasticsearch.client.core.MainResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BATCH_SIZE_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BEHAVIOR_ON_NULL_VALUES_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BehaviorOnNullValues;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_PASSWORD_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_USERNAME_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.DATA_STREAM_DATASET_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.DATA_STREAM_TIMESTAMP_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.DATA_STREAM_TYPE_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.DataStreamType;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.FLUSH_TIMEOUT_MS_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_KEY_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_KEY_TOPICS_CONFIG;
@@ -53,10 +60,14 @@ import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfi
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.PROXY_USERNAME_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.SECURITY_PROTOCOL_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.SSL_CONFIG_PREFIX;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.WRITE_METHOD_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.WriteMethod;
 
 public class Validator {
 
   private static final Logger log = LoggerFactory.getLogger(Validator.class);
+
+  private static final String DATA_STREAM_COMPATIBLE_ES_VERSION = "7.9.0";
 
   private ElasticsearchSinkConnectorConfig config;
   private Map<String, ConfigValue> values;
@@ -88,6 +99,7 @@ public class Validator {
 
     try (RestHighLevelClient client = clientFactory.client()) {
       validateCredentials();
+      validateDataStreamConfigs();
       validateIgnoreConfigs();
       validateKerberos();
       validateLingerMs();
@@ -98,6 +110,9 @@ public class Validator {
       if (!hasErrors()) {
         // no point if previous configs are invalid
         validateConnection(client);
+      }
+      if (!hasErrors()) {
+        validateVersion(client);
       }
     } catch (IOException e) {
       log.warn("Closing the client failed.", e);
@@ -114,6 +129,51 @@ public class Validator {
       );
       addErrorMessage(CONNECTION_USERNAME_CONFIG, errorMessage);
       addErrorMessage(CONNECTION_PASSWORD_CONFIG, errorMessage);
+    }
+  }
+
+  private void validateDataStreamConfigs() {
+    if (config.dataStreamType() == DataStreamType.NONE ^ config.dataStreamDataset().isEmpty()) {
+      String errorMessage = String.format(
+          "Either both or neither '%s' and '%s' must be set.",
+          DATA_STREAM_DATASET_CONFIG,
+          DATA_STREAM_TYPE_CONFIG
+      );
+      addErrorMessage(DATA_STREAM_TYPE_CONFIG, errorMessage);
+      addErrorMessage(DATA_STREAM_DATASET_CONFIG, errorMessage);
+    }
+
+    if (config.isDataStream() && config.writeMethod() == WriteMethod.UPSERT) {
+      String errorMessage = String.format(
+          "Upserts are not supported with data streams. %s must not be %s if %s and %s are set.",
+          WRITE_METHOD_CONFIG,
+          WriteMethod.UPSERT,
+          DATA_STREAM_TYPE_CONFIG,
+          DATA_STREAM_DATASET_CONFIG
+      );
+      addErrorMessage(WRITE_METHOD_CONFIG, errorMessage);
+    }
+
+    if (config.isDataStream() && config.behaviorOnNullValues() == BehaviorOnNullValues.DELETE) {
+      String errorMessage = String.format(
+          "Deletes are not supported with data streams. %s must not be %s if %s and %s are set.",
+          BEHAVIOR_ON_NULL_VALUES_CONFIG,
+          BehaviorOnNullValues.DELETE,
+          DATA_STREAM_TYPE_CONFIG,
+          DATA_STREAM_DATASET_CONFIG
+      );
+      addErrorMessage(BEHAVIOR_ON_NULL_VALUES_CONFIG, errorMessage);
+    }
+
+    if (!config.isDataStream() && !config.dataStreamTimestampField().isEmpty()) {
+      String errorMessage = String.format(
+          "Mapping a field to the '@timestamp' field is only necessary for data streams. "
+              + "%s must not be set if %s and %s are not set.",
+          DATA_STREAM_TIMESTAMP_CONFIG,
+          DATA_STREAM_TYPE_CONFIG,
+          DATA_STREAM_DATASET_CONFIG
+      );
+      addErrorMessage(DATA_STREAM_TIMESTAMP_CONFIG, errorMessage);
     }
   }
 
@@ -262,6 +322,56 @@ public class Validator {
         addErrorMessage(SECURITY_PROTOCOL_CONFIG, errorMessage);
       }
     }
+  }
+
+  private void validateVersion(RestHighLevelClient client) {
+    if (!config.isDataStream()) {
+      return;
+    }
+    MainResponse response;
+    try {
+      response = client.info(RequestOptions.DEFAULT);
+    } catch (IOException e) {
+      // Same error messages as from validating the connection.
+      return;
+    }
+    String versionNumber = response.getVersion().getNumber();
+    if (compareVersions(versionNumber, DATA_STREAM_COMPATIBLE_ES_VERSION) < 0) {
+      String errorMessage = String.format(
+          "Elasticsearch version %s is not compatible with data streams. Elasticsearch"
+              + "version must be at least %s.",
+          versionNumber,
+          DATA_STREAM_COMPATIBLE_ES_VERSION
+      );
+      addErrorMessage(CONNECTION_URL_CONFIG, errorMessage);
+      addErrorMessage(DATA_STREAM_TYPE_CONFIG, errorMessage);
+      addErrorMessage(DATA_STREAM_DATASET_CONFIG, errorMessage);
+    }
+  }
+
+  /**
+   * Compares <code>versionNumber</code> to <code>compatibleVersion</code>.
+   *
+   * @return  a negative integer, zero, or a positive integer if
+   *          <code>versionNumber</code> is less than, equal to, or greater
+   *          than <code>compatibleVersion</code>.
+   */
+  private int compareVersions(String versionNumber, String compatibleVersion) {
+    String[] versionSplit = versionNumber.split("\\.");
+    String[] compatibleSplit = compatibleVersion.split("\\.");
+
+    for (int i = 0; i < Math.min(versionSplit.length, compatibleSplit.length); i++) {
+      String versionSplitBeforeSuffix = versionSplit[i].split("-")[0];
+      String compatibleSplitBeforeSuffix = compatibleSplit[i].split("-")[0];
+      int comparison = Integer.compare(
+          Integer.parseInt(versionSplitBeforeSuffix),
+          Integer.parseInt(compatibleSplitBeforeSuffix)
+      );
+      if (comparison != 0) {
+        return comparison;
+      }
+    }
+    return versionSplit.length - compatibleSplit.length;
   }
 
   private void validateConnection(RestHighLevelClient client) {

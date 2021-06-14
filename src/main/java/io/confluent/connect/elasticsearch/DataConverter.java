@@ -15,6 +15,10 @@
 
 package io.confluent.connect.elasticsearch;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BehaviorOnNullValues;
 import org.apache.kafka.connect.data.ConnectSchema;
 import org.apache.kafka.connect.data.Date;
@@ -30,6 +34,7 @@ import org.apache.kafka.connect.json.JsonConverter;
 import org.apache.kafka.connect.sink.SinkRecord;
 import org.apache.kafka.connect.storage.Converter;
 import org.elasticsearch.action.DocWriteRequest;
+import org.elasticsearch.action.DocWriteRequest.OpType;
 import org.elasticsearch.action.delete.DeleteRequest;
 import org.elasticsearch.action.index.IndexRequest;
 import org.elasticsearch.action.update.UpdateRequest;
@@ -54,6 +59,9 @@ public class DataConverter {
   private static final Converter JSON_CONVERTER;
   protected static final String MAP_KEY = "key";
   protected static final String MAP_VALUE = "value";
+  protected static final String TIMESTAMP_FIELD = "@timestamp";
+
+  private ObjectMapper objectMapper;
 
   static {
     JSON_CONVERTER = new JsonConverter();
@@ -73,6 +81,7 @@ public class DataConverter {
    */
   public DataConverter(ElasticsearchSinkConnectorConfig config) {
     this.config = config;
+    this.objectMapper = new ObjectMapper();
   }
 
   private String convertKey(Schema keySchema, Object key) {
@@ -144,7 +153,9 @@ public class DataConverter {
       }
     }
 
-    final String payload = getPayload(record);
+    String payload = getPayload(record);
+    payload = maybeAddTimestamp(payload, record.timestamp());
+
     final String id = config.shouldIgnoreKey(record.topic())
         ? String.format("%s+%d+%d", record.topic(), record.kafkaPartition(), record.kafkaOffset())
         : convertKey(record.keySchema(), record.key());
@@ -162,8 +173,9 @@ public class DataConverter {
             .upsert(payload, XContentType.JSON)
             .retryOnConflict(Math.min(config.maxInFlightRequests(), 5));
       case INSERT:
+        OpType opType = config.isDataStream() ? OpType.CREATE : OpType.INDEX;
         return maybeAddExternalVersioning(
-            new IndexRequest(index).id(id).source(payload, XContentType.JSON),
+            new IndexRequest(index).id(id).source(payload, XContentType.JSON).opType(opType),
             record
         );
       default:
@@ -187,11 +199,34 @@ public class DataConverter {
     return new String(rawJsonPayload, StandardCharsets.UTF_8);
   }
 
+  private String maybeAddTimestamp(String payload, long timestamp) {
+    if (!config.isDataStream()) {
+      return payload;
+    }
+    try {
+      JsonNode jsonNode = objectMapper.readTree(payload);
+      if (!config.dataStreamTimestampField().isEmpty()) {
+        for (String timestampField : config.dataStreamTimestampField()) {
+          if (jsonNode.has(timestampField)) {
+            ((ObjectNode) jsonNode).put(TIMESTAMP_FIELD, jsonNode.get(timestampField).asText());
+            return objectMapper.writeValueAsString(jsonNode);
+          }
+        }
+      } else {
+        ((ObjectNode) jsonNode).put(TIMESTAMP_FIELD, timestamp);
+        return objectMapper.writeValueAsString(jsonNode);
+      }
+    } catch (JsonProcessingException e) {
+      // Should not happen if the payload was retrieved correctly.
+    }
+    return payload;
+  }
+
   private DocWriteRequest<?> maybeAddExternalVersioning(
       DocWriteRequest<?> request,
       SinkRecord record
   ) {
-    if (!config.shouldIgnoreKey(record.topic())) {
+    if (!config.isDataStream() && !config.shouldIgnoreKey(record.topic())) {
       request.versionType(VersionType.EXTERNAL);
       request.version(record.kafkaOffset());
     }

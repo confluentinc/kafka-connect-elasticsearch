@@ -51,7 +51,7 @@ public class ElasticsearchContainer
   /**
    * Default Elasticsearch version.
    */
-  public static final String DEFAULT_ES_VERSION = "7.0.1";
+  public static final String DEFAULT_ES_VERSION = "7.9.3";
 
   /**
    * Default Elasticsearch port.
@@ -99,6 +99,15 @@ public class ElasticsearchContainer
         DEFAULT_ES_VERSION
     );
     return new ElasticsearchContainer(imageName + ":" + version);
+  }
+
+  public static ElasticsearchContainer withESVersion(String ESVersion) {
+    String imageName = getSystemOrEnvProperty(
+        "elasticsearch.image",
+        "ELASTICSEARCH_IMAGE",
+        DEFAULT_DOCKER_IMAGE_NAME
+    );
+    return new ElasticsearchContainer(imageName + ":" + ESVersion);
   }
 
   private static final String KEY_PASSWORD = "asdfasdf";
