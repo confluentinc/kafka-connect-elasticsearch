@@ -27,10 +27,10 @@ import org.apache.kafka.common.config.Config;
 import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.config.ConfigValue;
 import org.apache.kafka.common.config.SslConfigs;
+import org.elasticsearch.client.core.MainResponse;
 import org.elasticsearch.client.RequestOptions;
 import org.elasticsearch.client.RestClient;
 import org.elasticsearch.client.RestHighLevelClient;
-import org.elasticsearch.client.core.MainResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -68,6 +68,7 @@ public class Validator {
   private static final Logger log = LoggerFactory.getLogger(Validator.class);
 
   private static final String DATA_STREAM_COMPATIBLE_ES_VERSION = "7.9.0";
+  private static final String CONNECTOR_V11_COMPATIBLE_ES_VERSION = "7.0.0";
 
   private ElasticsearchSinkConnectorConfig config;
   private Map<String, ConfigValue> values;
@@ -325,9 +326,6 @@ public class Validator {
   }
 
   private void validateVersion(RestHighLevelClient client) {
-    if (!config.isDataStream()) {
-      return;
-    }
     MainResponse response;
     try {
       response = client.info(RequestOptions.DEFAULT);
@@ -336,7 +334,8 @@ public class Validator {
       return;
     }
     String versionNumber = response.getVersion().getNumber();
-    if (compareVersions(versionNumber, DATA_STREAM_COMPATIBLE_ES_VERSION) < 0) {
+    if (config.isDataStream()
+        && compareVersions(versionNumber, DATA_STREAM_COMPATIBLE_ES_VERSION) < 0) {
       String errorMessage = String.format(
           "Elasticsearch version %s is not compatible with data streams. Elasticsearch"
               + "version must be at least %s.",
@@ -346,6 +345,16 @@ public class Validator {
       addErrorMessage(CONNECTION_URL_CONFIG, errorMessage);
       addErrorMessage(DATA_STREAM_TYPE_CONFIG, errorMessage);
       addErrorMessage(DATA_STREAM_DATASET_CONFIG, errorMessage);
+    }
+    if (compareVersions(versionNumber, CONNECTOR_V11_COMPATIBLE_ES_VERSION) < 0) {
+      String errorMessage = String.format(
+          "Connector version %s is not compatible with Elasticsearch version %s. Elasticsearch "
+              + "version must be at least %s.",
+          Version.getVersion(),
+          versionNumber,
+          CONNECTOR_V11_COMPATIBLE_ES_VERSION
+      );
+      addErrorMessage(CONNECTION_URL_CONFIG, errorMessage);
     }
   }
 
