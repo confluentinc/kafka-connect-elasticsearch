@@ -110,6 +110,8 @@ public class Validator {
       if (!hasErrors()) {
         // no point if previous configs are invalid
         validateConnection(client);
+      }
+      if (!hasErrors()) {
         validateVersion(client);
       }
     } catch (IOException e) {
