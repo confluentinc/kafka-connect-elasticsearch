@@ -87,7 +87,7 @@ public class ElasticsearchSinkTask extends SinkTask {
 
       logTrace("Writing {} to Elasticsearch.", record);
 
-      ensureIndexExists(convertTopicToIndexName(record.topic()));
+      ensureIndexExists(createIndexName(record.topic()));
       checkMapping(record);
       tryWriteRecord(record);
     }
@@ -115,7 +115,7 @@ public class ElasticsearchSinkTask extends SinkTask {
   }
 
   private void checkMapping(SinkRecord record) {
-    String index = convertTopicToIndexName(record.topic());
+    String index = createIndexName(record.topic());
     if (!config.shouldIgnoreSchema(record.topic()) && !existingMappings.contains(index)) {
       if (!client.hasMapping(index)) {
         client.createMapping(index, record.valueSchema());
@@ -157,10 +157,51 @@ public class ElasticsearchSinkTask extends SinkTask {
     return index;
   }
 
+  /**
+   * Returns the converted index name from a given topic name in the form {type}-{dataset}-{topic}.
+   * For the <code>topic</code>, Elasticsearch accepts:
+   * <ul>
+   *   <li>all lowercase</li>
+   *   <li>no longer than 100 bytes</li>
+   * </ul>
+   * (<a href="https://github.com/elastic/ecs/blob/master/rfcs/text/0009-data_stream-fields.md#restrictions-on-values">ref</a>_.)
+   */
+  private String convertTopicToDataStreamName(String topic) {
+    topic = topic.toLowerCase();
+    if (topic.length() > 100) {
+      topic = topic.substring(0, 100);
+    }
+    String dataStream = String.format(
+        "%s-%s-%s",
+        config.dataStreamType().name().toLowerCase(),
+        config.dataStreamDataset(),
+        topic
+    );
+    return dataStream;
+  }
+
+  /**
+   * Returns the converted index name from a given topic name. If writing to a data stream,
+   * returns the index name in the form {type}-{dataset}-{topic}. For both cases, Elasticsearch
+   * accepts:
+   * <ul>
+   *   <li>all lowercase</li>
+   *   <li>less than 256 bytes</li>
+   *   <li>does not start with - or _</li>
+   *   <li>is not . or ..</li>
+   * </ul>
+   * (<a href="https://www.elastic.co/guide/en/elasticsearch/reference/current/indices-create-index.html#indices-create-api-path-params">ref</a>_.)
+   */
+  private String createIndexName(String topic) {
+    return config.isDataStream()
+        ? convertTopicToDataStreamName(topic)
+        : convertTopicToIndexName(topic);
+  }
+
   private void ensureIndexExists(String index) {
     if (!indexCache.contains(index)) {
       log.info("Creating index {}.", index);
-      client.createIndex(index);
+      client.createIndexOrDataStream(index);
       indexCache.add(index);
     }
   }
@@ -184,7 +225,7 @@ public class ElasticsearchSinkTask extends SinkTask {
   private void tryWriteRecord(SinkRecord sinkRecord) {
     DocWriteRequest<?> record = null;
     try {
-      record = converter.convertRecord(sinkRecord, convertTopicToIndexName(sinkRecord.topic()));
+      record = converter.convertRecord(sinkRecord, createIndexName(sinkRecord.topic()));
     } catch (DataException convertException) {
       reportBadRecord(sinkRecord, convertException);
 
