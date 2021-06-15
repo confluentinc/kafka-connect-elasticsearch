@@ -567,6 +567,15 @@ public class ElasticsearchClientTest {
     container.start();
   }
 
+  @Test
+  public void testConnectionUrlExtraSlash() {
+    String withExtraSlash = container.getConnectionUrl() + "/";
+    props.put(CONNECTION_URL_CONFIG, withExtraSlash);
+    config = new ElasticsearchSinkConnectorConfig(props);
+    ElasticsearchClient client = new ElasticsearchClient(config, null);
+    client.close();
+  }
+
   private static Schema schema() {
     return SchemaBuilder
         .struct()

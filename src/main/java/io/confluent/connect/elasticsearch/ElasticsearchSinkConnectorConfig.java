@@ -30,6 +30,8 @@ import org.apache.kafka.common.config.ConfigDef.Validator;
 import org.apache.kafka.common.config.ConfigDef.Width;
 
 import java.util.Map;
+import java.util.stream.Collectors;
+
 import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.config.types.Password;
 
@@ -750,7 +752,9 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   }
 
   public Set<String> connectionUrls() {
-    return new HashSet<>(getList(CONNECTION_URL_CONFIG));
+    return getList(CONNECTION_URL_CONFIG)
+        .stream().map(s -> s.endsWith("/") ? s.substring(0, s.length() - 1) : s)
+        .collect(Collectors.toCollection(HashSet::new));
   }
 
   public boolean dropInvalidMessage() {
