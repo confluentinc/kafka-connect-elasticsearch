@@ -15,6 +15,29 @@
 
 package io.confluent.connect.elasticsearch.integration;
 
+import org.apache.kafka.connect.json.JsonConverter;
+import org.apache.kafka.connect.storage.StringConverter;
+import org.apache.kafka.test.TestUtils;
+import org.elasticsearch.ElasticsearchStatusException;
+import org.elasticsearch.client.security.user.User;
+import org.elasticsearch.client.security.user.privileges.IndicesPrivileges;
+import org.elasticsearch.client.security.user.privileges.Role;
+import org.elasticsearch.client.security.user.privileges.Role.Builder;
+import org.elasticsearch.search.SearchHit;
+import org.junit.After;
+import org.junit.AfterClass;
+import org.junit.Before;
+
+import java.io.IOException;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
+
+import io.confluent.connect.elasticsearch.ElasticsearchSinkConnector;
+import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig;
+import io.confluent.connect.elasticsearch.helper.ElasticsearchContainer;
+import io.confluent.connect.elasticsearch.helper.ElasticsearchHelperClient;
+
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_KEY_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_SCHEMA_CONFIG;
@@ -30,28 +53,18 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
-import io.confluent.connect.elasticsearch.ElasticsearchSinkConnector;
-import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig;
-import io.confluent.connect.elasticsearch.helper.ElasticsearchContainer;
-import io.confluent.connect.elasticsearch.helper.ElasticsearchHelperClient;
-import java.io.IOException;
-import java.util.HashMap;
-import java.util.Map;
-import org.apache.kafka.connect.json.JsonConverter;
-import org.apache.kafka.connect.storage.StringConverter;
-import org.apache.kafka.test.TestUtils;
-import org.elasticsearch.ElasticsearchStatusException;
-import org.elasticsearch.search.SearchHit;
-import org.junit.After;
-import org.junit.AfterClass;
-import org.junit.Before;
-
 public class ElasticsearchConnectorBaseIT extends BaseConnectorIT {
 
   protected static final int NUM_RECORDS = 5;
   protected static final int TASKS_MAX = 1;
   protected static final String CONNECTOR_NAME = "es-connector";
   protected static final String TOPIC = "test";
+
+  // User that has a minimal required and documented set of privileges
+  public static final String ELASTIC_MINIMAL_PRIVILEGES_NAME = "frank";
+  public static final String ELASTIC_MINIMAL_PRIVILEGES_PASSWORD = "WatermelonInEasterHay";
+
+  private static final String ES_SINK_CONNECTOR_ROLE = "es_sink_connector_role";
 
   protected static ElasticsearchContainer container;
 
@@ -74,10 +87,7 @@ public class ElasticsearchConnectorBaseIT extends BaseConnectorIT {
     connect.kafka().createTopic(TOPIC);
 
     props = createProps();
-    helperClient = new ElasticsearchHelperClient(
-        container.getConnectionUrl(),
-        new ElasticsearchSinkConnectorConfig(props)
-    );
+    helperClient = container.getHelperClient(props);
   }
 
   @After
@@ -183,5 +193,25 @@ public class ElasticsearchConnectorBaseIT extends BaseConnectorIT {
           String.format("{\"doc_num\":%d,\"@timestamp\":\"2021-04-28T11:11:22.%03dZ\"}", i, i)
       );
     }
+  }
+
+  protected static Role getMinimalPrivilegesRole() {
+    IndicesPrivileges.Builder indicesPrivilegesBuilder = IndicesPrivileges.builder();
+    IndicesPrivileges indicesPrivileges = indicesPrivilegesBuilder
+        .indices("*")
+        .privileges("create_index", "read", "write", "view_index_metadata")
+        .build();
+    Builder builder = Role.builder();
+    Role role = builder.name(ES_SINK_CONNECTOR_ROLE).indicesPrivileges(indicesPrivileges).build();
+    return role;
+  }
+
+  protected static User getMinimalPrivilegesUser() {
+        return new User(ELASTIC_MINIMAL_PRIVILEGES_NAME,
+            Collections.singletonList(ES_SINK_CONNECTOR_ROLE));
+  }
+
+  protected static String getMinimalPrivilegesPassword() {
+    return ELASTIC_MINIMAL_PRIVILEGES_PASSWORD;
   }
 }

@@ -4,10 +4,8 @@ import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfi
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.SECURITY_PROTOCOL_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.SSL_CONFIG_PREFIX;
 
-import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig;
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.SecurityProtocol;
 import io.confluent.connect.elasticsearch.helper.ElasticsearchContainer;
-import io.confluent.connect.elasticsearch.helper.ElasticsearchHelperClient;
 import org.apache.kafka.common.config.SslConfigs;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -49,10 +47,7 @@ public class ElasticsearchConnectorKerberosWithSslIT extends ElasticsearchConnec
     props.put(SSL_CONFIG_PREFIX + SslConfigs.SSL_KEY_PASSWORD_CONFIG, container.getKeyPassword());
     addKerberosConfigs(props);
 
-    helperClient = new ElasticsearchHelperClient(
-        address,
-        new ElasticsearchSinkConnectorConfig(props)
-    );
+    helperClient = container.getHelperClient(props);
 
     // Start connector
     runSimpleTest(props);

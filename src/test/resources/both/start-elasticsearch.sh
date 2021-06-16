@@ -84,5 +84,5 @@ if [[ -n "$ELASTIC_PASSWORD" ]]; then
 fi
 
 echo
-echo "Starting Elasticsearch with SSL enabled ..."
+echo "Starting Elasticsearch with SSL and Kerberos enabled ..."
 /usr/local/bin/docker-entrypoint.sh
