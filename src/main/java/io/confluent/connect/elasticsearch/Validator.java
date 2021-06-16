@@ -333,25 +333,25 @@ public class Validator {
       // Same error messages as from validating the connection.
       return;
     }
-    String versionNumber = response.getVersion().getNumber();
+    String esVersionNumber = response.getVersion().getNumber();
     if (config.isDataStream()
-        && compareVersions(versionNumber, DATA_STREAM_COMPATIBLE_ES_VERSION) < 0) {
+        && compareVersions(esVersionNumber, DATA_STREAM_COMPATIBLE_ES_VERSION) < 0) {
       String errorMessage = String.format(
           "Elasticsearch version %s is not compatible with data streams. Elasticsearch"
               + "version must be at least %s.",
-          versionNumber,
+          esVersionNumber,
           DATA_STREAM_COMPATIBLE_ES_VERSION
       );
       addErrorMessage(CONNECTION_URL_CONFIG, errorMessage);
       addErrorMessage(DATA_STREAM_TYPE_CONFIG, errorMessage);
       addErrorMessage(DATA_STREAM_DATASET_CONFIG, errorMessage);
     }
-    if (compareVersions(versionNumber, CONNECTOR_V11_COMPATIBLE_ES_VERSION) < 0) {
+    if (compareVersions(esVersionNumber, CONNECTOR_V11_COMPATIBLE_ES_VERSION) < 0) {
       String errorMessage = String.format(
           "Connector version %s is not compatible with Elasticsearch version %s. Elasticsearch "
               + "version must be at least %s.",
           Version.getVersion(),
-          versionNumber,
+          esVersionNumber,
           CONNECTOR_V11_COMPATIBLE_ES_VERSION
       );
       addErrorMessage(CONNECTION_URL_CONFIG, errorMessage);
