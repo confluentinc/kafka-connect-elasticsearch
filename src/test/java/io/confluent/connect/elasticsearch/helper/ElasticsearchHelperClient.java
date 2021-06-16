@@ -20,6 +20,8 @@ import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig;
 import java.io.IOException;
 import java.util.List;
 
+import java.util.Map.Entry;
+
 import org.apache.http.HttpHost;
 import org.elasticsearch.action.admin.indices.delete.DeleteIndexRequest;
 import org.elasticsearch.action.search.SearchRequest;
@@ -34,6 +36,13 @@ import org.elasticsearch.client.indices.GetIndexRequest;
 import org.elasticsearch.client.indices.GetMappingsRequest;
 import org.elasticsearch.client.indices.GetMappingsResponse;
 import org.elasticsearch.cluster.metadata.MappingMetadata;
+import org.elasticsearch.client.security.PutRoleRequest;
+import org.elasticsearch.client.security.PutRoleResponse;
+import org.elasticsearch.client.security.PutUserRequest;
+import org.elasticsearch.client.security.PutUserResponse;
+import org.elasticsearch.client.security.RefreshPolicy;
+import org.elasticsearch.client.security.user.User;
+import org.elasticsearch.client.security.user.privileges.Role;
 import org.elasticsearch.search.SearchHits;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -91,6 +100,27 @@ public class ElasticsearchHelperClient {
   public SearchHits search(String index) throws IOException {
     SearchRequest request = new SearchRequest(index);
     return client.search(request, RequestOptions.DEFAULT).getHits();
+  }
+
+  public void createRole(Role role) throws IOException {
+    PutRoleRequest putRoleRequest = new PutRoleRequest(role, RefreshPolicy.IMMEDIATE);
+    PutRoleResponse putRoleResponse = client.security().putRole(putRoleRequest, RequestOptions.DEFAULT);
+    if (!putRoleResponse.isCreated()) {
+      throw new RuntimeException(String.format("Failed to create a role %s", role.getName()));
+    }
+  }
+
+  public void createUser(Entry<User, String> userToPassword) throws IOException {
+    PutUserRequest putUserRequest = PutUserRequest.withPassword(
+        userToPassword.getKey(),
+        userToPassword.getValue().toCharArray(),
+        true,
+        RefreshPolicy.IMMEDIATE
+    );
+    PutUserResponse putUserResponse = client.security().putUser(putUserRequest, RequestOptions.DEFAULT);
+    if (!putUserResponse.isCreated()) {
+      throw new RuntimeException(String.format("Failed to create a user %s", userToPassword.getKey().getUsername()));
+    }
   }
 
   public void close() {

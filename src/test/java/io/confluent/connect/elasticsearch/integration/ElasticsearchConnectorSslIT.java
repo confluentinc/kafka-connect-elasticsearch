@@ -16,23 +16,28 @@
 package io.confluent.connect.elasticsearch.integration;
 
 import io.confluent.common.utils.IntegrationTest;
-import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig;
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.SecurityProtocol;
 import io.confluent.connect.elasticsearch.helper.ElasticsearchContainer;
-import io.confluent.connect.elasticsearch.helper.ElasticsearchHelperClient;
+
 import org.apache.kafka.common.config.SslConfigs;
+import org.elasticsearch.client.security.user.User;
+import org.elasticsearch.client.security.user.privileges.Role;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_PASSWORD_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_USERNAME_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.SECURITY_PROTOCOL_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.SSL_CONFIG_PREFIX;
-import static io.confluent.connect.elasticsearch.helper.ElasticsearchContainer.ELASTIC_PASSWORD;
+
 
 @Category(IntegrationTest.class)
 public class ElasticsearchConnectorSslIT extends ElasticsearchConnectorBaseIT {
@@ -41,7 +46,10 @@ public class ElasticsearchConnectorSslIT extends ElasticsearchConnectorBaseIT {
 
   @BeforeClass
   public static void setupBeforeAll() {
-    container = ElasticsearchContainer.fromSystemProperties().withSslEnabled(true);
+    Map<User, String> users = Collections
+        .singletonMap(getMinimalPrivilegesUser(), getMinimalPrivilegesPassword());
+    List<Role> roles = Collections.singletonList(getMinimalPrivilegesRole());
+    container = ElasticsearchContainer.fromSystemProperties().withSslEnabled(true).withBasicAuth(users, roles);
     container.start();
   }
 
@@ -59,10 +67,7 @@ public class ElasticsearchConnectorSslIT extends ElasticsearchConnectorBaseIT {
     props.put(CONNECTION_URL_CONFIG, address);
     addSslProps();
 
-    helperClient = new ElasticsearchHelperClient(
-        address,
-        new ElasticsearchSinkConnectorConfig(props)
-    );
+    helperClient = container.getHelperClient(props);
 
     // Start connector
     runSimpleTest(props);
@@ -81,10 +86,7 @@ public class ElasticsearchConnectorSslIT extends ElasticsearchConnectorBaseIT {
     // disable hostname verification
     props.put(SSL_CONFIG_PREFIX + SslConfigs.SSL_ENDPOINT_IDENTIFICATION_ALGORITHM_CONFIG, "");
 
-    helperClient = new ElasticsearchHelperClient(
-        address,
-        new ElasticsearchSinkConnectorConfig(props)
-    );
+    helperClient = container.getHelperClient(props);
 
     // Start connector
     runSimpleTest(props);
@@ -97,7 +99,7 @@ public class ElasticsearchConnectorSslIT extends ElasticsearchConnectorBaseIT {
     props.put(SSL_CONFIG_PREFIX + SslConfigs.SSL_TRUSTSTORE_LOCATION_CONFIG, container.getTruststorePath());
     props.put(SSL_CONFIG_PREFIX + SslConfigs.SSL_TRUSTSTORE_PASSWORD_CONFIG, container.getTruststorePassword());
     props.put(SSL_CONFIG_PREFIX + SslConfigs.SSL_KEY_PASSWORD_CONFIG, container.getKeyPassword());
-    props.put(CONNECTION_USERNAME_CONFIG, "elastic");
-    props.put(CONNECTION_PASSWORD_CONFIG, ELASTIC_PASSWORD);
+    props.put(CONNECTION_USERNAME_CONFIG, ELASTIC_MINIMAL_PRIVILEGES_NAME);
+    props.put(CONNECTION_PASSWORD_CONFIG, ELASTIC_MINIMAL_PRIVILEGES_PASSWORD);
   }
 }

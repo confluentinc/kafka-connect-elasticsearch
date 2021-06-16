@@ -11,6 +11,29 @@ To build a development version you'll need a recent version of Kafka as well as 
 
 You can build kafka-connect-elasticsearch with Maven using the standard lifecycle phases.
 
+# Configuring
+## Creating an Elasticsearch user and assigning required privileges
+### Create an Elasticsearch role
+```
+curl -u elastic:elastic -X POST "localhost:9200/_security/role/es_sink_connector_role?pretty" -H 'Content-Type: application/json' -d'
+{
+  "indices": [
+    {
+      "names": [ "*" ],
+      "privileges": ["create_index", "read", "write", "view_index_metadata"]
+    }
+  ]
+}'
+```
+### Create an Elasticsearch user
+```
+curl -u elastic:elastic -X POST "localhost:9200/_security/user/es_sink_connector_user?pretty" -H 'Content-Type: application/json' -d'
+{
+  "password" : "seCret-secUre-PaSsW0rD",
+  "roles" : [ "es_sink_connector_role" ]
+}'
+```
+
 # Contribute
 
 - Source Code: https://github.com/confluentinc/kafka-connect-elasticsearch
