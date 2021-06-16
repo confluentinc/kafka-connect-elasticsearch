@@ -32,7 +32,6 @@ import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfi
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.SECURITY_PROTOCOL_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.SSL_CONFIG_PREFIX;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.WRITE_METHOD_CONFIG;
-import static io.confluent.connect.elasticsearch.helper.ElasticsearchContainer.ELASTIC_PASSWORD;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertThrows;
@@ -74,6 +73,9 @@ import org.junit.Test;
 
 public class ElasticsearchClientTest {
 
+  private static final String INDEX = "index";
+  private static final String ELASTIC_SUPERUSER_NAME = "elastic";
+  private static final String ELASTIC_SUPERUSER_PASSWORD = "elastic";
   private static final String TOPIC = "index";
   private static final String DATA_STREAM_TYPE = "logs";
   private static final String DATA_STREAM_DATASET = "dataset";
@@ -573,8 +575,8 @@ public class ElasticsearchClientTest {
 
     String address = container.getConnectionUrl().replace(container.getContainerIpAddress(), container.hostMachineIpAddress());
     props.put(CONNECTION_URL_CONFIG, address);
-    props.put(CONNECTION_USERNAME_CONFIG, "elastic");
-    props.put(CONNECTION_PASSWORD_CONFIG, ELASTIC_PASSWORD);
+    props.put(CONNECTION_USERNAME_CONFIG, ELASTIC_SUPERUSER_NAME);
+    props.put(CONNECTION_PASSWORD_CONFIG, ELASTIC_SUPERUSER_PASSWORD);
     props.put(SECURITY_PROTOCOL_CONFIG, SecurityProtocol.SSL.name());
     props.put(SSL_CONFIG_PREFIX + SslConfigs.SSL_KEYSTORE_LOCATION_CONFIG, container.getKeystorePath());
     props.put(SSL_CONFIG_PREFIX + SslConfigs.SSL_KEYSTORE_PASSWORD_CONFIG, container.getKeystorePassword());
