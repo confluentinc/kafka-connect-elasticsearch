@@ -46,9 +46,8 @@ public class ElasticsearchConnectorSslIT extends ElasticsearchConnectorBaseIT {
 
   @BeforeClass
   public static void setupBeforeAll() {
-    Map<User, String> users = Collections
-        .singletonMap(getMinimalPrivilegesUser(), getMinimalPrivilegesPassword());
-    List<Role> roles = Collections.singletonList(getMinimalPrivilegesRole());
+    Map<User, String> users = getUsers();
+    List<Role> roles = getRoles();
     container = ElasticsearchContainer.fromSystemProperties().withSslEnabled(true).withBasicAuth(users, roles);
     container.start();
   }

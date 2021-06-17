@@ -41,7 +41,6 @@ import org.junit.experimental.categories.Category;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -54,8 +53,8 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
 
   @BeforeClass
   public static void setupBeforeAll() {
-    Map<User, String> users = Collections.singletonMap(getMinimalPrivilegesUser(), getMinimalPrivilegesPassword());
-    List<Role> roles = Collections.singletonList(getMinimalPrivilegesRole());
+    Map<User, String> users = getUsers();
+    List<Role> roles = getRoles();
     container = ElasticsearchContainer.fromSystemProperties().withBasicAuth(users, roles);
     container.start();
   }
