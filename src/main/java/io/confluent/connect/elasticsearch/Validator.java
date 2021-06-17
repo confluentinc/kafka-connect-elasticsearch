@@ -332,8 +332,10 @@ public class Validator {
     MainResponse response;
     try {
       response = client.info(RequestOptions.DEFAULT);
-    } catch (IOException e) {
-      // Same error messages as from validating the connection.
+    } catch (IOException | ElasticsearchStatusException e) {
+      // Same error messages as from validating the connection for IOException.
+      // Insufficient privileges to validate the version number if caught
+      // ElasticsearchStatusException.
       return;
     }
     String esVersionNumber = response.getVersion().getNumber();
