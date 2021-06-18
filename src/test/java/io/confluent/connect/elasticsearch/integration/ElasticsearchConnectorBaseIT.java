@@ -29,8 +29,10 @@ import org.junit.AfterClass;
 import org.junit.Before;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnector;
@@ -38,7 +40,9 @@ import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig;
 import io.confluent.connect.elasticsearch.helper.ElasticsearchContainer;
 import io.confluent.connect.elasticsearch.helper.ElasticsearchHelperClient;
 
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_PASSWORD_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_USERNAME_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_KEY_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_SCHEMA_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.DATA_STREAM_DATASET_CONFIG;
@@ -64,7 +68,11 @@ public class ElasticsearchConnectorBaseIT extends BaseConnectorIT {
   public static final String ELASTIC_MINIMAL_PRIVILEGES_NAME = "frank";
   public static final String ELASTIC_MINIMAL_PRIVILEGES_PASSWORD = "WatermelonInEasterHay";
 
+  public static final String ELASTIC_DATA_STREAM_MINIMAL_PRIVILEGES_NAME = "bob";
+  public static final String ELASTIC_DS_MINIMAL_PRIVILEGES_PASSWORD = "PeachesInGeorgia";
+
   private static final String ES_SINK_CONNECTOR_ROLE = "es_sink_connector_role";
+  private static final String ES_SINK_CONNECTOR_DS_ROLE = "es_sink_connector_ds_role";
 
   protected static ElasticsearchContainer container;
 
@@ -136,6 +144,8 @@ public class ElasticsearchConnectorBaseIT extends BaseConnectorIT {
     props.put(DATA_STREAM_TYPE_CONFIG, "logs");
     props.put(DATA_STREAM_DATASET_CONFIG, "dataset");
     index = "logs-dataset-" + TOPIC;
+    props.put(CONNECTION_USERNAME_CONFIG, ELASTIC_DATA_STREAM_MINIMAL_PRIVILEGES_NAME);
+    props.put(CONNECTION_PASSWORD_CONFIG, ELASTIC_DS_MINIMAL_PRIVILEGES_PASSWORD);
   }
 
   protected void setupFromContainer() {
@@ -195,23 +205,41 @@ public class ElasticsearchConnectorBaseIT extends BaseConnectorIT {
     }
   }
 
-  protected static Role getMinimalPrivilegesRole() {
+  protected static List<Role> getRoles() {
+    List<Role> roles = new ArrayList<>();
+    roles.add(getMinimalPrivilegesRole(false));
+    roles.add(getMinimalPrivilegesRole(true));
+    return roles;
+  }
+
+  protected static Map<User, String> getUsers() {
+    Map<User, String> users = new HashMap<>();
+    users.put(getMinimalPrivilegesUser(true), getMinimalPrivilegesPassword(true));
+    users.put(getMinimalPrivilegesUser(false), getMinimalPrivilegesPassword(false));
+    return users;
+  }
+
+  private static Role getMinimalPrivilegesRole(boolean forDataStream) {
     IndicesPrivileges.Builder indicesPrivilegesBuilder = IndicesPrivileges.builder();
     IndicesPrivileges indicesPrivileges = indicesPrivilegesBuilder
         .indices("*")
         .privileges("create_index", "read", "write", "view_index_metadata")
         .build();
     Builder builder = Role.builder();
-    Role role = builder.name(ES_SINK_CONNECTOR_ROLE).indicesPrivileges(indicesPrivileges).build();
+    builder = forDataStream ? builder.clusterPrivileges("monitor") : builder;
+    Role role = builder
+        .name(forDataStream ? ES_SINK_CONNECTOR_DS_ROLE : ES_SINK_CONNECTOR_ROLE)
+        .indicesPrivileges(indicesPrivileges)
+        .build();
     return role;
   }
 
-  protected static User getMinimalPrivilegesUser() {
-        return new User(ELASTIC_MINIMAL_PRIVILEGES_NAME,
-            Collections.singletonList(ES_SINK_CONNECTOR_ROLE));
+  private static User getMinimalPrivilegesUser(boolean forDataStream) {
+        return new User(forDataStream ? ELASTIC_DATA_STREAM_MINIMAL_PRIVILEGES_NAME : ELASTIC_MINIMAL_PRIVILEGES_NAME,
+            Collections.singletonList(forDataStream ? ES_SINK_CONNECTOR_DS_ROLE : ES_SINK_CONNECTOR_ROLE));
   }
 
-  protected static String getMinimalPrivilegesPassword() {
-    return ELASTIC_MINIMAL_PRIVILEGES_PASSWORD;
+  private static String getMinimalPrivilegesPassword(boolean forDataStream) {
+    return forDataStream ? ELASTIC_DS_MINIMAL_PRIVILEGES_PASSWORD : ELASTIC_MINIMAL_PRIVILEGES_PASSWORD;
   }
 }
