@@ -22,10 +22,10 @@ import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.config.ConfigValue;
 import org.apache.kafka.common.config.SslConfigs;
 import org.elasticsearch.ElasticsearchStatusException;
+import org.elasticsearch.client.core.MainResponse;
 import org.elasticsearch.client.RequestOptions;
 import org.elasticsearch.client.RestClient;
 import org.elasticsearch.client.RestHighLevelClient;
-import org.elasticsearch.client.core.MainResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -70,6 +70,7 @@ public class Validator {
 
   private static final Logger log = LoggerFactory.getLogger(Validator.class);
 
+  private static final String CONNECTOR_V11_COMPATIBLE_ES_VERSION = "7.0.0";
   private static final String DATA_STREAM_COMPATIBLE_ES_VERSION = "7.9.0";
 
   private ElasticsearchSinkConnectorConfig config;
@@ -328,27 +329,37 @@ public class Validator {
   }
 
   private void validateVersion(RestHighLevelClient client) {
-    if (!config.isDataStream()) {
-      return;
-    }
     MainResponse response;
     try {
       response = client.info(RequestOptions.DEFAULT);
-    } catch (IOException e) {
-      // Same error messages as from validating the connection.
+    } catch (IOException | ElasticsearchStatusException e) {
+      // Same error messages as from validating the connection for IOException.
+      // Insufficient privileges to validate the version number if caught
+      // ElasticsearchStatusException.
       return;
     }
-    String versionNumber = response.getVersion().getNumber();
-    if (compareVersions(versionNumber, DATA_STREAM_COMPATIBLE_ES_VERSION) < 0) {
+    String esVersionNumber = response.getVersion().getNumber();
+    if (config.isDataStream()
+        && compareVersions(esVersionNumber, DATA_STREAM_COMPATIBLE_ES_VERSION) < 0) {
       String errorMessage = String.format(
           "Elasticsearch version %s is not compatible with data streams. Elasticsearch"
               + "version must be at least %s.",
-          versionNumber,
+          esVersionNumber,
           DATA_STREAM_COMPATIBLE_ES_VERSION
       );
       addErrorMessage(CONNECTION_URL_CONFIG, errorMessage);
       addErrorMessage(DATA_STREAM_TYPE_CONFIG, errorMessage);
       addErrorMessage(DATA_STREAM_DATASET_CONFIG, errorMessage);
+    }
+    if (compareVersions(esVersionNumber, CONNECTOR_V11_COMPATIBLE_ES_VERSION) < 0) {
+      String errorMessage = String.format(
+          "Connector version %s is not compatible with Elasticsearch version %s. Elasticsearch "
+              + "version must be at least %s.",
+          Version.getVersion(),
+          esVersionNumber,
+          CONNECTOR_V11_COMPATIBLE_ES_VERSION
+      );
+      addErrorMessage(CONNECTION_URL_CONFIG, errorMessage);
     }
   }
 
