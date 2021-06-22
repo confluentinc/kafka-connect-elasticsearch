@@ -161,11 +161,14 @@ public class RetryUtil {
         return function.call();
       } catch (IOException e) {
         if (attempt >= maxAttempts) {
+          log.error("Failed to {} due to {} after total of {} attempt(s)",
+              description, e.getCause(), maxAttempts, e.getMessage());
           throw new ConnectException("Failed to " + description, e);
         }
-
         // Otherwise it is retriable and we should retry
         long backoff = computeRandomRetryWaitTimeInMillis(attempt, initialBackoff);
+        log.warn("Failed to {} due to {}. Retrying attempt ({}/{}) after backoff of {} ms",
+            description, e.getCause(), attempt, maxAttempts, backoff);
         clock.sleep(backoff);
       }
     }
