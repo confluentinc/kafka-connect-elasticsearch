@@ -372,6 +372,26 @@ public class ValidatorTest {
   }
 
   @Test
+  public void testIncompatibleESVersionWithConnector() {
+    validator = new Validator(props, () -> mockClient);
+    when(mockInfoResponse.getVersion().getNumber()).thenReturn("6.0.0");
+    Config result = validator.validate();
+    assertHasErrorMessage(result, CONNECTION_URL_CONFIG, "not compatible with Elasticsearch");
+  }
+
+  @Test
+  public void testCompatibleESVersionWithConnector() {
+    validator = new Validator(props, () -> mockClient);
+    String[] compatibleESVersions = {"7.0.0", "7.9.3", "7.10.0", "7.12.1", "8.0.0", "10.10.10"};
+    for (String version : compatibleESVersions) {
+      when(mockInfoResponse.getVersion().getNumber()).thenReturn(version);
+      Config result = validator.validate();
+
+      assertNoErrors(result);
+    }
+  }
+
+  @Test
   public void testValidSsl() {
     // no SSL
     props.put(SECURITY_PROTOCOL_CONFIG, SecurityProtocol.PLAINTEXT.name());
