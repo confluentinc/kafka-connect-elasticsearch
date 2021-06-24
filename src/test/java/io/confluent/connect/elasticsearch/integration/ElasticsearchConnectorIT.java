@@ -15,14 +15,7 @@
 
 package io.confluent.connect.elasticsearch.integration;
 
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BATCH_SIZE_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BEHAVIOR_ON_NULL_VALUES_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_PASSWORD_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_USERNAME_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_KEY_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.LINGER_MS_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BULK_SIZE_BYTES_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.WRITE_METHOD_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.*;
 import static org.apache.kafka.connect.runtime.ConnectorConfig.VALUE_CONVERTER_CLASS_CONFIG;
 import static org.junit.Assert.assertEquals;
 
@@ -30,12 +23,14 @@ import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.Behav
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.WriteMethod;
 import io.confluent.connect.elasticsearch.helper.ElasticsearchContainer;
 
+import org.apache.commons.lang3.NotImplementedException;
 import org.apache.kafka.connect.storage.StringConverter;
 import org.apache.kafka.test.IntegrationTest;
 import org.elasticsearch.client.security.user.User;
 import org.elasticsearch.client.security.user.privileges.Role;
 import org.elasticsearch.search.SearchHit;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.slf4j.Logger;
@@ -198,5 +193,13 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
     container.close();
     container = ElasticsearchContainer.fromSystemProperties();
     container.start();
+  }
+
+  @Ignore
+  @Test
+  public void testRouting() throws Exception {
+    props.put(ROUTING_FIELD_NAME_CONFIG, "doc_num");
+    // TODO this might require massive test data refactoring, discuss in PR first...
+    throw new NotImplementedException("");
   }
 }

@@ -492,6 +492,21 @@ public class DataConverterTest {
     assertEquals(VersionType.INTERNAL, actualRecord.versionType());
   }
 
+  @Test
+  public void testDoAddRoutingValueForConfiguredPath() {
+    Map<String, String> propsWithRouting = new HashMap<>(props);
+    propsWithRouting.put(ElasticsearchSinkConnectorConfig.ROUTING_FIELD_NAME_CONFIG, "string");
+    converter = new DataConverter(new ElasticsearchSinkConnectorConfig(propsWithRouting));
+    Schema preProcessedSchema = converter.preProcessSchema(schema);
+    String routingFieldValue = "routeTo";
+    Struct struct = new Struct(preProcessedSchema).put("string", routingFieldValue);
+    SinkRecord sinkRecord = createSinkRecordWithValue(struct);
+
+    IndexRequest actualRecord = (IndexRequest) converter.convertRecord(sinkRecord, index);
+
+    assertEquals(routingFieldValue, actualRecord.routing());
+  }
+
   private void configureDataStream() {
     props.put(ElasticsearchSinkConnectorConfig.DATA_STREAM_TYPE_CONFIG, "logs");
     props.put(ElasticsearchSinkConnectorConfig.DATA_STREAM_DATASET_CONFIG, "dataset");
