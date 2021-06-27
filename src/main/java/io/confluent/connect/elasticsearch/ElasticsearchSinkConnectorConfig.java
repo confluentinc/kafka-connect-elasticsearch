@@ -258,7 +258,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
 
   public static final String ROUTING_FIELD_NAME_CONFIG = "routing.field.name";
   private static final String ROUTING_FIELD_NAME_DOC =
-       "Specify which filed should be used for routing, "
+       "Specify which field should be used for routing, "
        + "supports nested fields through dot notion (`this.is.my.nested.path`). "
        + "If configured, the field is mandatory and must always resolve to a non-blank String.";
   private static final String ROUTING_FIELD_NAME_DISPLAY = "Routing field name";
