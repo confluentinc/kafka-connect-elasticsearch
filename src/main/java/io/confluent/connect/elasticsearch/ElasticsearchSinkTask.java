@@ -25,10 +25,10 @@ import org.apache.kafka.connect.sink.SinkRecord;
 import org.apache.kafka.connect.sink.SinkTask;
 import org.elasticsearch.ElasticsearchStatusException;
 import org.elasticsearch.action.DocWriteRequest;
+import org.elasticsearch.action.main.MainResponse;
 import org.elasticsearch.client.RequestOptions;
 import org.elasticsearch.client.RestClient;
 import org.elasticsearch.client.RestHighLevelClient;
-import org.elasticsearch.client.core.MainResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -153,7 +153,7 @@ public class ElasticsearchSinkTask extends SinkTask {
     String esVersionNumber = "Unknown";
     try {
       response = highLevelClient.info(RequestOptions.DEFAULT);
-      esVersionNumber = response.getVersion().getNumber();
+      esVersionNumber = response.getVersion().toString();
     } catch (IOException | ElasticsearchStatusException e) {
       // Same error messages as from validating the connection for IOException.
       // Insufficient privileges to validate the version number if caught
