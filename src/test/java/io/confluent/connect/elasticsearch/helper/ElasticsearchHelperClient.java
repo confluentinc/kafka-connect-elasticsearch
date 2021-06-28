@@ -15,11 +15,6 @@
 
 package io.confluent.connect.elasticsearch.helper;
 
-import io.confluent.connect.elasticsearch.ConfigCallbackHandler;
-import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig;
-import java.io.IOException;
-import java.util.Map.Entry;
-
 import org.apache.http.HttpHost;
 import org.elasticsearch.action.admin.indices.delete.DeleteIndexRequest;
 import org.elasticsearch.action.search.SearchRequest;
@@ -41,6 +36,12 @@ import org.elasticsearch.cluster.metadata.MappingMetaData;
 import org.elasticsearch.search.SearchHits;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.io.IOException;
+import java.util.Map.Entry;
+
+import io.confluent.connect.elasticsearch.ConfigCallbackHandler;
+import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig;
 
 public class ElasticsearchHelperClient {
 
