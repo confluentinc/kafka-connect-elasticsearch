@@ -119,6 +119,7 @@ public class ElasticsearchSinkTask extends SinkTask {
     client.close();
     try {
       highLevelClient.close();
+      highLevelClient = null;
     } catch (Exception e) {
       log.error("Failed to close high level rest client", e);
     }
