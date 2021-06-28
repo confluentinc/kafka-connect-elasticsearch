@@ -159,10 +159,10 @@ public class ElasticsearchSinkTask extends SinkTask {
       response = highLevelClient.info(RequestOptions.DEFAULT);
       esVersionNumber = response.getVersion().toString();
     } catch (Exception e) {
-      log.info("Failed to get ES server version", e);
       // Same error messages as from validating the connection for IOException.
       // Insufficient privileges to validate the version number if caught
       // ElasticsearchStatusException.
+      log.warn("Failed to get ES server version", e);
     }
     return esVersionNumber;
   }
