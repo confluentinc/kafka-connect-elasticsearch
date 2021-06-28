@@ -15,8 +15,6 @@
 
 package io.confluent.connect.elasticsearch;
 
-import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BehaviorOnNullValues;
-
 import org.apache.http.HttpHost;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
@@ -40,6 +38,8 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
+
+import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BehaviorOnNullValues;
 
 public class ElasticsearchSinkTask extends SinkTask {
 
@@ -72,7 +72,6 @@ public class ElasticsearchSinkTask extends SinkTask {
       if (context.errantRecordReporter() == null) {
         log.info("Errant record reporter not configured.");
       }
-
       // may be null if DLQ not enabled
       reporter = context.errantRecordReporter();
     } catch (NoClassDefFoundError | NoSuchMethodError e) {
@@ -82,7 +81,8 @@ public class ElasticsearchSinkTask extends SinkTask {
 
     this.client = client != null ? client : new ElasticsearchClient(config, reporter);
 
-    log.info("Started ElasticsearchSinkTask. Connecting to ES server version: {}", getServerVersion());
+    log.info("Started ElasticsearchSinkTask. Connecting to ES server version: {}",
+        getServerVersion());
   }
 
   @Override
