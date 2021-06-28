@@ -507,7 +507,7 @@ public class ElasticsearchClient {
    * Gets the mapping for an index.
    *
    * @param index the index to fetch the mapping for
-   * @return the MappingMetaData for the index
+   * @return the MappingMetadata for the index
    */
   private MappingMetadata mapping(String index) {
     GetMappingsRequest request = new GetMappingsRequest().indices(index);
