@@ -39,7 +39,7 @@ import org.elasticsearch.client.indices.GetIndexRequest;
 import org.elasticsearch.client.indices.GetMappingsRequest;
 import org.elasticsearch.client.indices.GetMappingsResponse;
 import org.elasticsearch.client.indices.PutMappingRequest;
-import org.elasticsearch.cluster.metadata.MappingMetaData;
+import org.elasticsearch.cluster.metadata.MappingMetadata;
 import org.elasticsearch.common.unit.TimeValue;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -220,7 +220,7 @@ public class ElasticsearchClient {
    * @return true if a mapping exists, false if it does not
    */
   public boolean hasMapping(String index) {
-    MappingMetaData mapping = mapping(index);
+    MappingMetadata mapping = mapping(index);
     return mapping != null && mapping.sourceAsMap() != null && !mapping.sourceAsMap().isEmpty();
   }
 
@@ -509,9 +509,9 @@ public class ElasticsearchClient {
    * Gets the mapping for an index.
    *
    * @param index the index to fetch the mapping for
-   * @return the MappingMetaData for the index
+   * @return the MappingMetadata for the index
    */
-  private MappingMetaData mapping(String index) {
+  private MappingMetadata mapping(String index) {
     GetMappingsRequest request = new GetMappingsRequest().indices(index);
     GetMappingsResponse response = callWithRetries(
         "get mapping for index " + index,
