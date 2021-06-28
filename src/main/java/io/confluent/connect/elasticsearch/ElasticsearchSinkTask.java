@@ -156,11 +156,12 @@ public class ElasticsearchSinkTask extends SinkTask {
       // Insufficient privileges to validate the version number if caught
       // ElasticsearchStatusException.
       log.warn("Failed to get ES server version", e);
-    }
-    try {
-      highLevelClient.close();
-    } catch (Exception e) {
-      log.error("Failed to close high level client");
+    } finally {
+      try {
+        highLevelClient.close();
+      } catch (Exception e) {
+        log.error("Failed to close high level client");
+      }
     }
     return esVersionNumber;
   }
