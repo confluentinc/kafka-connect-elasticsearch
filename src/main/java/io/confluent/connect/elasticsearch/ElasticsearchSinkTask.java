@@ -45,7 +45,6 @@ public class ElasticsearchSinkTask extends SinkTask {
 
   private DataConverter converter;
   private ElasticsearchClient client;
-  private RestHighLevelClient highLevelClient;
   private ElasticsearchSinkConnectorConfig config;
   private ErrantRecordReporter reporter;
   private Set<String> existingMappings;
@@ -115,12 +114,6 @@ public class ElasticsearchSinkTask extends SinkTask {
   public void stop() {
     log.debug("Stopping Elasticsearch client.");
     client.close();
-    try {
-      highLevelClient.close();
-      highLevelClient = null;
-    } catch (Exception e) {
-      log.error("Failed to close high level rest client", e);
-    }
   }
 
   @Override
@@ -141,7 +134,7 @@ public class ElasticsearchSinkTask extends SinkTask {
 
   private String getServerVersion() {
     ConfigCallbackHandler configCallbackHandler = new ConfigCallbackHandler(config);
-    this.highLevelClient = highLevelClient != null ? highLevelClient : new RestHighLevelClient(
+    RestHighLevelClient highLevelClient = new RestHighLevelClient(
         RestClient
             .builder(
                 config.connectionUrls()
@@ -163,6 +156,11 @@ public class ElasticsearchSinkTask extends SinkTask {
       // Insufficient privileges to validate the version number if caught
       // ElasticsearchStatusException.
       log.warn("Failed to get ES server version", e);
+    }
+    try {
+      highLevelClient.close();
+    } catch (Exception e) {
+      log.error("Failed to close high level client");
     }
     return esVersionNumber;
   }
