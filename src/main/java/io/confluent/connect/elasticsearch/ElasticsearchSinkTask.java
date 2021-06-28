@@ -117,6 +117,11 @@ public class ElasticsearchSinkTask extends SinkTask {
   public void stop() {
     log.debug("Stopping Elasticsearch client.");
     client.close();
+    try {
+      highLevelClient.close();
+    } catch (Exception e) {
+      log.error("Failed to close high level rest client", e);
+    }
   }
 
   @Override
@@ -154,7 +159,8 @@ public class ElasticsearchSinkTask extends SinkTask {
     try {
       response = highLevelClient.info(RequestOptions.DEFAULT);
       esVersionNumber = response.getVersion().toString();
-    } catch (IOException | ElasticsearchStatusException e) {
+    } catch (Exception e) {
+      log.info("Failed to get ES server version", e);
       // Same error messages as from validating the connection for IOException.
       // Insufficient privileges to validate the version number if caught
       // ElasticsearchStatusException.
