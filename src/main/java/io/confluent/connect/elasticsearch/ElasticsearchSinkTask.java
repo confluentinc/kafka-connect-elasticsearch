@@ -160,7 +160,7 @@ public class ElasticsearchSinkTask extends SinkTask {
       try {
         highLevelClient.close();
       } catch (Exception e) {
-        log.error("Failed to close high level client");
+        log.warn("Failed to close high level client");
       }
     }
     return esVersionNumber;
