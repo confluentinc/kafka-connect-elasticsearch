@@ -15,25 +15,6 @@
 
 package io.confluent.connect.elasticsearch;
 
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.FLUSH_TIMEOUT_MS_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.MAX_BUFFERED_RECORDS_CONFIG;
-
-import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BehaviorOnMalformedDoc;
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
-import java.util.concurrent.Callable;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicReference;
-import java.util.stream.Collectors;
 import org.apache.http.HttpHost;
 import org.apache.http.nio.conn.NHttpClientConnectionManager;
 import org.apache.kafka.common.utils.Time;
@@ -58,10 +39,31 @@ import org.elasticsearch.client.indices.GetIndexRequest;
 import org.elasticsearch.client.indices.GetMappingsRequest;
 import org.elasticsearch.client.indices.GetMappingsResponse;
 import org.elasticsearch.client.indices.PutMappingRequest;
-import org.elasticsearch.cluster.metadata.MappingMetadata;
+import org.elasticsearch.cluster.metadata.MappingMetaData;
 import org.elasticsearch.common.unit.TimeValue;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
+
+import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BehaviorOnMalformedDoc;
+
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.FLUSH_TIMEOUT_MS_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.MAX_BUFFERED_RECORDS_CONFIG;
 
 public class ElasticsearchClient {
 
@@ -218,7 +220,7 @@ public class ElasticsearchClient {
    * @return true if a mapping exists, false if it does not
    */
   public boolean hasMapping(String index) {
-    MappingMetadata mapping = mapping(index);
+    MappingMetaData mapping = mapping(index);
     return mapping != null && mapping.sourceAsMap() != null && !mapping.sourceAsMap().isEmpty();
   }
 
@@ -507,9 +509,9 @@ public class ElasticsearchClient {
    * Gets the mapping for an index.
    *
    * @param index the index to fetch the mapping for
-   * @return the MappingMetadata for the index
+   * @return the MappingMetaData for the index
    */
-  private MappingMetadata mapping(String index) {
+  private MappingMetaData mapping(String index) {
     GetMappingsRequest request = new GetMappingsRequest().indices(index);
     GetMappingsResponse response = callWithRetries(
         "get mapping for index " + index,
