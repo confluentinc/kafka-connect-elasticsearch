@@ -15,13 +15,6 @@
 
 package io.confluent.connect.elasticsearch.helper;
 
-import io.confluent.connect.elasticsearch.ConfigCallbackHandler;
-import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig;
-import java.io.IOException;
-import java.util.List;
-
-import java.util.Map.Entry;
-
 import org.apache.http.HttpHost;
 import org.elasticsearch.action.admin.indices.delete.DeleteIndexRequest;
 import org.elasticsearch.action.search.SearchRequest;
@@ -35,7 +28,6 @@ import org.elasticsearch.client.indices.GetDataStreamRequest;
 import org.elasticsearch.client.indices.GetIndexRequest;
 import org.elasticsearch.client.indices.GetMappingsRequest;
 import org.elasticsearch.client.indices.GetMappingsResponse;
-import org.elasticsearch.cluster.metadata.MappingMetadata;
 import org.elasticsearch.client.security.PutRoleRequest;
 import org.elasticsearch.client.security.PutRoleResponse;
 import org.elasticsearch.client.security.PutUserRequest;
@@ -43,9 +35,17 @@ import org.elasticsearch.client.security.PutUserResponse;
 import org.elasticsearch.client.security.RefreshPolicy;
 import org.elasticsearch.client.security.user.User;
 import org.elasticsearch.client.security.user.privileges.Role;
+import org.elasticsearch.cluster.metadata.MappingMetaData;
 import org.elasticsearch.search.SearchHits;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.io.IOException;
+import java.util.List;
+import java.util.Map.Entry;
+
+import io.confluent.connect.elasticsearch.ConfigCallbackHandler;
+import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig;
 
 public class ElasticsearchHelperClient {
 
@@ -86,7 +86,7 @@ public class ElasticsearchHelperClient {
     return client.count(request, RequestOptions.DEFAULT).getCount();
   }
 
-  public MappingMetadata getMapping(String index) throws IOException {
+  public MappingMetaData getMapping(String index) throws IOException {
     GetMappingsRequest request = new GetMappingsRequest().indices(index);
     GetMappingsResponse response = client.indices().getMapping(request, RequestOptions.DEFAULT);
     return response.mappings().get(index);
