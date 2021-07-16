@@ -108,6 +108,8 @@ public class DataConverter {
       case INT64:
       case STRING:
         return String.valueOf(key);
+      case STRUCT:
+        return key.toString();
       default:
         throw new DataException(schemaType.name() + " is not supported as the document id.");
     }

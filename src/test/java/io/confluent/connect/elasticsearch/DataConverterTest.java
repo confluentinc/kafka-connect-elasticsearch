@@ -365,6 +365,31 @@ public class DataConverterTest {
     }
   }
 
+  @Test
+  public void structKey() {
+    props.put(ElasticsearchSinkConnectorConfig.IGNORE_KEY_CONFIG, "false");
+    props.put(ElasticsearchSinkConnectorConfig.IGNORE_SCHEMA_CONFIG, "false");
+    converter = new DataConverter(new ElasticsearchSinkConnectorConfig(props));
+
+    Schema schema = SchemaBuilder.struct().field("field1", Schema.STRING_SCHEMA).field("field2", Schema.STRING_SCHEMA).build();
+    Struct key = new Struct(schema).put("field1", "value1").put("field2", "value2");
+    Struct value = new Struct(schema).put("field1", "value1").put("field2", "value2");
+
+    SinkRecord sinkRecord = new SinkRecord(
+         topic,
+         partition,
+         schema,
+         key,
+         schema,
+         value,
+         offset,
+         recordTimestamp,
+         TimestampType.CREATE_TIME
+    );
+    IndexRequest actualRecord = (IndexRequest) converter.convertRecord(sinkRecord, index);
+    assertEquals(actualRecord.id(), "Struct{field1=value1,field2=value2}");
+  }
+
   public SinkRecord createSinkRecordWithValue(Object value) {
     return new SinkRecord(
          topic, 
