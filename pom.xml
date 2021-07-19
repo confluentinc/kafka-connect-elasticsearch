@@ -59,7 +59,7 @@
         <repository>
             <id>confluent</id>
             <name>Confluent</name>
-            <url>https://packages.confluent.io/maven/</url>
+            <url>https://repo.maven.apache.org/maven2/</url>
         </repository>
     </repositories>
 
