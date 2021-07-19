@@ -15,7 +15,7 @@
 
 package io.confluent.connect.elasticsearch;
 
-import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BehaviorOnNullValues;
+import org.apache.http.HttpHost;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.connect.errors.ConnectException;
@@ -24,6 +24,10 @@ import org.apache.kafka.connect.sink.ErrantRecordReporter;
 import org.apache.kafka.connect.sink.SinkRecord;
 import org.apache.kafka.connect.sink.SinkTask;
 import org.elasticsearch.action.DocWriteRequest;
+import org.elasticsearch.client.RequestOptions;
+import org.elasticsearch.client.RestClient;
+import org.elasticsearch.client.RestHighLevelClient;
+import org.elasticsearch.client.core.MainResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -31,6 +35,9 @@ import java.util.Collection;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
+
+import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BehaviorOnNullValues;
 
 public class ElasticsearchSinkTask extends SinkTask {
 
@@ -62,7 +69,6 @@ public class ElasticsearchSinkTask extends SinkTask {
       if (context.errantRecordReporter() == null) {
         log.info("Errant record reporter not configured.");
       }
-
       // may be null if DLQ not enabled
       reporter = context.errantRecordReporter();
     } catch (NoClassDefFoundError | NoSuchMethodError e) {
@@ -72,7 +78,8 @@ public class ElasticsearchSinkTask extends SinkTask {
 
     this.client = client != null ? client : new ElasticsearchClient(config, reporter);
 
-    log.info("Started ElasticsearchSinkTask.");
+    log.info("Started ElasticsearchSinkTask. Connecting to ES server version: {}",
+        getServerVersion());
   }
 
   @Override
@@ -123,6 +130,40 @@ public class ElasticsearchSinkTask extends SinkTask {
       log.debug("Caching mapping for index '{}' locally.", index);
       existingMappings.add(index);
     }
+  }
+
+  private String getServerVersion() {
+    ConfigCallbackHandler configCallbackHandler = new ConfigCallbackHandler(config);
+    RestHighLevelClient highLevelClient = new RestHighLevelClient(
+        RestClient
+            .builder(
+                config.connectionUrls()
+                    .stream()
+                    .map(HttpHost::create)
+                    .collect(Collectors.toList())
+                    .toArray(new HttpHost[config.connectionUrls().size()])
+            )
+            .setHttpClientConfigCallback(configCallbackHandler)
+            .setRequestConfigCallback(configCallbackHandler)
+    );
+    MainResponse response;
+    String esVersionNumber = "Unknown";
+    try {
+      response = highLevelClient.info(RequestOptions.DEFAULT);
+      esVersionNumber = response.getVersion().toString();
+    } catch (Exception e) {
+      // Same error messages as from validating the connection for IOException.
+      // Insufficient privileges to validate the version number if caught
+      // ElasticsearchStatusException.
+      log.warn("Failed to get ES server version", e);
+    } finally {
+      try {
+        highLevelClient.close();
+      } catch (Exception e) {
+        log.warn("Failed to close high level client", e);
+      }
+    }
+    return esVersionNumber;
   }
 
   /**

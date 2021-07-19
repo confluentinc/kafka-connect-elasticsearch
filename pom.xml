@@ -168,13 +168,6 @@
             </exclusions>
             <scope>test</scope>
         </dependency>
-        <!--Require newer version than inherited-->
-        <dependency>
-            <groupId>com.google.guava</groupId>
-            <artifactId>guava</artifactId>
-            <version>27.0.1-jre</version>
-            <scope>test</scope>
-        </dependency>
         <dependency>
             <groupId>org.apache.kafka</groupId>
             <artifactId>connect-runtime</artifactId>
