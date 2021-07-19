@@ -21,6 +21,7 @@ jobs:
         uses: actions/setup-java@v2
         with:
           java-version: 15
+          distribution: zulu
       - name: Maven Set Version
         run: mvn versions:set -DnewVersion=${{ steps.get_version.outputs.VERSION }} -B --file pom.xml
       - name: Build with Maven
