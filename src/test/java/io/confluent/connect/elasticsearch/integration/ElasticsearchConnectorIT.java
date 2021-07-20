@@ -62,6 +62,18 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
     writeRecords(NUM_RECORDS);
     verifySearchResults(NUM_RECORDS * 2);
   }
+  
+  @Test
+  public void testStopESConnectorAndRestart() throws Exception {
+    // run connector and write
+    runSimpleTest(props);
+    // stop and start container
+    container.stop();
+    // write some more
+    writeRecords(NUM_RECORDS);
+    container.start();
+    verifySearchResults(NUM_RECORDS * 2);
+  }
 
   @Test
   public void testDelete() throws Exception {

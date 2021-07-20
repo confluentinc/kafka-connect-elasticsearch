@@ -39,6 +39,7 @@ import org.apache.http.nio.conn.NHttpClientConnectionManager;
 import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.errors.ConnectException;
+import org.apache.kafka.connect.errors.RetriableException;
 import org.apache.kafka.connect.sink.ErrantRecordReporter;
 import org.apache.kafka.connect.sink.SinkRecord;
 import org.elasticsearch.ElasticsearchStatusException;
@@ -333,7 +334,7 @@ public class ElasticsearchClient {
       @Override
       public void afterBulk(long executionId, BulkRequest request, Throwable failure) {
         removeFromInFlightRequests(executionId);
-        error.compareAndSet(null, new ConnectException("Bulk request failed.", failure));
+        error.compareAndSet(null, new RetriableException("Bulk request failed.", failure));
         numRecords.addAndGet(-request.requests().size());
       }
     };
