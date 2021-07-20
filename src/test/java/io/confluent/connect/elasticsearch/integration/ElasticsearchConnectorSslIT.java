@@ -103,5 +103,7 @@ public class ElasticsearchConnectorSslIT extends ElasticsearchConnectorBaseIT {
     props.put(SSL_CONFIG_PREFIX + SslConfigs.SSL_KEY_PASSWORD_CONFIG, container.getKeyPassword());
     props.put(CONNECTION_USERNAME_CONFIG, ELASTIC_MINIMAL_PRIVILEGES_NAME);
     props.put(CONNECTION_PASSWORD_CONFIG, ELASTIC_MINIMAL_PRIVILEGES_PASSWORD);
+
+    System.out.printf("ES pros", props);
   }
 }
