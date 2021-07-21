@@ -149,14 +149,16 @@ public class ElasticsearchContainer
   @Override
   public void start() {
     super.start();
-    String address = this.getConnectionUrl();
+    String address;
     if (isBasicAuthEnabled()) {
       Map<String, String> props = new HashMap<>();
       props.put(CONNECTION_USERNAME_CONFIG, ELASTIC_SUPERUSER_NAME);
       props.put(CONNECTION_PASSWORD_CONFIG, ELASTIC_SUPERUSER_PASSWORD);
       if (isSslEnabled()) {
         addSslProps(props);
-        address = address.replace(this.getContainerIpAddress(), this.hostMachineIpAddress());
+        address = this.getConnectionUrl(false);
+      } else {
+        address = this.getConnectionUrl();
       }
       props.put(CONNECTION_URL_CONFIG, address);
       ElasticsearchHelperClient helperClient = getHelperClient(props);
@@ -381,18 +383,27 @@ public class ElasticsearchContainer
   }
 
   /**
+   * @see ElasticsearchContainer#getConnectionUrl(boolean)
+   */
+  public String getConnectionUrl() {
+    return getConnectionUrl(true);
+  }
+
+  /**
    * Get the Elasticsearch connection URL.
    *
    * <p>This can only be called once the container is started.
    *
+   * @param useContainerIpAddress use container IP if true, host machine's IP otherwise
+   *
    * @return the connection URL; never null
    */
-  public String getConnectionUrl() {
+  public String getConnectionUrl(boolean useContainerIpAddress) {
     String protocol = isSslEnabled() ? "https" : "http";
     return String.format(
         "%s://%s:%d",
         protocol,
-        getContainerIpAddress(),
+        useContainerIpAddress ? getContainerIpAddress() : hostMachineIpAddress(),
         getMappedPort(ELASTICSEARCH_DEFAULT_PORT)
     );
   }

@@ -31,7 +31,9 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_PASSWORD_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_USERNAME_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.SSL_CONFIG_PREFIX;
 
 
@@ -55,9 +57,8 @@ public class ElasticsearchConnectorSslIT extends ElasticsearchConnectorBaseIT {
    */
   @Test
   public void testSecureConnectionVerifiedHostname() throws Throwable {
-    // Use IP address here because that's what the certificates allow
-    String address = container.getConnectionUrl();
-    address = address.replace(container.getContainerIpAddress(), container.hostMachineIpAddress());
+    // Use container IP address here because that's what the certificates allow
+    String address = container.getConnectionUrl(false);
     log.info("Creating connector for {}.", address);
 
     props.put(CONNECTION_URL_CONFIG, address);
@@ -67,6 +68,14 @@ public class ElasticsearchConnectorSslIT extends ElasticsearchConnectorBaseIT {
 
     // Start connector
     runSimpleTest(props);
+  }
+
+  @Override
+  protected Map<String, String> createProps() {
+    props = super.createProps();
+    props.put(CONNECTION_USERNAME_CONFIG, ELASTIC_MINIMAL_PRIVILEGES_NAME);
+    props.put(CONNECTION_PASSWORD_CONFIG, ELASTIC_MINIMAL_PRIVILEGES_PASSWORD);
+    return props;
   }
 
   @Test
