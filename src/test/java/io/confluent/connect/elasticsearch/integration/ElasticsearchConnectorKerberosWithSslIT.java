@@ -7,7 +7,7 @@ import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfi
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.SecurityProtocol;
 import io.confluent.connect.elasticsearch.helper.ElasticsearchContainer;
 import org.apache.kafka.common.config.SslConfigs;
-import org.apache.kafka.test.IntegrationTest;
+import io.confluent.common.utils.IntegrationTest;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
