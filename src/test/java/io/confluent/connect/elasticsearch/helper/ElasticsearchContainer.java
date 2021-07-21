@@ -15,6 +15,7 @@
 
 package io.confluent.connect.elasticsearch.helper;
 
+import org.apache.kafka.common.config.SslConfigs;
 import org.elasticsearch.client.security.user.User;
 import org.elasticsearch.client.security.user.privileges.Role;
 import org.slf4j.Logger;
@@ -41,10 +42,13 @@ import java.util.List;
 import java.util.Map;
 
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig;
+import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.SecurityProtocol;
 
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_PASSWORD_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_USERNAME_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.SECURITY_PROTOCOL_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.SSL_CONFIG_PREFIX;
 
 /**
  * A specialized TestContainer container for testing Elasticsearch, optionally with SSL support.
@@ -145,14 +149,28 @@ public class ElasticsearchContainer
   @Override
   public void start() {
     super.start();
+    String address = this.getConnectionUrl();
     if (isBasicAuthEnabled()) {
       Map<String, String> props = new HashMap<>();
       props.put(CONNECTION_USERNAME_CONFIG, ELASTIC_SUPERUSER_NAME);
       props.put(CONNECTION_PASSWORD_CONFIG, ELASTIC_SUPERUSER_PASSWORD);
-      props.put(CONNECTION_URL_CONFIG, getConnectionUrl());
+      if (isSslEnabled()) {
+        addSslProps(props);
+        address = address.replace(this.getContainerIpAddress(), this.hostMachineIpAddress());
+      }
+      props.put(CONNECTION_URL_CONFIG, address);
       ElasticsearchHelperClient helperClient = getHelperClient(props);
       createUsersAndRoles(helperClient);
     }
+  }
+
+  public void addSslProps(Map<String, String> props) {
+    props.put(SECURITY_PROTOCOL_CONFIG, SecurityProtocol.SSL.name());
+    props.put(SSL_CONFIG_PREFIX + SslConfigs.SSL_KEYSTORE_LOCATION_CONFIG, this.getKeystorePath());
+    props.put(SSL_CONFIG_PREFIX + SslConfigs.SSL_KEYSTORE_PASSWORD_CONFIG, this.getKeystorePassword());
+    props.put(SSL_CONFIG_PREFIX + SslConfigs.SSL_TRUSTSTORE_LOCATION_CONFIG, this.getTruststorePath());
+    props.put(SSL_CONFIG_PREFIX + SslConfigs.SSL_TRUSTSTORE_PASSWORD_CONFIG, this.getTruststorePassword());
+    props.put(SSL_CONFIG_PREFIX + SslConfigs.SSL_KEY_PASSWORD_CONFIG, this.getKeyPassword());
   }
 
   private void createUsersAndRoles(ElasticsearchHelperClient helperClient ) {
@@ -515,7 +533,7 @@ public class ElasticsearchContainer
     superUserProps.put(CONNECTION_USERNAME_CONFIG, ELASTIC_SUPERUSER_NAME);
     superUserProps.put(CONNECTION_PASSWORD_CONFIG, ELASTIC_SUPERUSER_PASSWORD);
     ElasticsearchSinkConnectorConfig config = new ElasticsearchSinkConnectorConfig(superUserProps);
-    ElasticsearchHelperClient client = new ElasticsearchHelperClient(this.getConnectionUrl(), config);
+    ElasticsearchHelperClient client = new ElasticsearchHelperClient(props.get(CONNECTION_URL_CONFIG), config);
     return client;
   }
 }
