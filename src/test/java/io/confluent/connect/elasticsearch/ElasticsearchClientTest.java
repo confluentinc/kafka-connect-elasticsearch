@@ -537,7 +537,7 @@ public class ElasticsearchClientTest {
     container = ElasticsearchContainer.fromSystemProperties().withSslEnabled(true);
     container.start();
 
-    String address = container.getConnectionUrl().replace(container.getContainerIpAddress(), container.hostMachineIpAddress());
+    String address = container.getConnectionUrl(false);
     props.put(CONNECTION_URL_CONFIG, address);
     props.put(CONNECTION_USERNAME_CONFIG, ELASTIC_SUPERUSER_NAME);
     props.put(CONNECTION_PASSWORD_CONFIG, ELASTIC_SUPERUSER_PASSWORD);

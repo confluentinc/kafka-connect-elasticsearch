@@ -34,7 +34,6 @@ import java.util.HashMap;
 import java.util.Map;
 
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnector;
-import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig;
 import io.confluent.connect.elasticsearch.helper.ElasticsearchContainer;
 import io.confluent.connect.elasticsearch.helper.ElasticsearchHelperClient;
 
