@@ -31,7 +31,7 @@ import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.Write
 import io.confluent.connect.elasticsearch.helper.ElasticsearchContainer;
 
 import org.apache.kafka.connect.storage.StringConverter;
-import org.apache.kafka.test.IntegrationTest;
+import io.confluent.common.utils.IntegrationTest;
 import org.elasticsearch.client.security.user.User;
 import org.elasticsearch.client.security.user.privileges.Role;
 import org.elasticsearch.search.SearchHit;
