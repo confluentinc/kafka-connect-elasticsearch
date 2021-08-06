@@ -5,7 +5,7 @@
     <parent>
         <groupId>io.confluent</groupId>
         <artifactId>common</artifactId>
-        <version>6.0.1</version>
+        <version>6.0.3</version>
     </parent>
 
     <groupId>io.confluent</groupId>
@@ -89,6 +89,11 @@
             <groupId>org.elasticsearch</groupId>
             <artifactId>elasticsearch</artifactId>
             <version>${es.version}</version>
+        </dependency>
+        <!-- pin jackson-dataformat-cbor for CVE - the version comes from confluentinc/common -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.dataformat</groupId>
+            <artifactId>jackson-dataformat-cbor</artifactId>
         </dependency>
         <!-- pin commons-codec for CVE -->
         <dependency>
