@@ -72,7 +72,7 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
   }
 
   @Test
-  public void testStopESConnectorAndRestart() throws Exception {
+  public void testStopESContainer() throws Exception {
     log.info("Running testStopESConnectorAndRestart");
     // run connector and write
     runSimpleTest(props);
