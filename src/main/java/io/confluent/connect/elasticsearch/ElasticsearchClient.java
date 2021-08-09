@@ -367,7 +367,8 @@ public class ElasticsearchClient {
           description,
           function,
           config.maxRetries(),
-          config.retryBackoffMs()
+          config.retryBackoffMs(),
+          config.connectionTimeoutMs()
       );
     } catch (Exception e) {
       throw new ConnectException("Failed to " + description + ".", e);
