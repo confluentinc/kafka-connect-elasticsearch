@@ -262,7 +262,10 @@ public class ElasticsearchClientTest {
 
     writeRecord(sinkRecord(0), client);
     assertEquals(0, helperClient.getDocCount(INDEX)); // should be empty before flush
+
+    // TODO shouldn't this be synchronous. Add a test.
     client.flush();
+
     waitUntilRecordsInES(1);
     assertEquals(1, helperClient.getDocCount(INDEX));
     client.close();
@@ -422,6 +425,7 @@ public class ElasticsearchClientTest {
     props.put(BATCH_SIZE_CONFIG, "2");
     props.put(MAX_RETRIES_CONFIG, "100");
     props.put(RETRY_BACKOFF_MS_CONFIG, "1000");
+    props.put(MAX_IN_FLIGHT_REQUESTS_CONFIG, "1");
     config = new ElasticsearchSinkConnectorConfig(props);
     converter = new DataConverter(config);
 
@@ -439,7 +443,7 @@ public class ElasticsearchClientTest {
     client.flush();
 
     // keep the ES service down for a couple of timeouts
-    Thread.sleep(config.readTimeoutMs() * 4);
+    Thread.sleep(config.readTimeoutMs() * 4L);
 
     // bring up ES service
     delay.stop();

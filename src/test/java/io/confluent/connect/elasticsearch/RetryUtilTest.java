@@ -72,7 +72,7 @@ public class RetryUtilTest {
     MockTime mockClock = new MockTime();
     long expectedTime = mockClock.milliseconds();
 
-    assertTrue(RetryUtil.callWithRetries("test", () -> testFunction(0), 3, 100,1000, mockClock));
+    assertTrue(RetryUtil.callWithRetries("test", () -> testFunction(0), 3, 100, mockClock));
     assertEquals(expectedTime, mockClock.milliseconds());
   }
 
@@ -80,7 +80,7 @@ public class RetryUtilTest {
   public void testCallWithRetriesSomeRetries() throws Exception {
     MockTime mockClock = spy(new MockTime());
 
-    assertTrue(RetryUtil.callWithRetries("test", () -> testFunction(2), 3, 100, 1000, mockClock));
+    assertTrue(RetryUtil.callWithRetries("test", () -> testFunction(2), 3, 100, mockClock));
     verify(mockClock, times(2)).sleep(anyLong());
   }
 
@@ -88,7 +88,7 @@ public class RetryUtilTest {
   public void testCallWithRetriesExhaustedRetries() throws Exception {
     MockTime mockClock = new MockTime();
 
-    assertTrue(RetryUtil.callWithRetries("test", () -> testFunction(4), 3, 100, 1000, mockClock));
+    assertTrue(RetryUtil.callWithRetries("test", () -> testFunction(4), 3, 100, mockClock));
     verify(mockClock, times(3)).sleep(anyLong());
   }
 

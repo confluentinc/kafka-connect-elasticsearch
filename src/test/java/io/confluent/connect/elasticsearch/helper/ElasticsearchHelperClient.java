@@ -55,7 +55,6 @@ public class ElasticsearchHelperClient {
         RestClient
             .builder(HttpHost.create(url))
             .setHttpClientConfigCallback(configCallbackHandler)
-            .setRequestConfigCallback(configCallbackHandler)
     );
   }
 

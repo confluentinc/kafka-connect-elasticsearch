@@ -106,7 +106,7 @@ public class ElasticsearchSinkTask extends SinkTask {
     try {
       client.flush();
     } catch (IllegalStateException e) {
-      log.debug("Tried to flush data to Elasticsearch, but BulkProcessor is already closed.");
+      log.debug("Tried to flush data to Elasticsearch, but BulkProcessor is already closed.", e);
     }
   }
 
@@ -144,13 +144,12 @@ public class ElasticsearchSinkTask extends SinkTask {
                     .toArray(new HttpHost[config.connectionUrls().size()])
             )
             .setHttpClientConfigCallback(configCallbackHandler)
-            .setRequestConfigCallback(configCallbackHandler)
     );
     MainResponse response;
     String esVersionNumber = "Unknown";
     try {
       response = highLevelClient.info(RequestOptions.DEFAULT);
-      esVersionNumber = response.getVersion().toString();
+      esVersionNumber = response.getVersion().getNumber();
     } catch (Exception e) {
       // Same error messages as from validating the connection for IOException.
       // Insufficient privileges to validate the version number if caught

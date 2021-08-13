@@ -18,7 +18,6 @@ package io.confluent.connect.elasticsearch.integration;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BATCH_SIZE_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BEHAVIOR_ON_NULL_VALUES_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_PASSWORD_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_TIMEOUT_MS_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_USERNAME_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_KEY_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.LINGER_MS_CONFIG;
@@ -41,8 +40,6 @@ import org.junit.experimental.categories.Category;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.net.ConnectException;
-import java.sql.Time;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -78,15 +75,19 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
     runSimpleTest(props);
     // stop container
     container.stop();
-    // write some more
-    writeRecords(NUM_RECORDS);
+    try {
+      // write some more
+      writeRecords(NUM_RECORDS);
 
-    // Wait for retry mechanism to finish
-    TimeUnit.SECONDS.sleep(20);
+      // TODO wait for this condition
+      // Wait for retry mechanism to finish
+      TimeUnit.SECONDS.sleep(20);
 
-    // Connector should fail since the server is down
-    assertEquals(connect.connectorStatus(CONNECTOR_NAME).tasks().get(0).state(), "FAILED");
-
+      // Connector should fail since the server is down
+      assertEquals(connect.connectorStatus(CONNECTOR_NAME).tasks().get(0).state(), "FAILED");
+    } finally {
+      container.start();
+    }
   }
 
   @Test

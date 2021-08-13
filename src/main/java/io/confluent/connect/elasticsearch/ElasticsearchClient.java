@@ -16,7 +16,7 @@
 package io.confluent.connect.elasticsearch;
 
 import org.apache.http.HttpHost;
-import org.apache.http.nio.conn.NHttpClientConnectionManager;
+import org.apache.http.impl.nio.conn.PoolingNHttpClientConnectionManager;
 import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.errors.ConnectException;
@@ -96,23 +96,8 @@ public class ElasticsearchClient {
       ErrantRecordReporter reporter
   ) {
     ConfigCallbackHandler configCallbackHandler = new ConfigCallbackHandler(config);
-    NHttpClientConnectionManager cm = configCallbackHandler.connectionManager();
-    /*
-     * Handles closing any idle or expired connections to avoid SocketTimeoutExceptions. Expired
-     * connections occur when the server closes their half of the connection without notifying
-     * the client.
-     */
-    this.executorService = Executors.newSingleThreadScheduledExecutor();
-    executorService.scheduleAtFixedRate(
-        () -> {
-          cm.closeExpiredConnections();
-          cm.closeIdleConnections(config.maxIdleTimeMs(), TimeUnit.MILLISECONDS);
-        },
-        config.maxIdleTimeMs(),
-        config.maxIdleTimeMs() / 2,
-        TimeUnit.MILLISECONDS
-    );
 
+    this.executorService = Executors.newSingleThreadScheduledExecutor();
     this.numRecords = new AtomicInteger(0);
     this.error = new AtomicReference<>();
     this.requestToRecord = reporter != null ? new ConcurrentHashMap<>() : null;
@@ -130,13 +115,13 @@ public class ElasticsearchClient {
                     .toArray(new HttpHost[config.connectionUrls().size()])
             )
             .setHttpClientConfigCallback(configCallbackHandler)
-            .setRequestConfigCallback(configCallbackHandler)
     );
     this.bulkProcessor = BulkProcessor
         .builder((req, lis) -> client.bulkAsync(req, RequestOptions.DEFAULT, lis), buildListener())
         .setBulkActions(config.batchSize())
         .setConcurrentRequests(config.maxInFlightRequests() - 1) // 0 = no concurrent requests
         .setFlushInterval(TimeValue.timeValueMillis(config.lingerMs()))
+        // This policy only applies to resource constraints (e.g. thread pool exhausted)
         .setBackoffPolicy(
             BackoffPolicy.exponentialBackoff(
                 TimeValue.timeValueMillis(config.retryBackoffMs()),
@@ -144,6 +129,43 @@ public class ElasticsearchClient {
             )
         )
         .build();
+
+    scheduleCleaningTasks(configCallbackHandler.connectionManager());
+  }
+
+  private void scheduleCleaningTasks(PoolingNHttpClientConnectionManager cm) {
+    /*
+     * Handles closing any idle or expired connections to avoid SocketTimeoutExceptions. Expired
+     * connections occur when the server closes their half of the connection without notifying
+     * the client.
+     */
+    // TODO do we really need this?
+    executorService.scheduleAtFixedRate(
+            () -> {
+              cm.closeExpiredConnections();
+              cm.closeIdleConnections(config.maxIdleTimeMs(), TimeUnit.MILLISECONDS);
+            },
+            config.maxIdleTimeMs(),
+            config.maxIdleTimeMs() / 2,
+            TimeUnit.MILLISECONDS
+    );
+
+    // Temporary safety net for retry logic
+    // Since we run a synchronous retry attempt before the original connection is formally closed,
+    // we need an external call to validate pending lease requests and time it out
+    // in case we run out of connections.
+    executorService.scheduleAtFixedRate(
+            () -> {
+              try {
+                cm.validatePendingRequests();
+              } catch (Exception ex) {
+                log.warn("Failed to validate pending requests in connection manager", ex);
+              }
+            },
+            config.connectionTimeoutMs(),
+            config.connectionTimeoutMs() / 2,
+            TimeUnit.MILLISECONDS
+    );
   }
 
   /**
@@ -338,6 +360,8 @@ public class ElasticsearchClient {
         try {
           // manually retry the bulk request until it succeeds or retries are exhausted using the
           // initial request thread
+          // TODO at this point, the original connection has not been closed
+          //     we should find an async way of retrying.
           BulkResponse bulkResponse = callWithRetries(
               "retrying bulk request",
               () -> client.bulk(request, RequestOptions.DEFAULT)
@@ -367,8 +391,7 @@ public class ElasticsearchClient {
           description,
           function,
           config.maxRetries(),
-          config.retryBackoffMs(),
-          config.connectionTimeoutMs()
+          config.retryBackoffMs()
       );
     } catch (Exception e) {
       throw new ConnectException("Failed to " + description + ".", e);

@@ -16,13 +16,8 @@
 package io.confluent.connect.elasticsearch;
 
 import java.util.concurrent.Callable;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 
 import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.connect.errors.ConnectException;
@@ -111,21 +106,17 @@ public class RetryUtil {
    * @param function         the function to call; may not be null
    * @param maxAttempts      maximum number of attempts
    * @param initialBackoff   the initial backoff in ms before retrying
-   * @param connectionTimeout The length of time to wait for a response from the server
    * @param <T>              the return type of the function to retry
    * @return the function's return value
    * @throws ConnectException        if the function failed after retries
-   * @throws Exception               if the function throws an exception
    */
   public static <T> T callWithRetries(
       String description,
       Callable<T> function,
       int maxAttempts,
-      long initialBackoff,
-      long connectionTimeout
-  ) throws Exception {
-    return callWithRetries(description, function, maxAttempts, initialBackoff,
-        connectionTimeout, Time.SYSTEM);
+      long initialBackoff
+  ) {
+    return callWithRetries(description, function, maxAttempts, initialBackoff, Time.SYSTEM);
   }
 
   /**
@@ -150,17 +141,14 @@ public class RetryUtil {
       Callable<T> function,
       int maxAttempts,
       long initialBackoff,
-      long connectionTimeout,
       Time clock
-  ) throws Exception {
+  ) {
     assert description != null;
     assert function != null;
     log.warn("in call with retries");
     int attempt = 0;
-    long backoff = computeRandomRetryWaitTimeInMillis(attempt, initialBackoff);
     while (true) {
       ++attempt;
-      ExecutorService executorService = Executors.newSingleThreadExecutor();
       try {
         log.warn(
             "Try {} (attempt {} of {})",
@@ -168,19 +156,20 @@ public class RetryUtil {
             attempt,
             maxAttempts
         );
-        Future<T> future = executorService.submit(function);
-        // Wait for connectionTimeout duration until the result is returned
-        return future.get(connectionTimeout, TimeUnit.MILLISECONDS);
-
+        T call = function.call();
+        return call;
       } catch (Exception e) {
         if (attempt >= maxAttempts) {
           log.error("Failed to {} due to {} after total of {} attempt(s)",
-              description, e.getCause(), maxAttempts, e.getMessage());
+              description, e.getCause(), maxAttempts, e);
           throw new ConnectException("Failed to " + description, e);
         }
+
+        // Otherwise it is retriable and we should retry
+        long backoff = computeRandomRetryWaitTimeInMillis(attempt, initialBackoff);
+
         log.warn("Failed to {} due to {}. Retrying attempt ({}/{}) after backoff of {} ms",
             description, e.getCause(), attempt, maxAttempts, backoff);
-        executorService.shutdown();
         clock.sleep(backoff);
       }
     }

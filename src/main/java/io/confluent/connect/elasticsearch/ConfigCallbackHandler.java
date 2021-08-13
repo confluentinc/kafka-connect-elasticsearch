@@ -48,7 +48,7 @@ import org.apache.http.impl.client.BasicCredentialsProvider;
 import org.apache.http.impl.nio.client.HttpAsyncClientBuilder;
 import org.apache.http.impl.nio.conn.PoolingNHttpClientConnectionManager;
 import org.apache.http.impl.nio.reactor.DefaultConnectingIOReactor;
-import org.apache.http.nio.conn.NHttpClientConnectionManager;
+import org.apache.http.impl.nio.reactor.IOReactorConfig;
 import org.apache.http.nio.conn.NoopIOSessionStrategy;
 import org.apache.http.nio.conn.SchemeIOSessionStrategy;
 import org.apache.http.nio.conn.ssl.SSLIOSessionStrategy;
@@ -58,7 +58,6 @@ import org.apache.kafka.common.network.Mode;
 import org.apache.kafka.common.security.ssl.SslFactory;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.elasticsearch.client.RestClientBuilder.HttpClientConfigCallback;
-import org.elasticsearch.client.RestClientBuilder.RequestConfigCallback;
 import org.ietf.jgss.GSSCredential;
 import org.ietf.jgss.GSSException;
 import org.ietf.jgss.GSSManager;
@@ -66,18 +65,18 @@ import org.ietf.jgss.Oid;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class ConfigCallbackHandler implements HttpClientConfigCallback, RequestConfigCallback {
+public class ConfigCallbackHandler implements HttpClientConfigCallback {
 
   private static final Logger log = LoggerFactory.getLogger(ConfigCallbackHandler.class);
 
   private static final Oid SPNEGO_OID = spnegoOid();
 
   private final ElasticsearchSinkConnectorConfig config;
-  private final NHttpClientConnectionManager connectionManager;
+  private final PoolingNHttpClientConnectionManager connectionManager;
 
   public ConfigCallbackHandler(ElasticsearchSinkConnectorConfig config) {
     this.config = config;
-    this.connectionManager = configureConnectionManager();
+    this.connectionManager = createConnectionManager();
   }
 
   /**
@@ -88,9 +87,15 @@ public class ConfigCallbackHandler implements HttpClientConfigCallback, RequestC
    */
   @Override
   public HttpAsyncClientBuilder customizeHttpClient(HttpAsyncClientBuilder builder) {
-    builder.setConnectionManager(connectionManager);
-    builder.setMaxConnPerRoute(config.maxInFlightRequests());
-    builder.setMaxConnTotal(config.maxInFlightRequests());
+    RequestConfig requestConfig = RequestConfig.custom()
+            .setContentCompressionEnabled(config.compression())
+            .setConnectTimeout(config.connectionTimeoutMs())
+            .setConnectionRequestTimeout(config.readTimeoutMs())
+            .setSocketTimeout(config.readTimeoutMs())
+            .build();
+
+    builder.setConnectionManager(connectionManager)
+            .setDefaultRequestConfig(requestConfig);
 
     configureAuthentication(builder);
 
@@ -116,26 +121,11 @@ public class ConfigCallbackHandler implements HttpClientConfigCallback, RequestC
   }
 
   /**
-   * Customizes each request according to configurations.
-   *
-   * @param builder the RequestConfigBuilder
-   * @return the builder
-   */
-  @Override
-  public RequestConfig.Builder customizeRequestConfig(RequestConfig.Builder builder) {
-    return builder
-        .setContentCompressionEnabled(config.compression())
-        .setConnectTimeout(config.connectionTimeoutMs())
-        .setConnectionRequestTimeout(config.readTimeoutMs())
-        .setSocketTimeout(config.readTimeoutMs());
-  }
-
-  /**
    * Returns the configured connection manager.
    *
    * @return the connection manager for the client.
    */
-  public NHttpClientConnectionManager connectionManager() {
+  public PoolingNHttpClientConnectionManager connectionManager() {
     return connectionManager;
   }
 
@@ -175,10 +165,14 @@ public class ConfigCallbackHandler implements HttpClientConfigCallback, RequestC
    *
    * @return the connection manager
    */
-  private PoolingNHttpClientConnectionManager configureConnectionManager() {
+  private PoolingNHttpClientConnectionManager createConnectionManager() {
     try {
       PoolingNHttpClientConnectionManager cm;
-      ConnectingIOReactor ioReactor = new DefaultConnectingIOReactor();
+      IOReactorConfig ioReactorConfig = IOReactorConfig.custom()
+              .setConnectTimeout(config.connectionTimeoutMs())
+              .setSoTimeout(config.readTimeoutMs())
+              .build();
+      ConnectingIOReactor ioReactor = new DefaultConnectingIOReactor(ioReactorConfig);
 
       if (config.isSslEnabled()) {
         HostnameVerifier hostnameVerifier = config.shouldDisableHostnameVerification()
@@ -194,8 +188,9 @@ public class ConfigCallbackHandler implements HttpClientConfigCallback, RequestC
         cm = new PoolingNHttpClientConnectionManager(ioReactor);
       }
 
-      cm.setDefaultMaxPerRoute(config.maxInFlightRequests());
-      cm.setMaxTotal(config.maxInFlightRequests());
+      // TODO can we have more routes? what if we have multiple nodes?
+      cm.setDefaultMaxPerRoute(config.maxInFlightRequests() * 2);
+      cm.setMaxTotal(config.maxInFlightRequests() * 2);
 
       return cm;
     } catch (IOReactorException e) {
