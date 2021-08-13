@@ -142,13 +142,13 @@ public class ElasticsearchClient {
      */
     // TODO do we really need this?
     executorService.scheduleAtFixedRate(
-            () -> {
-              cm.closeExpiredConnections();
-              cm.closeIdleConnections(config.maxIdleTimeMs(), TimeUnit.MILLISECONDS);
-            },
-            config.maxIdleTimeMs(),
-            config.maxIdleTimeMs() / 2,
-            TimeUnit.MILLISECONDS
+        () -> {
+          cm.closeExpiredConnections();
+          cm.closeIdleConnections(config.maxIdleTimeMs(), TimeUnit.MILLISECONDS);
+        },
+        config.maxIdleTimeMs(),
+        config.maxIdleTimeMs() / 2,
+        TimeUnit.MILLISECONDS
     );
 
     // Temporary safety net for retry logic
@@ -156,16 +156,16 @@ public class ElasticsearchClient {
     // we need an external call to validate pending lease requests and time it out
     // in case we run out of connections.
     executorService.scheduleAtFixedRate(
-            () -> {
-              try {
-                cm.validatePendingRequests();
-              } catch (Exception ex) {
-                log.warn("Failed to validate pending requests in connection manager", ex);
-              }
-            },
-            config.connectionTimeoutMs(),
-            config.connectionTimeoutMs() / 2,
-            TimeUnit.MILLISECONDS
+        () -> {
+          try {
+            cm.validatePendingRequests();
+          } catch (Exception ex) {
+            log.warn("Failed to validate pending requests in connection manager", ex);
+          }
+        },
+        config.connectionTimeoutMs(),
+        config.connectionTimeoutMs() / 2,
+        TimeUnit.MILLISECONDS
     );
   }
 
