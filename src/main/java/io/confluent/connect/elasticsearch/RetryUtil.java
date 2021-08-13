@@ -145,7 +145,6 @@ public class RetryUtil {
   ) {
     assert description != null;
     assert function != null;
-    log.warn("in call with retries");
     int attempt = 0;
     while (true) {
       ++attempt;

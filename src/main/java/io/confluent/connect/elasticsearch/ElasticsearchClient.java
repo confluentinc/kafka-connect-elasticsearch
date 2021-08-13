@@ -64,6 +64,7 @@ import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.Behav
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.FLUSH_TIMEOUT_MS_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.MAX_BUFFERED_RECORDS_CONFIG;
 
+@SuppressWarnings("checkstyle:ClassDataAbstractionCoupling")
 public class ElasticsearchClient {
 
   private static final Logger log = LoggerFactory.getLogger(ElasticsearchClient.class);
@@ -95,8 +96,6 @@ public class ElasticsearchClient {
       ElasticsearchSinkConnectorConfig config,
       ErrantRecordReporter reporter
   ) {
-    ConfigCallbackHandler configCallbackHandler = new ConfigCallbackHandler(config);
-
     this.executorService = Executors.newSingleThreadScheduledExecutor();
     this.numRecords = new AtomicInteger(0);
     this.error = new AtomicReference<>();
@@ -105,6 +104,8 @@ public class ElasticsearchClient {
     this.config = config;
     this.reporter = reporter;
     this.clock = Time.SYSTEM;
+
+    ConfigCallbackHandler configCallbackHandler = new ConfigCallbackHandler(config);
     this.client = new RestHighLevelClient(
         RestClient
             .builder(
