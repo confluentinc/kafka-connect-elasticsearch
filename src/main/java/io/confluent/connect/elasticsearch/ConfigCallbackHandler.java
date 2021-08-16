@@ -72,11 +72,9 @@ public class ConfigCallbackHandler implements HttpClientConfigCallback {
   private static final Oid SPNEGO_OID = spnegoOid();
 
   private final ElasticsearchSinkConnectorConfig config;
-  private final PoolingNHttpClientConnectionManager connectionManager;
 
   public ConfigCallbackHandler(ElasticsearchSinkConnectorConfig config) {
     this.config = config;
-    this.connectionManager = createConnectionManager();
   }
 
   /**
@@ -94,7 +92,7 @@ public class ConfigCallbackHandler implements HttpClientConfigCallback {
             .setSocketTimeout(config.readTimeoutMs())
             .build();
 
-    builder.setConnectionManager(connectionManager)
+    builder.setConnectionManager(createConnectionManager())
             .setDefaultRequestConfig(requestConfig);
 
     configureAuthentication(builder);
@@ -118,15 +116,6 @@ public class ConfigCallbackHandler implements HttpClientConfigCallback {
     }
 
     return builder;
-  }
-
-  /**
-   * Returns the configured connection manager.
-   *
-   * @return the connection manager for the client.
-   */
-  public PoolingNHttpClientConnectionManager connectionManager() {
-    return connectionManager;
   }
 
   /**
@@ -187,10 +176,6 @@ public class ConfigCallbackHandler implements HttpClientConfigCallback {
       } else {
         cm = new PoolingNHttpClientConnectionManager(ioReactor);
       }
-
-      // TODO can we have more routes? what if we have multiple nodes?
-      cm.setDefaultMaxPerRoute(config.maxInFlightRequests() * 2);
-      cm.setMaxTotal(config.maxInFlightRequests() * 2);
 
       return cm;
     } catch (IOReactorException e) {
