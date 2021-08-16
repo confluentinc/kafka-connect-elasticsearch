@@ -16,15 +16,14 @@
 package io.confluent.connect.elasticsearch;
 
 import org.apache.http.HttpHost;
-import org.apache.http.impl.nio.conn.PoolingNHttpClientConnectionManager;
 import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.sink.ErrantRecordReporter;
 import org.apache.kafka.connect.sink.SinkRecord;
 import org.elasticsearch.ElasticsearchStatusException;
+import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.DocWriteRequest;
-import org.elasticsearch.action.bulk.BackoffPolicy;
 import org.elasticsearch.action.bulk.BulkItemResponse;
 import org.elasticsearch.action.bulk.BulkProcessor;
 import org.elasticsearch.action.bulk.BulkProcessor.Listener;
@@ -52,11 +51,12 @@ import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.BiConsumer;
 import java.util.stream.Collectors;
 
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BehaviorOnMalformedDoc;
@@ -89,14 +89,14 @@ public class ElasticsearchClient {
   private final ElasticsearchSinkConnectorConfig config;
   private final ErrantRecordReporter reporter;
   private final RestHighLevelClient client;
-  private final ScheduledExecutorService executorService;
+  private final ExecutorService executorService;
   private final Time clock;
 
   public ElasticsearchClient(
       ElasticsearchSinkConnectorConfig config,
       ErrantRecordReporter reporter
   ) {
-    this.executorService = Executors.newSingleThreadScheduledExecutor();
+    this.executorService = Executors.newCachedThreadPool();
     this.numRecords = new AtomicInteger(0);
     this.error = new AtomicReference<>();
     this.requestToRecord = reporter != null ? new ConcurrentHashMap<>() : null;
@@ -118,55 +118,26 @@ public class ElasticsearchClient {
             .setHttpClientConfigCallback(configCallbackHandler)
     );
     this.bulkProcessor = BulkProcessor
-        .builder((req, lis) -> client.bulkAsync(req, RequestOptions.DEFAULT, lis), buildListener())
+        .builder(buildConsumer(), buildListener())
         .setBulkActions(config.batchSize())
         .setConcurrentRequests(config.maxInFlightRequests() - 1) // 0 = no concurrent requests
         .setFlushInterval(TimeValue.timeValueMillis(config.lingerMs()))
-        // This policy only applies to resource constraints (e.g. thread pool exhausted)
-        .setBackoffPolicy(
-            BackoffPolicy.exponentialBackoff(
-                TimeValue.timeValueMillis(config.retryBackoffMs()),
-                config.maxRetries()
-            )
-        )
         .build();
-
-    scheduleCleaningTasks(configCallbackHandler.connectionManager());
   }
 
-  private void scheduleCleaningTasks(PoolingNHttpClientConnectionManager cm) {
-    /*
-     * Handles closing any idle or expired connections to avoid SocketTimeoutExceptions. Expired
-     * connections occur when the server closes their half of the connection without notifying
-     * the client.
-     */
-    // TODO do we really need this?
-    executorService.scheduleAtFixedRate(
-        () -> {
-          cm.closeExpiredConnections();
-          cm.closeIdleConnections(config.maxIdleTimeMs(), TimeUnit.MILLISECONDS);
-        },
-        config.maxIdleTimeMs(),
-        config.maxIdleTimeMs() / 2,
-        TimeUnit.MILLISECONDS
-    );
-
-    // Temporary safety net for retry logic
-    // Since we run a synchronous retry attempt before the original connection is formally closed,
-    // we need an external call to validate pending lease requests and time it out
-    // in case we run out of connections.
-    executorService.scheduleAtFixedRate(
-        () -> {
-          try {
-            cm.validatePendingRequests();
-          } catch (Exception ex) {
-            log.warn("Failed to validate pending requests in connection manager", ex);
-          }
-        },
-        config.connectionTimeoutMs(),
-        config.connectionTimeoutMs() / 2,
-        TimeUnit.MILLISECONDS
-    );
+  private BiConsumer<BulkRequest, ActionListener<BulkResponse>> buildConsumer() {
+    return (req, lis) ->
+      executorService.submit(() -> {
+        try {
+          BulkResponse bulkResponse = callWithRetries(
+                  "execute bulk request",
+                  () -> client.bulk(req, RequestOptions.DEFAULT)
+          );
+          lis.onResponse(bulkResponse);
+        } catch (Exception ex) {
+          lis.onFailure(ex);
+        }
+      });
   }
 
   /**
@@ -181,7 +152,7 @@ public class ElasticsearchClient {
   /**
    * Closes the ElasticsearchClient.
    *
-   * @throws ConnectException if all of the records fail to flush before the timeout.
+   * @throws ConnectException if all the records fail to flush before the timeout.
    */
   public void close() {
     try {
@@ -191,8 +162,9 @@ public class ElasticsearchClient {
         );
       }
     } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
       throw new ConnectException(
-          "Interrupted while processing all in-flight requests on ElasticsearchClient close."
+          "Interrupted while processing all in-flight requests on ElasticsearchClient close.", e
       );
     } finally {
       closeConnections();
@@ -357,22 +329,10 @@ public class ElasticsearchClient {
 
       @Override
       public void afterBulk(long executionId, BulkRequest request, Throwable failure) {
-        log.warn("Bulk request {} failed. Retrying request.", executionId, failure);
-        try {
-          // manually retry the bulk request until it succeeds or retries are exhausted using the
-          // initial request thread
-          // TODO at this point, the original connection has not been closed
-          //     we should find an async way of retrying.
-          BulkResponse bulkResponse = callWithRetries(
-              "retrying bulk request",
-              () -> client.bulk(request, RequestOptions.DEFAULT)
-          );
-          afterBulk(executionId, request, bulkResponse);
-        } catch (ConnectException e) {
-          removeFromInFlightRequests(executionId);
-          error.compareAndSet(null, new ConnectException("Bulk request failed.", e.getCause()));
-          numRecords.addAndGet(-request.requests().size());
-        }
+        log.warn("Bulk request {} failed", executionId, failure);
+        removeFromInFlightRequests(executionId);
+        error.compareAndSet(null, new ConnectException("Bulk request failed", failure));
+        numRecords.addAndGet(-request.requests().size());
       }
     };
   }
@@ -387,23 +347,28 @@ public class ElasticsearchClient {
    * @return the return value of the called function
    */
   private <T> T callWithRetries(String description, Callable<T> function) {
-    try {
-      return RetryUtil.callWithRetries(
-          description,
-          function,
-          config.maxRetries(),
-          config.retryBackoffMs()
-      );
-    } catch (Exception e) {
-      throw new ConnectException("Failed to " + description + ".", e);
-    }
+    return RetryUtil.callWithRetries(
+        description,
+        function,
+        config.maxRetries() + 1,
+        config.retryBackoffMs()
+    );
   }
 
   /**
-   * Closes all of the connection and thread resources of the client.
+   * Closes all the connection and thread resources of the client.
    */
   private void closeConnections() {
     executorService.shutdown();
+    try {
+      if (!executorService.awaitTermination(config.flushTimeoutMs(), TimeUnit.MILLISECONDS)) {
+        executorService.shutdownNow();
+      }
+    } catch (InterruptedException e) {
+      executorService.shutdownNow();
+      Thread.currentThread().interrupt();
+      log.warn("Interrupted while awaiting for executor service shutdown.", e);
+    }
 
     try {
       client.close();

@@ -159,9 +159,10 @@ public class RetryUtil {
         return call;
       } catch (Exception e) {
         if (attempt >= maxAttempts) {
-          log.error("Failed to {} due to {} after total of {} attempt(s)",
-              description, e.getCause(), maxAttempts, e);
-          throw new ConnectException("Failed to " + description, e);
+          String msg = String.format("Failed to %s due to '%s' after %d attempt(s)",
+                  description, e.getCause(), attempt);
+          log.error(msg, e);
+          throw new ConnectException(msg, e);
         }
 
         // Otherwise it is retriable and we should retry
