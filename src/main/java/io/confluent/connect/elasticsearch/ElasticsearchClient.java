@@ -130,8 +130,8 @@ public class ElasticsearchClient {
       executorService.submit(() -> {
         try {
           BulkResponse bulkResponse = callWithRetries(
-                  "execute bulk request",
-                  () -> client.bulk(req, RequestOptions.DEFAULT)
+              "execute bulk request",
+              () -> client.bulk(req, RequestOptions.DEFAULT)
           );
           lis.onResponse(bulkResponse);
         } catch (Exception ex) {
