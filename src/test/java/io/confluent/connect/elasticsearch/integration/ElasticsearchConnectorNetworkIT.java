@@ -13,14 +13,9 @@ import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
 
-import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
-import static com.github.tomakehurst.wiremock.client.WireMock.any;
-import static com.github.tomakehurst.wiremock.client.WireMock.anyUrl;
-import static com.github.tomakehurst.wiremock.client.WireMock.ok;
-import static com.github.tomakehurst.wiremock.client.WireMock.post;
-import static com.github.tomakehurst.wiremock.client.WireMock.stubFor;
-import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
+import static com.github.tomakehurst.wiremock.client.WireMock.*;
 import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.options;
+import static com.google.common.net.HttpHeaders.CONTENT_TYPE;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BATCH_SIZE_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_KEY_CONFIG;
@@ -48,7 +43,6 @@ public class ElasticsearchConnectorNetworkIT extends BaseConnectorIT {
   protected static final String TOPIC = "test";
   protected Map<String, String> props;
 
-
   @Before
   public void setup() {
     startConnect();
@@ -72,9 +66,7 @@ public class ElasticsearchConnectorNetworkIT extends BaseConnectorIT {
     props.put(MAX_IN_FLIGHT_REQUESTS_CONFIG, Integer.toString(NUM_RECORDS - 1));
 
     wireMockRule.stubFor(post(urlPathEqualTo("/_bulk"))
-            .willReturn(aResponse()
-                    .withStatus(200)
-                    .withFixedDelay(2_000)));
+            .willReturn(ok().withFixedDelay(2_000)));
 
     connect.configureConnector(CONNECTOR_NAME, props);
     waitForConnectorToStart(CONNECTOR_NAME, TASKS_MAX);
@@ -89,6 +81,44 @@ public class ElasticsearchConnectorNetworkIT extends BaseConnectorIT {
             .contains("Failed to execute bulk request due to 'java.net.SocketTimeoutException: " +
                     "1,000 milliseconds timeout on connection")
             .contains("after 3 attempt(s)");
+  }
+
+  @Test
+  public void testTooManyRequests() throws Exception {
+    props.put(READ_TIMEOUT_MS_CONFIG, "1000");
+    props.put(MAX_RETRIES_CONFIG, "2");
+    props.put(RETRY_BACKOFF_MS_CONFIG, "10");
+    props.put(BATCH_SIZE_CONFIG, "1");
+    props.put(MAX_IN_FLIGHT_REQUESTS_CONFIG, Integer.toString(NUM_RECORDS - 1));
+
+    wireMockRule.stubFor(post(urlPathEqualTo("/_bulk"))
+            .willReturn(aResponse()
+                    .withStatus(429)
+                    .withHeader(CONTENT_TYPE, "application/json")
+                    .withBody("{\n" +
+                    "  \"error\": {\n" +
+                    "    \"type\": \"circuit_breaking_exception\",\n" +
+                    "    \"reason\": \"Data too large\",\n" +
+                    "    \"bytes_wanted\": 123848638,\n" +
+                    "    \"bytes_limit\": 123273216,\n" +
+                    "    \"durability\": \"TRANSIENT\"\n" +
+                    "  },\n" +
+                    "  \"status\": 429\n" +
+                    "}")));
+
+    connect.configureConnector(CONNECTOR_NAME, props);
+    waitForConnectorToStart(CONNECTOR_NAME, TASKS_MAX);
+    writeRecords(NUM_RECORDS);
+
+    // Connector should fail since the request takes longer than request timeout
+    await().atMost(Duration.ofMinutes(1)).untilAsserted(() ->
+            assertThat(connect.connectorStatus(CONNECTOR_NAME).tasks().get(0).state())
+                    .isEqualTo("FAILED"));
+
+    assertThat(connect.connectorStatus(CONNECTOR_NAME).tasks().get(0).trace())
+            .contains("Failed to execute bulk request due to 'ElasticsearchStatusException" +
+                    "[Elasticsearch exception [type=circuit_breaking_exception, " +
+                    "reason=Data too large]]' after 3 attempt(s)");
   }
 
   protected Map<String, String> createProps() {
