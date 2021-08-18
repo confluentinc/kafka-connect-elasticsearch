@@ -7,14 +7,34 @@ pipeline {
       yaml '''
 apiVersion: v1
 kind: Pod
+metadata:
+  labels:
+    jenkins/build: emb-m2
 spec:
+  affinity:
+    podAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+      - labelSelector:
+          matchExpressions:
+          - key: jenkins/build
+            operator: In
+            values:
+            - emb-m2
+        topologyKey: "kubernetes.io/hostname"
+  volumes:
+  - name: m2-repo
+    persistentVolumeClaim:
+      claimName: emb-m2-repo
   serviceAccountName: jenkins-codeartifact
   containers:
   - name: maven
-    image: maven:3.8.1-jdk-11
+    image: maven:3.8.1-openjdk-11
     command:
     - cat
     tty: true
+    volumeMounts:
+      - mountPath: "/home/jenkins/.m2"
+        name: m2-repo
   - name: aws
     image: amazon/aws-cli:2.2.18
     command:
