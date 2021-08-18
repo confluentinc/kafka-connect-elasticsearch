@@ -108,7 +108,11 @@ public class ElasticsearchSinkTask extends SinkTask {
   @Override
   public Map<TopicPartition, OffsetAndMetadata> preCommit(Map<TopicPartition,
           OffsetAndMetadata> currentOffsets) {
-    client.flush();
+    try {
+      client.flush();
+    } catch (IllegalStateException e) {
+      log.debug("Tried to flush data to Elasticsearch, but BulkProcessor is already closed.", e);
+    }
     return offsetTracker.getAndResetOffsets();
   }
 
