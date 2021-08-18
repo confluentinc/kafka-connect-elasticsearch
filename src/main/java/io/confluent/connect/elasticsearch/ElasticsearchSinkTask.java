@@ -49,6 +49,7 @@ public class ElasticsearchSinkTask extends SinkTask {
   private ErrantRecordReporter reporter;
   private Set<String> existingMappings;
   private Set<String> indexCache;
+  private OffsetTracker offsetTracker;
 
   @Override
   public void start(Map<String, String> props) {
@@ -63,6 +64,7 @@ public class ElasticsearchSinkTask extends SinkTask {
     this.converter = new DataConverter(config);
     this.existingMappings = new HashSet<>();
     this.indexCache = new HashSet<>();
+    this.offsetTracker = new OffsetTracker();
 
     this.reporter = null;
     try {
@@ -86,8 +88,11 @@ public class ElasticsearchSinkTask extends SinkTask {
   public void put(Collection<SinkRecord> records) throws ConnectException {
     log.debug("Putting {} records to Elasticsearch.", records.size());
     for (SinkRecord record : records) {
+      OffsetTracker.Offset offset = offsetTracker.addPendingRecord(record);
+
       if (shouldSkipRecord(record)) {
         logTrace("Ignoring {} with null value.", record);
+        offset.markProcessed();
         reportBadRecord(record, new ConnectException("Cannot write null valued record."));
         continue;
       }
@@ -96,18 +101,14 @@ public class ElasticsearchSinkTask extends SinkTask {
 
       ensureIndexExists(convertTopicToIndexName(record.topic()));
       checkMapping(record);
-      tryWriteRecord(record);
+      tryWriteRecord(record, offset);
     }
   }
 
   @Override
-  public void flush(Map<TopicPartition, OffsetAndMetadata> offsets) {
-    log.debug("Flushing data to Elasticsearch with the following offsets: {}", offsets);
-    try {
-      client.flush();
-    } catch (IllegalStateException e) {
-      log.debug("Tried to flush data to Elasticsearch, but BulkProcessor is already closed.", e);
-    }
+  public Map<TopicPartition, OffsetAndMetadata> preCommit(Map<TopicPartition,
+          OffsetAndMetadata> currentOffsets) {
+    return offsetTracker.getAndResetOffsets();
   }
 
   @Override
@@ -221,7 +222,7 @@ public class ElasticsearchSinkTask extends SinkTask {
     return record.value() == null && config.behaviorOnNullValues() == BehaviorOnNullValues.IGNORE;
   }
 
-  private void tryWriteRecord(SinkRecord sinkRecord) {
+  private void tryWriteRecord(SinkRecord sinkRecord, OffsetTracker.Offset offset) {
     DocWriteRequest<?> record = null;
     try {
       record = converter.convertRecord(sinkRecord, convertTopicToIndexName(sinkRecord.topic()));
@@ -237,7 +238,7 @@ public class ElasticsearchSinkTask extends SinkTask {
 
     if (record != null) {
       log.trace("Adding {} to bulk processor.", recordString(sinkRecord));
-      client.index(sinkRecord, record);
+      client.index(sinkRecord, record, offset);
     }
   }
 

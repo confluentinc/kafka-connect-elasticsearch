@@ -32,6 +32,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BehaviorOnNullValues;
+import io.confluent.connect.elasticsearch.OffsetTracker.Offset;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Struct;
@@ -82,12 +83,12 @@ public class ElasticsearchSinkTaskTest {
     // skip null
     SinkRecord nullRecord = record(true, true, 0);
     task.put(Collections.singletonList(nullRecord));
-    verify(client, never()).index(eq(nullRecord), any(DocWriteRequest.class));
+    verify(client, never()).index(eq(nullRecord), any(DocWriteRequest.class), any(Offset.class));
 
     // don't skip non-null
     SinkRecord notNullRecord = record(true, false,1);
     task.put(Collections.singletonList(notNullRecord));
-    verify(client, times(1)).index(eq(notNullRecord), any(DocWriteRequest.class));
+    verify(client, times(1)).index(eq(notNullRecord), any(DocWriteRequest.class), any(Offset.class));
   }
 
   @Test
@@ -101,13 +102,13 @@ public class ElasticsearchSinkTaskTest {
     // report null
     SinkRecord nullRecord = record(true, true, 0);
     task.put(Collections.singletonList(nullRecord));
-    verify(client, never()).index(eq(nullRecord), any(DocWriteRequest.class));
+    verify(client, never()).index(eq(nullRecord), any(), any());
     verify(mockReporter, times(1)).report(eq(nullRecord), any(ConnectException.class));
 
     // don't report
     SinkRecord notNullRecord = record(true, false,1);
     task.put(Collections.singletonList(notNullRecord));
-    verify(client, times(1)).index(eq(notNullRecord), any(DocWriteRequest.class));
+    verify(client, times(1)).index(eq(notNullRecord), any(), any());
     verify(mockReporter, never()).report(eq(notNullRecord), any(ConnectException.class));
   }
 
@@ -187,7 +188,7 @@ public class ElasticsearchSinkTaskTest {
   public void testPut() {
     SinkRecord record = record();
     task.put(Collections.singletonList(record));
-    verify(client, times(1)).index(eq(record), any());
+    verify(client, times(1)).index(eq(record), any(), any());
   }
 
   @Test
@@ -199,12 +200,12 @@ public class ElasticsearchSinkTaskTest {
     // skip invalid
     SinkRecord invalidRecord = record(true, 0);
     task.put(Collections.singletonList(invalidRecord));
-    verify(client, never()).index(eq(invalidRecord), any(DocWriteRequest.class));
+    verify(client, never()).index(eq(invalidRecord), any(), any());
 
     // don't skip valid
     SinkRecord validRecord = record(false, 1);
     task.put(Collections.singletonList(validRecord));
-    verify(client, times(1)).index(eq(validRecord), any(DocWriteRequest.class));
+    verify(client, times(1)).index(eq(validRecord), any(), any());
   }
 
   @Test
@@ -219,13 +220,13 @@ public class ElasticsearchSinkTaskTest {
     // report invalid
     SinkRecord invalidRecord = record(true, 0);
     task.put(Collections.singletonList(invalidRecord));
-    verify(client, never()).index(eq(invalidRecord), any(DocWriteRequest.class));
+    verify(client, never()).index(eq(invalidRecord), any(), any());
     verify(mockReporter, times(1)).report(eq(invalidRecord), any(DataException.class));
 
     // don't report valid
     SinkRecord validRecord = record(false, 1);
     task.put(Collections.singletonList(validRecord));
-    verify(client, times(1)).index(eq(validRecord), any(DocWriteRequest.class));
+    verify(client, times(1)).index(eq(validRecord), any(), any());
     verify(mockReporter, never()).report(eq(validRecord), any(DataException.class));
   }
 
