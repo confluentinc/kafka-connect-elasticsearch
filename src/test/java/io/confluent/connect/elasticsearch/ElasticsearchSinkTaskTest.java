@@ -243,7 +243,7 @@ public class ElasticsearchSinkTaskTest {
   @Test
   public void testFlush() {
     setUpTask();
-    task.flush(null);
+    task.preCommit(null);
     verify(client, times(1)).flush();
   }
 
@@ -253,7 +253,7 @@ public class ElasticsearchSinkTaskTest {
     doThrow(new IllegalStateException("already closed")).when(client).flush();
 
     // should not throw
-    task.flush(null);
+    task.preCommit(null);
     verify(client, times(1)).flush();
   }
 

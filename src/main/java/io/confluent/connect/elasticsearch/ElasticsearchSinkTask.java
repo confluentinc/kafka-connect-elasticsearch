@@ -108,6 +108,7 @@ public class ElasticsearchSinkTask extends SinkTask {
   @Override
   public Map<TopicPartition, OffsetAndMetadata> preCommit(Map<TopicPartition,
           OffsetAndMetadata> currentOffsets) {
+    client.flush();
     return offsetTracker.getAndResetOffsets();
   }
 

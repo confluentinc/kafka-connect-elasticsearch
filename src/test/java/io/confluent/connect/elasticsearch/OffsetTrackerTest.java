@@ -49,12 +49,12 @@ public class OffsetTrackerTest {
     offset1.markProcessed();
     Map<TopicPartition, OffsetAndMetadata> offsetMap = offsetTracker.getAndResetOffsets();
     assertThat(offsetMap).hasSize(1);
-    assertThat(offsetMap.get(tp).offset()).isEqualTo(1);
+    assertThat(offsetMap.get(tp).offset()).isEqualTo(2);
 
     offset3.markProcessed();
     offsetMap = offsetTracker.getAndResetOffsets();
     assertThat(offsetMap).hasSize(1);
-    assertThat(offsetMap.get(tp).offset()).isEqualTo(2);
+    assertThat(offsetMap.get(tp).offset()).isEqualTo(3);
 
     assertThat(offsetTracker.getAndResetOffsets()).isEmpty();
   }
@@ -77,7 +77,7 @@ public class OffsetTrackerTest {
 
     offset1.markProcessed();
     offset2.markProcessed();
-    assertThat(offsetTracker.getAndResetOffsets().get(tp).offset()).isEqualTo(1);
+    assertThat(offsetTracker.getAndResetOffsets().get(tp).offset()).isEqualTo(2);
 
     offset2 = offsetTracker.addPendingRecord(record2);
     assertThat(offsetTracker.getAndResetOffsets()).isEmpty();
@@ -94,9 +94,9 @@ public class OffsetTrackerTest {
     return new SinkRecord(topic,
             partition,
             null,
+            "testKey",
             null,
-            null,
-            null,
+            "testValue" + offset,
             offset);
   }
 }

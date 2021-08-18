@@ -42,6 +42,7 @@ class OffsetTracker {
     }
   }
 
+  // TODO limit size of queue
   private final Map<TopicPartition, Queue<Offset>> offsetsByPartition = new ConcurrentHashMap<>();
   private final Map<TopicPartition, Long> maxByPartition = new ConcurrentHashMap<>();
 
@@ -77,8 +78,7 @@ class OffsetTracker {
         }
       }
       if (newMaxFound) {
-        max++;
-        result.put(topicPartition, new OffsetAndMetadata(max));
+        result.put(topicPartition, new OffsetAndMetadata(max + 1));
         maxByPartition.put(topicPartition, max);
       }
     }));

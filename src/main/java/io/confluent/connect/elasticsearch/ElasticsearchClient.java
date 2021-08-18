@@ -214,7 +214,7 @@ public class ElasticsearchClient {
   }
 
   /**
-   * Flushes any buffered records.
+   * Triggers a flush of any buffered records.
    */
   public void flush() {
     bulkProcessor.flush();

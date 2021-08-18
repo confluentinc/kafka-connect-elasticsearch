@@ -45,6 +45,7 @@ import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.Behav
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BehaviorOnNullValues;
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.SecurityProtocol;
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.WriteMethod;
+import io.confluent.connect.elasticsearch.OffsetTracker.Offset;
 import io.confluent.connect.elasticsearch.helper.ElasticsearchContainer;
 import io.confluent.connect.elasticsearch.helper.ElasticsearchHelperClient;
 import io.confluent.connect.elasticsearch.helper.NetworkErrorContainer;
@@ -263,7 +264,6 @@ public class ElasticsearchClientTest {
     writeRecord(sinkRecord(0), client);
     assertEquals(0, helperClient.getDocCount(INDEX)); // should be empty before flush
 
-    // TODO shouldn't this be synchronous. Add a test.
     client.flush();
 
     waitUntilRecordsInES(1);
@@ -420,7 +420,7 @@ public class ElasticsearchClientTest {
   }
 
   @Test
-  public void testRetryRecordsOnFailure() throws Exception {
+  public void testRetryRecordsOnSocketTimeoutFailure() throws Exception {
     props.put(LINGER_MS_CONFIG, "60000");
     props.put(BATCH_SIZE_CONFIG, "2");
     props.put(MAX_RETRIES_CONFIG, "100");
@@ -428,7 +428,6 @@ public class ElasticsearchClientTest {
     props.put(MAX_IN_FLIGHT_REQUESTS_CONFIG, "1");
     config = new ElasticsearchSinkConnectorConfig(props);
     converter = new DataConverter(config);
-
 
     // mock bulk processor to throw errors
     ElasticsearchClient client = new ElasticsearchClient(config, null);
@@ -616,6 +615,6 @@ public class ElasticsearchClientTest {
   }
 
   private void writeRecord(SinkRecord record, ElasticsearchClient client) {
-    client.index(record, converter.convertRecord(record, record.topic()));
+    client.index(record, converter.convertRecord(record, record.topic()), new Offset(record.kafkaOffset()));
   }
 }
