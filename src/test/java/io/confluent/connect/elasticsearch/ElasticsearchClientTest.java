@@ -263,7 +263,6 @@ public class ElasticsearchClientTest {
     writeRecord(sinkRecord(0), client);
     assertEquals(0, helperClient.getDocCount(INDEX)); // should be empty before flush
 
-    // TODO shouldn't this be synchronous. Add a test.
     client.flush();
 
     waitUntilRecordsInES(1);
