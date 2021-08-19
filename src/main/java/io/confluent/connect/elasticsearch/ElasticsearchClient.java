@@ -24,6 +24,7 @@ import org.apache.kafka.connect.sink.SinkRecord;
 import org.elasticsearch.ElasticsearchStatusException;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.DocWriteRequest;
+import org.elasticsearch.action.bulk.BackoffPolicy;
 import org.elasticsearch.action.bulk.BulkItemResponse;
 import org.elasticsearch.action.bulk.BulkProcessor;
 import org.elasticsearch.action.bulk.BulkProcessor.Listener;
@@ -89,14 +90,14 @@ public class ElasticsearchClient {
   private final ElasticsearchSinkConnectorConfig config;
   private final ErrantRecordReporter reporter;
   private final RestHighLevelClient client;
-  private final ExecutorService executorService;
+  private final ExecutorService bulkExecutorService;
   private final Time clock;
 
   public ElasticsearchClient(
       ElasticsearchSinkConnectorConfig config,
       ErrantRecordReporter reporter
   ) {
-    this.executorService = Executors.newCachedThreadPool();
+    this.bulkExecutorService = Executors.newFixedThreadPool(config.maxInFlightRequests());
     this.numRecords = new AtomicInteger(0);
     this.error = new AtomicReference<>();
     this.requestToRecord = reporter != null ? new ConcurrentHashMap<>() : null;
@@ -122,12 +123,16 @@ public class ElasticsearchClient {
         .setBulkActions(config.batchSize())
         .setConcurrentRequests(config.maxInFlightRequests() - 1) // 0 = no concurrent requests
         .setFlushInterval(TimeValue.timeValueMillis(config.lingerMs()))
+        // Disabling bulk processor retries, because they only cover a small subset of errors
+        // (see https://github.com/elastic/elasticsearch/issues/71159)
+        // We are doing retries in the async thread instead.
+        .setBackoffPolicy(BackoffPolicy.noBackoff())
         .build();
   }
 
   private BiConsumer<BulkRequest, ActionListener<BulkResponse>> buildConsumer() {
     return (req, lis) ->
-      executorService.submit(() -> {
+      bulkExecutorService.submit(() -> {
         try {
           BulkResponse bulkResponse = callWithRetries(
               "execute bulk request",
@@ -136,6 +141,8 @@ public class ElasticsearchClient {
           lis.onResponse(bulkResponse);
         } catch (Exception ex) {
           lis.onFailure(ex);
+        } catch (Throwable ex) {
+          lis.onFailure(new ConnectException("Bulk request failed", ex));
         }
       });
   }
@@ -360,13 +367,13 @@ public class ElasticsearchClient {
    * Closes all the connection and thread resources of the client.
    */
   private void closeConnections() {
-    executorService.shutdown();
+    bulkExecutorService.shutdown();
     try {
-      if (!executorService.awaitTermination(config.flushTimeoutMs(), TimeUnit.MILLISECONDS)) {
-        executorService.shutdownNow();
+      if (!bulkExecutorService.awaitTermination(config.flushTimeoutMs(), TimeUnit.MILLISECONDS)) {
+        bulkExecutorService.shutdownNow();
       }
     } catch (InterruptedException e) {
-      executorService.shutdownNow();
+      bulkExecutorService.shutdownNow();
       Thread.currentThread().interrupt();
       log.warn("Interrupted while awaiting for executor service shutdown.", e);
     }
