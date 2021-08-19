@@ -174,7 +174,7 @@ public class ElasticsearchClient {
           "Interrupted while processing all in-flight requests on ElasticsearchClient close.", e
       );
     } finally {
-      closeConnections();
+      closeResources();
     }
   }
 
@@ -366,7 +366,7 @@ public class ElasticsearchClient {
   /**
    * Closes all the connection and thread resources of the client.
    */
-  private void closeConnections() {
+  private void closeResources() {
     bulkExecutorService.shutdown();
     try {
       if (!bulkExecutorService.awaitTermination(config.flushTimeoutMs(), TimeUnit.MILLISECONDS)) {

@@ -13,19 +13,30 @@ import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
 
-import static com.github.tomakehurst.wiremock.client.WireMock.*;
+import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
+import static com.github.tomakehurst.wiremock.client.WireMock.any;
+import static com.github.tomakehurst.wiremock.client.WireMock.anyUrl;
+import static com.github.tomakehurst.wiremock.client.WireMock.ok;
+import static com.github.tomakehurst.wiremock.client.WireMock.post;
+import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
+import static com.github.tomakehurst.wiremock.client.WireMock.stubFor;
+import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
+import static com.github.tomakehurst.wiremock.client.WireMock.verify;
 import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.options;
 import static com.google.common.net.HttpHeaders.CONTENT_TYPE;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BATCH_SIZE_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_KEY_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_SCHEMA_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.LINGER_MS_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.MAX_IN_FLIGHT_REQUESTS_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.MAX_RETRIES_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.READ_TIMEOUT_MS_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.RETRY_BACKOFF_MS_CONFIG;
 import static org.apache.kafka.connect.json.JsonConverterConfig.SCHEMAS_ENABLE_CONFIG;
-import static org.apache.kafka.connect.runtime.ConnectorConfig.*;
+import static org.apache.kafka.connect.runtime.ConnectorConfig.CONNECTOR_CLASS_CONFIG;
+import static org.apache.kafka.connect.runtime.ConnectorConfig.KEY_CONVERTER_CLASS_CONFIG;
+import static org.apache.kafka.connect.runtime.ConnectorConfig.TASKS_MAX_CONFIG;
 import static org.apache.kafka.connect.runtime.ConnectorConfig.VALUE_CONVERTER_CLASS_CONFIG;
 import static org.apache.kafka.connect.runtime.SinkConnectorConfig.TOPICS_CONFIG;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -59,12 +70,6 @@ public class ElasticsearchConnectorNetworkIT extends BaseConnectorIT {
 
   @Test
   public void testReadTimeout() throws Exception {
-    props.put(READ_TIMEOUT_MS_CONFIG, "1000");
-    props.put(MAX_RETRIES_CONFIG, "2");
-    props.put(RETRY_BACKOFF_MS_CONFIG, "10");
-    props.put(BATCH_SIZE_CONFIG, "1");
-    props.put(MAX_IN_FLIGHT_REQUESTS_CONFIG, Integer.toString(NUM_RECORDS - 1));
-
     wireMockRule.stubFor(post(urlPathEqualTo("/_bulk"))
             .willReturn(ok().withFixedDelay(2_000)));
 
@@ -81,16 +86,13 @@ public class ElasticsearchConnectorNetworkIT extends BaseConnectorIT {
             .contains("Failed to execute bulk request due to 'java.net.SocketTimeoutException: " +
                     "1,000 milliseconds timeout on connection")
             .contains("after 3 attempt(s)");
+
+    // 1 + 2 retries
+    verify(3, postRequestedFor(urlPathEqualTo("/_bulk")));
   }
 
   @Test
   public void testTooManyRequests() throws Exception {
-    props.put(READ_TIMEOUT_MS_CONFIG, "1000");
-    props.put(MAX_RETRIES_CONFIG, "2");
-    props.put(RETRY_BACKOFF_MS_CONFIG, "10");
-    props.put(BATCH_SIZE_CONFIG, "1");
-    props.put(MAX_IN_FLIGHT_REQUESTS_CONFIG, Integer.toString(NUM_RECORDS - 1));
-
     wireMockRule.stubFor(post(urlPathEqualTo("/_bulk"))
             .willReturn(aResponse()
                     .withStatus(429)
@@ -119,6 +121,32 @@ public class ElasticsearchConnectorNetworkIT extends BaseConnectorIT {
             .contains("Failed to execute bulk request due to 'ElasticsearchStatusException" +
                     "[Elasticsearch exception [type=circuit_breaking_exception, " +
                     "reason=Data too large]]' after 3 attempt(s)");
+
+    // 1 + 2 retries
+    verify(3, postRequestedFor(urlPathEqualTo("/_bulk")));
+  }
+
+  @Test
+  public void testServiceUnavailable() throws Exception {
+    wireMockRule.stubFor(post(urlPathEqualTo("/_bulk"))
+            .willReturn(aResponse()
+                    .withStatus(503)));
+
+    connect.configureConnector(CONNECTOR_NAME, props);
+    waitForConnectorToStart(CONNECTOR_NAME, TASKS_MAX);
+    writeRecords(NUM_RECORDS);
+
+    // Connector should fail since the request takes longer than request timeout
+    await().atMost(Duration.ofMinutes(1)).untilAsserted(() ->
+            assertThat(connect.connectorStatus(CONNECTOR_NAME).tasks().get(0).state())
+                    .isEqualTo("FAILED"));
+
+    assertThat(connect.connectorStatus(CONNECTOR_NAME).tasks().get(0).trace())
+            .contains("[HTTP/1.1 503 Service Unavailable]")
+            .contains("after 3 attempt(s)");
+
+    // 1 + 2 retries
+    verify(3, postRequestedFor(urlPathEqualTo("/_bulk")));
   }
 
   protected Map<String, String> createProps() {
@@ -136,6 +164,13 @@ public class ElasticsearchConnectorNetworkIT extends BaseConnectorIT {
     props.put(CONNECTION_URL_CONFIG, wireMockRule.url("/"));
     props.put(IGNORE_KEY_CONFIG, "true");
     props.put(IGNORE_SCHEMA_CONFIG, "true");
+
+    props.put(READ_TIMEOUT_MS_CONFIG, "1000");
+    props.put(MAX_RETRIES_CONFIG, "2");
+    props.put(RETRY_BACKOFF_MS_CONFIG, "10");
+    props.put(LINGER_MS_CONFIG, "60000");
+    props.put(BATCH_SIZE_CONFIG, "4");
+    props.put(MAX_IN_FLIGHT_REQUESTS_CONFIG, "1");
 
     return props;
   }
