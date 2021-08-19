@@ -32,7 +32,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BehaviorOnNullValues;
-import io.confluent.connect.elasticsearch.OffsetTracker.Offset;
+import io.confluent.connect.elasticsearch.OffsetTracker.OffsetState;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Struct;
@@ -83,12 +83,12 @@ public class ElasticsearchSinkTaskTest {
     // skip null
     SinkRecord nullRecord = record(true, true, 0);
     task.put(Collections.singletonList(nullRecord));
-    verify(client, never()).index(eq(nullRecord), any(DocWriteRequest.class), any(Offset.class));
+    verify(client, never()).index(eq(nullRecord), any(DocWriteRequest.class), any(OffsetState.class));
 
     // don't skip non-null
     SinkRecord notNullRecord = record(true, false,1);
     task.put(Collections.singletonList(notNullRecord));
-    verify(client, times(1)).index(eq(notNullRecord), any(DocWriteRequest.class), any(Offset.class));
+    verify(client, times(1)).index(eq(notNullRecord), any(DocWriteRequest.class), any(OffsetState.class));
   }
 
   @Test

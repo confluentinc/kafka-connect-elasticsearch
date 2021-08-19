@@ -86,7 +86,7 @@ public class ElasticsearchClient {
   private final AtomicReference<ConnectException> error;
   protected final BulkProcessor bulkProcessor;
   private final ConcurrentMap<DocWriteRequest<?>, SinkRecordAndOffset> requestToSinkRecord;
-  private final ConcurrentMap<Long, List<SinkRecord>> inFlightRequests;
+  private final ConcurrentMap<Long, List<SinkRecordAndOffset>> inFlightRequests;
   private final ElasticsearchSinkConnectorConfig config;
   private final ErrantRecordReporter reporter;
   private final RestHighLevelClient client;
@@ -247,7 +247,7 @@ public class ElasticsearchClient {
    * @param request the associated request to send
    * @throws ConnectException if one of the requests failed
    */
-  public void index(SinkRecord record, DocWriteRequest<?> request, OffsetTracker.Offset offset) {
+  public void index(SinkRecord record, DocWriteRequest<?> request, OffsetTracker.OffsetState offsetState) {
     if (isFailed()) {
       try {
         close();
@@ -274,7 +274,7 @@ public class ElasticsearchClient {
       }
     }
 
-    requestToSinkRecord.put(request, new SinkRecordAndOffset(record, offset));
+    requestToSinkRecord.put(request, new SinkRecordAndOffset(record, offsetState));
     numRecords.incrementAndGet();
     bulkProcessor.add(request);
   }
@@ -282,11 +282,11 @@ public class ElasticsearchClient {
   private static class SinkRecordAndOffset {
 
     private final SinkRecord sinkRecord;
-    private final OffsetTracker.Offset offset;
+    private final OffsetTracker.OffsetState offsetState;
 
-    public SinkRecordAndOffset(SinkRecord sinkRecord, OffsetTracker.Offset offset) {
+    public SinkRecordAndOffset(SinkRecord sinkRecord, OffsetTracker.OffsetState offsetState) {
       this.sinkRecord = sinkRecord;
-      this.offset = offset;
+      this.offsetState = offsetState;
     }
   }
 
@@ -314,8 +314,8 @@ public class ElasticsearchClient {
       @Override
       public void beforeBulk(long executionId, BulkRequest request) {
         if (inFlightRequests != null) {
-          List<SinkRecord> sinkRecords = request.requests().stream()
-                  .map(docWriteRequest -> requestToSinkRecord.get(docWriteRequest).sinkRecord)
+          List<SinkRecordAndOffset> sinkRecords = request.requests().stream()
+                  .map(requestToSinkRecord::get)
                   .collect(toList());
 
           inFlightRequests.put(executionId, sinkRecords);
@@ -328,7 +328,7 @@ public class ElasticsearchClient {
           handleResponse(bulkItemResponse, executionId);
         }
 
-        request.requests().forEach(req -> requestToSinkRecord.get(req).offset.markProcessed());
+        request.requests().forEach(req -> requestToSinkRecord.get(req).offsetState.markProcessed());
         bulkFinished(executionId, request);
       }
 
@@ -502,14 +502,14 @@ public class ElasticsearchClient {
    */
   private synchronized void reportBadRecord(BulkItemResponse response, long executionId) {
     if (reporter != null) {
-      List<SinkRecord> sinkRecords = inFlightRequests.getOrDefault(executionId, new ArrayList<>());
-      SinkRecord original = sinkRecords.size() > response.getItemId()
+      List<SinkRecordAndOffset> sinkRecords = inFlightRequests.getOrDefault(executionId, new ArrayList<>());
+      SinkRecordAndOffset original = sinkRecords.size() > response.getItemId()
           ? sinkRecords.get(response.getItemId())
           : null;
       if (original != null) {
         // TODO this is also async. Do we tie this Future with the offset tracker?
         reporter.report(
-            original,
+            original.sinkRecord,
             new ReportingException("Indexing failed: " + response.getFailureMessage())
         );
       }

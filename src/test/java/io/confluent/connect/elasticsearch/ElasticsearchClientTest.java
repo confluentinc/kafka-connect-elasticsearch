@@ -45,7 +45,6 @@ import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.Behav
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BehaviorOnNullValues;
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.SecurityProtocol;
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.WriteMethod;
-import io.confluent.connect.elasticsearch.OffsetTracker.Offset;
 import io.confluent.connect.elasticsearch.helper.ElasticsearchContainer;
 import io.confluent.connect.elasticsearch.helper.ElasticsearchHelperClient;
 import io.confluent.connect.elasticsearch.helper.NetworkErrorContainer;
@@ -615,6 +614,6 @@ public class ElasticsearchClientTest {
   }
 
   private void writeRecord(SinkRecord record, ElasticsearchClient client) {
-    client.index(record, converter.convertRecord(record, record.topic()), new Offset(record.kafkaOffset()));
+    client.index(record, converter.convertRecord(record, record.topic()), new OffsetTracker.OffsetState(record.kafkaOffset()));
   }
 }

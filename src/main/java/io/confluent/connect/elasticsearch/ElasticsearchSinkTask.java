@@ -88,11 +88,11 @@ public class ElasticsearchSinkTask extends SinkTask {
   public void put(Collection<SinkRecord> records) throws ConnectException {
     log.debug("Putting {} records to Elasticsearch.", records.size());
     for (SinkRecord record : records) {
-      OffsetTracker.Offset offset = offsetTracker.addPendingRecord(record);
+      OffsetTracker.OffsetState offsetState = offsetTracker.addPendingRecord(record);
 
       if (shouldSkipRecord(record)) {
         logTrace("Ignoring {} with null value.", record);
-        offset.markProcessed();
+        offsetState.markProcessed();
         reportBadRecord(record, new ConnectException("Cannot write null valued record."));
         continue;
       }
@@ -101,7 +101,7 @@ public class ElasticsearchSinkTask extends SinkTask {
 
       ensureIndexExists(convertTopicToIndexName(record.topic()));
       checkMapping(record);
-      tryWriteRecord(record, offset);
+      tryWriteRecord(record, offsetState);
     }
   }
 
@@ -227,7 +227,7 @@ public class ElasticsearchSinkTask extends SinkTask {
     return record.value() == null && config.behaviorOnNullValues() == BehaviorOnNullValues.IGNORE;
   }
 
-  private void tryWriteRecord(SinkRecord sinkRecord, OffsetTracker.Offset offset) {
+  private void tryWriteRecord(SinkRecord sinkRecord, OffsetTracker.OffsetState offsetState) {
     DocWriteRequest<?> record = null;
     try {
       record = converter.convertRecord(sinkRecord, convertTopicToIndexName(sinkRecord.topic()));
@@ -243,7 +243,7 @@ public class ElasticsearchSinkTask extends SinkTask {
 
     if (record != null) {
       log.trace("Adding {} to bulk processor.", recordString(sinkRecord));
-      client.index(sinkRecord, record, offset);
+      client.index(sinkRecord, record, offsetState);
     }
   }
 

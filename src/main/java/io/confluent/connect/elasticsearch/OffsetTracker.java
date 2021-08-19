@@ -19,21 +19,20 @@ import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.connect.sink.SinkRecord;
 
-import java.util.ArrayDeque;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.Queue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 class OffsetTracker {
 
-  static class Offset {
+  static class OffsetState {
     private final long offset;
     private final AtomicBoolean processed = new AtomicBoolean();
 
-    Offset(long offset) {
+    OffsetState(long offset) {
       this.offset = offset;
     }
 
@@ -43,34 +42,41 @@ class OffsetTracker {
   }
 
   // TODO limit size of queue
-  private final Map<TopicPartition, Queue<Offset>> offsetsByPartition = new ConcurrentHashMap<>();
-  private final Map<TopicPartition, Long> maxByPartition = new ConcurrentHashMap<>();
+  private final Map<TopicPartition, Map<Long, OffsetState>> offsetsByPartition
+          = new ConcurrentHashMap<>();
 
-  public Offset addPendingRecord(SinkRecord sinkRecord) {
+  private final Map<TopicPartition, Long> maxReportedByPartition
+          = new ConcurrentHashMap<>();
+
+  /**
+   * This method assumes that new records are added in offset order.
+   * Older records can be re-added, and the same Offset object will be return if its
+   * offset hasn't been reported yet.
+   */
+  public OffsetState addPendingRecord(SinkRecord sinkRecord) {
     TopicPartition tp = new TopicPartition(sinkRecord.topic(), sinkRecord.kafkaPartition());
-    Offset offset = new Offset(sinkRecord.kafkaOffset());
-    Long partitionMax = maxByPartition.get(tp);
+    Long partitionMax = maxReportedByPartition.get(tp);
     if (partitionMax == null || sinkRecord.kafkaOffset() > partitionMax) {
-      offsetsByPartition
-              .computeIfAbsent(tp, key -> new ArrayDeque<>())
-              .add(offset);
+      return offsetsByPartition
+              .computeIfAbsent(tp, key -> new LinkedHashMap<>())
+              .computeIfAbsent(sinkRecord.kafkaOffset(), OffsetState::new);
     }
-    return offset;
+    return new OffsetState(sinkRecord.kafkaOffset());
   }
 
   public Map<TopicPartition, OffsetAndMetadata> getAndResetOffsets() {
     Map<TopicPartition, OffsetAndMetadata> result = new HashMap<>();
 
     offsetsByPartition.forEach(((topicPartition, offsets) -> {
-      Long max = maxByPartition.get(topicPartition);
+      Long max = maxReportedByPartition.get(topicPartition);
       boolean newMaxFound = false;
-      Iterator<Offset> iterator = offsets.iterator();
+      Iterator<OffsetState> iterator = offsets.values().iterator();
       while (iterator.hasNext()) {
-        Offset offset = iterator.next();
-        if (offset.processed.get()) {
+        OffsetState offsetState = iterator.next();
+        if (offsetState.processed.get()) {
           iterator.remove();
-          if (max == null || offset.offset > max) {
-            max = offset.offset;
+          if (max == null || offsetState.offset > max) {
+            max = offsetState.offset;
             newMaxFound = true;
           }
         } else {
@@ -79,7 +85,7 @@ class OffsetTracker {
       }
       if (newMaxFound) {
         result.put(topicPartition, new OffsetAndMetadata(max + 1));
-        maxByPartition.put(topicPartition, max);
+        maxReportedByPartition.put(topicPartition, max);
       }
     }));
     return result;
