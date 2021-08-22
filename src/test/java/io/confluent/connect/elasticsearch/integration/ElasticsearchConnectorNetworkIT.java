@@ -1,7 +1,14 @@
 package io.confluent.connect.elasticsearch.integration;
 
+import com.github.tomakehurst.wiremock.WireMockServer;
+import com.github.tomakehurst.wiremock.common.FileSource;
+import com.github.tomakehurst.wiremock.extension.Parameters;
+import com.github.tomakehurst.wiremock.extension.ResponseTransformer;
+import com.github.tomakehurst.wiremock.http.Request;
+import com.github.tomakehurst.wiremock.http.Response;
 import com.github.tomakehurst.wiremock.junit.WireMockRule;
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnector;
+import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.json.JsonConverter;
 import org.apache.kafka.connect.storage.StringConverter;
 import org.junit.After;
@@ -12,11 +19,14 @@ import org.junit.Test;
 import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.Semaphore;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.any;
 import static com.github.tomakehurst.wiremock.client.WireMock.anyUrl;
 import static com.github.tomakehurst.wiremock.client.WireMock.ok;
+import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.stubFor;
@@ -66,6 +76,123 @@ public class ElasticsearchConnectorNetworkIT extends BaseConnectorIT {
   @After
   public void cleanup() {
     stopConnect();
+  }
+
+  /**
+   * Transformer that blocks all incoming requests until {@link #release(int)} is called
+   * to fairly unblock a given number of requests.
+   */
+  public static class ConcurrencyTransformer extends ResponseTransformer {
+
+    private final Semaphore s = new Semaphore(0, true);
+    private final AtomicInteger requestCount = new AtomicInteger();
+
+    public ConcurrencyTransformer() {
+      s.drainPermits();
+    }
+
+    @Override
+    public Response transform(Request request, Response response, FileSource files, Parameters parameters) {
+      try {
+        s.acquire();
+      } catch (InterruptedException e) {
+        throw new ConnectException(e);
+      } finally {
+        s.release();
+      }
+      requestCount.incrementAndGet();
+      return response;
+    }
+
+    @Override
+    public String getName() {
+      return "concurrency";
+    }
+
+    public void release(int permits) {
+      s.release(permits);
+    }
+
+    /**
+     * How many requests are currently blocked
+     */
+    public int queueLength() {
+      return s.getQueueLength();
+    }
+
+    /**
+     * How many requests have been processed
+     */
+    public int requestCount() {
+      return requestCount.get();
+    }
+
+    @Override
+    public boolean applyGlobally() {
+      return false;
+    }
+
+  }
+
+  @Test
+  public void testConcurrentRequests() throws Exception {
+    ConcurrencyTransformer concurrencyTransformer = new ConcurrencyTransformer();
+    WireMockServer wireMockServer = new WireMockServer(options().dynamicPort()
+            .extensions(concurrencyTransformer));
+
+    try {
+      wireMockServer.start();
+      wireMockServer.stubFor(post(urlPathEqualTo("/_bulk"))
+              .willReturn(okJson("{\n" +
+                      "   \"took\": 30,\n" +
+                      "   \"errors\": false,\n" +
+                      "   \"items\": [\n" +
+                      "      {\n" +
+                      "         \"index\": {\n" +
+                      "            \"_index\": \"test\",\n" +
+                      "            \"_type\": \"_doc\",\n" +
+                      "            \"_id\": \"1\",\n" +
+                      "            \"_version\": 1,\n" +
+                      "            \"result\": \"created\",\n" +
+                      "            \"_shards\": {\n" +
+                      "               \"total\": 2,\n" +
+                      "               \"successful\": 1,\n" +
+                      "               \"failed\": 0\n" +
+                      "            },\n" +
+                      "            \"status\": 201,\n" +
+                      "            \"_seq_no\" : 0,\n" +
+                      "            \"_primary_term\": 1\n" +
+                      "         }\n" +
+                      "      }\n" +
+                      "   ]\n" +
+                      "}")
+                      .withTransformers(concurrencyTransformer.getName())));
+      wireMockServer.stubFor(any(anyUrl()).atPriority(10).willReturn(ok()));
+
+      props.put(CONNECTION_URL_CONFIG, wireMockServer.url("/"));
+      props.put(READ_TIMEOUT_MS_CONFIG, "60000");
+      props.put(MAX_RETRIES_CONFIG, "0");
+      props.put(LINGER_MS_CONFIG, "60000");
+      props.put(BATCH_SIZE_CONFIG, "1");
+      props.put(MAX_IN_FLIGHT_REQUESTS_CONFIG, "4");
+
+      connect.configureConnector(CONNECTOR_NAME, props);
+      waitForConnectorToStart(CONNECTOR_NAME, TASKS_MAX);
+      writeRecords(10);
+
+      // TODO MAX_IN_FLIGHT_REQUESTS_CONFIG is misleading (it allows 1 less concurrent request
+      // than configure), but fixing it would be a breaking change.
+      // Consider allowing 0 (blocking) and removing "-1"
+      await().atMost(Duration.ofSeconds(10)).untilAsserted(() ->
+              assertThat(concurrencyTransformer.queueLength()).isEqualTo(3));
+
+      concurrencyTransformer.release(10);
+
+      await().atMost(Duration.ofSeconds(10)).untilAsserted(() ->
+              assertThat(concurrencyTransformer.requestCount()).isEqualTo(10));
+    } finally {
+      wireMockServer.stop();
+    }
   }
 
   @Test
