@@ -65,6 +65,15 @@ import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.Behav
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.FLUSH_TIMEOUT_MS_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.MAX_BUFFERED_RECORDS_CONFIG;
 
+/**
+ * Implementation notes:
+ * <ul>
+ *   <li>Based on Elasticsearch's BulkProcessor, which is responsible for batching based on size
+ *   and linger. It also limits the concurrency (max number of in-flight requests).</li>
+ *   <li>Batches are run asynchronously on a separate thread</li>
+ *   <li>Retries are processed synchronously in the original batch thread</li>
+ * </ul>
+ */
 @SuppressWarnings("checkstyle:ClassDataAbstractionCoupling")
 public class ElasticsearchClient {
 
