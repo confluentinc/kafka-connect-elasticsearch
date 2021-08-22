@@ -1,12 +1,14 @@
 package io.confluent.connect.elasticsearch.integration;
 
 import com.github.tomakehurst.wiremock.WireMockServer;
+import com.github.tomakehurst.wiremock.client.WireMock;
 import com.github.tomakehurst.wiremock.common.FileSource;
 import com.github.tomakehurst.wiremock.extension.Parameters;
 import com.github.tomakehurst.wiremock.extension.ResponseTransformer;
 import com.github.tomakehurst.wiremock.http.Request;
 import com.github.tomakehurst.wiremock.http.Response;
 import com.github.tomakehurst.wiremock.junit.WireMockRule;
+import com.github.tomakehurst.wiremock.stubbing.Scenario;
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnector;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.json.JsonConverter;
@@ -132,6 +134,56 @@ public class ElasticsearchConnectorNetworkIT extends BaseConnectorIT {
       return false;
     }
 
+  }
+
+  @Test
+  public void testRetry() throws InterruptedException {
+    wireMockRule.stubFor(post(urlPathEqualTo("/_bulk"))
+            .inScenario("bulkRetry1")
+            .whenScenarioStateIs(Scenario.STARTED)
+            .withRequestBody(WireMock.containing("{\"doc_num\":0}"))
+            .willReturn(aResponse().withStatus(500))
+            .willSetStateTo("Failed"));
+
+    wireMockRule.stubFor(post(urlPathEqualTo("/_bulk"))
+            .inScenario("bulkRetry1")
+            .whenScenarioStateIs("Failed")
+            .withRequestBody(WireMock.containing("{\"doc_num\":0}"))
+            .willSetStateTo("Fixed")
+            .willReturn(okJson("{\n" +
+                    "   \"took\": 30,\n" +
+                    "   \"errors\": false,\n" +
+                    "   \"items\": [\n" +
+                    "      {\n" +
+                    "         \"index\": {\n" +
+                    "            \"_index\": \"test\",\n" +
+                    "            \"_type\": \"_doc\",\n" +
+                    "            \"_id\": \"1\",\n" +
+                    "            \"_version\": 1,\n" +
+                    "            \"result\": \"created\",\n" +
+                    "            \"_shards\": {\n" +
+                    "               \"total\": 2,\n" +
+                    "               \"successful\": 1,\n" +
+                    "               \"failed\": 0\n" +
+                    "            },\n" +
+                    "            \"status\": 201,\n" +
+                    "            \"_seq_no\" : 0,\n" +
+                    "            \"_primary_term\": 1\n" +
+                    "         }\n" +
+                    "      }\n" +
+                    "   ]\n" +
+                    "}")));
+
+    connect.configureConnector(CONNECTOR_NAME, props);
+    waitForConnectorToStart(CONNECTOR_NAME, TASKS_MAX);
+    writeRecords(4);
+
+    await().untilAsserted(
+            () -> assertThat(wireMockRule.getAllScenarios().getScenarios().get(0).getState())
+                    .isEqualTo("Fixed"));
+
+    assertThat(connect.connectorStatus(CONNECTOR_NAME).tasks().get(0).state())
+                    .isEqualTo("RUNNING");
   }
 
   @Test
