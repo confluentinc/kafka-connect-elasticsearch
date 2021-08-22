@@ -181,6 +181,10 @@ public class ConfigCallbackHandler implements HttpClientConfigCallback {
       cm.setDefaultMaxPerRoute(maxPerRoute);
       cm.setMaxTotal(maxPerRoute * config.connectionUrls().size());
 
+      log.debug("Connection pool config: maxPerRoute: {}, maxTotal {}",
+              cm.getDefaultMaxPerRoute(),
+              cm.getMaxTotal());
+
       return cm;
     } catch (IOReactorException e) {
       throw new ConnectException("Unable to open ElasticsearchClient.", e);
