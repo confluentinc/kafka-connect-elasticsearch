@@ -89,10 +89,6 @@ public class ElasticsearchConnectorNetworkIT extends BaseConnectorIT {
     private final Semaphore s = new Semaphore(0, true);
     private final AtomicInteger requestCount = new AtomicInteger();
 
-    public ConcurrencyTransformer() {
-      s.drainPermits();
-    }
-
     @Override
     public Response transform(Request request, Response response, FileSource files, Parameters parameters) {
       try {

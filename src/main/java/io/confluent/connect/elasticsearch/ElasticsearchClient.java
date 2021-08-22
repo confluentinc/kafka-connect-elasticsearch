@@ -65,6 +65,15 @@ import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfi
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.MAX_BUFFERED_RECORDS_CONFIG;
 import static java.util.stream.Collectors.toList;
 
+/**
+ * Implementation notes:
+ * <ul>
+ *   <li>Based on Elasticsearch's BulkProcessor, which is responsible for batching based on size
+ *   and linger. It also limits the concurrency (max number of in-flight requests).</li>
+ *   <li>Batches are run asynchronously on a separate thread</li>
+ *   <li>Retries are processed synchronously in the original batch thread</li>
+ * </ul>
+ */
 @SuppressWarnings("checkstyle:ClassDataAbstractionCoupling")
 public class ElasticsearchClient {
 
