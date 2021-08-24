@@ -15,6 +15,7 @@
 
 package io.confluent.connect.elasticsearch;
 
+import io.confluent.connect.elasticsearch.OffsetTracker.OffsetState;
 import org.apache.http.HttpHost;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
@@ -88,17 +89,19 @@ public class ElasticsearchSinkTask extends SinkTask {
   public void put(Collection<SinkRecord> records) throws ConnectException {
     log.debug("Putting {} records to Elasticsearch.", records.size());
     for (SinkRecord record : records) {
-      OffsetTracker.OffsetState offsetState = offsetTracker.addPendingRecord(record);
+      OffsetState offsetState = offsetTracker.addPendingRecord(record);
 
       if (shouldSkipRecord(record)) {
         logTrace("Ignoring {} with null value.", record);
-        offsetState.markProcessed();
-        reportBadRecord(record, new ConnectException("Cannot write null valued record."));
+        reportBadRecord(record,
+                new ConnectException("Cannot write null valued record."),
+                offsetState);
         continue;
       }
 
       logTrace("Writing {} to Elasticsearch.", record);
 
+      // TODO these calls can fail, make sure we handle the offset state accordingly
       ensureIndexExists(convertTopicToIndexName(record.topic()));
       checkMapping(record);
       tryWriteRecord(record, offsetState);
@@ -113,7 +116,7 @@ public class ElasticsearchSinkTask extends SinkTask {
     } catch (IllegalStateException e) {
       log.debug("Tried to flush data to Elasticsearch, but BulkProcessor is already closed.", e);
     }
-    return offsetTracker.getAndResetOffsets();
+    return offsetTracker.getOffsets();
   }
 
   @Override
@@ -217,8 +220,9 @@ public class ElasticsearchSinkTask extends SinkTask {
     }
   }
 
-  private void reportBadRecord(SinkRecord record, Throwable error) {
+  private void reportBadRecord(SinkRecord record, Throwable error, OffsetState offsetState) {
     if (reporter != null) {
+      offsetState.markProcessed(); // TODO tie with reporter result
       reporter.report(record, error);
     }
   }
@@ -227,12 +231,12 @@ public class ElasticsearchSinkTask extends SinkTask {
     return record.value() == null && config.behaviorOnNullValues() == BehaviorOnNullValues.IGNORE;
   }
 
-  private void tryWriteRecord(SinkRecord sinkRecord, OffsetTracker.OffsetState offsetState) {
+  private void tryWriteRecord(SinkRecord sinkRecord, OffsetState offsetState) {
     DocWriteRequest<?> record = null;
     try {
       record = converter.convertRecord(sinkRecord, convertTopicToIndexName(sinkRecord.topic()));
     } catch (DataException convertException) {
-      reportBadRecord(sinkRecord, convertException);
+      reportBadRecord(sinkRecord, convertException, offsetState);
 
       if (config.dropInvalidMessage()) {
         log.error("Can't convert {}.", recordString(sinkRecord), convertException);
@@ -254,5 +258,10 @@ public class ElasticsearchSinkTask extends SinkTask {
         record.kafkaPartition(),
         record.kafkaOffset()
     );
+  }
+
+  @Override
+  public void close(Collection<TopicPartition> partitions) {
+    offsetTracker.closePartitions(partitions);
   }
 }

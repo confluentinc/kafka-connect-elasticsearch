@@ -15,10 +15,12 @@
 
 package io.confluent.connect.elasticsearch;
 
+import io.confluent.connect.elasticsearch.OffsetTracker.OffsetState;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.connect.sink.SinkRecord;
 import org.junit.Test;
+import org.testcontainers.shaded.com.google.common.collect.ImmutableList;
 
 import java.util.Map;
 
@@ -36,26 +38,30 @@ public class OffsetTrackerTest {
     SinkRecord record2 = sinkRecord(tp, 1);
     SinkRecord record3 = sinkRecord(tp, 2);
 
-    OffsetTracker.OffsetState offsetState1 = offsetTracker.addPendingRecord(record1);
-    OffsetTracker.OffsetState offsetState2 = offsetTracker.addPendingRecord(record2);
-    OffsetTracker.OffsetState offsetState3 = offsetTracker.addPendingRecord(record3);
+    OffsetState offsetState1 = offsetTracker.addPendingRecord(record1);
+    OffsetState offsetState2 = offsetTracker.addPendingRecord(record2);
+    OffsetState offsetState3 = offsetTracker.addPendingRecord(record3);
 
-    assertThat(offsetTracker.getAndResetOffsets()).isEmpty();
+    assertThat(offsetTracker.getOffsets()).isEmpty();
 
     offsetState2.markProcessed();
-    assertThat(offsetTracker.getAndResetOffsets()).isEmpty();
+    assertThat(offsetTracker.getOffsets()).isEmpty();
 
     offsetState1.markProcessed();
-    Map<TopicPartition, OffsetAndMetadata> offsetMap = offsetTracker.getAndResetOffsets();
+
+    offsetTracker.moveOffsets();
+    Map<TopicPartition, OffsetAndMetadata> offsetMap = offsetTracker.getOffsets();
     assertThat(offsetMap).hasSize(1);
     assertThat(offsetMap.get(tp).offset()).isEqualTo(2);
 
     offsetState3.markProcessed();
-    offsetMap = offsetTracker.getAndResetOffsets();
+    offsetTracker.moveOffsets();
+    offsetMap = offsetTracker.getOffsets();
     assertThat(offsetMap).hasSize(1);
     assertThat(offsetMap.get(tp).offset()).isEqualTo(3);
 
-    assertThat(offsetTracker.getAndResetOffsets()).isEmpty();
+    offsetTracker.moveOffsets();
+    assertThat(offsetMap.get(tp).offset()).isEqualTo(3);
   }
 
   /**
@@ -71,18 +77,21 @@ public class OffsetTrackerTest {
     SinkRecord record1 = sinkRecord(tp, 0);
     SinkRecord record2 = sinkRecord(tp, 1);
 
-    OffsetTracker.OffsetState offsetState1 = offsetTracker.addPendingRecord(record1);
-    OffsetTracker.OffsetState offsetState2 = offsetTracker.addPendingRecord(record2);
+    OffsetState offsetState1 = offsetTracker.addPendingRecord(record1);
+    OffsetState offsetState2 = offsetTracker.addPendingRecord(record2);
 
     offsetState1.markProcessed();
     offsetState2.markProcessed();
-    assertThat(offsetTracker.getAndResetOffsets().get(tp).offset()).isEqualTo(2);
+    offsetTracker.moveOffsets();
+    assertThat(offsetTracker.getOffsets().get(tp).offset()).isEqualTo(2);
 
     offsetState2 = offsetTracker.addPendingRecord(record2);
-    assertThat(offsetTracker.getAndResetOffsets()).isEmpty();
+    offsetTracker.moveOffsets();
+    assertThat(offsetTracker.getOffsets().get(tp).offset()).isEqualTo(2);
 
     offsetState2.markProcessed();
-    assertThat(offsetTracker.getAndResetOffsets()).isEmpty();
+    offsetTracker.moveOffsets();
+    assertThat(offsetTracker.getOffsets().get(tp).offset()).isEqualTo(2);
   }
 
   @Test
@@ -94,20 +103,43 @@ public class OffsetTrackerTest {
     SinkRecord record1 = sinkRecord(tp, 0);
     SinkRecord record2 = sinkRecord(tp, 1);
 
-    OffsetTracker.OffsetState offsetState1A = offsetTracker.addPendingRecord(record1);
-    OffsetTracker.OffsetState offsetState2A = offsetTracker.addPendingRecord(record2);
+    OffsetState offsetState1A = offsetTracker.addPendingRecord(record1);
+    OffsetState offsetState2A = offsetTracker.addPendingRecord(record2);
 
     // first fails but second succeeds
     offsetState2A.markProcessed();
-    assertThat(offsetTracker.getAndResetOffsets()).isEmpty();
+    offsetTracker.moveOffsets();
+    assertThat(offsetTracker.getOffsets()).isEmpty();
 
-    // now the batch is retried by the framework (e.g. RetriableException)
-    OffsetTracker.OffsetState offsetState1B = offsetTracker.addPendingRecord(record1);
-    OffsetTracker.OffsetState offsetState2B = offsetTracker.addPendingRecord(record2);
+    // now simulate the batch being retried by the framework (e.g. after a RetriableException)
+    OffsetState offsetState1B = offsetTracker.addPendingRecord(record1);
+    OffsetState offsetState2B = offsetTracker.addPendingRecord(record2);
 
     offsetState2B.markProcessed();
     offsetState1B.markProcessed();
-    assertThat(offsetTracker.getAndResetOffsets().get(tp).offset()).isEqualTo(2);
+    offsetTracker.moveOffsets();
+    assertThat(offsetTracker.getOffsets().get(tp).offset()).isEqualTo(2);
+  }
+
+  @Test
+  public void testRebalance() {
+    OffsetTracker offsetTracker = new OffsetTracker();
+
+    TopicPartition tp1 = new TopicPartition("t1", 0);
+    TopicPartition tp2 = new TopicPartition("t2", 0);
+    TopicPartition tp3 = new TopicPartition("t3", 0);
+
+    SinkRecord record1 = sinkRecord(tp1, 0);
+    SinkRecord record2 = sinkRecord(tp2, 0);
+
+    offsetTracker.addPendingRecord(record1).markProcessed();
+    offsetTracker.addPendingRecord(record2).markProcessed();
+
+    offsetTracker.moveOffsets();
+    assertThat(offsetTracker.getOffsets().size()).isEqualTo(2);
+
+    offsetTracker.closePartitions(ImmutableList.of(tp1, tp3));
+    assertThat(offsetTracker.getOffsets().keySet()).containsExactly(tp2);
   }
 
   private SinkRecord sinkRecord(TopicPartition tp, long offset) {

@@ -36,10 +36,7 @@ import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.*;
 
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BehaviorOnMalformedDoc;
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BehaviorOnNullValues;
@@ -51,6 +48,7 @@ import io.confluent.connect.elasticsearch.helper.NetworkErrorContainer;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import org.apache.kafka.common.config.SslConfigs;
 import org.apache.kafka.connect.data.Schema;
@@ -235,19 +233,19 @@ public class ElasticsearchClientTest {
     client.createIndex(INDEX);
 
     writeRecord(sinkRecord(0), client);
-    assertEquals(1, client.numRecords.get());
+    assertEquals(1, client.numBufferedRecords.get());
     client.flush();
 
     waitUntilRecordsInES(1);
     assertEquals(1, helperClient.getDocCount(INDEX));
-    assertEquals(0, client.numRecords.get());
+    assertEquals(0, client.numBufferedRecords.get());
 
     writeRecord(sinkRecord(1), client);
-    assertEquals(1, client.numRecords.get());
+    assertEquals(1, client.numBufferedRecords.get());
 
     // will block until the previous record is flushed
     writeRecord(sinkRecord(2), client);
-    assertEquals(1, client.numRecords.get());
+    assertEquals(1, client.numBufferedRecords.get());
 
     waitUntilRecordsInES(3);
     client.close();
@@ -457,6 +455,8 @@ public class ElasticsearchClientTest {
     converter = new DataConverter(config);
 
     ErrantRecordReporter reporter = mock(ErrantRecordReporter.class);
+    when(reporter.report(any(), any()))
+            .thenReturn(CompletableFuture.completedFuture(null));
     ElasticsearchClient client = new ElasticsearchClient(config, reporter);
     client.createIndex(INDEX);
     client.createMapping(INDEX, schema());

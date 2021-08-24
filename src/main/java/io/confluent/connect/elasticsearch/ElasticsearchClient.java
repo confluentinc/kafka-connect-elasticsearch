@@ -15,6 +15,7 @@
 
 package io.confluent.connect.elasticsearch;
 
+import io.confluent.connect.elasticsearch.OffsetTracker.OffsetState;
 import org.apache.http.HttpHost;
 import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.connect.data.Schema;
@@ -54,6 +55,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
@@ -72,6 +74,7 @@ import static java.util.stream.Collectors.toList;
  *   and linger. It also limits the concurrency (max number of in-flight requests).</li>
  *   <li>Batches are run asynchronously on a separate thread</li>
  *   <li>Retries are processed synchronously in the original batch thread</li>
+ *   <li>Batches are not grouped by partition(s)</li>
  * </ul>
  */
 @SuppressWarnings("checkstyle:ClassDataAbstractionCoupling")
@@ -91,7 +94,7 @@ public class ElasticsearchClient {
       )
   );
 
-  protected final AtomicInteger numRecords;
+  protected final AtomicInteger numBufferedRecords;
   private final AtomicReference<ConnectException> error;
   protected final BulkProcessor bulkProcessor;
   private final ConcurrentMap<DocWriteRequest<?>, SinkRecordAndOffset> requestToSinkRecord;
@@ -102,12 +105,21 @@ public class ElasticsearchClient {
   private final ExecutorService bulkExecutorService;
   private final Time clock;
 
+  // Visible for testing
+  public ElasticsearchClient(
+          ElasticsearchSinkConnectorConfig config,
+          ErrantRecordReporter reporter
+  ) {
+    this(config, reporter, new OffsetTracker());
+  }
+
   public ElasticsearchClient(
       ElasticsearchSinkConnectorConfig config,
-      ErrantRecordReporter reporter
+      ErrantRecordReporter reporter,
+      OffsetTracker offsetTracker
   ) {
     this.bulkExecutorService = Executors.newFixedThreadPool(config.maxInFlightRequests());
-    this.numRecords = new AtomicInteger(0);
+    this.numBufferedRecords = new AtomicInteger(0);
     this.error = new AtomicReference<>();
     this.requestToSinkRecord = new ConcurrentHashMap<>();
     this.inFlightRequests = reporter != null ? new ConcurrentHashMap<>() : null;
@@ -128,7 +140,7 @@ public class ElasticsearchClient {
             .setHttpClientConfigCallback(configCallbackHandler)
     );
     this.bulkProcessor = BulkProcessor
-        .builder(buildConsumer(), buildListener())
+        .builder(buildConsumer(), buildListener(offsetTracker))
         .setBulkActions(config.batchSize())
         .setConcurrentRequests(config.maxInFlightRequests() - 1) // 0 = no concurrent requests
         .setFlushInterval(TimeValue.timeValueMillis(config.lingerMs()))
@@ -256,7 +268,7 @@ public class ElasticsearchClient {
    * @param request the associated request to send
    * @throws ConnectException if one of the requests failed
    */
-  public void index(SinkRecord record, DocWriteRequest<?> request, OffsetTracker.OffsetState offsetState) {
+  public void index(SinkRecord record, DocWriteRequest<?> request, OffsetState offsetState) {
     if (isFailed()) {
       try {
         close();
@@ -267,33 +279,38 @@ public class ElasticsearchClient {
       throw error.get();
     }
 
-    // wait for internal buffer to be less than max.buffered.records configuration
+    verifyBufferedRecords();
+
+    requestToSinkRecord.put(request, new SinkRecordAndOffset(record, offsetState));
+    numBufferedRecords.incrementAndGet();
+    bulkProcessor.add(request);
+  }
+
+  /**
+   * Wait for internal buffer to be less than max.buffered.records configuration
+    */
+  private void verifyBufferedRecords() {
     long maxWaitTime = clock.milliseconds() + config.flushTimeoutMs();
-    while (numRecords.get() >= config.maxBufferedRecords()) {
+    while (numBufferedRecords.get() >= config.maxBufferedRecords()) {
       clock.sleep(WAIT_TIME);
       if (clock.milliseconds() > maxWaitTime) {
         throw new ConnectException(
-            String.format(
-                "Could not make space in the internal buffer fast enough. Consider increasing %s"
-                    + " or %s.",
-                FLUSH_TIMEOUT_MS_CONFIG,
-                MAX_BUFFERED_RECORDS_CONFIG
+            String.format("Could not make space in the internal buffer fast enough. "
+                            + "Consider increasing %s or %s.",
+                    FLUSH_TIMEOUT_MS_CONFIG,
+                    MAX_BUFFERED_RECORDS_CONFIG
             )
         );
       }
     }
-
-    requestToSinkRecord.put(request, new SinkRecordAndOffset(record, offsetState));
-    numRecords.incrementAndGet();
-    bulkProcessor.add(request);
   }
 
   private static class SinkRecordAndOffset {
 
     private final SinkRecord sinkRecord;
-    private final OffsetTracker.OffsetState offsetState;
+    private final OffsetState offsetState;
 
-    public SinkRecordAndOffset(SinkRecord sinkRecord, OffsetTracker.OffsetState offsetState) {
+    public SinkRecordAndOffset(SinkRecord sinkRecord, OffsetState offsetState) {
       this.sinkRecord = sinkRecord;
       this.offsetState = offsetState;
     }
@@ -318,7 +335,7 @@ public class ElasticsearchClient {
    *
    * @return the listener
    */
-  private BulkProcessor.Listener buildListener() {
+  private BulkProcessor.Listener buildListener(OffsetTracker offsetTracker) {
     return new Listener() {
       @Override
       public void beforeBulk(long executionId, BulkRequest request) {
@@ -333,11 +350,21 @@ public class ElasticsearchClient {
 
       @Override
       public void afterBulk(long executionId, BulkRequest request, BulkResponse response) {
+        List<DocWriteRequest<?>> requests = request.requests();
+
+        int itemNumber = 0;
         for (BulkItemResponse bulkItemResponse : response) {
-          handleResponse(bulkItemResponse, executionId);
+          SinkRecordAndOffset record = itemNumber < requests.size()
+                  ? requestToSinkRecord.get(requests.get(itemNumber))
+                  : null;
+          handleResponse(record, bulkItemResponse, executionId);
         }
 
-        request.requests().forEach(req -> requestToSinkRecord.get(req).offsetState.markProcessed());
+        requests.forEach(req ->
+                requestToSinkRecord.get(req).offsetState.markProcessed());
+
+        offsetTracker.moveOffsets();
+
         bulkFinished(executionId, request);
       }
 
@@ -351,7 +378,7 @@ public class ElasticsearchClient {
       private void bulkFinished(long executionId, BulkRequest request) {
         request.requests().forEach(requestToSinkRecord::remove);
         removeFromInFlightRequests(executionId);
-        numRecords.addAndGet(-request.requests().size());
+        numBufferedRecords.addAndGet(-request.requests().size());
       }
     };
   }
@@ -404,12 +431,14 @@ public class ElasticsearchClient {
    * @param response    the response to process
    * @param executionId the execution id of the request
    */
-  private void handleResponse(BulkItemResponse response, long executionId) {
+  private void handleResponse(SinkRecordAndOffset record,
+                              BulkItemResponse response,
+                              long executionId) {
     if (response.isFailed()) {
       for (String error : MALFORMED_DOC_ERRORS) {
         if (response.getFailureMessage().contains(error)) {
           handleMalformedDocResponse(response);
-          reportBadRecord(response, executionId);
+          reportBadRecord(record, response, executionId);
           return;
         }
       }
@@ -423,7 +452,7 @@ public class ElasticsearchClient {
             response.getIndex()
         );
 
-        reportBadRecord(response, executionId);
+        reportBadRecord(record, response, executionId);
         return;
       }
 
@@ -509,20 +538,24 @@ public class ElasticsearchClient {
    * @param response    the failed response from ES
    * @param executionId the execution id of the request associated with the response
    */
-  private synchronized void reportBadRecord(BulkItemResponse response, long executionId) {
+  private synchronized void reportBadRecord(SinkRecordAndOffset record,
+                                            BulkItemResponse response,
+                                            long executionId) {
     if (reporter != null) {
-      List<SinkRecordAndOffset> sinkRecords = inFlightRequests.getOrDefault(executionId, new ArrayList<>());
+      List<SinkRecordAndOffset> sinkRecords =
+          inFlightRequests.getOrDefault(executionId, new ArrayList<>());
       SinkRecordAndOffset original = sinkRecords.size() > response.getItemId()
           ? sinkRecords.get(response.getItemId())
           : null;
       if (original != null) {
-        // TODO this is also async. Do we tie this Future with the offset tracker?
-        reporter.report(
+        Future<Void> reportFuture = reporter.report(
             original.sinkRecord,
             new ReportingException("Indexing failed: " + response.getFailureMessage())
         );
+        record.offsetState.markProcessed(reportFuture::isDone);
       }
     }
+    record.offsetState.markProcessed();
   }
 
   /**

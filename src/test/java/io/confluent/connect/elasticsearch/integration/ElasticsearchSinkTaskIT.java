@@ -97,6 +97,10 @@ public class ElasticsearchSinkTaskIT {
     assertThat(task.preCommit(currentOffsets)).isEmpty();
   }
 
+  // TODO test retriableexception
+
+  // TODO test rebalance
+
   private SinkRecord sinkRecord(TopicPartition tp, long offset) {
     return sinkRecord(tp.topic(), tp.partition(), offset);
   }
