@@ -1,5 +1,8 @@
 package io.confluent.connect.elasticsearch.integration;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.client.WireMock;
 import com.github.tomakehurst.wiremock.common.FileSource;
@@ -59,12 +62,14 @@ public class ElasticsearchConnectorNetworkIT extends BaseConnectorIT {
   @Rule
   public WireMockRule wireMockRule = new WireMockRule(options().dynamicPort(), false);
 
-  protected static final int NUM_RECORDS = 5;
-  protected static final int TASKS_MAX = 1;
+  private static final ObjectMapper MAPPER = new ObjectMapper();
 
-  protected static final String CONNECTOR_NAME = "es-connector";
-  protected static final String TOPIC = "test";
-  protected Map<String, String> props;
+  private static final int NUM_RECORDS = 5;
+  private static final int TASKS_MAX = 1;
+
+  private static final String CONNECTOR_NAME = "es-connector";
+  private static final String TOPIC = "test";
+  private Map<String, String> props;
 
   @Before
   public void setup() {
@@ -133,7 +138,7 @@ public class ElasticsearchConnectorNetworkIT extends BaseConnectorIT {
   }
 
   @Test
-  public void testRetry() throws InterruptedException {
+  public void testRetry() throws Exception {
     wireMockRule.stubFor(post(urlPathEqualTo("/_bulk"))
             .inScenario("bulkRetry1")
             .whenScenarioStateIs(Scenario.STARTED)
@@ -146,29 +151,7 @@ public class ElasticsearchConnectorNetworkIT extends BaseConnectorIT {
             .whenScenarioStateIs("Failed")
             .withRequestBody(WireMock.containing("{\"doc_num\":0}"))
             .willSetStateTo("Fixed")
-            .willReturn(okJson("{\n" +
-                    "   \"took\": 30,\n" +
-                    "   \"errors\": false,\n" +
-                    "   \"items\": [\n" +
-                    "      {\n" +
-                    "         \"index\": {\n" +
-                    "            \"_index\": \"test\",\n" +
-                    "            \"_type\": \"_doc\",\n" +
-                    "            \"_id\": \"1\",\n" +
-                    "            \"_version\": 1,\n" +
-                    "            \"result\": \"created\",\n" +
-                    "            \"_shards\": {\n" +
-                    "               \"total\": 2,\n" +
-                    "               \"successful\": 1,\n" +
-                    "               \"failed\": 0\n" +
-                    "            },\n" +
-                    "            \"status\": 201,\n" +
-                    "            \"_seq_no\" : 0,\n" +
-                    "            \"_primary_term\": 1\n" +
-                    "         }\n" +
-                    "      }\n" +
-                    "   ]\n" +
-                    "}")));
+            .willReturn(okJson(okBulkResponse())));
 
     connect.configureConnector(CONNECTOR_NAME, props);
     waitForConnectorToStart(CONNECTOR_NAME, TASKS_MAX);
@@ -191,29 +174,7 @@ public class ElasticsearchConnectorNetworkIT extends BaseConnectorIT {
     try {
       wireMockServer.start();
       wireMockServer.stubFor(post(urlPathEqualTo("/_bulk"))
-              .willReturn(okJson("{\n" +
-                      "   \"took\": 30,\n" +
-                      "   \"errors\": false,\n" +
-                      "   \"items\": [\n" +
-                      "      {\n" +
-                      "         \"index\": {\n" +
-                      "            \"_index\": \"test\",\n" +
-                      "            \"_type\": \"_doc\",\n" +
-                      "            \"_id\": \"1\",\n" +
-                      "            \"_version\": 1,\n" +
-                      "            \"result\": \"created\",\n" +
-                      "            \"_shards\": {\n" +
-                      "               \"total\": 2,\n" +
-                      "               \"successful\": 1,\n" +
-                      "               \"failed\": 0\n" +
-                      "            },\n" +
-                      "            \"status\": 201,\n" +
-                      "            \"_seq_no\" : 0,\n" +
-                      "            \"_primary_term\": 1\n" +
-                      "         }\n" +
-                      "      }\n" +
-                      "   ]\n" +
-                      "}")
+              .willReturn(okJson(okBulkResponse())
                       .withTransformers(concurrencyTransformer.getName())));
       wireMockServer.stubFor(any(anyUrl()).atPriority(10).willReturn(ok()));
 
@@ -354,6 +315,23 @@ public class ElasticsearchConnectorNetworkIT extends BaseConnectorIT {
     for (int i = 0; i < numRecords; i++) {
       connect.kafka().produce(TOPIC, String.valueOf(i), String.format("{\"doc_num\":%d}", i));
     }
+  }
+
+  private String okBulkResponse() throws JsonProcessingException {
+    ObjectNode response = MAPPER.createObjectNode();
+    response
+      .put("errors", false)
+      .putArray("items")
+          .addObject()
+            .putObject("index")
+              .put("_index", "test")
+              .put("_type", "_doc")
+              .put("_id", "1")
+              .put("_version", "1")
+              .put("result", "created")
+              .put("status", 201)
+              .put("_seq_no", 0);
+    return MAPPER.writerWithDefaultPrettyPrinter().writeValueAsString(response);
   }
 
 }
