@@ -177,8 +177,11 @@ public class ConfigCallbackHandler implements HttpClientConfigCallback {
         cm = new PoolingNHttpClientConnectionManager(ioReactor);
       }
 
+      // Allowing up to two http connections per processing thread to a given host
       int maxPerRoute = Math.max(10, config.maxInFlightRequests() * 2);
       cm.setDefaultMaxPerRoute(maxPerRoute);
+      // And for the global limit, with multiply the per-host limit
+      // by the number of potential different ES hosts
       cm.setMaxTotal(maxPerRoute * config.connectionUrls().size());
 
       log.debug("Connection pool config: maxPerRoute: {}, maxTotal {}",
