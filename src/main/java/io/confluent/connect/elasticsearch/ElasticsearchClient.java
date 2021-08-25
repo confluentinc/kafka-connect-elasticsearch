@@ -68,21 +68,24 @@ import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfi
 import static java.util.stream.Collectors.toList;
 
 /**
- * Implementation notes:
- * <ul>
- *   <li>Based on Elasticsearch's BulkProcessor, which is responsible for batching based on size
- *   and linger. It also limits the concurrency (max number of in-flight requests).</li>
- *   <li>Batches are run asynchronously on a separate thread</li>
- *   <li>Retries are processed synchronously in the original batch thread</li>
- *   <li>Batches are not grouped by partition(s)</li>
- * </ul>
+ * Based on Elasticsearch's BulkProcessor, which is responsible for building batches based on size
+ * and linger time (not grouped by partitions) and limiting the concurrency (max number of
+ * in-flight requests).
+ * <br>
+ * Batch processing is asynchronous. BulkProcessor delegates the bulk calls to a separate thread
+ * pool. Retries are handled synchronously in each batch thread.
+ * <br>
+ * If all the retries fail, the exception is reported via an atomic reference to an error,
+ * which is checked and thrown from a subsequent call to the task's put method and that results
+ * in failure of the task.
  */
 @SuppressWarnings("checkstyle:ClassDataAbstractionCoupling")
 public class ElasticsearchClient {
 
   private static final Logger log = LoggerFactory.getLogger(ElasticsearchClient.class);
 
-  private static final long WAIT_TIME = TimeUnit.MILLISECONDS.toMillis(10);
+  private static final long WAIT_TIME_MS = 10;
+  private static final long CLOSE_WAIT_TIME_MS = 5_000;
   private static final String RESOURCE_ALREADY_EXISTS_EXCEPTION =
       "resource_already_exists_exception";
   private static final String VERSION_CONFLICT_EXCEPTION = "version_conflict_engine_exception";
@@ -153,6 +156,14 @@ public class ElasticsearchClient {
 
   private BiConsumer<BulkRequest, ActionListener<BulkResponse>> buildConsumer() {
     return (req, lis) ->
+      // Executes a synchronous bulk request in a background thread, with synchronous retries.
+      // We don't use bulkAsync because we can't retry from its callback (see
+      // https://github.com/confluentinc/kafka-connect-elasticsearch/pull/575)
+      // BulkProcessor is the one guaranteeing that no more than maxInFlightRequests batches
+      // are started at the same time (a new consumer is not called until all others are finished),
+      // which means we don't need to limit the executor pending task queue.
+
+      // Result is ignored because everything is reported via the corresponding ActionListener.
       bulkExecutorService.submit(() -> {
         try {
           BulkResponse bulkResponse = callWithRetries(
@@ -292,7 +303,7 @@ public class ElasticsearchClient {
   private void verifyBufferedRecords() {
     long maxWaitTime = clock.milliseconds() + config.flushTimeoutMs();
     while (numBufferedRecords.get() >= config.maxBufferedRecords()) {
-      clock.sleep(WAIT_TIME);
+      clock.sleep(WAIT_TIME_MS);
       if (clock.milliseconds() > maxWaitTime) {
         throw new ConnectException(
             String.format("Could not make space in the internal buffer fast enough. "
@@ -407,7 +418,7 @@ public class ElasticsearchClient {
   private void closeResources() {
     bulkExecutorService.shutdown();
     try {
-      if (!bulkExecutorService.awaitTermination(config.flushTimeoutMs(), TimeUnit.MILLISECONDS)) {
+      if (!bulkExecutorService.awaitTermination(CLOSE_WAIT_TIME_MS, TimeUnit.MILLISECONDS)) {
         bulkExecutorService.shutdownNow();
       }
     } catch (InterruptedException e) {
