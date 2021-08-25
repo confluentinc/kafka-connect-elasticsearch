@@ -79,7 +79,8 @@ public class ElasticsearchClient {
 
   private static final Logger log = LoggerFactory.getLogger(ElasticsearchClient.class);
 
-  private static final long WAIT_TIME = TimeUnit.MILLISECONDS.toMillis(10);
+  private static final long WAIT_TIME_MS = 10;
+  private static final long CLOSE_WAIT_TIME_MS = 5_000;
   private static final String RESOURCE_ALREADY_EXISTS_EXCEPTION =
       "resource_already_exists_exception";
   private static final String VERSION_CONFLICT_EXCEPTION = "version_conflict_engine_exception";
@@ -270,7 +271,7 @@ public class ElasticsearchClient {
     // wait for internal buffer to be less than max.buffered.records configuration
     long maxWaitTime = clock.milliseconds() + config.flushTimeoutMs();
     while (numRecords.get() >= config.maxBufferedRecords()) {
-      clock.sleep(WAIT_TIME);
+      clock.sleep(WAIT_TIME_MS);
       if (clock.milliseconds() > maxWaitTime) {
         throw new ConnectException(
             String.format(
@@ -378,7 +379,7 @@ public class ElasticsearchClient {
   private void closeResources() {
     bulkExecutorService.shutdown();
     try {
-      if (!bulkExecutorService.awaitTermination(config.flushTimeoutMs(), TimeUnit.MILLISECONDS)) {
+      if (!bulkExecutorService.awaitTermination(CLOSE_WAIT_TIME_MS, TimeUnit.MILLISECONDS)) {
         bulkExecutorService.shutdownNow();
       }
     } catch (InterruptedException e) {
