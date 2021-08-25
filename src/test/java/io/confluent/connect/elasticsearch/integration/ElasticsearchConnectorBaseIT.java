@@ -30,6 +30,7 @@ import org.junit.Before;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.net.ConnectException;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -102,9 +103,15 @@ public class ElasticsearchConnectorBaseIT extends BaseConnectorIT {
   public void cleanup() throws IOException {
     stopConnect();
 
-    if (helperClient != null) {
-      helperClient.deleteIndex(index, isDataStream);
-      helperClient.close();
+    if (container.isRunning()) {
+      if (helperClient != null) {
+        try {
+          helperClient.deleteIndex(index, isDataStream);
+          helperClient.close();
+        } catch (ConnectException e) {
+          // Server is already down. No need to close
+        }
+      }
     }
   }
 
