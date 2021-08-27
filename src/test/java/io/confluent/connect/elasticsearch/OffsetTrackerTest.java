@@ -156,12 +156,14 @@ public class OffsetTrackerTest {
     offsetTracker.addPendingRecord(sinkRecord(tp1, 0));
     offsetTracker.addPendingRecord(sinkRecord(tp2, 0));
 
-    // verify this call blocks
-    CompletableFuture<Void> future = CompletableFuture.runAsync(() ->
-            offsetTracker.addPendingRecord(sinkRecord(tp1, 1)));
+    verifyBlocking(() -> offsetTracker.addPendingRecord(sinkRecord(tp1, 1)));
+  }
 
+  private void verifyBlocking(Runnable runnable) {
+    CompletableFuture<Void> future = CompletableFuture.runAsync(runnable);
     try {
       future.get(1, TimeUnit.SECONDS);
+      fail("Call should be blocking");
     } catch (TimeoutException e) {
       // this is what we expect
     } catch (Exception e) {
@@ -170,7 +172,6 @@ public class OffsetTrackerTest {
       future.cancel(true);
     }
   }
-
 
   private SinkRecord sinkRecord(TopicPartition tp, long offset) {
     return sinkRecord(tp.topic(), tp.partition(), offset);

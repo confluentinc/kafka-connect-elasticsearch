@@ -101,10 +101,6 @@ public class ElasticsearchSinkTask extends SinkTask {
       }
 
       logTrace("Writing {} to Elasticsearch.", record);
-
-      // TODO these calls can fail, make sure we handle the offset state accordingly
-      ensureIndexExists(convertTopicToIndexName(record.topic()));
-      checkMapping(record);
       tryWriteRecord(record, offsetState);
     }
   }
@@ -224,7 +220,7 @@ public class ElasticsearchSinkTask extends SinkTask {
   private void reportBadRecord(SinkRecord record, Throwable error, OffsetState offsetState) {
     if (reporter != null) {
       Future<Void> result = reporter.report(record, error);
-      offsetState.markProcessed(result::isDone);
+      offsetState.markProcessed(result::isDone); // TODO should we fail the task if this fails?
     } else {
       offsetState.markProcessed();
     }
@@ -235,9 +231,14 @@ public class ElasticsearchSinkTask extends SinkTask {
   }
 
   private void tryWriteRecord(SinkRecord sinkRecord, OffsetState offsetState) {
-    DocWriteRequest<?> record = null;
+    String indexName = convertTopicToIndexName(sinkRecord.topic());
+
+    ensureIndexExists(indexName);
+    checkMapping(sinkRecord);
+
+    DocWriteRequest<?> docWriteRequest = null;
     try {
-      record = converter.convertRecord(sinkRecord, convertTopicToIndexName(sinkRecord.topic()));
+      docWriteRequest = converter.convertRecord(sinkRecord, indexName);
     } catch (DataException convertException) {
       reportBadRecord(sinkRecord, convertException, offsetState);
 
@@ -248,9 +249,9 @@ public class ElasticsearchSinkTask extends SinkTask {
       }
     }
 
-    if (record != null) {
-      log.trace("Adding {} to bulk processor.", recordString(sinkRecord));
-      client.index(sinkRecord, record, offsetState);
+    if (docWriteRequest != null) {
+      logTrace("Adding {} to bulk processor.", sinkRecord);
+      client.index(sinkRecord, docWriteRequest, offsetState);
     }
   }
 

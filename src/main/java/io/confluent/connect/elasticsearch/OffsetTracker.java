@@ -117,16 +117,8 @@ class OffsetTracker {
   public OffsetState addPendingRecord(SinkRecord sinkRecord) {
     lock.lock();
     try {
-      if (numEntries.get() >= maxNumEntries) {
-        log.debug("Maximum number of offset tracking entries reached {}, blocking", maxNumEntries);
-        try {
-          notFull.await();
-        } catch (InterruptedException e) {
-          Thread.currentThread().interrupt();
-          throw new ConnectException("Interrupted while waiting for offset tracking entries "
-                  + "to decrease", e);
-        }
-      }
+      applyBackpressureIfNecessary();
+
       numEntries.incrementAndGet();
       TopicPartition tp = new TopicPartition(sinkRecord.topic(), sinkRecord.kafkaPartition());
       Long partitionMax = maxOffsetByPartition.get(tp);
@@ -138,6 +130,19 @@ class OffsetTracker {
       return new OffsetState(sinkRecord.kafkaOffset());
     } finally {
       lock.unlock();
+    }
+  }
+
+  private void applyBackpressureIfNecessary() {
+    if (numEntries.get() >= maxNumEntries) {
+      log.debug("Maximum number of offset tracking entries reached {}, blocking", maxNumEntries);
+      try {
+        notFull.await();
+      } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();
+        throw new ConnectException("Interrupted while waiting for offset tracking entries "
+                + "to decrease", e);
+      }
     }
   }
 
