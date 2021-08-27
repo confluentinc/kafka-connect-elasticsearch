@@ -40,6 +40,20 @@ class OffsetTracker {
 
   private static final Logger log = LoggerFactory.getLogger(OffsetTracker.class);
 
+  private final Map<TopicPartition, Map<Long, OffsetState>> offsetsByPartition
+          = new ConcurrentHashMap<>();
+
+  private final Map<TopicPartition, Long> maxOffsetByPartition
+          = new ConcurrentHashMap<>();
+
+  private final AtomicLong numEntries = new AtomicLong();
+
+
+  // no fairness, things can only be blocked from one thread, the one making the put call
+  private final ReentrantLock lock = new ReentrantLock();
+  private final Condition notFull = lock.newCondition();
+  private final long maxNumEntries;
+
   static class OffsetState {
 
     private static final Supplier<Boolean> TRUE = () -> true;
@@ -73,19 +87,9 @@ class OffsetTracker {
     }
   }
 
-  private final Map<TopicPartition, Map<Long, OffsetState>> offsetsByPartition
-          = new ConcurrentHashMap<>();
-
-  private final Map<TopicPartition, Long> maxOffsetByPartition
-          = new ConcurrentHashMap<>();
-
-  private final AtomicLong numEntries = new AtomicLong();
-
-  private static final long LIMIT = 1_000; // TODO calculate / config
-
-  // fairness is not important, things can only be blocked from one thread
-  private final ReentrantLock lock = new ReentrantLock();
-  private final Condition notFull = lock.newCondition();
+  OffsetTracker(int maxNumEntries) {
+    this.maxNumEntries = maxNumEntries;
+  }
 
   /**
    * Partitions are no longer owned, we should release all related resources.
@@ -113,8 +117,8 @@ class OffsetTracker {
   public OffsetState addPendingRecord(SinkRecord sinkRecord) {
     lock.lock();
     try {
-      if (numEntries.get() >= LIMIT) {
-        log.debug("Maximum number of offset tracking entries reached {}, blocking", LIMIT);
+      if (numEntries.get() >= maxNumEntries) {
+        log.debug("Maximum number of offset tracking entries reached {}, blocking", maxNumEntries);
         try {
           notFull.await();
         } catch (InterruptedException e) {
@@ -169,7 +173,7 @@ class OffsetTracker {
         }
       }));
 
-      if (numEntries.get() < LIMIT) {
+      if (numEntries.get() < maxNumEntries) {
         notFull.signalAll();
       }
     } finally {

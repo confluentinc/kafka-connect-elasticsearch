@@ -23,14 +23,18 @@ import org.junit.Test;
 import org.testcontainers.shaded.com.google.common.collect.ImmutableList;
 
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.fail;
 
 public class OffsetTrackerTest {
 
   @Test
   public void testHappyPath() {
-    OffsetTracker offsetTracker = new OffsetTracker();
+    OffsetTracker offsetTracker = new OffsetTracker(10);
 
     TopicPartition tp = new TopicPartition("t1", 0);
 
@@ -70,7 +74,7 @@ public class OffsetTrackerTest {
    */
   @Test
   public void testBelowWatermark() {
-    OffsetTracker offsetTracker = new OffsetTracker();
+    OffsetTracker offsetTracker = new OffsetTracker(10);
 
     TopicPartition tp = new TopicPartition("t1", 0);
 
@@ -96,7 +100,7 @@ public class OffsetTrackerTest {
 
   @Test
   public void testBatchRetry() {
-    OffsetTracker offsetTracker = new OffsetTracker();
+    OffsetTracker offsetTracker = new OffsetTracker(10);
 
     TopicPartition tp = new TopicPartition("t1", 0);
 
@@ -123,7 +127,7 @@ public class OffsetTrackerTest {
 
   @Test
   public void testRebalance() {
-    OffsetTracker offsetTracker = new OffsetTracker();
+    OffsetTracker offsetTracker = new OffsetTracker(10);
 
     TopicPartition tp1 = new TopicPartition("t1", 0);
     TopicPartition tp2 = new TopicPartition("t2", 0);
@@ -141,6 +145,32 @@ public class OffsetTrackerTest {
     offsetTracker.closePartitions(ImmutableList.of(tp1, tp3));
     assertThat(offsetTracker.getOffsets().keySet()).containsExactly(tp2);
   }
+
+  @Test
+  public void testBackPressure() {
+    OffsetTracker offsetTracker = new OffsetTracker(2);
+
+    TopicPartition tp1 = new TopicPartition("t1", 0);
+    TopicPartition tp2 = new TopicPartition("t2", 0);
+
+    offsetTracker.addPendingRecord(sinkRecord(tp1, 0));
+    offsetTracker.addPendingRecord(sinkRecord(tp2, 0));
+
+    // verify this call blocks
+    CompletableFuture<Void> future = CompletableFuture.runAsync(() ->
+            offsetTracker.addPendingRecord(sinkRecord(tp1, 1)));
+
+    try {
+      future.get(1, TimeUnit.SECONDS);
+    } catch (TimeoutException e) {
+      // this is what we expect
+    } catch (Exception e) {
+      fail("Unexpected exception", e);
+    } finally {
+      future.cancel(true);
+    }
+  }
+
 
   private SinkRecord sinkRecord(TopicPartition tp, long offset) {
     return sinkRecord(tp.topic(), tp.partition(), offset);

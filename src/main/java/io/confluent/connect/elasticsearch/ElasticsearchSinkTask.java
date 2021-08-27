@@ -36,6 +36,7 @@ import java.util.Collection;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.Future;
 import java.util.stream.Collectors;
 
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BehaviorOnNullValues;
@@ -65,7 +66,7 @@ public class ElasticsearchSinkTask extends SinkTask {
     this.converter = new DataConverter(config);
     this.existingMappings = new HashSet<>();
     this.indexCache = new HashSet<>();
-    this.offsetTracker = new OffsetTracker();
+    this.offsetTracker = new OffsetTracker(config.maxBufferedRecords() * 10);
 
     this.reporter = null;
     try {
@@ -222,8 +223,10 @@ public class ElasticsearchSinkTask extends SinkTask {
 
   private void reportBadRecord(SinkRecord record, Throwable error, OffsetState offsetState) {
     if (reporter != null) {
-      offsetState.markProcessed(); // TODO tie with reporter result
-      reporter.report(record, error);
+      Future<Void> result = reporter.report(record, error);
+      offsetState.markProcessed(result::isDone);
+    } else {
+      offsetState.markProcessed();
     }
   }
 

@@ -113,7 +113,7 @@ public class ElasticsearchClient {
           ElasticsearchSinkConnectorConfig config,
           ErrantRecordReporter reporter
   ) {
-    this(config, reporter, new OffsetTracker());
+    this(config, reporter, new OffsetTracker(config.maxBufferedRecords()));
   }
 
   public ElasticsearchClient(
