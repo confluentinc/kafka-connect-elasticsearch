@@ -36,7 +36,6 @@ import java.util.Collection;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.Future;
 import java.util.stream.Collectors;
 
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BehaviorOnNullValues;
@@ -94,9 +93,7 @@ public class ElasticsearchSinkTask extends SinkTask {
 
       if (shouldSkipRecord(record)) {
         logTrace("Ignoring {} with null value.", record);
-        reportBadRecord(record,
-                new ConnectException("Cannot write null valued record."),
-                offsetState);
+        reportBadRecord(record, new ConnectException("Cannot write null valued record."));
         continue;
       }
 
@@ -217,12 +214,11 @@ public class ElasticsearchSinkTask extends SinkTask {
     }
   }
 
-  private void reportBadRecord(SinkRecord record, Throwable error, OffsetState offsetState) {
+  private void reportBadRecord(SinkRecord record, Throwable error) {
     if (reporter != null) {
-      Future<Void> result = reporter.report(record, error);
-      offsetState.markProcessed(result::isDone); // TODO should we fail the task if this fails?
-    } else {
-      offsetState.markProcessed();
+      // No need to wait for the futures (synchronously or async), the framework will wait for
+      // all these futures before calling preCommit
+      reporter.report(record, error);
     }
   }
 
@@ -240,7 +236,7 @@ public class ElasticsearchSinkTask extends SinkTask {
     try {
       docWriteRequest = converter.convertRecord(sinkRecord, indexName);
     } catch (DataException convertException) {
-      reportBadRecord(sinkRecord, convertException, offsetState);
+      reportBadRecord(sinkRecord, convertException);
 
       if (config.dropInvalidMessage()) {
         log.error("Can't convert {}.", recordString(sinkRecord), convertException);

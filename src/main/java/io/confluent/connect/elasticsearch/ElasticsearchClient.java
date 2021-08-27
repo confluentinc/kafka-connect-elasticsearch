@@ -55,7 +55,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
@@ -449,7 +448,8 @@ public class ElasticsearchClient {
       for (String error : MALFORMED_DOC_ERRORS) {
         if (response.getFailureMessage().contains(error)) {
           handleMalformedDocResponse(response);
-          reportBadRecord(record, response, executionId);
+          reportBadRecord(response, executionId);
+          record.offsetState.markProcessed();
           return;
         }
       }
@@ -463,7 +463,8 @@ public class ElasticsearchClient {
             response.getIndex()
         );
 
-        reportBadRecord(record, response, executionId);
+        reportBadRecord(response, executionId);
+        record.offsetState.markProcessed();
         return;
       }
 
@@ -549,8 +550,7 @@ public class ElasticsearchClient {
    * @param response    the failed response from ES
    * @param executionId the execution id of the request associated with the response
    */
-  private synchronized void reportBadRecord(SinkRecordAndOffset record,
-                                            BulkItemResponse response,
+  private synchronized void reportBadRecord(BulkItemResponse response,
                                             long executionId) {
     if (reporter != null) {
       List<SinkRecordAndOffset> sinkRecords =
@@ -559,14 +559,12 @@ public class ElasticsearchClient {
           ? sinkRecords.get(response.getItemId())
           : null;
       if (original != null) {
-        Future<Void> reportFuture = reporter.report(
+        reporter.report(
             original.sinkRecord,
             new ReportingException("Indexing failed: " + response.getFailureMessage())
         );
-        record.offsetState.markProcessed(reportFuture::isDone);
       }
     }
-    record.offsetState.markProcessed();
   }
 
   /**

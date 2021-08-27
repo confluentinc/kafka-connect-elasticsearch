@@ -18,7 +18,6 @@ package io.confluent.connect.elasticsearch;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.connect.errors.ConnectException;
-import org.apache.kafka.connect.sink.ErrantRecordReporter;
 import org.apache.kafka.connect.sink.SinkRecord;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -29,10 +28,8 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
-import java.util.function.Supplier;
 
 import static java.util.stream.Collectors.toMap;
 
@@ -56,34 +53,22 @@ class OffsetTracker {
 
   static class OffsetState {
 
-    private static final Supplier<Boolean> TRUE = () -> true;
     private final long offset;
-    private final AtomicReference<Supplier<Boolean>> processed = new AtomicReference<>();
+    private volatile boolean processed;
 
     OffsetState(long offset) {
       this.offset = offset;
     }
 
     /**
-     * Marks the offset as processed (ready to report to preCommit), if it has not been marked yet
+     * Marks the offset as processed (ready to report to preCommit)
      */
     public void markProcessed() {
-      markProcessed(TRUE);
-    }
-
-    /**
-     * Provides a supplier that will determine if the record was processed or not.
-     * It does nothing is markProcessed was called before.
-     * Intended for async operations that return a Future and don't provide a callback we can
-     * hook to. (e.g. {@link ErrantRecordReporter#report(SinkRecord, Throwable)})
-     */
-    public void markProcessed(Supplier<Boolean> processedSupplier) {
-      processed.compareAndSet(null, processedSupplier);
+      processed = true;
     }
 
     public boolean isProcessed() {
-      Supplier<Boolean> booleanSupplier = processed.get();
-      return booleanSupplier != null && Boolean.TRUE.equals(booleanSupplier.get());
+      return processed;
     }
   }
 
@@ -124,6 +109,7 @@ class OffsetTracker {
       Long partitionMax = maxOffsetByPartition.get(tp);
       if (partitionMax == null || sinkRecord.kafkaOffset() > partitionMax) {
         return offsetsByPartition
+                // Insertion order needs to be maintained
                 .computeIfAbsent(tp, key -> new LinkedHashMap<>())
                 .computeIfAbsent(sinkRecord.kafkaOffset(), OffsetState::new);
       }
@@ -133,6 +119,7 @@ class OffsetTracker {
     }
   }
 
+  // TODO explore pausing partitions instead of blocking backpressure
   private void applyBackpressureIfNecessary() {
     if (numEntries.get() >= maxNumEntries) {
       log.debug("Maximum number of offset tracking entries reached {}, blocking", maxNumEntries);
@@ -153,6 +140,10 @@ class OffsetTracker {
                     e -> new OffsetAndMetadata(e.getValue() + 1)));
   }
 
+  /**
+   * Calculates new "safe" offsets, and unblocks backpressure if possible.
+   * TODO if we avoid blocking backpressure (by pausing partitions), we can do this in getOffsets
+   */
   public void moveOffsets() {
     lock.lock();
     try {
