@@ -24,8 +24,11 @@ import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfi
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BULK_SIZE_BYTES_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.WRITE_METHOD_CONFIG;
 import static org.apache.kafka.connect.runtime.ConnectorConfig.VALUE_CONVERTER_CLASS_CONFIG;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
 import static org.junit.Assert.assertEquals;
 
+import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig;
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BehaviorOnNullValues;
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.WriteMethod;
 import io.confluent.connect.elasticsearch.helper.ElasticsearchContainer;
@@ -38,16 +41,13 @@ import org.elasticsearch.search.SearchHit;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 
 @Category(IntegrationTest.class)
 public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
-
-  private static Logger log = LoggerFactory.getLogger(ElasticsearchConnectorIT.class);
 
   // TODO: test compatibility
 
@@ -57,6 +57,14 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
     List<Role> roles = getRoles();
     container = ElasticsearchContainer.fromSystemProperties().withBasicAuth(users, roles);
     container.start();
+  }
+
+  @Override
+  public void setup() {
+    if (!container.isRunning()) {
+      setupBeforeAll();
+    }
+    super.setup();
   }
 
   @Override
@@ -83,6 +91,32 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
 
     writeRecords(1);
     verifySearchResults(4);
+  }
+
+  @Test
+  public void testStopESContainer() throws Exception {
+    props.put(ElasticsearchSinkConnectorConfig.MAX_RETRIES_CONFIG, "2");
+    props.put(ElasticsearchSinkConnectorConfig.RETRY_BACKOFF_MS_CONFIG, "10");
+    props.put(ElasticsearchSinkConnectorConfig.BATCH_SIZE_CONFIG, "1");
+    props.put(ElasticsearchSinkConnectorConfig.MAX_IN_FLIGHT_REQUESTS_CONFIG,
+            Integer.toString(NUM_RECORDS - 1));
+
+    // run connector and write
+    runSimpleTest(props);
+
+    // stop ES, for all following requests to fail with "connection refused"
+    container.stop();
+
+    // try to write some more
+    writeRecords(NUM_RECORDS);
+
+    // Connector should fail since the server is down
+    await().atMost(Duration.ofMinutes(1)).untilAsserted(() ->
+        assertThat(connect.connectorStatus(CONNECTOR_NAME).tasks().get(0).state())
+            .isEqualTo("FAILED"));
+
+    assertThat(connect.connectorStatus(CONNECTOR_NAME).tasks().get(0).trace())
+                    .contains("'java.net.ConnectException: Connection refused' after 3 attempt(s)");
   }
 
   @Test
