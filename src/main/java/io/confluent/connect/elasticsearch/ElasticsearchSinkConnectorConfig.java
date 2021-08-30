@@ -15,9 +15,6 @@
 
 package io.confluent.connect.elasticsearch;
 
-import com.amazonaws.auth.AWSCredentialsProvider;
-import com.amazonaws.auth.DefaultAWSCredentialsProviderChain;
-import com.amazonaws.regions.RegionUtils;
 import org.apache.kafka.common.Configurable;
 import java.io.File;
 import java.net.URI;
@@ -41,6 +38,9 @@ import org.apache.kafka.connect.errors.ConnectException;
 
 import org.apache.kafka.common.config.types.Password;
 import org.elasticsearch.common.unit.ByteSizeValue;
+import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
+import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider;
+import software.amazon.awssdk.regions.Region;
 
 import static org.apache.kafka.common.config.ConfigDef.Range.between;
 import static org.apache.kafka.common.config.SslConfigs.SSL_ENDPOINT_IDENTIFICATION_ALGORITHM_CONFIG;
@@ -373,8 +373,8 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
 
   public static final String AWS_CREDENTIALS_PROVIDER_CLASS_CONFIG =
           "aws.credentials.provider.class";
-  private static final Class<? extends AWSCredentialsProvider>
-          AWS_CREDENTIALS_PROVIDER_CLASS_DEFAULT = DefaultAWSCredentialsProviderChain.class;
+  private static final Class<? extends AwsCredentialsProvider>
+          AWS_CREDENTIALS_PROVIDER_CLASS_DEFAULT = DefaultCredentialsProvider.create().getClass();
 
   /**
    * The properties that begin with this prefix will be used to configure a class, specified by
@@ -832,9 +832,9 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   }
 
   @SuppressWarnings("unchecked")
-  public AWSCredentialsProvider getCredentialsProvider() {
+  public AwsCredentialsProvider getCredentialsProvider() {
     try {
-      AWSCredentialsProvider provider = ((Class<? extends AWSCredentialsProvider>)
+      AwsCredentialsProvider provider = ((Class<? extends AwsCredentialsProvider>)
               getClass(ElasticsearchSinkConnectorConfig.AWS_CREDENTIALS_PROVIDER_CLASS_CONFIG))
               .newInstance();
 
@@ -860,23 +860,23 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
     @Override
     public void ensureValid(String name, Object provider) {
       if (provider instanceof Class
-              && AWSCredentialsProvider.class.isAssignableFrom((Class<?>) provider)) {
+              && AwsCredentialsProvider.class.isAssignableFrom((Class<?>) provider)) {
         return;
       }
-      throw new ConfigException(name, provider, "Class must extend: " + AWSCredentialsProvider.class
+      throw new ConfigException(name, provider, "Class must extend: " + AwsCredentialsProvider.class
       );
     }
 
     @Override
     public String toString() {
-      return "Any class implementing: " + AWSCredentialsProvider.class;
+      return "Any class implementing: " + AwsCredentialsProvider.class;
     }
   }
 
   private static class RegionRecommender implements ConfigDef.Recommender {
     @Override
     public List<Object> validValues(String name, Map<String, Object> connectorConfigs) {
-      return Collections.singletonList(RegionUtils.getRegions());
+      return Collections.singletonList(Region.regions());
     }
 
     @Override
@@ -889,18 +889,18 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
     @Override
     public void ensureValid(String name, Object region) {
       String regionStr = ((String) region).toLowerCase().trim();
-      if (RegionUtils.getRegion(regionStr) == null) {
+      if (Region.of(regionStr) == null) {
         throw new ConfigException(
                 name,
                 region,
-                "Value must be one of: " + Utils.join(RegionUtils.getRegions(), ", ")
+                "Value must be one of: " + Utils.join(Region.regions(), ", ")
         );
       }
     }
 
     @Override
     public String toString() {
-      return "[" + Utils.join(RegionUtils.getRegions(), ", ") + "]";
+      return "[" + Utils.join(Region.regions(), ", ") + "]";
     }
   }
 
