@@ -27,27 +27,10 @@ import java.util.Map;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
-import static com.github.tomakehurst.wiremock.client.WireMock.any;
-import static com.github.tomakehurst.wiremock.client.WireMock.anyUrl;
-import static com.github.tomakehurst.wiremock.client.WireMock.ok;
-import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
-import static com.github.tomakehurst.wiremock.client.WireMock.post;
-import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
-import static com.github.tomakehurst.wiremock.client.WireMock.stubFor;
-import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
-import static com.github.tomakehurst.wiremock.client.WireMock.verify;
+import static com.github.tomakehurst.wiremock.client.WireMock.*;
 import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.options;
 import static com.google.common.net.HttpHeaders.CONTENT_TYPE;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BATCH_SIZE_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_KEY_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_SCHEMA_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.LINGER_MS_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.MAX_IN_FLIGHT_REQUESTS_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.MAX_RETRIES_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.READ_TIMEOUT_MS_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.RETRY_BACKOFF_MS_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.*;
 import static org.apache.kafka.connect.json.JsonConverterConfig.SCHEMAS_ENABLE_CONFIG;
 import static org.apache.kafka.connect.runtime.ConnectorConfig.CONNECTOR_CLASS_CONFIG;
 import static org.apache.kafka.connect.runtime.ConnectorConfig.KEY_CONVERTER_CLASS_CONFIG;
@@ -192,13 +175,11 @@ public class ElasticsearchConnectorNetworkIT extends BaseConnectorIT {
       // TODO MAX_IN_FLIGHT_REQUESTS_CONFIG is misleading (it allows 1 less concurrent request
       // than configure), but fixing it would be a breaking change.
       // Consider allowing 0 (blocking) and removing "-1"
-      await().atMost(Duration.ofSeconds(10)).untilAsserted(() ->
-              assertThat(concurrencyTransformer.queueLength()).isEqualTo(3));
+      await().untilAsserted(() -> assertThat(concurrencyTransformer.queueLength()).isEqualTo(3));
 
       concurrencyTransformer.release(10);
 
-      await().atMost(Duration.ofSeconds(10)).untilAsserted(() ->
-              assertThat(concurrencyTransformer.requestCount()).isEqualTo(10));
+      await().untilAsserted(() -> assertThat(concurrencyTransformer.requestCount()).isEqualTo(10));
     } finally {
       wireMockServer.stop();
     }
@@ -284,6 +265,135 @@ public class ElasticsearchConnectorNetworkIT extends BaseConnectorIT {
     // 1 + 2 retries
     verify(3, postRequestedFor(urlPathEqualTo("/_bulk")));
   }
+
+  /**
+   * Verify that we apply backpressure (by pausing partitions) if number of offset
+   * entries grows too large.
+   */
+  @Test
+  public void testPausePartitions() throws Exception {
+    ConcurrencyTransformer concurrencyTransformer = new ConcurrencyTransformer();
+    WireMockServer wireMockServer = new WireMockServer(options().dynamicPort()
+            .extensions(concurrencyTransformer));
+
+    try {
+      wireMockServer.start();
+      wireMockServer.stubFor(post(urlPathEqualTo("/_bulk"))
+              .willReturn(okJson(okBulkResponse())
+              .withTransformers(concurrencyTransformer.getName())));
+      wireMockServer.stubFor(any(anyUrl()).atPriority(10).willReturn(ok()));
+
+      props.put(CONNECTION_URL_CONFIG, wireMockServer.url("/"));
+      props.put(READ_TIMEOUT_MS_CONFIG, "600000");
+      props.put(LINGER_MS_CONFIG, "600000");
+      props.put(FLUSH_TIMEOUT_MS_CONFIG, "600000");
+      props.put(MAX_RETRIES_CONFIG, "0");
+      props.put(BATCH_SIZE_CONFIG, "1");
+      props.put(MAX_BUFFERED_RECORDS_CONFIG, "10");
+      props.put(MAX_IN_FLIGHT_REQUESTS_CONFIG, "4");
+
+
+      connect.configureConnector(CONNECTOR_NAME, props);
+      waitForConnectorToStart(CONNECTOR_NAME, TASKS_MAX);
+
+      // First batch should get stuck
+      writeRecords(1);
+
+      await().untilAsserted(() -> assertThat(concurrencyTransformer.queueLength()).isEqualTo(1));
+
+      wireMockServer.stubFor(post(urlPathEqualTo("/_bulk"))
+              .willReturn(okJson(okBulkResponse())));
+
+      // Now we write multiple records to hit the limit of offset entries and force
+      // partitions to be paused
+      writeRecords(1_000);
+
+      await().untilAsserted(() ->
+              wireMockServer.verify(moreThanOrExactly(99),
+                      postRequestedFor(urlPathEqualTo("/_bulk"))));
+
+      // verify it stays blocked for a couple of seconds
+      await().pollDelay(Duration.ofSeconds(2))
+              .untilAsserted(() ->
+              wireMockServer.verify(lessThan(1_001),
+                      postRequestedFor(urlPathEqualTo("/_bulk"))));
+
+      // Unblock first batch, partitions should be resumed and all records processed
+      concurrencyTransformer.release(1);
+
+      await().untilAsserted(() ->
+              wireMockServer.verify(moreThanOrExactly(1_001),
+                      postRequestedFor(urlPathEqualTo("/_bulk"))));
+    } finally {
+      wireMockServer.stop();
+    }
+  }
+
+  /**
+   * Verify that connector properly fails while partitions are paused because number of offset
+   * entries grew too large.
+   */
+  @Test
+  public void testPausePartitionsAndFail() throws Exception {
+    ConcurrencyTransformer concurrencyTransformer = new ConcurrencyTransformer();
+    WireMockServer wireMockServer = new WireMockServer(options().dynamicPort()
+            .extensions(concurrencyTransformer));
+
+    try {
+      wireMockServer.start();
+      wireMockServer.stubFor(post(urlPathEqualTo("/_bulk"))
+              .willReturn(aResponse()
+                      .withStatus(500)
+                      .withTransformers(concurrencyTransformer.getName())));
+      wireMockServer.stubFor(any(anyUrl()).atPriority(10).willReturn(ok()));
+
+      props.put(CONNECTION_URL_CONFIG, wireMockServer.url("/"));
+      props.put(READ_TIMEOUT_MS_CONFIG, "600000");
+      props.put(LINGER_MS_CONFIG, "600000");
+      props.put(FLUSH_TIMEOUT_MS_CONFIG, "600000");
+      props.put(MAX_RETRIES_CONFIG, "0");
+      props.put(BATCH_SIZE_CONFIG, "1");
+      props.put(MAX_BUFFERED_RECORDS_CONFIG, "10");
+      props.put(MAX_IN_FLIGHT_REQUESTS_CONFIG, "4");
+
+      connect.configureConnector(CONNECTOR_NAME, props);
+      waitForConnectorToStart(CONNECTOR_NAME, TASKS_MAX);
+
+      // First batch should get stuck
+      writeRecords(1);
+
+      await().untilAsserted(() -> assertThat(concurrencyTransformer.queueLength()).isEqualTo(1));
+
+      wireMockServer.stubFor(post(urlPathEqualTo("/_bulk"))
+              .willReturn(okJson(okBulkResponse())));
+
+      // Now we write multiple records to hit the limit of offset entries and force
+      // partitions to be paused
+      writeRecords(1_000);
+
+      await().untilAsserted(() ->
+              wireMockServer.verify(moreThanOrExactly(99),
+                      postRequestedFor(urlPathEqualTo("/_bulk"))));
+
+      // verify it stays blocked for a couple of seconds
+      await().pollDelay(Duration.ofSeconds(2))
+              .untilAsserted(() ->
+                      wireMockServer.verify(lessThan(1_001),
+                              postRequestedFor(urlPathEqualTo("/_bulk"))));
+
+      // Unblock first batch, it should fail
+      concurrencyTransformer.release(1);
+
+      await().untilAsserted(() ->
+              assertThat(connect.connectorStatus(CONNECTOR_NAME).tasks().get(0).state())
+                      .isEqualTo("FAILED"));
+      assertThat(connect.connectorStatus(CONNECTOR_NAME).tasks().get(0).trace())
+              .contains("status line [HTTP/1.1 500 Server Error]");
+    } finally {
+      wireMockServer.stop();
+    }
+  }
+
 
   protected Map<String, String> createProps() {
     Map<String, String> props = new HashMap<>();

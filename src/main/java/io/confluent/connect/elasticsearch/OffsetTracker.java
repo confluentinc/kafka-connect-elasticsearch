@@ -17,39 +17,36 @@ package io.confluent.connect.elasticsearch;
 
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
-import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.sink.SinkRecord;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.locks.Condition;
-import java.util.concurrent.locks.ReentrantLock;
 
 import static java.util.stream.Collectors.toMap;
 
+/**
+ * Tracks processed records to calculate safe offsets to commit.
+ * <br>
+ * Since ElasticsearchClient can potentially process multiple batches asynchronously for the same
+ * partition, if we don't want to wait for all in-flight batches at the end of the put call
+ * (or flush/preCommit) we need to keep track of what's the highest offset that is safe to commit.
+ * For now, we do that at the individual record level because batching is handled by BulkProcessor,
+ * and we don't have control over grouping/ordering.
+ */
 class OffsetTracker {
 
   private static final Logger log = LoggerFactory.getLogger(OffsetTracker.class);
 
-  private final Map<TopicPartition, Map<Long, OffsetState>> offsetsByPartition
-          = new ConcurrentHashMap<>();
-
-  private final Map<TopicPartition, Long> maxOffsetByPartition
-          = new ConcurrentHashMap<>();
+  private final Map<TopicPartition, Map<Long, OffsetState>> offsetsByPartition = new HashMap<>();
+  private final Map<TopicPartition, Long> maxOffsetByPartition = new HashMap<>();
 
   private final AtomicLong numEntries = new AtomicLong();
-
-
-  // no fairness, things can only be blocked from one thread, the one making the put call
-  private final ReentrantLock lock = new ReentrantLock();
-  private final Condition notFull = lock.newCondition();
-  private final long maxNumEntries;
 
   static class OffsetState {
 
@@ -72,26 +69,17 @@ class OffsetTracker {
     }
   }
 
-  OffsetTracker(int maxNumEntries) {
-    this.maxNumEntries = maxNumEntries;
-  }
-
   /**
    * Partitions are no longer owned, we should release all related resources.
    */
-  public void closePartitions(Collection<TopicPartition> topicPartitions) {
-    lock.lock();
-    try {
-      topicPartitions.forEach(tp -> {
-        Map<Long, OffsetState> offsets = offsetsByPartition.remove(tp);
-        if (offsets != null) {
-          numEntries.getAndAdd(offsets.size());
-        }
-        maxOffsetByPartition.remove(tp);
-      });
-    } finally {
-      lock.unlock();
-    }
+  public synchronized void closePartitions(Collection<TopicPartition> topicPartitions) {
+    topicPartitions.forEach(tp -> {
+      Map<Long, OffsetState> offsets = offsetsByPartition.remove(tp);
+      if (offsets != null) {
+        numEntries.getAndAdd(offsets.size());
+      }
+      maxOffsetByPartition.remove(tp);
+    });
   }
 
   /**
@@ -99,82 +87,65 @@ class OffsetTracker {
    * Older records can be re-added, and the same Offset object will be return if its
    * offset hasn't been reported yet.
    */
-  public OffsetState addPendingRecord(SinkRecord sinkRecord) {
-    lock.lock();
-    try {
-      applyBackpressureIfNecessary();
-
+  public synchronized OffsetState addPendingRecord(SinkRecord sinkRecord) {
+    log.trace("Adding pending record");
+    TopicPartition tp = new TopicPartition(sinkRecord.topic(), sinkRecord.kafkaPartition());
+    Long partitionMax = maxOffsetByPartition.get(tp);
+    if (partitionMax == null || sinkRecord.kafkaOffset() > partitionMax) {
       numEntries.incrementAndGet();
-      TopicPartition tp = new TopicPartition(sinkRecord.topic(), sinkRecord.kafkaPartition());
-      Long partitionMax = maxOffsetByPartition.get(tp);
-      if (partitionMax == null || sinkRecord.kafkaOffset() > partitionMax) {
-        return offsetsByPartition
-                // Insertion order needs to be maintained
-                .computeIfAbsent(tp, key -> new LinkedHashMap<>())
-                .computeIfAbsent(sinkRecord.kafkaOffset(), OffsetState::new);
-      }
+      return offsetsByPartition
+              // Insertion order needs to be maintained
+              .computeIfAbsent(tp, key -> new LinkedHashMap<>())
+              .computeIfAbsent(sinkRecord.kafkaOffset(), OffsetState::new);
+    } else {
       return new OffsetState(sinkRecord.kafkaOffset());
-    } finally {
-      lock.unlock();
     }
   }
 
-  // TODO explore pausing partitions instead of blocking backpressure
-  private void applyBackpressureIfNecessary() {
-    if (numEntries.get() >= maxNumEntries) {
-      log.debug("Maximum number of offset tracking entries reached {}, blocking", maxNumEntries);
-      try {
-        notFull.await();
-      } catch (InterruptedException e) {
-        Thread.currentThread().interrupt();
-        throw new ConnectException("Interrupted while waiting for offset tracking entries "
-                + "to decrease", e);
+  /**
+   * @return overall number of entries
+   */
+  public long numEntries() {
+    return numEntries.get();
+  }
+
+  /**
+   * Move offsets to the highest we can.
+   */
+  public synchronized void updateOffsets() {
+    log.trace("Updating offsets");
+    offsetsByPartition.forEach(((topicPartition, offsets) -> {
+      Long max = maxOffsetByPartition.get(topicPartition);
+      boolean newMaxFound = false;
+      Iterator<OffsetState> iterator = offsets.values().iterator();
+      while (iterator.hasNext()) {
+        OffsetState offsetState = iterator.next();
+        if (offsetState.isProcessed()) {
+          iterator.remove();
+          numEntries.decrementAndGet();
+          if (max == null || offsetState.offset > max) {
+            max = offsetState.offset;
+            newMaxFound = true;
+          }
+        } else {
+          break;
+        }
       }
-    }
+      if (newMaxFound) {
+        maxOffsetByPartition.put(topicPartition, max);
+      }
+    }));
+    log.trace("Updated offsets, num entries: {}", numEntries);
   }
 
-  public Map<TopicPartition, OffsetAndMetadata> getOffsets() {
+  /**
+   * @return offsets to commit
+   */
+  public synchronized Map<TopicPartition, OffsetAndMetadata> offsets() {
     return maxOffsetByPartition.entrySet().stream()
             .collect(toMap(
                     Map.Entry::getKey,
                     e -> new OffsetAndMetadata(e.getValue() + 1)));
-  }
-
-  /**
-   * Calculates new "safe" offsets, and unblocks backpressure if possible.
-   * TODO if we avoid blocking backpressure (by pausing partitions), we can do this in getOffsets
-   */
-  public void moveOffsets() {
-    lock.lock();
-    try {
-      offsetsByPartition.forEach(((topicPartition, offsets) -> {
-        Long max = maxOffsetByPartition.get(topicPartition);
-        boolean newMaxFound = false;
-        Iterator<OffsetState> iterator = offsets.values().iterator();
-        while (iterator.hasNext()) {
-          OffsetState offsetState = iterator.next();
-          if (offsetState.isProcessed()) {
-            iterator.remove();
-            numEntries.decrementAndGet();
-            if (max == null || offsetState.offset > max) {
-              max = offsetState.offset;
-              newMaxFound = true;
-            }
-          } else {
-            break;
-          }
-        }
-        if (newMaxFound) {
-          maxOffsetByPartition.put(topicPartition, max);
-        }
-      }));
-
-      if (numEntries.get() < maxNumEntries) {
-        notFull.signalAll();
-      }
-    } finally {
-      lock.unlock();
-    }
   }
 
 }

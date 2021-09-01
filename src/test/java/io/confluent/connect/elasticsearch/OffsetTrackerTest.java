@@ -23,18 +23,14 @@ import org.junit.Test;
 import org.testcontainers.shaded.com.google.common.collect.ImmutableList;
 
 import java.util.Map;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.fail;
 
 public class OffsetTrackerTest {
 
   @Test
   public void testHappyPath() {
-    OffsetTracker offsetTracker = new OffsetTracker(10);
+    OffsetTracker offsetTracker = new OffsetTracker();
 
     TopicPartition tp = new TopicPartition("t1", 0);
 
@@ -46,25 +42,25 @@ public class OffsetTrackerTest {
     OffsetState offsetState2 = offsetTracker.addPendingRecord(record2);
     OffsetState offsetState3 = offsetTracker.addPendingRecord(record3);
 
-    assertThat(offsetTracker.getOffsets()).isEmpty();
+    assertThat(offsetTracker.offsets()).isEmpty();
 
     offsetState2.markProcessed();
-    assertThat(offsetTracker.getOffsets()).isEmpty();
+    assertThat(offsetTracker.offsets()).isEmpty();
 
     offsetState1.markProcessed();
 
-    offsetTracker.moveOffsets();
-    Map<TopicPartition, OffsetAndMetadata> offsetMap = offsetTracker.getOffsets();
+    offsetTracker.updateOffsets();
+    Map<TopicPartition, OffsetAndMetadata> offsetMap = offsetTracker.offsets();
     assertThat(offsetMap).hasSize(1);
     assertThat(offsetMap.get(tp).offset()).isEqualTo(2);
 
     offsetState3.markProcessed();
-    offsetTracker.moveOffsets();
-    offsetMap = offsetTracker.getOffsets();
+    offsetTracker.updateOffsets();
+    offsetMap = offsetTracker.offsets();
     assertThat(offsetMap).hasSize(1);
     assertThat(offsetMap.get(tp).offset()).isEqualTo(3);
 
-    offsetTracker.moveOffsets();
+    offsetTracker.updateOffsets();
     assertThat(offsetMap.get(tp).offset()).isEqualTo(3);
   }
 
@@ -74,7 +70,7 @@ public class OffsetTrackerTest {
    */
   @Test
   public void testBelowWatermark() {
-    OffsetTracker offsetTracker = new OffsetTracker(10);
+    OffsetTracker offsetTracker = new OffsetTracker();
 
     TopicPartition tp = new TopicPartition("t1", 0);
 
@@ -86,21 +82,21 @@ public class OffsetTrackerTest {
 
     offsetState1.markProcessed();
     offsetState2.markProcessed();
-    offsetTracker.moveOffsets();
-    assertThat(offsetTracker.getOffsets().get(tp).offset()).isEqualTo(2);
+    offsetTracker.updateOffsets();
+    assertThat(offsetTracker.offsets().get(tp).offset()).isEqualTo(2);
 
     offsetState2 = offsetTracker.addPendingRecord(record2);
-    offsetTracker.moveOffsets();
-    assertThat(offsetTracker.getOffsets().get(tp).offset()).isEqualTo(2);
+    offsetTracker.updateOffsets();
+    assertThat(offsetTracker.offsets().get(tp).offset()).isEqualTo(2);
 
     offsetState2.markProcessed();
-    offsetTracker.moveOffsets();
-    assertThat(offsetTracker.getOffsets().get(tp).offset()).isEqualTo(2);
+    offsetTracker.updateOffsets();
+    assertThat(offsetTracker.offsets().get(tp).offset()).isEqualTo(2);
   }
 
   @Test
   public void testBatchRetry() {
-    OffsetTracker offsetTracker = new OffsetTracker(10);
+    OffsetTracker offsetTracker = new OffsetTracker();
 
     TopicPartition tp = new TopicPartition("t1", 0);
 
@@ -112,8 +108,8 @@ public class OffsetTrackerTest {
 
     // first fails but second succeeds
     offsetState2A.markProcessed();
-    offsetTracker.moveOffsets();
-    assertThat(offsetTracker.getOffsets()).isEmpty();
+    offsetTracker.updateOffsets();
+    assertThat(offsetTracker.offsets()).isEmpty();
 
     // now simulate the batch being retried by the framework (e.g. after a RetriableException)
     OffsetState offsetState1B = offsetTracker.addPendingRecord(record1);
@@ -121,13 +117,13 @@ public class OffsetTrackerTest {
 
     offsetState2B.markProcessed();
     offsetState1B.markProcessed();
-    offsetTracker.moveOffsets();
-    assertThat(offsetTracker.getOffsets().get(tp).offset()).isEqualTo(2);
+    offsetTracker.updateOffsets();
+    assertThat(offsetTracker.offsets().get(tp).offset()).isEqualTo(2);
   }
 
   @Test
   public void testRebalance() {
-    OffsetTracker offsetTracker = new OffsetTracker(10);
+    OffsetTracker offsetTracker = new OffsetTracker();
 
     TopicPartition tp1 = new TopicPartition("t1", 0);
     TopicPartition tp2 = new TopicPartition("t2", 0);
@@ -139,38 +135,11 @@ public class OffsetTrackerTest {
     offsetTracker.addPendingRecord(record1).markProcessed();
     offsetTracker.addPendingRecord(record2).markProcessed();
 
-    offsetTracker.moveOffsets();
-    assertThat(offsetTracker.getOffsets().size()).isEqualTo(2);
+    offsetTracker.updateOffsets();
+    assertThat(offsetTracker.offsets().size()).isEqualTo(2);
 
     offsetTracker.closePartitions(ImmutableList.of(tp1, tp3));
-    assertThat(offsetTracker.getOffsets().keySet()).containsExactly(tp2);
-  }
-
-  @Test
-  public void testBackPressure() {
-    OffsetTracker offsetTracker = new OffsetTracker(2);
-
-    TopicPartition tp1 = new TopicPartition("t1", 0);
-    TopicPartition tp2 = new TopicPartition("t2", 0);
-
-    offsetTracker.addPendingRecord(sinkRecord(tp1, 0));
-    offsetTracker.addPendingRecord(sinkRecord(tp2, 0));
-
-    verifyBlocking(() -> offsetTracker.addPendingRecord(sinkRecord(tp1, 1)));
-  }
-
-  private void verifyBlocking(Runnable runnable) {
-    CompletableFuture<Void> future = CompletableFuture.runAsync(runnable);
-    try {
-      future.get(1, TimeUnit.SECONDS);
-      fail("Call should be blocking");
-    } catch (TimeoutException e) {
-      // this is what we expect
-    } catch (Exception e) {
-      fail("Unexpected exception", e);
-    } finally {
-      future.cancel(true);
-    }
+    assertThat(offsetTracker.offsets().keySet()).containsExactly(tp2);
   }
 
   private SinkRecord sinkRecord(TopicPartition tp, long offset) {

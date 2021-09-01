@@ -24,6 +24,7 @@ import org.apache.kafka.connect.errors.DataException;
 import org.apache.kafka.connect.sink.ErrantRecordReporter;
 import org.apache.kafka.connect.sink.SinkRecord;
 import org.apache.kafka.connect.sink.SinkTask;
+import org.apache.kafka.connect.sink.SinkTaskContext;
 import org.elasticsearch.action.DocWriteRequest;
 import org.elasticsearch.client.RequestOptions;
 import org.elasticsearch.client.RestClient;
@@ -36,6 +37,7 @@ import java.util.Collection;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.BooleanSupplier;
 import java.util.stream.Collectors;
 
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BehaviorOnNullValues;
@@ -51,6 +53,7 @@ public class ElasticsearchSinkTask extends SinkTask {
   private Set<String> existingMappings;
   private Set<String> indexCache;
   private OffsetTracker offsetTracker;
+  private PartitionPauser partitionPauser;
 
   @Override
   public void start(Map<String, String> props) {
@@ -65,7 +68,13 @@ public class ElasticsearchSinkTask extends SinkTask {
     this.converter = new DataConverter(config);
     this.existingMappings = new HashSet<>();
     this.indexCache = new HashSet<>();
-    this.offsetTracker = new OffsetTracker(config.maxBufferedRecords() * 10);
+    this.offsetTracker = new OffsetTracker();
+
+    int offsetHighWaterMark = config.maxBufferedRecords() * 10;
+    int offsetLowWaterMark = config.maxBufferedRecords() * 5;
+    this.partitionPauser = new PartitionPauser(context,
+            () -> offsetTracker.numEntries() > offsetHighWaterMark,
+            () -> offsetTracker.numEntries() <= offsetLowWaterMark);
 
     this.reporter = null;
     try {
@@ -79,15 +88,64 @@ public class ElasticsearchSinkTask extends SinkTask {
       log.warn("AK versions prior to 2.6 do not support the errant record reporter.");
     }
 
-    this.client = client != null ? client : new ElasticsearchClient(config, reporter);
+    this.client = client != null ? client : new ElasticsearchClient(config, reporter, offsetTracker);
 
     log.info("Started ElasticsearchSinkTask. Connecting to ES server version: {}",
         getServerVersion());
   }
 
+  private static class PartitionPauser {
+
+    private final SinkTaskContext context;
+    private final BooleanSupplier pauseCondition;
+    private final BooleanSupplier resumeCondition;
+    private boolean partitionsPaused;
+
+    public PartitionPauser(SinkTaskContext context,
+                           BooleanSupplier pauseCondition,
+                           BooleanSupplier resumeCondition) {
+      this.context = context;
+      this.pauseCondition = pauseCondition;
+      this.resumeCondition = resumeCondition;
+    }
+
+    /**
+     * Resume partitions if they are paused and resume condition is met.
+     * Has to be run in the connector thread.
+     */
+    private void tryResumePartitions() {
+      if (partitionsPaused) {
+        if (resumeCondition.getAsBoolean()) {
+          log.debug("Resuming all partitions");
+          context.resume(context.assignment().toArray(new TopicPartition[0]));
+          partitionsPaused = false;
+        } else {
+          context.timeout(100);
+        }
+      }
+    }
+
+    /**
+     * Pause partitions if they are paused and resume condition is met.
+     * Has to be run in the connector thread.
+     */
+    private void tryPausePartitions() {
+      if (!partitionsPaused && pauseCondition.getAsBoolean()) {
+        log.debug("Pausing all partitions");
+        context.pause(context.assignment().toArray(new TopicPartition[0]));
+        context.timeout(100);
+        partitionsPaused = true;
+      }
+    }
+  }
+
   @Override
   public void put(Collection<SinkRecord> records) throws ConnectException {
     log.debug("Putting {} records to Elasticsearch.", records.size());
+
+    client.throwIfFailed();
+    partitionPauser.tryResumePartitions();
+
     for (SinkRecord record : records) {
       OffsetState offsetState = offsetTracker.addPendingRecord(record);
 
@@ -100,17 +158,19 @@ public class ElasticsearchSinkTask extends SinkTask {
       logTrace("Writing {} to Elasticsearch.", record);
       tryWriteRecord(record, offsetState);
     }
+    partitionPauser.tryPausePartitions();
   }
 
   @Override
   public Map<TopicPartition, OffsetAndMetadata> preCommit(Map<TopicPartition,
           OffsetAndMetadata> currentOffsets) {
     try {
+      // This will just trigger an asynchronous execution of any buffered records
       client.flush();
     } catch (IllegalStateException e) {
       log.debug("Tried to flush data to Elasticsearch, but BulkProcessor is already closed.", e);
     }
-    return offsetTracker.getOffsets();
+    return offsetTracker.offsets();
   }
 
   @Override
@@ -124,8 +184,7 @@ public class ElasticsearchSinkTask extends SinkTask {
     return Version.getVersion();
   }
 
-  private void checkMapping(SinkRecord record) {
-    String index = convertTopicToIndexName(record.topic());
+  private void checkMapping(String index, SinkRecord record) {
     if (!config.shouldIgnoreSchema(record.topic()) && !existingMappings.contains(index)) {
       if (!client.hasMapping(index)) {
         client.createMapping(index, record.valueSchema());
@@ -230,7 +289,7 @@ public class ElasticsearchSinkTask extends SinkTask {
     String indexName = convertTopicToIndexName(sinkRecord.topic());
 
     ensureIndexExists(indexName);
-    checkMapping(sinkRecord);
+    checkMapping(indexName, sinkRecord);
 
     DocWriteRequest<?> docWriteRequest = null;
     try {

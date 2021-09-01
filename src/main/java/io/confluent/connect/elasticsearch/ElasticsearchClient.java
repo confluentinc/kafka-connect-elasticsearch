@@ -112,7 +112,7 @@ public class ElasticsearchClient {
           ElasticsearchSinkConnectorConfig config,
           ErrantRecordReporter reporter
   ) {
-    this(config, reporter, new OffsetTracker(config.maxBufferedRecords()));
+    this(config, reporter, new OffsetTracker());
   }
 
   public ElasticsearchClient(
@@ -273,12 +273,30 @@ public class ElasticsearchClient {
    * document id when either the DLQ is configured or
    * {@link ElasticsearchSinkConnectorConfig#IGNORE_KEY_CONFIG} is set to <code>false</code> because
    * they require the use of a map keyed by document id.
+   * <br>
+   * This call is usually asynchronous, but can block if:
+   * <ul>
+   *   <li>A new batch is finished (e.g. max batch size has been reached) and
+   *    the overall number of threads (max in flight requests) are in use.</li>
+   *   <li>The maximum number of buffered records have been reached</li>
+   * </ul>
    *
    * @param record the record to index
    * @param request the associated request to send
    * @throws ConnectException if one of the requests failed
    */
   public void index(SinkRecord record, DocWriteRequest<?> request, OffsetState offsetState) {
+    throwIfFailed();
+
+    // TODO should we just pause partitions instead of blocking and failing the connector?
+    verifyNumBufferedRecords();
+
+    requestToSinkRecord.put(request, new SinkRecordAndOffset(record, offsetState));
+    numBufferedRecords.incrementAndGet();
+    bulkProcessor.add(request);
+  }
+
+  public void throwIfFailed() {
     if (isFailed()) {
       try {
         close();
@@ -288,18 +306,12 @@ public class ElasticsearchClient {
       }
       throw error.get();
     }
-
-    verifyBufferedRecords();
-
-    requestToSinkRecord.put(request, new SinkRecordAndOffset(record, offsetState));
-    numBufferedRecords.incrementAndGet();
-    bulkProcessor.add(request);
   }
 
   /**
    * Wait for internal buffer to be less than max.buffered.records configuration
     */
-  private void verifyBufferedRecords() {
+  private void verifyNumBufferedRecords() {
     long maxWaitTime = clock.milliseconds() + config.flushTimeoutMs();
     while (numBufferedRecords.get() >= config.maxBufferedRecords()) {
       clock.sleep(WAIT_TIME_MS);
@@ -372,8 +384,7 @@ public class ElasticsearchClient {
 
         requests.forEach(req ->
                 requestToSinkRecord.get(req).offsetState.markProcessed());
-
-        offsetTracker.moveOffsets();
+        offsetTracker.updateOffsets();
 
         bulkFinished(executionId, request);
       }
