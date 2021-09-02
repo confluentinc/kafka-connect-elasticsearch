@@ -42,6 +42,7 @@ import java.util.stream.Collectors;
 
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BehaviorOnNullValues;
 
+@SuppressWarnings("checkstyle:ClassDataAbstractionCoupling")
 public class ElasticsearchSinkTask extends SinkTask {
 
   private static final Logger log = LoggerFactory.getLogger(ElasticsearchSinkTask.class);
@@ -73,8 +74,8 @@ public class ElasticsearchSinkTask extends SinkTask {
     int offsetHighWaterMark = config.maxBufferedRecords() * 10;
     int offsetLowWaterMark = config.maxBufferedRecords() * 5;
     this.partitionPauser = new PartitionPauser(context,
-            () -> offsetTracker.numEntries() > offsetHighWaterMark,
-            () -> offsetTracker.numEntries() <= offsetLowWaterMark);
+        () -> offsetTracker.numEntries() > offsetHighWaterMark,
+        () -> offsetTracker.numEntries() <= offsetLowWaterMark);
 
     this.reporter = null;
     try {
@@ -88,7 +89,8 @@ public class ElasticsearchSinkTask extends SinkTask {
       log.warn("AK versions prior to 2.6 do not support the errant record reporter.");
     }
 
-    this.client = client != null ? client : new ElasticsearchClient(config, reporter, offsetTracker);
+    this.client = client != null ? client
+            : new ElasticsearchClient(config, reporter, offsetTracker);
 
     log.info("Started ElasticsearchSinkTask. Connecting to ES server version: {}",
         getServerVersion());

@@ -144,8 +144,8 @@ class OffsetTracker {
   public synchronized Map<TopicPartition, OffsetAndMetadata> offsets() {
     return maxOffsetByPartition.entrySet().stream()
             .collect(toMap(
-                    Map.Entry::getKey,
-                    e -> new OffsetAndMetadata(e.getValue() + 1)));
+                Map.Entry::getKey,
+                e -> new OffsetAndMetadata(e.getValue() + 1)));
   }
 
 }

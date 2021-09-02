@@ -15,7 +15,9 @@
 
 package io.confluent.connect.elasticsearch.integration;
 
+import com.github.tomakehurst.wiremock.client.WireMock;
 import com.github.tomakehurst.wiremock.junit.WireMockRule;
+import com.github.tomakehurst.wiremock.stubbing.Scenario;
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnector;
 import io.confluent.connect.elasticsearch.ElasticsearchSinkTask;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
@@ -27,7 +29,6 @@ import org.apache.kafka.connect.storage.StringConverter;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
-import org.mockito.Mockito;
 import org.testcontainers.shaded.com.google.common.collect.ImmutableList;
 import org.testcontainers.shaded.com.google.common.collect.ImmutableMap;
 
@@ -35,25 +36,17 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import static com.github.tomakehurst.wiremock.client.WireMock.any;
-import static com.github.tomakehurst.wiremock.client.WireMock.anyUrl;
-import static com.github.tomakehurst.wiremock.client.WireMock.ok;
-import static com.github.tomakehurst.wiremock.client.WireMock.post;
-import static com.github.tomakehurst.wiremock.client.WireMock.stubFor;
-import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
+import static com.github.tomakehurst.wiremock.client.WireMock.*;
 import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.options;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BATCH_SIZE_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_KEY_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_SCHEMA_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.MAX_RETRIES_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.READ_TIMEOUT_MS_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.RETRY_BACKOFF_MS_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.*;
+import static io.confluent.connect.elasticsearch.integration.ElasticsearchConnectorNetworkIT.okBulkResponse;
 import static org.apache.kafka.connect.json.JsonConverterConfig.SCHEMAS_ENABLE_CONFIG;
 import static org.apache.kafka.connect.runtime.ConnectorConfig.*;
 import static org.apache.kafka.connect.runtime.ConnectorConfig.VALUE_CONVERTER_CLASS_CONFIG;
 import static org.apache.kafka.connect.runtime.SinkConnectorConfig.TOPICS_CONFIG;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
+import static org.mockito.Mockito.mock;
 
 public class ElasticsearchSinkTaskIT {
 
@@ -81,7 +74,7 @@ public class ElasticsearchSinkTaskIT {
 
     ElasticsearchSinkTask task = new ElasticsearchSinkTask();
 
-    SinkTaskContext context = Mockito.mock(SinkTaskContext.class);
+    SinkTaskContext context = mock(SinkTaskContext.class);
     task.initialize(context);
     task.start(props);
 
@@ -97,7 +90,54 @@ public class ElasticsearchSinkTaskIT {
     assertThat(task.preCommit(currentOffsets)).isEmpty();
   }
 
-  // TODO test retriableexception
+  /**
+   * Verify things are handled correctly when we receive the same records in a new put call
+   * (e.g. after a RetriableException)
+   */
+  @Test
+  public void testPutRetry() throws Exception {
+    wireMockRule.stubFor(post(urlPathEqualTo("/_bulk"))
+            .withRequestBody(WireMock.containing("{\"doc_num\":0}"))
+            .willReturn(okJson(okBulkResponse())));
+
+    wireMockRule.stubFor(post(urlPathEqualTo("/_bulk"))
+            .withRequestBody(WireMock.containing("{\"doc_num\":1}"))
+            .willReturn(aResponse().withFixedDelay(50_000)));
+
+    Map<String, String> props = createProps();
+    props.put(READ_TIMEOUT_MS_CONFIG, "1000");
+    props.put(MAX_RETRIES_CONFIG, "2");
+    props.put(RETRY_BACKOFF_MS_CONFIG, "10");
+    props.put(BATCH_SIZE_CONFIG, "1");
+
+    ElasticsearchSinkTask task = new ElasticsearchSinkTask();
+
+    SinkTaskContext context = mock(SinkTaskContext.class);
+    task.initialize(context);
+    task.start(props);
+
+    TopicPartition tp = new TopicPartition(TOPIC, 0);
+    List<SinkRecord> records = ImmutableList.of(
+            sinkRecord(tp, 0),
+            sinkRecord(tp, 1));
+    task.put(records);
+
+    Map<TopicPartition, OffsetAndMetadata> currentOffsets =
+            ImmutableMap.of(tp, new OffsetAndMetadata(2));
+    await().untilAsserted(() ->
+      assertThat(task.preCommit(currentOffsets))
+              .isEqualTo(ImmutableMap.of(tp, new OffsetAndMetadata(1))));
+
+    wireMockRule.stubFor(post(urlPathEqualTo("/_bulk"))
+            .willReturn(okJson(okBulkResponse())));
+
+    task.put(records);
+    await().untilAsserted(() ->
+            assertThat(task.preCommit(currentOffsets))
+                    .isEqualTo(currentOffsets));
+  }
+
+  // TODO test pause partitions
 
   // TODO test rebalance
 
@@ -111,7 +151,7 @@ public class ElasticsearchSinkTaskIT {
             null,
             "testKey",
             null,
-            "testValue" + offset,
+            ImmutableMap.of("doc_num", offset),
             offset);
   }
 
@@ -130,6 +170,7 @@ public class ElasticsearchSinkTaskIT {
     props.put(CONNECTION_URL_CONFIG, wireMockRule.url("/"));
     props.put(IGNORE_KEY_CONFIG, "true");
     props.put(IGNORE_SCHEMA_CONFIG, "true");
+    props.put(WRITE_METHOD_CONFIG, WriteMethod.UPSERT.toString());
 
     return props;
   }
