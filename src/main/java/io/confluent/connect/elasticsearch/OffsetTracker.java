@@ -71,6 +71,7 @@ class OffsetTracker {
 
   /**
    * Partitions are no longer owned, we should release all related resources.
+   * @param topicPartitions partitions to close
    */
   public synchronized void closePartitions(Collection<TopicPartition> topicPartitions) {
     topicPartitions.forEach(tp -> {
@@ -86,6 +87,8 @@ class OffsetTracker {
    * This method assumes that new records are added in offset order.
    * Older records can be re-added, and the same Offset object will be return if its
    * offset hasn't been reported yet.
+   * @param sinkRecord record to add
+   * @return offset state record that can be used to mark the record as processed
    */
   public synchronized OffsetState addPendingRecord(SinkRecord sinkRecord) {
     log.trace("Adding pending record");
@@ -103,9 +106,11 @@ class OffsetTracker {
   }
 
   /**
-   * @return overall number of entries
+   * @return overall number of entries currently in memory. {@link #updateOffsets()} is the one
+   *         cleaning up entries that are not needed anymore (all the contiguos processed entries
+   *         since the last reported offset)
    */
-  public long numEntries() {
+  public long numOffsetStateEntries() {
     return numEntries.get();
   }
 

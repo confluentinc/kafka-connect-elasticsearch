@@ -274,7 +274,7 @@ public class ElasticsearchClient {
    * {@link ElasticsearchSinkConnectorConfig#IGNORE_KEY_CONFIG} is set to <code>false</code> because
    * they require the use of a map keyed by document id.
    *
-   * <p>This call is usually asynchronous, but can block if:
+   * <p>This call is usually asynchronous, but can block in any of the following scenarios:
    * <ul>
    *   <li>A new batch is finished (e.g. max batch size has been reached) and
    *    the overall number of threads (max in flight requests) are in use.</li>

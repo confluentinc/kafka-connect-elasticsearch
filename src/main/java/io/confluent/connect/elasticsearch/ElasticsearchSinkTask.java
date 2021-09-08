@@ -74,8 +74,8 @@ public class ElasticsearchSinkTask extends SinkTask {
     int offsetHighWaterMark = config.maxBufferedRecords() * 10;
     int offsetLowWaterMark = config.maxBufferedRecords() * 5;
     this.partitionPauser = new PartitionPauser(context,
-        () -> offsetTracker.numEntries() > offsetHighWaterMark,
-        () -> offsetTracker.numEntries() <= offsetLowWaterMark);
+        () -> offsetTracker.numOffsetStateEntries() > offsetHighWaterMark,
+        () -> offsetTracker.numOffsetStateEntries() <= offsetLowWaterMark);
 
     this.reporter = null;
     try {
@@ -94,51 +94,6 @@ public class ElasticsearchSinkTask extends SinkTask {
 
     log.info("Started ElasticsearchSinkTask. Connecting to ES server version: {}",
         getServerVersion());
-  }
-
-  private static class PartitionPauser {
-
-    private final SinkTaskContext context;
-    private final BooleanSupplier pauseCondition;
-    private final BooleanSupplier resumeCondition;
-    private boolean partitionsPaused;
-
-    public PartitionPauser(SinkTaskContext context,
-                           BooleanSupplier pauseCondition,
-                           BooleanSupplier resumeCondition) {
-      this.context = context;
-      this.pauseCondition = pauseCondition;
-      this.resumeCondition = resumeCondition;
-    }
-
-    /**
-     * Resume partitions if they are paused and resume condition is met.
-     * Has to be run in the connector thread.
-     */
-    private void maybeResumePartitions() {
-      if (partitionsPaused) {
-        if (resumeCondition.getAsBoolean()) {
-          log.debug("Resuming all partitions");
-          context.resume(context.assignment().toArray(new TopicPartition[0]));
-          partitionsPaused = false;
-        } else {
-          context.timeout(100);
-        }
-      }
-    }
-
-    /**
-     * Pause partitions if they are paused and resume condition is met.
-     * Has to be run in the connector thread.
-     */
-    private void maybePausePartitions() {
-      if (!partitionsPaused && pauseCondition.getAsBoolean()) {
-        log.debug("Pausing all partitions");
-        context.pause(context.assignment().toArray(new TopicPartition[0]));
-        context.timeout(100);
-        partitionsPaused = true;
-      }
-    }
   }
 
   @Override
@@ -324,5 +279,55 @@ public class ElasticsearchSinkTask extends SinkTask {
   @Override
   public void close(Collection<TopicPartition> partitions) {
     offsetTracker.closePartitions(partitions);
+  }
+
+  // Visible for testing
+  static class PartitionPauser {
+
+    // Kafka consumer poll timeout to set when partitions are paused, to avoid waiting for a long
+    // time (default poll timeout) to resume it.
+    private static final int PAUSE_POLL_TIMEOUT_MS = 100;
+
+    private final SinkTaskContext context;
+    private final BooleanSupplier pauseCondition;
+    private final BooleanSupplier resumeCondition;
+    private boolean partitionsPaused;
+
+    public PartitionPauser(SinkTaskContext context,
+                           BooleanSupplier pauseCondition,
+                           BooleanSupplier resumeCondition) {
+      this.context = context;
+      this.pauseCondition = pauseCondition;
+      this.resumeCondition = resumeCondition;
+    }
+
+    /**
+     * Resume partitions if they are paused and resume condition is met.
+     * Has to be run in the connector thread.
+     */
+    void maybeResumePartitions() {
+      if (partitionsPaused) {
+        if (resumeCondition.getAsBoolean()) {
+          log.debug("Resuming all partitions");
+          context.resume(context.assignment().toArray(new TopicPartition[0]));
+          partitionsPaused = false;
+        } else {
+          context.timeout(PAUSE_POLL_TIMEOUT_MS);
+        }
+      }
+    }
+
+    /**
+     * Pause partitions if they are paused and resume condition is met.
+     * Has to be run in the connector thread.
+     */
+    void maybePausePartitions() {
+      if (!partitionsPaused && pauseCondition.getAsBoolean()) {
+        log.debug("Pausing all partitions");
+        context.pause(context.assignment().toArray(new TopicPartition[0]));
+        context.timeout(PAUSE_POLL_TIMEOUT_MS);
+        partitionsPaused = true;
+      }
+    }
   }
 }

@@ -132,15 +132,15 @@ public class OffsetTrackerTest {
     offsetTracker.addPendingRecord(sinkRecord(tp1, 0)).markProcessed();
     offsetTracker.addPendingRecord(sinkRecord(tp1, 1));
     offsetTracker.addPendingRecord(sinkRecord(tp2, 0)).markProcessed();
-    assertThat(offsetTracker.numEntries()).isEqualTo(3);
+    assertThat(offsetTracker.numOffsetStateEntries()).isEqualTo(3);
 
     offsetTracker.updateOffsets();
     assertThat(offsetTracker.offsets().size()).isEqualTo(2);
-    assertThat(offsetTracker.numEntries()).isEqualTo(1);
+    assertThat(offsetTracker.numOffsetStateEntries()).isEqualTo(1);
 
     offsetTracker.closePartitions(ImmutableList.of(tp1, tp3));
     assertThat(offsetTracker.offsets().keySet()).containsExactly(tp2);
-    assertThat(offsetTracker.numEntries()).isEqualTo(0);
+    assertThat(offsetTracker.numOffsetStateEntries()).isEqualTo(0);
   }
 
   private SinkRecord sinkRecord(TopicPartition tp, long offset) {
