@@ -115,7 +115,7 @@ public class ElasticsearchSinkTask extends SinkTask {
      * Resume partitions if they are paused and resume condition is met.
      * Has to be run in the connector thread.
      */
-    private void tryResumePartitions() {
+    private void maybeResumePartitions() {
       if (partitionsPaused) {
         if (resumeCondition.getAsBoolean()) {
           log.debug("Resuming all partitions");
@@ -131,7 +131,7 @@ public class ElasticsearchSinkTask extends SinkTask {
      * Pause partitions if they are paused and resume condition is met.
      * Has to be run in the connector thread.
      */
-    private void tryPausePartitions() {
+    private void maybePausePartitions() {
       if (!partitionsPaused && pauseCondition.getAsBoolean()) {
         log.debug("Pausing all partitions");
         context.pause(context.assignment().toArray(new TopicPartition[0]));
@@ -146,7 +146,7 @@ public class ElasticsearchSinkTask extends SinkTask {
     log.debug("Putting {} records to Elasticsearch.", records.size());
 
     client.throwIfFailed();
-    partitionPauser.tryResumePartitions();
+    partitionPauser.maybeResumePartitions();
 
     for (SinkRecord record : records) {
       OffsetState offsetState = offsetTracker.addPendingRecord(record);
@@ -160,12 +160,12 @@ public class ElasticsearchSinkTask extends SinkTask {
       logTrace("Writing {} to Elasticsearch.", record);
       tryWriteRecord(record, offsetState);
     }
-    partitionPauser.tryPausePartitions();
+    partitionPauser.maybePausePartitions();
   }
 
   @Override
-  public Map<TopicPartition, OffsetAndMetadata> preCommit(Map<TopicPartition,
-          OffsetAndMetadata> currentOffsets) {
+  public Map<TopicPartition, OffsetAndMetadata> preCommit(
+          Map<TopicPartition, OffsetAndMetadata> currentOffsets) {
     try {
       // This will just trigger an asynchronous execution of any buffered records
       client.flush();

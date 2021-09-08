@@ -32,8 +32,8 @@ import static java.util.stream.Collectors.toMap;
 
 /**
  * Tracks processed records to calculate safe offsets to commit.
- * <br>
- * Since ElasticsearchClient can potentially process multiple batches asynchronously for the same
+ *
+ * <p>Since ElasticsearchClient can potentially process multiple batches asynchronously for the same
  * partition, if we don't want to wait for all in-flight batches at the end of the put call
  * (or flush/preCommit) we need to keep track of what's the highest offset that is safe to commit.
  * For now, we do that at the individual record level because batching is handled by BulkProcessor,
@@ -76,7 +76,7 @@ class OffsetTracker {
     topicPartitions.forEach(tp -> {
       Map<Long, OffsetState> offsets = offsetsByPartition.remove(tp);
       if (offsets != null) {
-        numEntries.getAndAdd(offsets.size());
+        numEntries.getAndAdd(-offsets.size());
       }
       maxOffsetByPartition.remove(tp);
     });
@@ -145,6 +145,8 @@ class OffsetTracker {
     return maxOffsetByPartition.entrySet().stream()
             .collect(toMap(
                 Map.Entry::getKey,
+                // The offsets you commit are the offsets of the messages you want to read next
+                // (not the offsets of the messages you did read last)
                 e -> new OffsetAndMetadata(e.getValue() + 1)));
   }
 

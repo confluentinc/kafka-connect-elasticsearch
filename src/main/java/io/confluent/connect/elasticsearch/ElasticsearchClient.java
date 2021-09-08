@@ -70,11 +70,11 @@ import static java.util.stream.Collectors.toList;
  * Based on Elasticsearch's BulkProcessor, which is responsible for building batches based on size
  * and linger time (not grouped by partitions) and limiting the concurrency (max number of
  * in-flight requests).
- * <br>
- * Batch processing is asynchronous. BulkProcessor delegates the bulk calls to a separate thread
+ *
+ * <p>Batch processing is asynchronous. BulkProcessor delegates the bulk calls to a separate thread
  * pool. Retries are handled synchronously in each batch thread.
- * <br>
- * If all the retries fail, the exception is reported via an atomic reference to an error,
+ *
+ * <p>If all the retries fail, the exception is reported via an atomic reference to an error,
  * which is checked and thrown from a subsequent call to the task's put method and that results
  * in failure of the task.
  */
@@ -273,8 +273,8 @@ public class ElasticsearchClient {
    * document id when either the DLQ is configured or
    * {@link ElasticsearchSinkConnectorConfig#IGNORE_KEY_CONFIG} is set to <code>false</code> because
    * they require the use of a map keyed by document id.
-   * <br>
-   * This call is usually asynchronous, but can block if:
+   *
+   * <p>This call is usually asynchronous, but can block if:
    * <ul>
    *   <li>A new batch is finished (e.g. max batch size has been reached) and
    *    the overall number of threads (max in flight requests) are in use.</li>
