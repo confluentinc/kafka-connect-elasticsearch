@@ -303,7 +303,7 @@ public class ElasticsearchSinkTask extends SinkTask {
 
     /**
      * Resume partitions if they are paused and resume condition is met.
-     * Has to be run in the connector thread.
+     * Has to be run in the task thread.
      */
     void maybeResumePartitions() {
       if (partitionsPaused) {
@@ -319,7 +319,7 @@ public class ElasticsearchSinkTask extends SinkTask {
 
     /**
      * Pause partitions if they are paused and resume condition is met.
-     * Has to be run in the connector thread.
+     * Has to be run in the task thread.
      */
     void maybePausePartitions() {
       if (!partitionsPaused && pauseCondition.getAsBoolean()) {

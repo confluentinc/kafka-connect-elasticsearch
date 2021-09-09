@@ -55,5 +55,9 @@ public class PartitionPauserTest {
     verify(context).assignment();
     verify(context).resume(tp);
     verifyNoMoreInteractions(context);
+
+    clearInvocations(context);
+    partitionPauser.maybeResumePartitions();
+    verifyNoMoreInteractions(context);
   }
 }
