@@ -286,7 +286,7 @@ public class ElasticsearchSinkTask extends SinkTask {
 
     // Kafka consumer poll timeout to set when partitions are paused, to avoid waiting for a long
     // time (default poll timeout) to resume it.
-    private static final int PAUSE_POLL_TIMEOUT_MS = 100;
+    private static final long PAUSE_POLL_TIMEOUT_MS = 100;
 
     private final SinkTaskContext context;
     private final BooleanSupplier pauseCondition;
