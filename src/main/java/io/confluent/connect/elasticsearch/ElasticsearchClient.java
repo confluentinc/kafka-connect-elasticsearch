@@ -374,12 +374,8 @@ public class ElasticsearchClient {
       public void afterBulk(long executionId, BulkRequest request, BulkResponse response) {
         List<DocWriteRequest<?>> requests = request.requests();
 
-        int itemNumber = 0;
         for (BulkItemResponse bulkItemResponse : response) {
-          SinkRecordAndOffset record = itemNumber < requests.size()
-                  ? requestToSinkRecord.get(requests.get(itemNumber))
-                  : null;
-          handleResponse(record, bulkItemResponse, executionId);
+          handleResponse(bulkItemResponse, executionId);
         }
 
         requests.forEach(req ->
@@ -452,15 +448,13 @@ public class ElasticsearchClient {
    * @param response    the response to process
    * @param executionId the execution id of the request
    */
-  private void handleResponse(SinkRecordAndOffset record,
-                              BulkItemResponse response,
+  private void handleResponse(BulkItemResponse response,
                               long executionId) {
     if (response.isFailed()) {
       for (String error : MALFORMED_DOC_ERRORS) {
         if (response.getFailureMessage().contains(error)) {
           handleMalformedDocResponse(response);
           reportBadRecord(response, executionId);
-          record.offsetState.markProcessed();
           return;
         }
       }
@@ -475,7 +469,6 @@ public class ElasticsearchClient {
         );
 
         reportBadRecord(response, executionId);
-        record.offsetState.markProcessed();
         return;
       }
 

@@ -318,7 +318,7 @@ public class ElasticsearchSinkTask extends SinkTask {
     }
 
     /**
-     * Pause partitions if they are paused and resume condition is met.
+     * Pause partitions if they are not paused and pause condition is met.
      * Has to be run in the task thread.
      */
     void maybePausePartitions() {
