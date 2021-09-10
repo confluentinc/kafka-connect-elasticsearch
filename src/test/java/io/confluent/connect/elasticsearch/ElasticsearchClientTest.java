@@ -40,6 +40,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BehaviorOnMalformedDoc;
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BehaviorOnNullValues;
@@ -51,6 +52,7 @@ import io.confluent.connect.elasticsearch.helper.NetworkErrorContainer;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import org.apache.kafka.common.config.SslConfigs;
 import org.apache.kafka.connect.data.Schema;
@@ -235,19 +237,19 @@ public class ElasticsearchClientTest {
     client.createIndex(INDEX);
 
     writeRecord(sinkRecord(0), client);
-    assertEquals(1, client.numRecords.get());
+    assertEquals(1, client.numBufferedRecords.get());
     client.flush();
 
     waitUntilRecordsInES(1);
     assertEquals(1, helperClient.getDocCount(INDEX));
-    assertEquals(0, client.numRecords.get());
+    assertEquals(0, client.numBufferedRecords.get());
 
     writeRecord(sinkRecord(1), client);
-    assertEquals(1, client.numRecords.get());
+    assertEquals(1, client.numBufferedRecords.get());
 
     // will block until the previous record is flushed
     writeRecord(sinkRecord(2), client);
-    assertEquals(1, client.numRecords.get());
+    assertEquals(1, client.numBufferedRecords.get());
 
     waitUntilRecordsInES(3);
     client.close();
@@ -419,7 +421,7 @@ public class ElasticsearchClientTest {
   }
 
   @Test
-  public void testRetryRecordsOnFailure() throws Exception {
+  public void testRetryRecordsOnSocketTimeoutFailure() throws Exception {
     props.put(LINGER_MS_CONFIG, "60000");
     props.put(BATCH_SIZE_CONFIG, "2");
     props.put(MAX_RETRIES_CONFIG, "100");
@@ -427,7 +429,6 @@ public class ElasticsearchClientTest {
     props.put(MAX_IN_FLIGHT_REQUESTS_CONFIG, "1");
     config = new ElasticsearchSinkConnectorConfig(props);
     converter = new DataConverter(config);
-
 
     // mock bulk processor to throw errors
     ElasticsearchClient client = new ElasticsearchClient(config, null);
@@ -458,6 +459,8 @@ public class ElasticsearchClientTest {
     converter = new DataConverter(config);
 
     ErrantRecordReporter reporter = mock(ErrantRecordReporter.class);
+    when(reporter.report(any(), any()))
+            .thenReturn(CompletableFuture.completedFuture(null));
     ElasticsearchClient client = new ElasticsearchClient(config, reporter);
     client.createIndex(INDEX);
     client.createMapping(INDEX, schema());
@@ -615,6 +618,6 @@ public class ElasticsearchClientTest {
   }
 
   private void writeRecord(SinkRecord record, ElasticsearchClient client) {
-    client.index(record, converter.convertRecord(record, record.topic()));
+    client.index(record, converter.convertRecord(record, record.topic()), new OffsetTracker.OffsetState(record.kafkaOffset()));
   }
 }

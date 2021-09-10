@@ -15,6 +15,7 @@
 
 package io.confluent.connect.elasticsearch;
 
+import io.confluent.connect.elasticsearch.OffsetTracker.OffsetState;
 import org.apache.http.HttpHost;
 import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.connect.data.Schema;
@@ -58,22 +59,22 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiConsumer;
-import java.util.stream.Collectors;
 
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BehaviorOnMalformedDoc;
 
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.FLUSH_TIMEOUT_MS_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.MAX_BUFFERED_RECORDS_CONFIG;
+import static java.util.stream.Collectors.toList;
 
 /**
  * Based on Elasticsearch's BulkProcessor, which is responsible for building batches based on size
  * and linger time (not grouped by partitions) and limiting the concurrency (max number of
  * in-flight requests).
- * <br>
- * Batch processing is asynchronous. BulkProcessor delegates the bulk calls to a separate thread
+ *
+ * <p>Batch processing is asynchronous. BulkProcessor delegates the bulk calls to a separate thread
  * pool. Retries are handled synchronously in each batch thread.
- * <br>
- * If all the retries fail, the exception is reported via an atomic reference to an error,
+ *
+ * <p>If all the retries fail, the exception is reported via an atomic reference to an error,
  * which is checked and thrown from a subsequent call to the task's put method and that results
  * in failure of the task.
  */
@@ -95,25 +96,34 @@ public class ElasticsearchClient {
       )
   );
 
-  protected final AtomicInteger numRecords;
+  protected final AtomicInteger numBufferedRecords;
   private final AtomicReference<ConnectException> error;
   protected final BulkProcessor bulkProcessor;
-  private final ConcurrentMap<DocWriteRequest<?>, SinkRecord> requestToRecord;
-  private final ConcurrentMap<Long, List<SinkRecord>> inFlightRequests;
+  private final ConcurrentMap<DocWriteRequest<?>, SinkRecordAndOffset> requestToSinkRecord;
+  private final ConcurrentMap<Long, List<SinkRecordAndOffset>> inFlightRequests;
   private final ElasticsearchSinkConnectorConfig config;
   private final ErrantRecordReporter reporter;
   private final RestHighLevelClient client;
   private final ExecutorService bulkExecutorService;
   private final Time clock;
 
+  // Visible for testing
+  public ElasticsearchClient(
+          ElasticsearchSinkConnectorConfig config,
+          ErrantRecordReporter reporter
+  ) {
+    this(config, reporter, new OffsetTracker());
+  }
+
   public ElasticsearchClient(
       ElasticsearchSinkConnectorConfig config,
-      ErrantRecordReporter reporter
+      ErrantRecordReporter reporter,
+      OffsetTracker offsetTracker
   ) {
     this.bulkExecutorService = Executors.newFixedThreadPool(config.maxInFlightRequests());
-    this.numRecords = new AtomicInteger(0);
+    this.numBufferedRecords = new AtomicInteger(0);
     this.error = new AtomicReference<>();
-    this.requestToRecord = reporter != null ? new ConcurrentHashMap<>() : null;
+    this.requestToSinkRecord = new ConcurrentHashMap<>();
     this.inFlightRequests = reporter != null ? new ConcurrentHashMap<>() : null;
     this.config = config;
     this.reporter = reporter;
@@ -126,13 +136,13 @@ public class ElasticsearchClient {
                 config.connectionUrls()
                     .stream()
                     .map(HttpHost::create)
-                    .collect(Collectors.toList())
+                    .collect(toList())
                     .toArray(new HttpHost[config.connectionUrls().size()])
             )
             .setHttpClientConfigCallback(configCallbackHandler)
     );
     this.bulkProcessor = BulkProcessor
-        .builder(buildConsumer(), buildListener())
+        .builder(buildConsumer(), buildListener(offsetTracker))
         .setBulkActions(config.batchSize())
         .setConcurrentRequests(config.maxInFlightRequests() - 1) // 0 = no concurrent requests
         .setFlushInterval(TimeValue.timeValueMillis(config.lingerMs()))
@@ -242,7 +252,7 @@ public class ElasticsearchClient {
   }
 
   /**
-   * Flushes any buffered records.
+   * Triggers a flush of any buffered records.
    */
   public void flush() {
     bulkProcessor.flush();
@@ -264,11 +274,29 @@ public class ElasticsearchClient {
    * {@link ElasticsearchSinkConnectorConfig#IGNORE_KEY_CONFIG} is set to <code>false</code> because
    * they require the use of a map keyed by document id.
    *
+   * <p>This call is usually asynchronous, but can block in any of the following scenarios:
+   * <ul>
+   *   <li>A new batch is finished (e.g. max batch size has been reached) and
+   *    the overall number of threads (max in flight requests) are in use.</li>
+   *   <li>The maximum number of buffered records have been reached</li>
+   * </ul>
+   *
    * @param record the record to index
    * @param request the associated request to send
    * @throws ConnectException if one of the requests failed
    */
-  public void index(SinkRecord record, DocWriteRequest<?> request) {
+  public void index(SinkRecord record, DocWriteRequest<?> request, OffsetState offsetState) {
+    throwIfFailed();
+
+    // TODO should we just pause partitions instead of blocking and failing the connector?
+    verifyNumBufferedRecords();
+
+    requestToSinkRecord.put(request, new SinkRecordAndOffset(record, offsetState));
+    numBufferedRecords.incrementAndGet();
+    bulkProcessor.add(request);
+  }
+
+  public void throwIfFailed() {
     if (isFailed()) {
       try {
         close();
@@ -278,26 +306,36 @@ public class ElasticsearchClient {
       }
       throw error.get();
     }
+  }
 
-    // wait for internal buffer to be less than max.buffered.records configuration
+  /**
+   * Wait for internal buffer to be less than max.buffered.records configuration
+    */
+  private void verifyNumBufferedRecords() {
     long maxWaitTime = clock.milliseconds() + config.flushTimeoutMs();
-    while (numRecords.get() >= config.maxBufferedRecords()) {
+    while (numBufferedRecords.get() >= config.maxBufferedRecords()) {
       clock.sleep(WAIT_TIME_MS);
       if (clock.milliseconds() > maxWaitTime) {
         throw new ConnectException(
-            String.format(
-                "Could not make space in the internal buffer fast enough. Consider increasing %s"
-                    + " or %s.",
-                FLUSH_TIMEOUT_MS_CONFIG,
-                MAX_BUFFERED_RECORDS_CONFIG
+            String.format("Could not make space in the internal buffer fast enough. "
+                            + "Consider increasing %s or %s.",
+                    FLUSH_TIMEOUT_MS_CONFIG,
+                    MAX_BUFFERED_RECORDS_CONFIG
             )
         );
       }
     }
+  }
 
-    addToRequestToRecordMap(request, record);
-    numRecords.incrementAndGet();
-    bulkProcessor.add(request);
+  private static class SinkRecordAndOffset {
+
+    private final SinkRecord sinkRecord;
+    private final OffsetState offsetState;
+
+    public SinkRecordAndOffset(SinkRecord sinkRecord, OffsetState offsetState) {
+      this.sinkRecord = sinkRecord;
+      this.offsetState = offsetState;
+    }
   }
 
   /**
@@ -315,32 +353,18 @@ public class ElasticsearchClient {
   }
 
   /**
-   * Maps a record to the write request.
-   *
-   * @param request the write request
-   * @param record  the record
-   */
-  private void addToRequestToRecordMap(DocWriteRequest<?> request, SinkRecord record) {
-    if (requestToRecord != null) {
-      requestToRecord.put(request, record);
-    }
-  }
-
-  /**
    * Creates a listener with callback functions to handle completed requests for the BulkProcessor.
    *
    * @return the listener
    */
-  private BulkProcessor.Listener buildListener() {
+  private BulkProcessor.Listener buildListener(OffsetTracker offsetTracker) {
     return new Listener() {
       @Override
       public void beforeBulk(long executionId, BulkRequest request) {
-        if (requestToRecord != null && inFlightRequests != null) {
-          List<SinkRecord> sinkRecords = new ArrayList<>(request.requests().size());
-          for (DocWriteRequest<?> req : request.requests()) {
-            sinkRecords.add(requestToRecord.get(req));
-            requestToRecord.remove(req);
-          }
+        if (inFlightRequests != null) {
+          List<SinkRecordAndOffset> sinkRecords = request.requests().stream()
+                  .map(requestToSinkRecord::get)
+                  .collect(toList());
 
           inFlightRequests.put(executionId, sinkRecords);
         }
@@ -348,20 +372,30 @@ public class ElasticsearchClient {
 
       @Override
       public void afterBulk(long executionId, BulkRequest request, BulkResponse response) {
+        List<DocWriteRequest<?>> requests = request.requests();
+
         for (BulkItemResponse bulkItemResponse : response) {
           handleResponse(bulkItemResponse, executionId);
         }
 
-        removeFromInFlightRequests(executionId);
-        numRecords.addAndGet(-response.getItems().length);
+        requests.forEach(req ->
+                requestToSinkRecord.get(req).offsetState.markProcessed());
+        offsetTracker.updateOffsets();
+
+        bulkFinished(executionId, request);
       }
 
       @Override
       public void afterBulk(long executionId, BulkRequest request, Throwable failure) {
         log.warn("Bulk request {} failed", executionId, failure);
-        removeFromInFlightRequests(executionId);
         error.compareAndSet(null, new ConnectException("Bulk request failed", failure));
-        numRecords.addAndGet(-request.requests().size());
+        bulkFinished(executionId, request);
+      }
+
+      private void bulkFinished(long executionId, BulkRequest request) {
+        request.requests().forEach(requestToSinkRecord::remove);
+        removeFromInFlightRequests(executionId);
+        numBufferedRecords.addAndGet(-request.requests().size());
       }
     };
   }
@@ -414,7 +448,8 @@ public class ElasticsearchClient {
    * @param response    the response to process
    * @param executionId the execution id of the request
    */
-  private void handleResponse(BulkItemResponse response, long executionId) {
+  private void handleResponse(BulkItemResponse response,
+                              long executionId) {
     if (response.isFailed()) {
       for (String error : MALFORMED_DOC_ERRORS) {
         if (response.getFailureMessage().contains(error)) {
@@ -505,11 +540,11 @@ public class ElasticsearchClient {
   /**
    * Removes the mapping for bulk request id to records being written.
    *
-   * @param executionDd the execution id of the bulk request
+   * @param executionId the execution id of the bulk request
    */
-  private void removeFromInFlightRequests(long executionDd) {
+  private void removeFromInFlightRequests(long executionId) {
     if (inFlightRequests != null) {
-      inFlightRequests.remove(executionDd);
+      inFlightRequests.remove(executionId);
     }
   }
 
@@ -519,15 +554,17 @@ public class ElasticsearchClient {
    * @param response    the failed response from ES
    * @param executionId the execution id of the request associated with the response
    */
-  private synchronized void reportBadRecord(BulkItemResponse response, long executionId) {
+  private synchronized void reportBadRecord(BulkItemResponse response,
+                                            long executionId) {
     if (reporter != null) {
-      List<SinkRecord> sinkRecords = inFlightRequests.getOrDefault(executionId, new ArrayList<>());
-      SinkRecord original = sinkRecords.size() > response.getItemId()
+      List<SinkRecordAndOffset> sinkRecords =
+          inFlightRequests.getOrDefault(executionId, new ArrayList<>());
+      SinkRecordAndOffset original = sinkRecords.size() > response.getItemId()
           ? sinkRecords.get(response.getItemId())
           : null;
       if (original != null) {
         reporter.report(
-            original,
+            original.sinkRecord,
             new ReportingException("Indexing failed: " + response.getFailureMessage())
         );
       }
