@@ -285,7 +285,7 @@ public class ElasticsearchSinkTask extends SinkTask {
   }
 
   private void tryWriteRecord(SinkRecord sinkRecord, OffsetState offsetState) {
-    String indexName = convertTopicToIndexName(sinkRecord.topic());
+    String indexName = createIndexName(sinkRecord.topic());
 
     ensureIndexExists(indexName);
     checkMapping(indexName, sinkRecord);
