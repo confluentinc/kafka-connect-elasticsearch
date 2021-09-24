@@ -4,5 +4,5 @@ common {
   upstreamProjects = 'confluentinc/common'
   pintMerge = true
   downStreamValidate = false
-  nodeLabel = 'docker-oraclejdk8'
+  nodeLabel = 'docker-debian-jdk8'
 }
