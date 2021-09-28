@@ -76,6 +76,35 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
   }
 
   @Test
+  public void testStrictMappings() throws Exception {
+    helperClient.createIndex(TOPIC, "{\n" +
+            "  \"dynamic\" : \"strict\",\n" +
+            "  \"properties\": {\n" +
+            "    \"advertiserId\": { \"type\": \"long\" },\n" +
+            "    \"advertiserName\": { \"type\": \"text\"}\n" +
+            "  }\n" +
+            "}");
+
+    props.put(ElasticsearchSinkConnectorConfig.BATCH_SIZE_CONFIG, "1");
+    props.put(ElasticsearchSinkConnectorConfig.MAX_RETRIES_CONFIG, "1");
+    props.put(ElasticsearchSinkConnectorConfig.RETRY_BACKOFF_MS_CONFIG, "10");
+    props.put(ElasticsearchSinkConnectorConfig.MAX_IN_FLIGHT_REQUESTS_CONFIG, "2");
+    connect.configureConnector(CONNECTOR_NAME, props);
+    waitForConnectorToStart(CONNECTOR_NAME, TASKS_MAX);
+
+    writeRecords(3);
+
+    await().atMost(Duration.ofMinutes(1)).untilAsserted(() ->
+            assertThat(connect.connectorStatus(CONNECTOR_NAME).tasks().get(0).state())
+                    .isEqualTo("FAILED"));
+
+    assertThat(connect.connectorStatus(CONNECTOR_NAME).tasks().get(0).trace())
+            .contains("ElasticsearchException[Elasticsearch exception " +
+                    "[type=strict_dynamic_mapping_exception," +
+                    " reason=mapping set to strict, dynamic introduction of");
+  }
+
+  @Test
   public void testBatchByByteSize() throws Exception {
     // Based on the size of the topic, key, and value strings in JSON format.
     int approximateRecordByteSize = 60;
