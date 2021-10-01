@@ -363,12 +363,15 @@ public class ElasticsearchClient {
       public void afterBulk(long executionId, BulkRequest request, BulkResponse response) {
         List<DocWriteRequest<?>> requests = request.requests();
 
+        int idx = 0;
         for (BulkItemResponse bulkItemResponse : response) {
-          handleResponse(bulkItemResponse, executionId);
+          boolean failed = handleResponse(bulkItemResponse, executionId);
+          if (!failed && idx < requests.size()) {
+            requestToSinkRecord.get(requests.get(idx)).offsetState.markProcessed();
+          }
+          idx++;
         }
 
-        requests.forEach(req ->
-                requestToSinkRecord.get(req).offsetState.markProcessed());
         offsetTracker.updateOffsets();
 
         bulkFinished(executionId, request);
@@ -484,15 +487,16 @@ public class ElasticsearchClient {
    *
    * @param response    the response to process
    * @param executionId the execution id of the request
+   * @return true if the record was not successfully processed, and we should not commit its offset
    */
-  private void handleResponse(BulkItemResponse response,
+  private boolean handleResponse(BulkItemResponse response,
                               long executionId) {
     if (response.isFailed()) {
       for (String error : MALFORMED_DOC_ERRORS) {
         if (response.getFailureMessage().contains(error)) {
-          handleMalformedDocResponse(response);
+          boolean failed = handleMalformedDocResponse(response);
           reportBadRecord(response, executionId);
-          return;
+          return failed;
         }
       }
 
@@ -506,14 +510,16 @@ public class ElasticsearchClient {
         );
 
         reportBadRecord(response, executionId);
-        return;
+        return false;
       }
 
       error.compareAndSet(
           null,
           new ConnectException("Indexing record failed.", response.getFailure().getCause())
       );
+      return true;
     }
+    return false;
   }
 
   /**
@@ -521,8 +527,9 @@ public class ElasticsearchClient {
    * ignore or fail.
    *
    * @param response the failed response from ES
+   * @return true if the record was not successfully processed, and we should not commit its offset
    */
-  private void handleMalformedDocResponse(BulkItemResponse response) {
+  private boolean handleMalformedDocResponse(BulkItemResponse response) {
     String errorMsg = String.format(
         "Encountered an illegal document error '%s'. Ignoring and will not index record.",
         response.getFailureMessage()
@@ -530,10 +537,10 @@ public class ElasticsearchClient {
     switch (config.behaviorOnMalformedDoc()) {
       case IGNORE:
         log.debug(errorMsg);
-        return;
+        return false;
       case WARN:
         log.warn(errorMsg);
-        return;
+        return false;
       case FAIL:
       default:
         log.error(
@@ -547,6 +554,7 @@ public class ElasticsearchClient {
             null,
             new ConnectException("Indexing record failed.", response.getFailure().getCause())
         );
+        return true;
     }
   }
 

@@ -33,6 +33,9 @@ import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.Behav
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.WriteMethod;
 import io.confluent.connect.elasticsearch.helper.ElasticsearchContainer;
 
+import org.apache.kafka.clients.admin.ListConsumerGroupOffsetsResult;
+import org.apache.kafka.clients.consumer.OffsetAndMetadata;
+import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.connect.storage.StringConverter;
 import io.confluent.common.utils.IntegrationTest;
 import org.elasticsearch.client.security.user.User;
@@ -81,7 +84,7 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
             "  \"dynamic\" : \"strict\",\n" +
             "  \"properties\": {\n" +
             "    \"advertiserId\": { \"type\": \"long\" },\n" +
-            "    \"advertiserName\": { \"type\": \"text\"}\n" +
+            "    \"advertiserName\": { \"type\": \"text\" }\n" +
             "  }\n" +
             "}");
 
@@ -102,6 +105,17 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
             .contains("ElasticsearchException[Elasticsearch exception " +
                     "[type=strict_dynamic_mapping_exception," +
                     " reason=mapping set to strict, dynamic introduction of");
+
+    assertThat(getConnectorOffset(CONNECTOR_NAME)).isEqualTo(0);
+  }
+
+  private long getConnectorOffset(String connectorName) throws Exception {
+    String cGroupName = "connect-" + connectorName;
+    ListConsumerGroupOffsetsResult offsetsResult = connect.kafka().createAdminClient()
+            .listConsumerGroupOffsets(cGroupName);
+    OffsetAndMetadata offsetAndMetadata = offsetsResult.partitionsToOffsetAndMetadata().get()
+            .get(new TopicPartition("test", 0));
+    return offsetAndMetadata == null ? 0 : offsetAndMetadata.offset();
   }
 
   @Test

@@ -128,7 +128,9 @@ public class ElasticsearchSinkTask extends SinkTask {
     } catch (IllegalStateException e) {
       log.debug("Tried to flush data to Elasticsearch, but BulkProcessor is already closed.", e);
     }
-    return offsetTracker.offsets();
+    Map<TopicPartition, OffsetAndMetadata> offsets = offsetTracker.offsets();
+    log.debug("preCommitting offsets {}", offsets);
+    return offsets;
   }
 
   @Override
