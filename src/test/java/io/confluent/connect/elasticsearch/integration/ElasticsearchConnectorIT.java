@@ -78,15 +78,13 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
     return props;
   }
 
+  /**
+   * Verify that mapping errors when an index has strict mapping is handled correctly
+   */
   @Test
   public void testStrictMappings() throws Exception {
-    helperClient.createIndex(TOPIC, "{\n" +
-            "  \"dynamic\" : \"strict\",\n" +
-            "  \"properties\": {\n" +
-            "    \"advertiserId\": { \"type\": \"long\" },\n" +
-            "    \"advertiserName\": { \"type\": \"text\" }\n" +
-            "  }\n" +
-            "}");
+    helperClient.createIndex(TOPIC, "{ \"dynamic\" : \"strict\", " +
+            " \"properties\": { \"longProp\": { \"type\": \"long\" } } } }");
 
     props.put(ElasticsearchSinkConnectorConfig.BATCH_SIZE_CONFIG, "1");
     props.put(ElasticsearchSinkConnectorConfig.MAX_RETRIES_CONFIG, "1");
@@ -95,7 +93,10 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
     connect.configureConnector(CONNECTOR_NAME, props);
     waitForConnectorToStart(CONNECTOR_NAME, TASKS_MAX);
 
-    writeRecords(3);
+    connect.kafka().produce(TOPIC, "key1", "{\"longProp\":1}");
+    connect.kafka().produce(TOPIC, "key2", "{\"any-prop\":1}");
+    connect.kafka().produce(TOPIC, "key3", "{\"any-prop\":1}");
+    connect.kafka().produce(TOPIC, "key4", "{\"any-prop\":1}");
 
     await().atMost(Duration.ofMinutes(1)).untilAsserted(() ->
             assertThat(connect.connectorStatus(CONNECTOR_NAME).tasks().get(0).state())
@@ -106,15 +107,17 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
                     "[type=strict_dynamic_mapping_exception," +
                     " reason=mapping set to strict, dynamic introduction of");
 
-    assertThat(getConnectorOffset(CONNECTOR_NAME)).isEqualTo(0);
+    // The framework commits offsets right before failing the task, verify the failed record's
+    // offset is not included
+    assertThat(getConnectorOffset(CONNECTOR_NAME, TOPIC, 0)).isEqualTo(1);
   }
 
-  private long getConnectorOffset(String connectorName) throws Exception {
+  private long getConnectorOffset(String connectorName, String topic, int partition) throws Exception {
     String cGroupName = "connect-" + connectorName;
     ListConsumerGroupOffsetsResult offsetsResult = connect.kafka().createAdminClient()
             .listConsumerGroupOffsets(cGroupName);
     OffsetAndMetadata offsetAndMetadata = offsetsResult.partitionsToOffsetAndMetadata().get()
-            .get(new TopicPartition("test", 0));
+            .get(new TopicPartition(topic, partition));
     return offsetAndMetadata == null ? 0 : offsetAndMetadata.offset();
   }
 

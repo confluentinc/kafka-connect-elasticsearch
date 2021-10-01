@@ -91,6 +91,7 @@ public class ElasticsearchClient {
   private static final String VERSION_CONFLICT_EXCEPTION = "version_conflict_engine_exception";
   private static final Set<String> MALFORMED_DOC_ERRORS = new HashSet<>(
       Arrays.asList(
+          "strict_dynamic_mapping_exception",
           "mapper_parsing_exception",
           "illegal_argument_exception",
           "action_request_validation_exception"
@@ -495,7 +496,9 @@ public class ElasticsearchClient {
       for (String error : MALFORMED_DOC_ERRORS) {
         if (response.getFailureMessage().contains(error)) {
           boolean failed = handleMalformedDocResponse(response);
-          reportBadRecord(response, executionId);
+          if (!failed) {
+            reportBadRecord(response, executionId);
+          }
           return failed;
         }
       }
