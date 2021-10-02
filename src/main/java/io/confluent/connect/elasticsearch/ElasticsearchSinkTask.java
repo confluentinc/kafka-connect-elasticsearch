@@ -108,6 +108,7 @@ public class ElasticsearchSinkTask extends SinkTask {
 
       if (shouldSkipRecord(record)) {
         logTrace("Ignoring {} with null value.", record);
+        offsetState.markProcessed();
         reportBadRecord(record, new ConnectException("Cannot write null valued record."));
         continue;
       }
@@ -300,6 +301,7 @@ public class ElasticsearchSinkTask extends SinkTask {
 
       if (config.dropInvalidMessage()) {
         log.error("Can't convert {}.", recordString(sinkRecord), convertException);
+        offsetState.markProcessed();
       } else {
         throw convertException;
       }
