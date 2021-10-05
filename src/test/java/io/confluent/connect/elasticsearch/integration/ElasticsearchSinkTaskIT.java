@@ -64,6 +64,9 @@ import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfi
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.*;
 import static io.confluent.connect.elasticsearch.integration.ElasticsearchConnectorNetworkIT.errorBulkResponse;
 import static java.util.stream.Collectors.toList;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.*;
+import static io.confluent.connect.elasticsearch.integration.ElasticsearchConnectorNetworkIT.errorBulkResponse;
+import static java.util.stream.Collectors.toList;
 import static org.apache.kafka.connect.json.JsonConverterConfig.SCHEMAS_ENABLE_CONFIG;
 import static org.apache.kafka.connect.runtime.ConnectorConfig.CONNECTOR_CLASS_CONFIG;
 import static org.apache.kafka.connect.runtime.ConnectorConfig.KEY_CONVERTER_CLASS_CONFIG;
