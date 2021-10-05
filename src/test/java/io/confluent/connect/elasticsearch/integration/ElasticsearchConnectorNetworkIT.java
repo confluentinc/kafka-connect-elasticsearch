@@ -2,6 +2,7 @@ package io.confluent.connect.elasticsearch.integration;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.github.tomakehurst.wiremock.junit.WireMockRule;
 import com.github.tomakehurst.wiremock.stubbing.Scenario;
@@ -16,6 +17,8 @@ import org.junit.Test;
 import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.IntStream;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.any;
@@ -43,6 +46,7 @@ import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfi
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.MAX_RETRIES_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.READ_TIMEOUT_MS_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.RETRY_BACKOFF_MS_CONFIG;
+import static java.util.stream.Collectors.toSet;
 import static org.apache.kafka.connect.json.JsonConverterConfig.SCHEMAS_ENABLE_CONFIG;
 import static org.apache.kafka.connect.runtime.ConnectorConfig.CONNECTOR_CLASS_CONFIG;
 import static org.apache.kafka.connect.runtime.ConnectorConfig.KEY_CONVERTER_CLASS_CONFIG;
@@ -96,7 +100,7 @@ public class ElasticsearchConnectorNetworkIT extends BaseConnectorIT {
             .whenScenarioStateIs("Failed")
             .withRequestBody(containing("{\"doc_num\":0}"))
             .willSetStateTo("Fixed")
-            .willReturn(okJson(okBulkResponse())));
+            .willReturn(okJson(errorBulkResponse())));
 
     connect.configureConnector(CONNECTOR_NAME, props);
     waitForConnectorToStart(CONNECTOR_NAME, TASKS_MAX);
@@ -113,7 +117,7 @@ public class ElasticsearchConnectorNetworkIT extends BaseConnectorIT {
   @Test
   public void testConcurrentRequests() throws Exception {
     wireMockRule.stubFor(post(urlPathEqualTo("/_bulk"))
-            .willReturn(okJson(okBulkResponse())
+            .willReturn(okJson(errorBulkResponse())
                     .withTransformers(BlockingTransformer.NAME)));
     wireMockRule.stubFor(any(anyUrl()).atPriority(10).willReturn(ok()));
 
@@ -230,7 +234,7 @@ public class ElasticsearchConnectorNetworkIT extends BaseConnectorIT {
   @Test
   public void testPausePartitions() throws Exception {
     wireMockRule.stubFor(post(urlPathEqualTo("/_bulk"))
-            .willReturn(okJson(okBulkResponse())
+            .willReturn(okJson(errorBulkResponse())
             .withTransformers(BlockingTransformer.NAME)));
     wireMockRule.stubFor(any(anyUrl()).atPriority(10).willReturn(ok()));
 
@@ -254,7 +258,7 @@ public class ElasticsearchConnectorNetworkIT extends BaseConnectorIT {
     await().untilAsserted(() -> assertThat(blockingTransformer.queueLength()).isEqualTo(1));
 
     wireMockRule.stubFor(post(urlPathEqualTo("/_bulk"))
-            .willReturn(okJson(okBulkResponse())));
+            .willReturn(okJson(errorBulkResponse())));
 
     // Now we write multiple records to hit the limit of offset entries and force
     // partitions to be paused
@@ -309,7 +313,7 @@ public class ElasticsearchConnectorNetworkIT extends BaseConnectorIT {
     await().untilAsserted(() -> assertThat(blockingTransformer.queueLength()).isEqualTo(1));
 
     wireMockRule.stubFor(post(urlPathEqualTo("/_bulk"))
-            .willReturn(okJson(okBulkResponse())));
+            .willReturn(okJson(errorBulkResponse())));
 
     // Now we write multiple records to hit the limit of offset entries and force
     // partitions to be paused
@@ -367,20 +371,59 @@ public class ElasticsearchConnectorNetworkIT extends BaseConnectorIT {
     }
   }
 
-  public static String okBulkResponse() throws JsonProcessingException {
+  public static String errorBulkResponse() throws JsonProcessingException {
+    return errorBulkResponse(1);
+  }
+
+  public static String errorBulkResponse(int items) throws JsonProcessingException {
     ObjectNode response = MAPPER.createObjectNode();
-    response
-      .put("errors", false)
-      .putArray("items")
-          .addObject()
-            .putObject("index")
+    ArrayNode itemsArray = response
+            .put("errors", false)
+            .putArray("items");
+
+    for (int i = 0; i < items; i++) {
+      itemsArray
+              .addObject()
+              .putObject("index")
               .put("_index", "test")
               .put("_type", "_doc")
-              .put("_id", "1")
+              .put("_id", Integer.toString(i+1))
               .put("_version", "1")
               .put("result", "created")
               .put("status", 201)
               .put("_seq_no", 0);
+    }
+    return MAPPER.writerWithDefaultPrettyPrinter().writeValueAsString(response);
+  }
+
+  public static String errorBulkResponse(int items, String errorType, int... errorIdx) throws JsonProcessingException {
+    ObjectNode response = MAPPER.createObjectNode();
+    ArrayNode itemsArray = response
+            .put("errors", true)
+            .putArray("items");
+
+    Set<Integer> errorIndexes = IntStream.of(errorIdx).boxed().collect(toSet());
+    for (int i = 0; i < items; i++) {
+      ObjectNode arrayObject = itemsArray
+              .addObject()
+              .putObject("index")
+                .put("_index", "test")
+                .put("_type", "_doc")
+                .put("_id", Integer.toString(i + 1))
+                .put("_version", "1")
+                .put("_seq_no", 0);
+      if (errorIndexes.contains(i)) {
+        arrayObject
+                .put("status", 400)
+                .putObject("error")
+                  .put("type", errorType)
+                  .put("reason", "Reason for " + errorType);
+      } else {
+        arrayObject
+                .put("result", "created")
+                .put("status", 201);
+      }
+    }
     return MAPPER.writerWithDefaultPrettyPrinter().writeValueAsString(response);
   }
 
