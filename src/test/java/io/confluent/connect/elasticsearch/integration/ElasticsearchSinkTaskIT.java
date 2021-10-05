@@ -15,12 +15,15 @@
 
 package io.confluent.connect.elasticsearch.integration;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.github.tomakehurst.wiremock.client.WireMock;
 import com.github.tomakehurst.wiremock.junit.WireMockRule;
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnector;
 import io.confluent.connect.elasticsearch.ElasticsearchSinkTask;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
+import org.apache.kafka.connect.errors.ConnectException;
+import org.apache.kafka.connect.errors.DataException;
 import org.apache.kafka.connect.json.JsonConverter;
 import org.apache.kafka.connect.sink.SinkRecord;
 import org.apache.kafka.connect.sink.SinkTaskContext;
@@ -37,6 +40,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.IntStream;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.any;
@@ -47,17 +51,9 @@ import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.stubFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.options;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BATCH_SIZE_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_KEY_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_SCHEMA_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.MAX_BUFFERED_RECORDS_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.MAX_RETRIES_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.READ_TIMEOUT_MS_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.RETRY_BACKOFF_MS_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.WRITE_METHOD_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.WriteMethod;
-import static io.confluent.connect.elasticsearch.integration.ElasticsearchConnectorNetworkIT.okBulkResponse;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.*;
+import static io.confluent.connect.elasticsearch.integration.ElasticsearchConnectorNetworkIT.errorBulkResponse;
+import static java.util.stream.Collectors.toList;
 import static org.apache.kafka.connect.json.JsonConverterConfig.SCHEMAS_ENABLE_CONFIG;
 import static org.apache.kafka.connect.runtime.ConnectorConfig.CONNECTOR_CLASS_CONFIG;
 import static org.apache.kafka.connect.runtime.ConnectorConfig.KEY_CONVERTER_CLASS_CONFIG;
@@ -65,6 +61,7 @@ import static org.apache.kafka.connect.runtime.ConnectorConfig.TASKS_MAX_CONFIG;
 import static org.apache.kafka.connect.runtime.ConnectorConfig.VALUE_CONVERTER_CLASS_CONFIG;
 import static org.apache.kafka.connect.runtime.SinkConnectorConfig.TOPICS_CONFIG;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.awaitility.Awaitility.await;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -114,6 +111,139 @@ public class ElasticsearchSinkTaskIT {
     assertThat(task.preCommit(currentOffsets)).isEmpty();
   }
 
+  @Test
+  public void testIndividualFailure() throws JsonProcessingException {
+    wireMockRule.stubFor(post(urlPathEqualTo("/_bulk"))
+            .willReturn(okJson(ElasticsearchConnectorNetworkIT.errorBulkResponse(3,
+                    "strict_dynamic_mapping_exception", 1))));
+
+    Map<String, String> props = createProps();
+    props.put(READ_TIMEOUT_MS_CONFIG, "1000");
+    props.put(MAX_RETRIES_CONFIG, "2");
+    props.put(RETRY_BACKOFF_MS_CONFIG, "10");
+    props.put(MAX_IN_FLIGHT_REQUESTS_CONFIG, "1");
+    props.put(BATCH_SIZE_CONFIG, "3");
+    props.put(LINGER_MS_CONFIG, "10000");
+    props.put(BEHAVIOR_ON_MALFORMED_DOCS_CONFIG, "ignore");
+
+    final ElasticsearchSinkTask task = new ElasticsearchSinkTask();
+    SinkTaskContext context = mock(SinkTaskContext.class);
+    task.initialize(context);
+    task.start(props);
+
+    TopicPartition tp = new TopicPartition(TOPIC, 0);
+    List<SinkRecord> records = IntStream.range(0, 6).boxed()
+            .map(offset -> sinkRecord(tp, offset))
+            .collect(toList());
+    task.put(records);
+
+    // All is safe to commit
+    Map<TopicPartition, OffsetAndMetadata> currentOffsets =
+            ImmutableMap.of(tp, new OffsetAndMetadata(6));
+    assertThat(task.preCommit(currentOffsets))
+            .isEqualTo(currentOffsets);
+
+    // Now check that we actually fail and offsets are not past the failed record
+    props.put(BEHAVIOR_ON_MALFORMED_DOCS_CONFIG, "fail");
+    task.initialize(context);
+    task.start(props);
+
+    assertThatThrownBy(() -> task.put(records))
+            .isInstanceOf(ConnectException.class)
+            .hasMessageContaining("Indexing record failed");
+    assertThat(task.preCommit(currentOffsets))
+            .isEqualTo(ImmutableMap.of(tp, new OffsetAndMetadata(1)));
+  }
+
+  @Test
+  public void testConvertDataException() throws JsonProcessingException {
+    wireMockRule.stubFor(post(urlPathEqualTo("/_bulk"))
+            .willReturn(okJson(errorBulkResponse(3))));
+
+    Map<String, String> props = createProps();
+    props.put(READ_TIMEOUT_MS_CONFIG, "1000");
+    props.put(MAX_RETRIES_CONFIG, "2");
+    props.put(RETRY_BACKOFF_MS_CONFIG, "10");
+    props.put(MAX_IN_FLIGHT_REQUESTS_CONFIG, "1");
+    props.put(BATCH_SIZE_CONFIG, "10");
+    props.put(LINGER_MS_CONFIG, "10000");
+    props.put(IGNORE_KEY_CONFIG, "false");
+    props.put(DROP_INVALID_MESSAGE_CONFIG, "true");
+
+    final ElasticsearchSinkTask task = new ElasticsearchSinkTask();
+    SinkTaskContext context = mock(SinkTaskContext.class);
+    task.initialize(context);
+    task.start(props);
+
+    TopicPartition tp = new TopicPartition(TOPIC, 0);
+    List<SinkRecord> records = ImmutableList.of(
+            sinkRecord(tp, 0),
+            sinkRecord(tp, 1, null, "value"), // this should throw a DataException
+            sinkRecord(tp, 2));
+    task.put(records);
+
+    // All is safe to commit
+    Map<TopicPartition, OffsetAndMetadata> currentOffsets =
+            ImmutableMap.of(tp, new OffsetAndMetadata(3));
+    assertThat(task.preCommit(currentOffsets))
+            .isEqualTo(currentOffsets);
+
+    // Now check that we actually fail and offsets are not past the failed record
+    props.put(DROP_INVALID_MESSAGE_CONFIG, "false");
+    task.initialize(context);
+    task.start(props);
+
+    assertThatThrownBy(() -> task.put(records))
+            .isInstanceOf(DataException.class)
+            .hasMessageContaining("Key is used as document id and can not be null");
+    assertThat(task.preCommit(currentOffsets))
+            .isEqualTo(ImmutableMap.of(tp, new OffsetAndMetadata(1)));
+  }
+
+  @Test
+  public void testNullValue() throws JsonProcessingException {
+    wireMockRule.stubFor(post(urlPathEqualTo("/_bulk"))
+            .willReturn(okJson(errorBulkResponse(3))));
+
+    Map<String, String> props = createProps();
+    props.put(READ_TIMEOUT_MS_CONFIG, "1000");
+    props.put(MAX_RETRIES_CONFIG, "2");
+    props.put(RETRY_BACKOFF_MS_CONFIG, "10");
+    props.put(MAX_IN_FLIGHT_REQUESTS_CONFIG, "1");
+    props.put(BATCH_SIZE_CONFIG, "10");
+    props.put(LINGER_MS_CONFIG, "10000");
+    props.put(BEHAVIOR_ON_NULL_VALUES_CONFIG, "ignore");
+
+    final ElasticsearchSinkTask task = new ElasticsearchSinkTask();
+    SinkTaskContext context = mock(SinkTaskContext.class);
+    task.initialize(context);
+    task.start(props);
+
+    TopicPartition tp = new TopicPartition(TOPIC, 0);
+    List<SinkRecord> records = ImmutableList.of(
+            sinkRecord(tp, 0),
+            sinkRecord(tp, 1, "testKey", null),
+            sinkRecord(tp, 2));
+    task.put(records);
+
+    // All is safe to commit
+    Map<TopicPartition, OffsetAndMetadata> currentOffsets =
+            ImmutableMap.of(tp, new OffsetAndMetadata(3));
+    assertThat(task.preCommit(currentOffsets))
+            .isEqualTo(currentOffsets);
+
+    // Now check that we actually fail and offsets are not past the failed record
+    props.put(BEHAVIOR_ON_NULL_VALUES_CONFIG, "fail");
+    task.initialize(context);
+    task.start(props);
+
+    assertThatThrownBy(() -> task.put(records))
+            .isInstanceOf(DataException.class)
+            .hasMessageContaining("null value encountered");
+    assertThat(task.preCommit(currentOffsets))
+            .isEqualTo(ImmutableMap.of(tp, new OffsetAndMetadata(1)));
+  }
+
   /**
    * Verify things are handled correctly when we receive the same records in a new put call
    * (e.g. after a RetriableException)
@@ -122,7 +252,7 @@ public class ElasticsearchSinkTaskIT {
   public void testPutRetry() throws Exception {
     wireMockRule.stubFor(post(urlPathEqualTo("/_bulk"))
             .withRequestBody(WireMock.containing("{\"doc_num\":0}"))
-            .willReturn(okJson(okBulkResponse())));
+            .willReturn(okJson(ElasticsearchConnectorNetworkIT.errorBulkResponse())));
 
     wireMockRule.stubFor(post(urlPathEqualTo("/_bulk"))
             .withRequestBody(WireMock.containing("{\"doc_num\":1}"))
@@ -153,7 +283,7 @@ public class ElasticsearchSinkTaskIT {
               .isEqualTo(ImmutableMap.of(tp, new OffsetAndMetadata(1))));
 
     wireMockRule.stubFor(post(urlPathEqualTo("/_bulk"))
-            .willReturn(okJson(okBulkResponse())));
+            .willReturn(okJson(ElasticsearchConnectorNetworkIT.errorBulkResponse())));
 
     task.put(records);
     await().untilAsserted(() ->
@@ -167,11 +297,11 @@ public class ElasticsearchSinkTaskIT {
   @Test
   public void testOffsetsBackpressure() throws Exception {
     wireMockRule.stubFor(post(urlPathEqualTo("/_bulk"))
-            .willReturn(okJson(okBulkResponse())));
+            .willReturn(okJson(ElasticsearchConnectorNetworkIT.errorBulkResponse())));
 
     wireMockRule.stubFor(post(urlPathEqualTo("/_bulk"))
             .withRequestBody(WireMock.containing("{\"doc_num\":0}"))
-            .willReturn(okJson(okBulkResponse())
+            .willReturn(okJson(ElasticsearchConnectorNetworkIT.errorBulkResponse())
                     .withTransformers(BlockingTransformer.NAME)));
 
     Map<String, String> props = createProps();
@@ -213,7 +343,7 @@ public class ElasticsearchSinkTaskIT {
   public void testRebalance() throws Exception {
     wireMockRule.stubFor(post(urlPathEqualTo("/_bulk"))
             .withRequestBody(WireMock.containing("{\"doc_num\":0}"))
-            .willReturn(okJson(okBulkResponse())));
+            .willReturn(okJson(ElasticsearchConnectorNetworkIT.errorBulkResponse())));
 
     wireMockRule.stubFor(post(urlPathEqualTo("/_bulk"))
             .withRequestBody(WireMock.containing("{\"doc_num\":1}"))
@@ -259,13 +389,21 @@ public class ElasticsearchSinkTaskIT {
     return sinkRecord(tp.topic(), tp.partition(), offset);
   }
 
+  private SinkRecord sinkRecord(TopicPartition tp, long offset, String key, Object value) {
+    return sinkRecord(tp.topic(), tp.partition(), offset, key, value);
+  }
+
   private SinkRecord sinkRecord(String topic, int partition, long offset) {
+    return sinkRecord(topic, partition, offset, "testKey", ImmutableMap.of("doc_num", offset));
+  }
+
+  private SinkRecord sinkRecord(String topic, int partition, long offset, String key, Object value) {
     return new SinkRecord(topic,
             partition,
             null,
-            "testKey",
+            key,
             null,
-            ImmutableMap.of("doc_num", offset),
+            value,
             offset);
   }
 
