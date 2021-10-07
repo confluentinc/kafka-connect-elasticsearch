@@ -22,6 +22,7 @@ import org.elasticsearch.client.RequestOptions;
 import org.elasticsearch.client.RestClient;
 import org.elasticsearch.client.RestHighLevelClient;
 import org.elasticsearch.client.core.CountRequest;
+import org.elasticsearch.client.indices.CreateIndexRequest;
 import org.elasticsearch.client.indices.DataStream;
 import org.elasticsearch.client.indices.DeleteDataStreamRequest;
 import org.elasticsearch.client.indices.GetDataStreamRequest;
@@ -36,6 +37,7 @@ import org.elasticsearch.client.security.RefreshPolicy;
 import org.elasticsearch.client.security.user.User;
 import org.elasticsearch.client.security.user.privileges.Role;
 import org.elasticsearch.cluster.metadata.MappingMetadata;
+import org.elasticsearch.common.xcontent.XContentType;
 import org.elasticsearch.search.SearchHits;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -94,6 +96,11 @@ public class ElasticsearchHelperClient {
   public boolean indexExists(String index) throws IOException {
     GetIndexRequest request = new GetIndexRequest(index);
     return client.indices().exists(request, RequestOptions.DEFAULT);
+  }
+
+  public void createIndex(String index, String jsonMappings) throws IOException {
+    CreateIndexRequest createIndexRequest = new CreateIndexRequest(index).mapping(jsonMappings, XContentType.JSON);
+    client.indices().create(createIndexRequest, RequestOptions.DEFAULT);
   }
 
   public SearchHits search(String index) throws IOException {

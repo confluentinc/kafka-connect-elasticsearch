@@ -108,6 +108,7 @@ public class ElasticsearchSinkTask extends SinkTask {
 
       if (shouldSkipRecord(record)) {
         logTrace("Ignoring {} with null value.", record);
+        offsetState.markProcessed();
         reportBadRecord(record, new ConnectException("Cannot write null valued record."));
         continue;
       }
@@ -128,7 +129,9 @@ public class ElasticsearchSinkTask extends SinkTask {
     } catch (IllegalStateException e) {
       log.debug("Tried to flush data to Elasticsearch, but BulkProcessor is already closed.", e);
     }
-    return offsetTracker.offsets();
+    Map<TopicPartition, OffsetAndMetadata> offsets = offsetTracker.offsets();
+    log.debug("preCommitting offsets {}", offsets);
+    return offsets;
   }
 
   @Override
@@ -298,6 +301,7 @@ public class ElasticsearchSinkTask extends SinkTask {
 
       if (config.dropInvalidMessage()) {
         log.error("Can't convert {}.", recordString(sinkRecord), convertException);
+        offsetState.markProcessed();
       } else {
         throw convertException;
       }
