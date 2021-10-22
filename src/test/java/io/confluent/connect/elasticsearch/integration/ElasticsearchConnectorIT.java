@@ -109,7 +109,7 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
 
     // The framework commits offsets right before failing the task, verify the failed record's
     // offset is not included
-    assertThat(getConnectorOffset(CONNECTOR_NAME, TOPIC, 0)).isEqualTo(1);
+    assertThat(getConnectorOffset(CONNECTOR_NAME, TOPIC, 0)).isLessThanOrEqualTo(1);
   }
 
   private long getConnectorOffset(String connectorName, String topic, int partition) throws Exception {
