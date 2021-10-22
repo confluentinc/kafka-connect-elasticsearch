@@ -34,6 +34,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
@@ -69,7 +70,7 @@ public class ElasticsearchSinkTask extends SinkTask {
     this.converter = new DataConverter(config);
     this.existingMappings = new HashSet<>();
     this.indexCache = new HashSet<>();
-    this.offsetTracker = new OffsetTracker();
+    this.offsetTracker = new OffsetTracker(); // TODO no-op if synchronous
 
     int offsetHighWaterMark = config.maxBufferedRecords() * 10;
     int offsetLowWaterMark = config.maxBufferedRecords() * 5;
@@ -128,9 +129,16 @@ public class ElasticsearchSinkTask extends SinkTask {
     } catch (IllegalStateException e) {
       log.debug("Tried to flush data to Elasticsearch, but BulkProcessor is already closed.", e);
     }
-    Map<TopicPartition, OffsetAndMetadata> offsets = offsetTracker.offsets();
-    log.debug("preCommitting offsets {}", offsets);
-    return offsets;
+    if (true) {
+      client.waitForInFlightRequests();
+      return client.isFailed() ? Collections.emptyMap() : currentOffsets;
+    } else {
+      // TODO compare currentOffsets topic names against offsets to fail fast if
+      //  topic-mutating SMTs are being used.
+      Map<TopicPartition, OffsetAndMetadata> offsets = offsetTracker.offsets();
+      log.debug("preCommitting offsets {}", offsets);
+      return offsets;
+    }
   }
 
   @Override

@@ -248,6 +248,12 @@ public class ElasticsearchClient {
     bulkProcessor.flush();
   }
 
+  public void waitForInFlightRequests() {
+    while (numBufferedRecords.get() > 0) {
+      clock.sleep(WAIT_TIME_MS);
+    }
+  }
+
   /**
    * Checks whether the index already has a mapping or not.
    * @param index the index to check
@@ -566,7 +572,7 @@ public class ElasticsearchClient {
    *
    * @return true if a response has failed, false if none have failed
    */
-  private boolean isFailed() {
+  public boolean isFailed() {
     return error.get() != null;
   }
 
