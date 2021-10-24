@@ -56,6 +56,7 @@ public class ElasticsearchSinkTask extends SinkTask {
   private Set<String> indexCache;
   private OffsetTracker offsetTracker;
   private PartitionPauser partitionPauser;
+  private Set<TopicPartition> assignedPartitions;
 
   @Override
   public void start(Map<String, String> props) {
@@ -71,6 +72,7 @@ public class ElasticsearchSinkTask extends SinkTask {
     this.existingMappings = new HashSet<>();
     this.indexCache = new HashSet<>();
     this.offsetTracker = new OffsetTracker(); // TODO no-op if synchronous
+    this.assignedPartitions = new HashSet<>();
 
     int offsetHighWaterMark = config.maxBufferedRecords() * 10;
     int offsetLowWaterMark = config.maxBufferedRecords() * 5;
@@ -105,6 +107,8 @@ public class ElasticsearchSinkTask extends SinkTask {
     partitionPauser.maybeResumePartitions();
 
     for (SinkRecord record : records) {
+      verifyChangingTopic(record);
+
       OffsetState offsetState = offsetTracker.addPendingRecord(record);
 
       if (shouldSkipRecord(record)) {
@@ -118,6 +122,20 @@ public class ElasticsearchSinkTask extends SinkTask {
       tryWriteRecord(record, offsetState);
     }
     partitionPauser.maybePausePartitions();
+  }
+
+  /**
+   * Fail fast in cases where topic mutating SMTs are used and connector configuration doesn't
+   * support it.
+   */
+  private void verifyChangingTopic(SinkRecord record) {
+    // TODO test
+    TopicPartition tp = new TopicPartition(record.topic(), record.kafkaPartition());
+    if (!config.flushSynchronously() && !assignedPartitions.contains(tp)) {
+      String msg = String.format("Found a topic name '%s' that doesn't match assigned partitions."
+              + " Connector doesn't support topic mutating SMTs", record.topic());
+      throw new ConnectException(msg);
+    }
   }
 
   @Override
@@ -330,7 +348,13 @@ public class ElasticsearchSinkTask extends SinkTask {
   }
 
   @Override
+  public void open(Collection<TopicPartition> partitions) {
+    assignedPartitions.addAll(partitions);
+  }
+
+  @Override
   public void close(Collection<TopicPartition> partitions) {
+    assignedPartitions.removeAll(partitions);
     offsetTracker.closePartitions(partitions);
   }
 
