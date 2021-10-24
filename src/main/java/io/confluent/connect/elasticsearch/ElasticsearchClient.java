@@ -249,6 +249,7 @@ public class ElasticsearchClient {
   }
 
   public void waitForInFlightRequests() {
+    // TODO notify
     while (numBufferedRecords.get() > 0) {
       clock.sleep(WAIT_TIME_MS);
     }

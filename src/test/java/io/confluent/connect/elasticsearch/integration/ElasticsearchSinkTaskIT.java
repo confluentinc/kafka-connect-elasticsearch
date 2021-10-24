@@ -18,6 +18,7 @@ package io.confluent.connect.elasticsearch.integration;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.github.tomakehurst.wiremock.client.WireMock;
 import com.github.tomakehurst.wiremock.junit.WireMockRule;
+import io.confluent.common.utils.IntegrationTest;
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnector;
 import io.confluent.connect.elasticsearch.ElasticsearchSinkTask;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
@@ -31,11 +32,16 @@ import org.apache.kafka.connect.storage.StringConverter;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
 import org.testcontainers.shaded.com.google.common.collect.ImmutableList;
 import org.testcontainers.shaded.com.google.common.collect.ImmutableMap;
 import org.testcontainers.shaded.com.google.common.collect.ImmutableSet;
 
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -80,7 +86,16 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+@RunWith(Parameterized.class)
+@Category(IntegrationTest.class)
 public class ElasticsearchSinkTaskIT {
+
+  @Parameterized.Parameters(name = "{index}: syncFlush={0}")
+  public static Collection<Object[]> data() {
+    return Arrays.asList(new Object[][] {
+            { true }, { false }
+    });
+  }
 
   @Rule
   public WireMockRule wireMockRule = new WireMockRule(options()
@@ -89,6 +104,12 @@ public class ElasticsearchSinkTaskIT {
 
   protected static final String TOPIC = "test";
   protected static final int TASKS_MAX = 1;
+
+  private final boolean synchronousFlush;
+
+  public ElasticsearchSinkTaskIT(boolean synchronousFlush) {
+    this.synchronousFlush = synchronousFlush;
+  }
 
   @Before
   public void setup() {
@@ -164,8 +185,14 @@ public class ElasticsearchSinkTaskIT {
     assertThatThrownBy(() -> task.put(records))
             .isInstanceOf(ConnectException.class)
             .hasMessageContaining("Indexing record failed");
-    assertThat(task.preCommit(currentOffsets))
-            .isEqualTo(ImmutableMap.of(tp, new OffsetAndMetadata(1)));
+    currentOffsets = ImmutableMap.of(tp, new OffsetAndMetadata(0));
+    assertThat(getOffsetOrZero(task.preCommit(currentOffsets), tp))
+            .isLessThanOrEqualTo(1);
+  }
+
+  private long getOffsetOrZero(Map<TopicPartition, OffsetAndMetadata> offsetMap, TopicPartition tp) {
+    OffsetAndMetadata offsetAndMetadata = offsetMap.get(tp);
+    return offsetAndMetadata == null ? 0 : offsetAndMetadata.offset();
   }
 
   @Test
@@ -209,8 +236,10 @@ public class ElasticsearchSinkTaskIT {
     assertThatThrownBy(() -> task.put(records))
             .isInstanceOf(DataException.class)
             .hasMessageContaining("Key is used as document id and can not be null");
-    assertThat(task.preCommit(currentOffsets))
-            .isEqualTo(ImmutableMap.of(tp, new OffsetAndMetadata(1)));
+
+    currentOffsets = ImmutableMap.of(tp, new OffsetAndMetadata(0));
+    assertThat(task.preCommit(currentOffsets).get(tp).offset())
+            .isLessThanOrEqualTo(1);
   }
 
   @Test
@@ -253,8 +282,9 @@ public class ElasticsearchSinkTaskIT {
     assertThatThrownBy(() -> task.put(records))
             .isInstanceOf(DataException.class)
             .hasMessageContaining("null value encountered");
-    assertThat(task.preCommit(currentOffsets))
-            .isEqualTo(ImmutableMap.of(tp, new OffsetAndMetadata(1)));
+    currentOffsets = ImmutableMap.of(tp, new OffsetAndMetadata(0));
+    assertThat(task.preCommit(currentOffsets).get(tp).offset())
+            .isLessThanOrEqualTo(1);
   }
 
   /**
@@ -291,9 +321,11 @@ public class ElasticsearchSinkTaskIT {
 
     Map<TopicPartition, OffsetAndMetadata> currentOffsets =
             ImmutableMap.of(tp, new OffsetAndMetadata(2));
-    await().untilAsserted(() ->
-      assertThat(task.preCommit(currentOffsets))
-              .isEqualTo(ImmutableMap.of(tp, new OffsetAndMetadata(1))));
+    if (!synchronousFlush) {
+      await().untilAsserted(() ->
+              assertThat(task.preCommit(currentOffsets))
+                      .isEqualTo(ImmutableMap.of(tp, new OffsetAndMetadata(1))));
+    }
 
     wireMockRule.stubFor(post(urlPathEqualTo("/_bulk"))
             .willReturn(okJson(ElasticsearchConnectorNetworkIT.errorBulkResponse())));
@@ -354,6 +386,8 @@ public class ElasticsearchSinkTaskIT {
    */
   @Test
   public void testRebalance() throws Exception {
+    if (synchronousFlush) return; // This test only applies to asynchronous flushing
+
     wireMockRule.stubFor(post(urlPathEqualTo("/_bulk"))
             .withRequestBody(WireMock.containing("{\"doc_num\":0}"))
             .willReturn(okJson(ElasticsearchConnectorNetworkIT.errorBulkResponse())));
@@ -436,6 +470,7 @@ public class ElasticsearchSinkTaskIT {
     props.put(IGNORE_KEY_CONFIG, "true");
     props.put(IGNORE_SCHEMA_CONFIG, "true");
     props.put(WRITE_METHOD_CONFIG, WriteMethod.UPSERT.toString());
+    props.put(FLUSH_SYNCHRONOUSLY_CONFIG, Boolean.toString(synchronousFlush));
 
     return props;
   }

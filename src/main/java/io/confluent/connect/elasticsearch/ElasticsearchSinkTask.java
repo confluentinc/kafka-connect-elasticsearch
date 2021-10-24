@@ -129,7 +129,7 @@ public class ElasticsearchSinkTask extends SinkTask {
     } catch (IllegalStateException e) {
       log.debug("Tried to flush data to Elasticsearch, but BulkProcessor is already closed.", e);
     }
-    if (true) {
+    if (config.flushSynchronously()) {
       client.waitForInFlightRequests();
       return client.isFailed() ? Collections.emptyMap() : currentOffsets;
     } else {
