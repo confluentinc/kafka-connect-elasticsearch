@@ -54,6 +54,8 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
 
   // TODO: test compatibility
 
+  // TODO: test interaction with topic-mutating SMTs
+
   @BeforeClass
   public static void setupBeforeAll() {
     Map<User, String> users = getUsers();
