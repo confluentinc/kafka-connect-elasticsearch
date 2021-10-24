@@ -119,8 +119,8 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   private static final String FLUSH_SYNCHRONOUSLY_DOC =
           // TODO expand
           "True if flushes should wait for background processing to finish. This has a throughput"
-                + "penalty and makes the connector less responsive but allows for topic-mutating SMTs"
-                + " (e.g. RegexRouter or TimestampRouter";
+            + "penalty and makes the connector less responsive but allows for topic-mutating SMTs"
+            + " (e.g. RegexRouter or TimestampRouter";
   private static final String FLUSH_SYNCHRONOUSLY_DISPLAY = "Flush synchronously";
   private static final boolean FLUSH_SYNCHRONOUSLY_DEFAULT = true;
 
