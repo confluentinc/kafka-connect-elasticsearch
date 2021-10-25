@@ -129,11 +129,13 @@ public class ElasticsearchSinkTaskIT {
 
     ElasticsearchSinkTask task = new ElasticsearchSinkTask();
 
+    TopicPartition tp = new TopicPartition(TOPIC, 0);
+
     SinkTaskContext context = mock(SinkTaskContext.class);
+    when(context.assignment()).thenReturn(ImmutableSet.of(tp));
     task.initialize(context);
     task.start(props);
 
-    TopicPartition tp = new TopicPartition(TOPIC, 0);
     List<SinkRecord> records = ImmutableList.of(
             sinkRecord(tp, 0),
             sinkRecord(tp, 1));
@@ -160,12 +162,14 @@ public class ElasticsearchSinkTaskIT {
     props.put(LINGER_MS_CONFIG, "10000");
     props.put(BEHAVIOR_ON_MALFORMED_DOCS_CONFIG, "ignore");
 
+    TopicPartition tp = new TopicPartition(TOPIC, 0);
+
     final ElasticsearchSinkTask task = new ElasticsearchSinkTask();
     SinkTaskContext context = mock(SinkTaskContext.class);
+    when(context.assignment()).thenReturn(ImmutableSet.of(tp));
+
     task.initialize(context);
     task.start(props);
-
-    TopicPartition tp = new TopicPartition(TOPIC, 0);
     List<SinkRecord> records = IntStream.range(0, 6).boxed()
             .map(offset -> sinkRecord(tp, offset))
             .collect(toList());
@@ -210,12 +214,15 @@ public class ElasticsearchSinkTaskIT {
     props.put(IGNORE_KEY_CONFIG, "false");
     props.put(DROP_INVALID_MESSAGE_CONFIG, "true");
 
+    TopicPartition tp = new TopicPartition(TOPIC, 0);
+
     final ElasticsearchSinkTask task = new ElasticsearchSinkTask();
     SinkTaskContext context = mock(SinkTaskContext.class);
+    when(context.assignment()).thenReturn(ImmutableSet.of(tp));
+
     task.initialize(context);
     task.start(props);
 
-    TopicPartition tp = new TopicPartition(TOPIC, 0);
     List<SinkRecord> records = ImmutableList.of(
             sinkRecord(tp, 0),
             sinkRecord(tp, 1, null, "value"), // this should throw a DataException
@@ -232,6 +239,7 @@ public class ElasticsearchSinkTaskIT {
     props.put(DROP_INVALID_MESSAGE_CONFIG, "false");
     task.initialize(context);
     task.start(props);
+    task.open(ImmutableList.of(tp));
 
     assertThatThrownBy(() -> task.put(records))
             .isInstanceOf(DataException.class)
@@ -256,12 +264,14 @@ public class ElasticsearchSinkTaskIT {
     props.put(LINGER_MS_CONFIG, "10000");
     props.put(BEHAVIOR_ON_NULL_VALUES_CONFIG, "ignore");
 
+    TopicPartition tp = new TopicPartition(TOPIC, 0);
+
     final ElasticsearchSinkTask task = new ElasticsearchSinkTask();
     SinkTaskContext context = mock(SinkTaskContext.class);
+    when(context.assignment()).thenReturn(ImmutableSet.of(tp));
     task.initialize(context);
     task.start(props);
 
-    TopicPartition tp = new TopicPartition(TOPIC, 0);
     List<SinkRecord> records = ImmutableList.of(
             sinkRecord(tp, 0),
             sinkRecord(tp, 1, "testKey", null),
@@ -309,14 +319,16 @@ public class ElasticsearchSinkTaskIT {
 
     ElasticsearchSinkTask task = new ElasticsearchSinkTask();
 
+    TopicPartition tp = new TopicPartition(TOPIC, 0);
     SinkTaskContext context = mock(SinkTaskContext.class);
+    when(context.assignment()).thenReturn(ImmutableSet.of(tp));
     task.initialize(context);
     task.start(props);
 
-    TopicPartition tp = new TopicPartition(TOPIC, 0);
     List<SinkRecord> records = ImmutableList.of(
             sinkRecord(tp, 0),
             sinkRecord(tp, 1));
+    task.open(ImmutableList.of(tp));
     task.put(records);
 
     Map<TopicPartition, OffsetAndMetadata> currentOffsets =
@@ -364,6 +376,7 @@ public class ElasticsearchSinkTaskIT {
     when(context.assignment()).thenReturn(ImmutableSet.of(tp1));
     task.initialize(context);
     task.start(props);
+    task.open(ImmutableList.of(tp1));
 
     List<SinkRecord> records = new ArrayList<>();
     for (int i = 0; i < 100; i++) {
@@ -404,12 +417,13 @@ public class ElasticsearchSinkTaskIT {
 
     ElasticsearchSinkTask task = new ElasticsearchSinkTask();
 
+    TopicPartition tp1 = new TopicPartition(TOPIC, 0);
+    TopicPartition tp2 = new TopicPartition(TOPIC, 1);
     SinkTaskContext context = mock(SinkTaskContext.class);
+    when(context.assignment()).thenReturn(ImmutableSet.of(tp1, tp2));
     task.initialize(context);
     task.start(props);
 
-    TopicPartition tp1 = new TopicPartition(TOPIC, 0);
-    TopicPartition tp2 = new TopicPartition(TOPIC, 1);
     List<SinkRecord> records = ImmutableList.of(
             sinkRecord(tp1, 0),
             sinkRecord(tp1, 1),
@@ -427,6 +441,7 @@ public class ElasticsearchSinkTaskIT {
 
     task.close(ImmutableList.of(tp1));
     task.open(ImmutableList.of(new TopicPartition(TOPIC, 2)));
+    when(context.assignment()).thenReturn(ImmutableSet.of(tp2));
     await().untilAsserted(() ->
             assertThat(task.preCommit(currentOffsets))
                     .isEqualTo(ImmutableMap.of(tp2, new OffsetAndMetadata(1))));

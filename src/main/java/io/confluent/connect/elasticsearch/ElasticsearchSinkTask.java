@@ -56,7 +56,6 @@ public class ElasticsearchSinkTask extends SinkTask {
   private Set<String> indexCache;
   private OffsetTracker offsetTracker;
   private PartitionPauser partitionPauser;
-  private Set<TopicPartition> assignedPartitions;
 
   @Override
   public void start(Map<String, String> props) {
@@ -72,7 +71,6 @@ public class ElasticsearchSinkTask extends SinkTask {
     this.existingMappings = new HashSet<>();
     this.indexCache = new HashSet<>();
     this.offsetTracker = new OffsetTracker(); // TODO no-op if synchronous
-    this.assignedPartitions = new HashSet<>();
 
     int offsetHighWaterMark = config.maxBufferedRecords() * 10;
     int offsetLowWaterMark = config.maxBufferedRecords() * 5;
@@ -131,7 +129,7 @@ public class ElasticsearchSinkTask extends SinkTask {
   private void verifyChangingTopic(SinkRecord record) {
     // TODO test
     TopicPartition tp = new TopicPartition(record.topic(), record.kafkaPartition());
-    if (!config.flushSynchronously() && !assignedPartitions.contains(tp)) {
+    if (!config.flushSynchronously() && !context.assignment().contains(tp)) {
       String msg = String.format("Found a topic name '%s' that doesn't match assigned partitions."
               + " Connector doesn't support topic mutating SMTs", record.topic());
       throw new ConnectException(msg);
@@ -348,13 +346,7 @@ public class ElasticsearchSinkTask extends SinkTask {
   }
 
   @Override
-  public void open(Collection<TopicPartition> partitions) {
-    assignedPartitions.addAll(partitions);
-  }
-
-  @Override
   public void close(Collection<TopicPartition> partitions) {
-    assignedPartitions.removeAll(partitions);
     offsetTracker.closePartitions(partitions);
   }
 
