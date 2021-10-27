@@ -55,7 +55,7 @@ public abstract class BaseConnectorIT {
    * Wait up to {@link #CONNECTOR_STARTUP_DURATION_MS maximum time limit} for the connector with the given
    * name to start the specified number of tasks.
    *
-   * @param name the name of the connector
+   * @param name     the name of the connector
    * @param numTasks the minimum number of tasks that are expected
    * @return the time this method discovered the connector has started, in milliseconds past epoch
    * @throws InterruptedException if this was interrupted
@@ -73,7 +73,7 @@ public abstract class BaseConnectorIT {
    * Confirm that a connector with an exact number of tasks is running.
    *
    * @param connectorName the connector
-   * @param numTasks the minimum number of tasks
+   * @param numTasks      the minimum number of tasks
    * @return true if the connector and tasks are in RUNNING state; false otherwise
    */
   protected Optional<Boolean> assertConnectorAndTasksRunning(String connectorName, int numTasks) {
@@ -83,6 +83,31 @@ public abstract class BaseConnectorIT {
           && info.tasks().size() >= numTasks
           && info.connector().state().equals(AbstractStatus.State.RUNNING.toString())
           && info.tasks().stream().allMatch(s -> s.state().equals(AbstractStatus.State.RUNNING.toString()));
+      return Optional.of(result);
+    } catch (Exception e) {
+      log.error("Could not check connector state info.");
+      return Optional.empty();
+    }
+  }
+
+  public long waitForConnectorToFail(String name, int numTasks, String trace) throws InterruptedException {
+    TestUtils.waitForCondition(
+        () -> assertConnectorAndTasksFailed(name, numTasks, trace).orElse(false),
+        CONNECTOR_STARTUP_DURATION_MS,
+        "Connector tasks did not fail in time."
+    );
+    return System.currentTimeMillis();
+  }
+
+  protected Optional<Boolean> assertConnectorAndTasksFailed(String connectorName, int numTasks, String trace) {
+    try {
+      ConnectorStateInfo info = connect.connectorStatus(connectorName);
+      boolean result = info != null
+          && info.tasks().size() >= numTasks
+          && info.tasks().stream()
+          .allMatch(s -> s.state().equals(AbstractStatus.State.FAILED.toString())
+              && info.tasks().stream().allMatch(t -> t.trace().contains(trace))
+          );
       return Optional.of(result);
     } catch (Exception e) {
       log.error("Could not check connector state info.");
