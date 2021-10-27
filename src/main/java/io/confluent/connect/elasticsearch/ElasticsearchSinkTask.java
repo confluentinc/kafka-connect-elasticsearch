@@ -15,7 +15,14 @@
 
 package io.confluent.connect.elasticsearch;
 
-import io.confluent.connect.elasticsearch.OffsetTracker.OffsetState;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
+import java.util.function.BooleanSupplier;
+import java.util.stream.Collectors;
+
 import org.apache.http.HttpHost;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
@@ -33,15 +40,8 @@ import org.elasticsearch.client.core.MainResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Set;
-import java.util.function.BooleanSupplier;
-import java.util.stream.Collectors;
-
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BehaviorOnNullValues;
+import io.confluent.connect.elasticsearch.OffsetTracker.OffsetState;
 
 @SuppressWarnings("checkstyle:ClassDataAbstractionCoupling")
 public class ElasticsearchSinkTask extends SinkTask {
@@ -91,7 +91,7 @@ public class ElasticsearchSinkTask extends SinkTask {
     }
 
     this.client = client != null ? client
-            : new ElasticsearchClient(config, reporter, offsetTracker);
+        : new ElasticsearchClient(config, reporter, offsetTracker);
 
     log.info("Started ElasticsearchSinkTask. Connecting to ES server version: {}",
         getServerVersion());
@@ -131,14 +131,14 @@ public class ElasticsearchSinkTask extends SinkTask {
     TopicPartition tp = new TopicPartition(record.topic(), record.kafkaPartition());
     if (!config.flushSynchronously() && !context.assignment().contains(tp)) {
       String msg = String.format("Found a topic name '%s' that doesn't match assigned partitions."
-              + " Connector doesn't support topic mutating SMTs", record.topic());
+          + " Connector doesn't support topic mutating SMTs", record.topic());
       throw new ConnectException(msg);
     }
   }
 
   @Override
   public Map<TopicPartition, OffsetAndMetadata> preCommit(
-          Map<TopicPartition, OffsetAndMetadata> currentOffsets) {
+      Map<TopicPartition, OffsetAndMetadata> currentOffsets) {
     try {
       // This will just trigger an asynchronous execution of any buffered records
       client.flush();
@@ -149,8 +149,6 @@ public class ElasticsearchSinkTask extends SinkTask {
       client.waitForInFlightRequests();
       return client.isFailed() ? Collections.emptyMap() : currentOffsets;
     } else {
-      // TODO compare currentOffsets topic names against offsets to fail fast if
-      //  topic-mutating SMTs are being used.
       Map<TopicPartition, OffsetAndMetadata> offsets = offsetTracker.offsets();
       log.debug("preCommitting offsets {}", offsets);
       return offsets;

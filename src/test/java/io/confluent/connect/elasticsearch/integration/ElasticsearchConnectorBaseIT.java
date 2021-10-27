@@ -31,6 +31,7 @@ import org.elasticsearch.client.security.user.User;
 import org.elasticsearch.client.security.user.privileges.IndicesPrivileges;
 import org.elasticsearch.client.security.user.privileges.Role;
 import org.elasticsearch.client.security.user.privileges.Role.Builder;
+import org.elasticsearch.rest.RestStatus;
 import org.elasticsearch.search.SearchHit;
 import org.junit.After;
 import org.junit.AfterClass;
@@ -82,7 +83,6 @@ public class ElasticsearchConnectorBaseIT extends BaseConnectorIT {
   protected ElasticsearchHelperClient helperClient;
   protected Map<String, String> props;
   protected String index;
-  protected boolean needToCleanup = true;
 
   @AfterClass
   public static void cleanupAfterAll() {
@@ -105,13 +105,19 @@ public class ElasticsearchConnectorBaseIT extends BaseConnectorIT {
   public void cleanup() throws IOException {
     stopConnect();
 
-    if (container.isRunning() && needToCleanup) {
+    if (container.isRunning()) {
       if (helperClient != null) {
         try {
           helperClient.deleteIndex(index, isDataStream);
           helperClient.close();
         } catch (ConnectException e) {
           // Server is already down. No need to close
+        } catch (ElasticsearchStatusException e) {
+          if (RestStatus.NOT_FOUND.equals(e.status())) {
+            // index wasn't created, nothing to clean
+          } else {
+            throw e;
+          }
         }
       }
     }

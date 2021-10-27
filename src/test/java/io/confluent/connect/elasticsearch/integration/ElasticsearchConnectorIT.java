@@ -36,7 +36,6 @@ import io.confluent.common.utils.IntegrationTest;
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig;
 import io.confluent.connect.elasticsearch.helper.ElasticsearchContainer;
 
-
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BATCH_SIZE_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BEHAVIOR_ON_NULL_VALUES_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BULK_SIZE_BYTES_CONFIG;
@@ -55,8 +54,6 @@ import static org.junit.Assert.assertEquals;
 public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
 
   // TODO: test compatibility
-
-  // TODO: test interaction with topic-mutating SMTs
 
   @BeforeClass
   public static void setupBeforeAll() {
@@ -310,7 +307,27 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
     props.put("transforms.TimestampRouter.timestamp.format", timestampFormat);
     props.put(FLUSH_SYNCHRONOUSLY_CONFIG, "false");
     index = String.format("route-it-to-here-%s-at-%s", TOPIC, formatter.format(date));
-    needToCleanup = false;
+    assertConnectorFails(props, "Connector doesn't support topic mutating SMTs");
+  }
+
+  @Test
+  public void testReconfigureToUseRoutingSMT() throws Exception {
+    props.put(FLUSH_SYNCHRONOUSLY_CONFIG, "false");
+    // run a connector without a routing SMT in asynchronous mode
+    runSimpleTest(props);
+    // reconfigure connector to use a routing SMT in synchronous mode
+    props.put(FLUSH_SYNCHRONOUSLY_CONFIG, "true");
+    props.put("transforms", "TimestampRouter");
+    props.put("transforms.TimestampRouter.type", "org.apache.kafka.connect.transforms.TimestampRouter");
+    String timestampFormat = "YYYYMM";
+    props.put("transforms.TimestampRouter.topic.format", "route-it-to-here-${topic}-at-${timestamp}");
+    props.put("transforms.TimestampRouter.timestamp.format", timestampFormat);
+    SimpleDateFormat formatter = new SimpleDateFormat(timestampFormat);
+    Date date = new Date(System.currentTimeMillis());
+    index = String.format("route-it-to-here-%s-at-%s", TOPIC, formatter.format(date));
+    runSimpleTest(props);
+    // reconfigure connector to use a routing SMT in asynchronous mode
+    props.put(FLUSH_SYNCHRONOUSLY_CONFIG, "false");
     assertConnectorFails(props, "Connector doesn't support topic mutating SMTs");
   }
 }
