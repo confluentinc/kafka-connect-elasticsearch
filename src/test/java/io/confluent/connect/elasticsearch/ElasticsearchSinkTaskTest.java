@@ -19,8 +19,10 @@ import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfi
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.DATA_STREAM_DATASET_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.DATA_STREAM_TYPE_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.DROP_INVALID_MESSAGE_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.FLUSH_SYNCHRONOUSLY_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_KEY_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_SCHEMA_CONFIG;
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -34,6 +36,8 @@ import static org.mockito.Mockito.when;
 
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BehaviorOnNullValues;
 import io.confluent.connect.elasticsearch.OffsetTracker.OffsetState;
+
+import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.record.TimestampType;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaBuilder;
@@ -375,6 +379,21 @@ public class ElasticsearchSinkTaskTest {
     // call start twice for both exceptions
     setUpTask();
     setUpTask();
+  }
+
+  @Test
+  public void testShouldVerifyChangingTopic() {
+    props.put(FLUSH_SYNCHRONOUSLY_CONFIG, "false");
+    setUpTask();
+    String changedTopic = "routed-to-another-topic";
+    SinkRecord record = record(changedTopic, false, false, 0);
+    when(context.assignment()).thenReturn(Collections.singleton(new TopicPartition("original-topic-name", 1)));
+    try {
+      task.put(Collections.singletonList(record));
+    } catch (ConnectException e) {
+      assertEquals(String.format("Found a topic name '%s' that doesn't match assigned partitions."
+          + " Connector doesn't support topic mutating SMTs", record.topic()), e.getMessage());
+    }
   }
 
   private String dataStreamName(String type, String dataset, String namespace) {

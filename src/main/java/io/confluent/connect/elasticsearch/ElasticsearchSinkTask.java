@@ -127,7 +127,6 @@ public class ElasticsearchSinkTask extends SinkTask {
    * support it.
    */
   private void verifyChangingTopic(SinkRecord record) {
-    // TODO test
     TopicPartition tp = new TopicPartition(record.topic(), record.kafkaPartition());
     if (!config.flushSynchronously() && !context.assignment().contains(tp)) {
       String msg = String.format("Found a topic name '%s' that doesn't match assigned partitions."
