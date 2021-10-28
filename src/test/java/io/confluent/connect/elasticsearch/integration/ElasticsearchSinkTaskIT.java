@@ -15,12 +15,18 @@
 
 package io.confluent.connect.elasticsearch.integration;
 
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.IntStream;
+
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.github.tomakehurst.wiremock.client.WireMock;
 import com.github.tomakehurst.wiremock.junit.WireMockRule;
-import io.confluent.common.utils.IntegrationTest;
-import io.confluent.connect.elasticsearch.ElasticsearchSinkConnector;
-import io.confluent.connect.elasticsearch.ElasticsearchSinkTask;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.connect.errors.ConnectException;
@@ -39,14 +45,10 @@ import org.testcontainers.shaded.com.google.common.collect.ImmutableList;
 import org.testcontainers.shaded.com.google.common.collect.ImmutableMap;
 import org.testcontainers.shaded.com.google.common.collect.ImmutableSet;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.stream.IntStream;
+import io.confluent.common.utils.IntegrationTest;
+import io.confluent.connect.elasticsearch.ElasticsearchSinkConnector;
+import io.confluent.connect.elasticsearch.ElasticsearchSinkTask;
+
 
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.any;
@@ -384,13 +386,17 @@ public class ElasticsearchSinkTaskIT {
     }
     task.put(records);
 
-    verify(context).pause(tp1);
+    if (!synchronousFlush) {
+      verify(context).pause(tp1);
+    }
 
     BlockingTransformer.getInstance(wireMockRule).release(1);
 
     await().untilAsserted(() -> {
       task.put(Collections.emptyList());
-      verify(context).resume(tp1);
+      if (!synchronousFlush) {
+        verify(context).resume(tp1);
+      }
     });
   }
 
