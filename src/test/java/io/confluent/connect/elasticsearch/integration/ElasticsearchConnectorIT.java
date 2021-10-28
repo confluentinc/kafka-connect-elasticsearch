@@ -25,6 +25,7 @@ import org.apache.kafka.clients.admin.ListConsumerGroupOffsetsResult;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.connect.storage.StringConverter;
+import org.apache.kafka.test.TestUtils;
 import org.elasticsearch.client.security.user.User;
 import org.elasticsearch.client.security.user.privileges.Role;
 import org.elasticsearch.search.SearchHit;
@@ -35,6 +36,7 @@ import org.junit.experimental.categories.Category;
 import io.confluent.common.utils.IntegrationTest;
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig;
 import io.confluent.connect.elasticsearch.helper.ElasticsearchContainer;
+
 
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BATCH_SIZE_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BEHAVIOR_ON_NULL_VALUES_CONFIG;
@@ -294,6 +296,7 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
     props.put(FLUSH_SYNCHRONOUSLY_CONFIG, "true");
     index = String.format("route-it-to-here-%s-at-%s", TOPIC, formatter.format(date));
     runSimpleTest(props);
+    waitForCommittedOffsets(CONNECTOR_NAME, TOPIC, 0, NUM_RECORDS);
   }
 
   @Test
@@ -326,8 +329,18 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
     Date date = new Date(System.currentTimeMillis());
     index = String.format("route-it-to-here-%s-at-%s", TOPIC, formatter.format(date));
     runSimpleTest(props);
+    waitForCommittedOffsets(CONNECTOR_NAME, TOPIC, 0, NUM_RECORDS * 2);
     // reconfigure connector to use a routing SMT in asynchronous mode
     props.put(FLUSH_SYNCHRONOUSLY_CONFIG, "false");
     assertConnectorFails(props, "Connector doesn't support topic mutating SMTs");
+  }
+
+  public long waitForCommittedOffsets(String connectorName, String topicName, int partition, int expectedOffset) throws InterruptedException {
+    TestUtils.waitForCondition(
+        () -> expectedOffset == getConnectorOffset(connectorName, topicName, partition),
+        CONNECTOR_COMMIT_DURATION_MS,
+        "Connector tasks did not commit offsets in time."
+    );
+    return System.currentTimeMillis();
   }
 }
