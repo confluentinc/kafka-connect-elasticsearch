@@ -29,6 +29,9 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.locks.Condition;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.BiConsumer;
 
 import org.apache.http.HttpHost;
@@ -109,6 +112,8 @@ public class ElasticsearchClient {
   private final RestHighLevelClient client;
   private final ExecutorService bulkExecutorService;
   private final Time clock;
+  private Lock lock = new ReentrantLock();
+  private Condition noInFlightRequests = lock.newCondition();
 
   // Visible for testing
   public ElasticsearchClient(
@@ -250,9 +255,15 @@ public class ElasticsearchClient {
   }
 
   public void waitForInFlightRequests() {
-    // TODO notify
-    while (numBufferedRecords.get() > 0) {
-      clock.sleep(WAIT_TIME_MS);
+    lock.lock();
+    try {
+      while (numBufferedRecords.get() > 0) {
+        noInFlightRequests.await();
+      }
+    } catch (InterruptedException e) {
+      throw new ConnectException(e);
+    } finally {
+      lock.unlock();
     }
   }
 
@@ -398,7 +409,13 @@ public class ElasticsearchClient {
       private void bulkFinished(long executionId, BulkRequest request) {
         request.requests().forEach(requestToSinkRecord::remove);
         removeFromInFlightRequests(executionId);
-        numBufferedRecords.addAndGet(-request.requests().size());
+        lock.lock();
+        try {
+          numBufferedRecords.addAndGet(-request.requests().size());
+          noInFlightRequests.signalAll();
+        } finally {
+          lock.unlock();
+        }
       }
     };
   }
