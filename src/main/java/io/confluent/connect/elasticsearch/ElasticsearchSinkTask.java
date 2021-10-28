@@ -70,14 +70,14 @@ public class ElasticsearchSinkTask extends SinkTask {
     this.converter = new DataConverter(config);
     this.existingMappings = new HashSet<>();
     this.indexCache = new HashSet<>();
-    this.offsetTracker = new OffsetTracker(); // TODO no-op if synchronous
-
-    int offsetHighWaterMark = config.maxBufferedRecords() * 10;
-    int offsetLowWaterMark = config.maxBufferedRecords() * 5;
-    this.partitionPauser = new PartitionPauser(context,
-        () -> offsetTracker.numOffsetStateEntries() > offsetHighWaterMark,
-        () -> offsetTracker.numOffsetStateEntries() <= offsetLowWaterMark);
-
+    if (!config.flushSynchronously()) {
+      this.offsetTracker = config.flushSynchronously() ? null : new OffsetTracker();
+      int offsetHighWaterMark = config.maxBufferedRecords() * 10;
+      int offsetLowWaterMark = config.maxBufferedRecords() * 5;
+      this.partitionPauser = new PartitionPauser(context,
+          () -> offsetTracker.numOffsetStateEntries() > offsetHighWaterMark,
+          () -> offsetTracker.numOffsetStateEntries() <= offsetLowWaterMark);
+    }
     this.reporter = null;
     try {
       if (context.errantRecordReporter() == null) {
@@ -102,25 +102,35 @@ public class ElasticsearchSinkTask extends SinkTask {
     log.debug("Putting {} records to Elasticsearch.", records.size());
 
     client.throwIfFailed();
-    partitionPauser.maybeResumePartitions();
+    if (!config.flushSynchronously()) {
+      partitionPauser.maybeResumePartitions();
+    }
 
     for (SinkRecord record : records) {
       verifyChangingTopic(record);
-
-      OffsetState offsetState = offsetTracker.addPendingRecord(record);
-
-      if (shouldSkipRecord(record)) {
-        logTrace("Ignoring {} with null value.", record);
-        offsetState.markProcessed();
-        reportBadRecord(record, new ConnectException("Cannot write null valued record."));
-        continue;
+      if (config.flushSynchronously()) {
+        if (shouldSkipRecord(record)) {
+          logTrace("Ignoring {} with null value.", record);
+          reportBadRecord(record, new ConnectException("Cannot write null valued record."));
+          continue;
+        }
+        logTrace("Writing {} to Elasticsearch.", record);
+        tryWriteRecord(record, null);
+      } else {
+        OffsetState offsetState = offsetTracker.addPendingRecord(record);
+        if (shouldSkipRecord(record)) {
+          logTrace("Ignoring {} with null value.", record);
+          offsetState.markProcessed();
+          reportBadRecord(record, new ConnectException("Cannot write null valued record."));
+          continue;
+        }
+        logTrace("Writing {} to Elasticsearch.", record);
+        tryWriteRecord(record, offsetState);
       }
-
-      logTrace("Writing {} to Elasticsearch.", record);
-
-      tryWriteRecord(record, offsetState);
     }
-    partitionPauser.maybePausePartitions();
+    if (!config.flushSynchronously()) {
+      partitionPauser.maybePausePartitions();
+    }
   }
 
   /**
@@ -322,7 +332,9 @@ public class ElasticsearchSinkTask extends SinkTask {
 
       if (config.dropInvalidMessage()) {
         log.error("Can't convert {}.", recordString(sinkRecord), convertException);
-        offsetState.markProcessed();
+        if (!config.flushSynchronously()) {
+          offsetState.markProcessed();
+        }
       } else {
         throw convertException;
       }
@@ -345,7 +357,9 @@ public class ElasticsearchSinkTask extends SinkTask {
 
   @Override
   public void close(Collection<TopicPartition> partitions) {
-    offsetTracker.closePartitions(partitions);
+    if (!config.flushSynchronously()) {
+      offsetTracker.closePartitions(partitions);
+    }
   }
 
   // Visible for testing

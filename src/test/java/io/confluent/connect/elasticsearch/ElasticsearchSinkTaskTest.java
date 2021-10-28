@@ -27,6 +27,7 @@ import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -91,10 +92,20 @@ public class ElasticsearchSinkTaskTest {
     task.put(Collections.singletonList(nullRecord));
     verify(client, never()).index(eq(nullRecord), any(DocWriteRequest.class), any(OffsetState.class));
 
-    // don't skip non-null
+    // don't skip non-null, asynchronous mode
+    when(context.assignment()).thenReturn(Collections.singleton(new TopicPartition(TOPIC, 1)));
+    props.put(FLUSH_SYNCHRONOUSLY_CONFIG, "false"); //no-op?
+    setUpTask();
     SinkRecord notNullRecord = record(true, false,1);
     task.put(Collections.singletonList(notNullRecord));
     verify(client, times(1)).index(eq(notNullRecord), any(DocWriteRequest.class), any(OffsetState.class));
+
+    // don't skip non-null, synchronous mode
+    props.put(FLUSH_SYNCHRONOUSLY_CONFIG, "true");
+    setUpTask();
+    notNullRecord = record(true, false,1);
+    task.put(Collections.singletonList(notNullRecord));
+    verify(client, times(1)).index(eq(notNullRecord), any(DocWriteRequest.class), isNull());
   }
 
   @Test
