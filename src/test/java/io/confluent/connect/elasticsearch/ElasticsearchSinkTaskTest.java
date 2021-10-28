@@ -94,7 +94,7 @@ public class ElasticsearchSinkTaskTest {
 
     // don't skip non-null, asynchronous mode
     when(context.assignment()).thenReturn(Collections.singleton(new TopicPartition(TOPIC, 1)));
-    props.put(FLUSH_SYNCHRONOUSLY_CONFIG, "false"); //no-op?
+    props.put(FLUSH_SYNCHRONOUSLY_CONFIG, "false");
     setUpTask();
     SinkRecord notNullRecord = record(true, false,1);
     task.put(Collections.singletonList(notNullRecord));
