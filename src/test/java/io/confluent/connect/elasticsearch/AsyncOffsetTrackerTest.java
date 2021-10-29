@@ -15,7 +15,7 @@
 
 package io.confluent.connect.elasticsearch;
 
-import io.confluent.connect.elasticsearch.OffsetTracker.OffsetState;
+import io.confluent.connect.elasticsearch.AsyncOffsetTracker.AsyncOffsetState;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.connect.sink.SinkRecord;
@@ -26,11 +26,11 @@ import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-public class OffsetTrackerTest {
+public class AsyncOffsetTrackerTest {
 
   @Test
   public void testHappyPath() {
-    OffsetTracker offsetTracker = new OffsetTracker();
+    AsyncOffsetTracker offsetTracker = new AsyncOffsetTracker();
 
     TopicPartition tp = new TopicPartition("t1", 0);
 
@@ -70,7 +70,7 @@ public class OffsetTrackerTest {
    */
   @Test
   public void testBelowWatermark() {
-    OffsetTracker offsetTracker = new OffsetTracker();
+    AsyncOffsetTracker offsetTracker = new AsyncOffsetTracker();
 
     TopicPartition tp = new TopicPartition("t1", 0);
 
@@ -96,7 +96,7 @@ public class OffsetTrackerTest {
 
   @Test
   public void testBatchRetry() {
-    OffsetTracker offsetTracker = new OffsetTracker();
+    AsyncOffsetTracker offsetTracker = new AsyncOffsetTracker();
 
     TopicPartition tp = new TopicPartition("t1", 0);
 
@@ -123,7 +123,7 @@ public class OffsetTrackerTest {
 
   @Test
   public void testRebalance() {
-    OffsetTracker offsetTracker = new OffsetTracker();
+    AsyncOffsetTracker offsetTracker = new AsyncOffsetTracker();
 
     TopicPartition tp1 = new TopicPartition("t1", 0);
     TopicPartition tp2 = new TopicPartition("t2", 0);

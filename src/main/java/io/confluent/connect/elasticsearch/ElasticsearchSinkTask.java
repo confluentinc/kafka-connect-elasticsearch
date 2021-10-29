@@ -41,7 +41,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BehaviorOnNullValues;
-import io.confluent.connect.elasticsearch.OffsetTracker.OffsetState;
 
 @SuppressWarnings("checkstyle:ClassDataAbstractionCoupling")
 public class ElasticsearchSinkTask extends SinkTask {
@@ -71,13 +70,15 @@ public class ElasticsearchSinkTask extends SinkTask {
     this.existingMappings = new HashSet<>();
     this.indexCache = new HashSet<>();
     if (!config.flushSynchronously()) {
-      this.offsetTracker = config.flushSynchronously() ? null : new OffsetTracker();
-      int offsetHighWaterMark = config.maxBufferedRecords() * 10;
-      int offsetLowWaterMark = config.maxBufferedRecords() * 5;
-      this.partitionPauser = new PartitionPauser(context,
-          () -> offsetTracker.numOffsetStateEntries() > offsetHighWaterMark,
-          () -> offsetTracker.numOffsetStateEntries() <= offsetLowWaterMark);
+      this.offsetTracker = new AsyncOffsetTracker();
+    } else {
+      this.offsetTracker = new SyncOffsetTracker();
     }
+    int offsetHighWaterMark = config.maxBufferedRecords() * 10;
+    int offsetLowWaterMark = config.maxBufferedRecords() * 5;
+    this.partitionPauser = new PartitionPauser(context,
+        () -> offsetTracker.numOffsetStateEntries() > offsetHighWaterMark,
+        () -> offsetTracker.numOffsetStateEntries() <= offsetLowWaterMark);
     this.reporter = null;
     try {
       if (context.errantRecordReporter() == null) {
@@ -102,9 +103,7 @@ public class ElasticsearchSinkTask extends SinkTask {
     log.debug("Putting {} records to Elasticsearch.", records.size());
 
     client.throwIfFailed();
-    if (!config.flushSynchronously()) {
-      partitionPauser.maybeResumePartitions();
-    }
+    partitionPauser.maybeResumePartitions();
 
     for (SinkRecord record : records) {
       verifyChangingTopic(record);
@@ -121,9 +120,7 @@ public class ElasticsearchSinkTask extends SinkTask {
       logTrace("Writing {} to Elasticsearch.", record);
       tryWriteRecord(record, offsetState);
     }
-    if (!config.flushSynchronously()) {
-      partitionPauser.maybePausePartitions();
-    }
+    partitionPauser.maybePausePartitions();
   }
 
   /**
@@ -325,9 +322,7 @@ public class ElasticsearchSinkTask extends SinkTask {
 
       if (config.dropInvalidMessage()) {
         log.error("Can't convert {}.", recordString(sinkRecord), convertException);
-        if (!config.flushSynchronously()) {
-          offsetState.markProcessed();
-        }
+        offsetState.markProcessed();
       } else {
         throw convertException;
       }
@@ -350,9 +345,7 @@ public class ElasticsearchSinkTask extends SinkTask {
 
   @Override
   public void close(Collection<TopicPartition> partitions) {
-    if (!config.flushSynchronously()) {
-      offsetTracker.closePartitions(partitions);
-    }
+    offsetTracker.closePartitions(partitions);
   }
 
   // Visible for testing

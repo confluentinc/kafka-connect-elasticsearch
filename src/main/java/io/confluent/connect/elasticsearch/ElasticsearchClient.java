@@ -64,8 +64,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BehaviorOnMalformedDoc;
-import io.confluent.connect.elasticsearch.OffsetTracker.OffsetState;
-
 
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.FLUSH_TIMEOUT_MS_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.MAX_BUFFERED_RECORDS_CONFIG;
@@ -112,15 +110,15 @@ public class ElasticsearchClient {
   private final RestHighLevelClient client;
   private final ExecutorService bulkExecutorService;
   private final Time clock;
-  private Lock lock = new ReentrantLock();
-  private Condition noInFlightRequests = lock.newCondition();
+  private final Lock lock = new ReentrantLock();
+  private final Condition inFlightRequestsUpdated = lock.newCondition();
 
   // Visible for testing
   public ElasticsearchClient(
           ElasticsearchSinkConnectorConfig config,
           ErrantRecordReporter reporter
   ) {
-    this(config, reporter, new OffsetTracker());
+    this(config, reporter, new AsyncOffsetTracker());
   }
 
   public ElasticsearchClient(
@@ -258,9 +256,10 @@ public class ElasticsearchClient {
     lock.lock();
     try {
       while (numBufferedRecords.get() > 0) {
-        noInFlightRequests.await();
+        inFlightRequestsUpdated.await();
       }
     } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
       throw new ConnectException(e);
     } finally {
       lock.unlock();
@@ -292,6 +291,7 @@ public class ElasticsearchClient {
    *
    * @param record the record to index
    * @param request the associated request to send
+   * @param offsetState record's offset state
    * @throws ConnectException if one of the requests failed
    */
   public void index(SinkRecord record, DocWriteRequest<?> request, OffsetState offsetState) {
@@ -386,15 +386,13 @@ public class ElasticsearchClient {
         int idx = 0;
         for (BulkItemResponse bulkItemResponse : response) {
           boolean failed = handleResponse(bulkItemResponse, executionId);
-          if (!failed && idx < requests.size() && !config.flushSynchronously()) {
+          if (!failed && idx < requests.size()) {
             requestToSinkRecord.get(requests.get(idx)).offsetState.markProcessed();
           }
           idx++;
         }
 
-        if (!config.flushSynchronously()) {
-          offsetTracker.updateOffsets();
-        }
+        offsetTracker.updateOffsets();
 
         bulkFinished(executionId, request);
       }
@@ -412,7 +410,7 @@ public class ElasticsearchClient {
         lock.lock();
         try {
           numBufferedRecords.addAndGet(-request.requests().size());
-          noInFlightRequests.signalAll();
+          inFlightRequestsUpdated.signalAll();
         } finally {
           lock.unlock();
         }
