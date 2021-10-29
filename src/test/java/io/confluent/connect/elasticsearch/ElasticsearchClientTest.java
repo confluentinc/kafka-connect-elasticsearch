@@ -696,6 +696,6 @@ public class ElasticsearchClientTest {
 
   private void writeRecord(SinkRecord record, ElasticsearchClient client) {
     client.index(record, converter.convertRecord(record, createIndexName(record.topic())),
-            new OffsetTracker.OffsetState(record.kafkaOffset()));
+            new AsyncOffsetTracker.AsyncOffsetState(record.kafkaOffset()));
   }
 }
