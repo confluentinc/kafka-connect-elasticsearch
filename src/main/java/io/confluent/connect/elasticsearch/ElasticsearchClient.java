@@ -65,6 +65,7 @@ import org.slf4j.LoggerFactory;
 
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BehaviorOnMalformedDoc;
 
+
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.FLUSH_TIMEOUT_MS_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.MAX_BUFFERED_RECORDS_CONFIG;
 import static java.util.stream.Collectors.toList;
@@ -115,10 +116,10 @@ public class ElasticsearchClient {
 
   // Visible for testing
   public ElasticsearchClient(
-          ElasticsearchSinkConnectorConfig config,
-          ErrantRecordReporter reporter
+      ElasticsearchSinkConnectorConfig config,
+      ErrantRecordReporter reporter
   ) {
-    this(config, reporter, new AsyncOffsetTracker());
+    this(config, reporter, config.flushSynchronously() ? new SyncOffsetTracker() : new AsyncOffsetTracker());
   }
 
   public ElasticsearchClient(
