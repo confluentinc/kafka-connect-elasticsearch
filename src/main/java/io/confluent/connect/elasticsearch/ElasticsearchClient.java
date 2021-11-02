@@ -119,7 +119,10 @@ public class ElasticsearchClient {
       ElasticsearchSinkConnectorConfig config,
       ErrantRecordReporter reporter
   ) {
-    this(config, reporter, config.flushSynchronously() ? new SyncOffsetTracker() : new AsyncOffsetTracker());
+    this(config, reporter, config.flushSynchronously()
+        ? new SyncOffsetTracker()
+        : new AsyncOffsetTracker()
+    );
   }
 
   public ElasticsearchClient(

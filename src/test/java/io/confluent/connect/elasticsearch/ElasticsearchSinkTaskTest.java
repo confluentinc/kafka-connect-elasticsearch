@@ -15,6 +15,32 @@
 
 package io.confluent.connect.elasticsearch;
 
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
+
+import org.apache.kafka.common.TopicPartition;
+import org.apache.kafka.common.record.TimestampType;
+import org.apache.kafka.connect.data.Schema;
+import org.apache.kafka.connect.data.SchemaBuilder;
+import org.apache.kafka.connect.data.Struct;
+import org.apache.kafka.connect.errors.ConnectException;
+import org.apache.kafka.connect.errors.DataException;
+import org.apache.kafka.connect.sink.ErrantRecordReporter;
+import org.apache.kafka.connect.sink.SinkRecord;
+import org.apache.kafka.connect.sink.SinkTaskContext;
+import org.elasticsearch.action.DocWriteRequest;
+import org.junit.Before;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
+
+import io.confluent.connect.elasticsearch.AsyncOffsetTracker.AsyncOffsetState;
+import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BehaviorOnNullValues;
+
+
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BEHAVIOR_ON_NULL_VALUES_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.DATA_STREAM_DATASET_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.DATA_STREAM_TYPE_CONFIG;
@@ -34,28 +60,15 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BehaviorOnNullValues;
-import io.confluent.connect.elasticsearch.AsyncOffsetTracker.AsyncOffsetState;
-
-import org.apache.kafka.common.TopicPartition;
-import org.apache.kafka.common.record.TimestampType;
-import org.apache.kafka.connect.data.Schema;
-import org.apache.kafka.connect.data.SchemaBuilder;
-import org.apache.kafka.connect.data.Struct;
-import org.apache.kafka.connect.errors.ConnectException;
-import org.apache.kafka.connect.errors.DataException;
-import org.apache.kafka.connect.sink.ErrantRecordReporter;
-import org.apache.kafka.connect.sink.SinkRecord;
-import org.apache.kafka.connect.sink.SinkTaskContext;
-import org.elasticsearch.action.DocWriteRequest;
-import org.junit.Before;
-import org.junit.Test;
-
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Collections;
-
+@RunWith(Parameterized.class)
 public class ElasticsearchSinkTaskTest {
+
+  @Parameterized.Parameters(name = "{index}: flush.synchronously={0}")
+  public static Collection<Object[]> data() {
+    return Arrays.asList(new Object[][] {
+        { true }, { false }
+    });
+  }
 
   protected static final String TOPIC = "topic";
 
@@ -63,6 +76,11 @@ public class ElasticsearchSinkTaskTest {
   private ElasticsearchSinkTask task;
   private Map<String, String> props;
   private SinkTaskContext context;
+  private final boolean flushSynchronously;
+
+  public ElasticsearchSinkTaskTest(boolean flushSynchronously) {
+    this.flushSynchronously = flushSynchronously;
+  }
 
   private void setUpTask() {
     task = new ElasticsearchSinkTask();
@@ -74,6 +92,7 @@ public class ElasticsearchSinkTaskTest {
   public void setUp() {
     props = ElasticsearchSinkConnectorConfigTest.addNecessaryProps(new HashMap<>());
     props.put(IGNORE_KEY_CONFIG, "true");
+    props.put(FLUSH_SYNCHRONOUSLY_CONFIG, Boolean.toString(flushSynchronously));
 
     client = mock(ElasticsearchClient.class);
     context = mock(SinkTaskContext.class);
@@ -88,23 +107,20 @@ public class ElasticsearchSinkTaskTest {
 
     // skip null
     SinkRecord nullRecord = record(true, true, 0);
+    when(context.assignment()).thenReturn(Collections.singleton(new TopicPartition(TOPIC, 1)));
     task.put(Collections.singletonList(nullRecord));
     verify(client, never()).index(eq(nullRecord), any(DocWriteRequest.class), any(AsyncOffsetState.class));
 
-    // don't skip non-null, asynchronous mode
+    // don't skip non-null
     when(context.assignment()).thenReturn(Collections.singleton(new TopicPartition(TOPIC, 1)));
-    props.put(FLUSH_SYNCHRONOUSLY_CONFIG, "false");
     setUpTask();
-    SinkRecord notNullRecord = record(true, false,1);
+    SinkRecord notNullRecord = record(true, false, 1);
     task.put(Collections.singletonList(notNullRecord));
-    verify(client, times(1)).index(eq(notNullRecord), any(DocWriteRequest.class), any(AsyncOffsetState.class));
-
-    // don't skip non-null, synchronous mode
-    props.put(FLUSH_SYNCHRONOUSLY_CONFIG, "true");
-    setUpTask();
-    notNullRecord = record(true, false,1);
-    task.put(Collections.singletonList(notNullRecord));
-    verify(client, times(1)).index(eq(notNullRecord), any(DocWriteRequest.class), any(SyncOffsetTracker.SyncOffsetState.class));
+    if (flushSynchronously) {
+      verify(client, times(1)).index(eq(notNullRecord), any(DocWriteRequest.class), any(SyncOffsetTracker.SyncOffsetState.class));
+    } else {
+      verify(client, times(1)).index(eq(notNullRecord), any(DocWriteRequest.class), any(AsyncOffsetState.class));
+    }
   }
 
   @Test
@@ -117,6 +133,7 @@ public class ElasticsearchSinkTaskTest {
 
     // report null
     SinkRecord nullRecord = record(true, true, 0);
+    when(context.assignment()).thenReturn(Collections.singleton(new TopicPartition(TOPIC, 1)));
     task.put(Collections.singletonList(nullRecord));
     verify(client, never()).index(eq(nullRecord), any(), any());
     verify(mockReporter, times(1)).report(eq(nullRecord), any(ConnectException.class));
@@ -135,23 +152,27 @@ public class ElasticsearchSinkTaskTest {
 
     // fail null
     SinkRecord nullRecord = record(true, true, 0);
+    when(context.assignment()).thenReturn(Collections.singleton(new TopicPartition(TOPIC, 1)));
     task.put(Collections.singletonList(nullRecord));
   }
 
   @Test
   public void testCreateIndex() {
+    when(context.assignment()).thenReturn(Collections.singleton(new TopicPartition(TOPIC, 1)));
     task.put(Collections.singletonList(record()));
     verify(client, times(1)).createIndexOrDataStream(eq(TOPIC));
   }
 
   @Test
   public void testCreateUpperCaseIndex() {
+    when(context.assignment()).thenReturn(Collections.singleton(new TopicPartition(TOPIC, 1)));
     task.put(Collections.singletonList(record()));
     verify(client, times(1)).createIndexOrDataStream(eq(TOPIC.toLowerCase()));
   }
 
   @Test
   public void testDoNotCreateCachedIndex() {
+    when(context.assignment()).thenReturn(Collections.singleton(new TopicPartition(TOPIC, 1)));
     task.put(Collections.singletonList(record()));
     verify(client, times(1)).createIndexOrDataStream(eq(TOPIC));
 
@@ -165,6 +186,7 @@ public class ElasticsearchSinkTaskTest {
     setUpTask();
 
     SinkRecord record = record();
+    when(context.assignment()).thenReturn(Collections.singleton(new TopicPartition(TOPIC, 1)));
     task.put(Collections.singletonList(record));
     verify(client, never()).hasMapping(eq(TOPIC));
     verify(client, never()).createMapping(eq(TOPIC), eq(record.valueSchema()));
@@ -175,6 +197,7 @@ public class ElasticsearchSinkTaskTest {
     when(client.hasMapping(TOPIC)).thenReturn(true);
 
     SinkRecord record = record();
+    when(context.assignment()).thenReturn(Collections.singleton(new TopicPartition(TOPIC, 1)));
     task.put(Collections.singletonList(record));
     verify(client, times(1)).hasMapping(eq(TOPIC));
     verify(client, never()).createMapping(eq(TOPIC), eq(record.valueSchema()));
@@ -183,6 +206,7 @@ public class ElasticsearchSinkTaskTest {
   @Test
   public void testAddMapping() {
     SinkRecord record = record();
+    when(context.assignment()).thenReturn(Collections.singleton(new TopicPartition(TOPIC, 1)));
     task.put(Collections.singletonList(record));
     verify(client, times(1)).hasMapping(eq(TOPIC));
     verify(client, times(1)).createMapping(eq(TOPIC), eq(record.valueSchema()));
@@ -191,6 +215,7 @@ public class ElasticsearchSinkTaskTest {
   @Test
   public void testDoNotAddCachedMapping() {
     SinkRecord record = record();
+    when(context.assignment()).thenReturn(Collections.singleton(new TopicPartition(TOPIC, 1)));
     task.put(Collections.singletonList(record));
     verify(client, times(1)).hasMapping(eq(TOPIC));
     verify(client, times(1)).createMapping(eq(TOPIC), eq(record.valueSchema()));
@@ -203,6 +228,7 @@ public class ElasticsearchSinkTaskTest {
   @Test
   public void testPut() {
     SinkRecord record = record();
+    when(context.assignment()).thenReturn(Collections.singleton(new TopicPartition(TOPIC, 1)));
     task.put(Collections.singletonList(record));
     verify(client, times(1)).index(eq(record), any(), any());
   }
@@ -215,6 +241,7 @@ public class ElasticsearchSinkTaskTest {
 
     // skip invalid
     SinkRecord invalidRecord = record(true, 0);
+    when(context.assignment()).thenReturn(Collections.singleton(new TopicPartition(TOPIC, 1)));
     task.put(Collections.singletonList(invalidRecord));
     verify(client, never()).index(eq(invalidRecord), any(), any());
 
@@ -235,6 +262,7 @@ public class ElasticsearchSinkTaskTest {
 
     // report invalid
     SinkRecord invalidRecord = record(true, 0);
+    when(context.assignment()).thenReturn(Collections.singleton(new TopicPartition(TOPIC, 1)));
     task.put(Collections.singletonList(invalidRecord));
     verify(client, never()).index(eq(invalidRecord), any(), any());
     verify(mockReporter, times(1)).report(eq(invalidRecord), any(DataException.class));
@@ -253,6 +281,7 @@ public class ElasticsearchSinkTaskTest {
     setUpTask();
 
     SinkRecord invalidRecord = record();
+    when(context.assignment()).thenReturn(Collections.singleton(new TopicPartition(TOPIC, 1)));
     task.put(Collections.singletonList(invalidRecord));
   }
 
@@ -298,6 +327,7 @@ public class ElasticsearchSinkTaskTest {
     setUpTask();
 
     String topic = "-dash";
+    when(context.assignment()).thenReturn(Collections.singleton(new TopicPartition(topic, 1)));
     task.put(Collections.singletonList(record(topic, true, false, 0)));
     String indexName = dataStreamName(type, dataset, topic);
     verify(client, times(1)).createIndexOrDataStream(eq(indexName));
@@ -312,6 +342,7 @@ public class ElasticsearchSinkTaskTest {
     setUpTask();
 
     String topic = "_underscore";
+    when(context.assignment()).thenReturn(Collections.singleton(new TopicPartition(topic, 1)));
     task.put(Collections.singletonList(record(topic, true, false, 0)));
     String indexName = dataStreamName(type, dataset, topic);
     verify(client, times(1)).createIndexOrDataStream(eq(indexName));
@@ -326,6 +357,7 @@ public class ElasticsearchSinkTaskTest {
     setUpTask();
 
     String topic = String.format("%0101d", 1);
+    when(context.assignment()).thenReturn(Collections.singleton(new TopicPartition(topic, 1)));
     task.put(Collections.singletonList(record(topic, true, false, 0)));
     String indexName = dataStreamName(type, dataset, topic.substring(0, 100));
     verify(client, times(1)).createIndexOrDataStream(eq(indexName));
@@ -340,6 +372,7 @@ public class ElasticsearchSinkTaskTest {
     setUpTask();
 
     String topic = "UPPERCASE";
+    when(context.assignment()).thenReturn(Collections.singleton(new TopicPartition(topic, 1)));
     task.put(Collections.singletonList(record(topic, true, false, 0)));
     String indexName = dataStreamName(type, dataset, topic.toLowerCase());
     verify(client, times(1)).createIndexOrDataStream(eq(indexName));
@@ -351,31 +384,37 @@ public class ElasticsearchSinkTaskTest {
 
     String upperCaseTopic = "UPPERCASE";
     SinkRecord record = record(upperCaseTopic, true, false, 0);
+    when(context.assignment()).thenReturn(Collections.singleton(new TopicPartition(upperCaseTopic, 1)));
     task.put(Collections.singletonList(record));
     verify(client, times(1)).createIndexOrDataStream(eq(upperCaseTopic.toLowerCase()));
 
     String tooLongTopic = String.format("%0256d", 1);
     record = record(tooLongTopic, true, false, 0);
+    when(context.assignment()).thenReturn(Collections.singleton(new TopicPartition(tooLongTopic, 1)));
     task.put(Collections.singletonList(record));
     verify(client, times(1)).createIndexOrDataStream(eq(tooLongTopic.substring(0, 255)));
 
     String startsWithDash = "-dash";
     record = record(startsWithDash, true, false, 0);
+    when(context.assignment()).thenReturn(Collections.singleton(new TopicPartition(startsWithDash, 1)));
     task.put(Collections.singletonList(record));
     verify(client, times(1)).createIndexOrDataStream(eq("dash"));
 
     String startsWithUnderscore = "_underscore";
     record = record(startsWithUnderscore, true, false, 0);
+    when(context.assignment()).thenReturn(Collections.singleton(new TopicPartition(startsWithUnderscore, 1)));
     task.put(Collections.singletonList(record));
     verify(client, times(1)).createIndexOrDataStream(eq("underscore"));
 
     String dot = ".";
     record = record(dot, true, false, 0);
+    when(context.assignment()).thenReturn(Collections.singleton(new TopicPartition(dot, 1)));
     task.put(Collections.singletonList(record));
     verify(client, times(1)).createIndexOrDataStream(eq("dot"));
 
     String dots = "..";
     record = record(dots, true, false, 0);
+    when(context.assignment()).thenReturn(Collections.singleton(new TopicPartition(dots, 1)));
     task.put(Collections.singletonList(record));
     verify(client, times(1)).createIndexOrDataStream(eq("dotdot"));
   }
@@ -393,7 +432,6 @@ public class ElasticsearchSinkTaskTest {
 
   @Test
   public void testShouldVerifyChangingTopic() {
-    props.put(FLUSH_SYNCHRONOUSLY_CONFIG, "false");
     setUpTask();
     String changedTopic = "routed-to-another-topic";
     SinkRecord record = record(changedTopic, false, false, 0);

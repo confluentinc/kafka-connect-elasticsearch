@@ -23,7 +23,12 @@ import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.connect.sink.SinkRecord;
 
+/**
+ * It's a no-op offset tracker to use with <code>FLUSH_SYNCHRONOUSLY_CONFIG=true</code>
+ *
+ */
 public class SyncOffsetTracker implements OffsetTracker {
+
   @Override
   public long numOffsetStateEntries() {
     return 0;
