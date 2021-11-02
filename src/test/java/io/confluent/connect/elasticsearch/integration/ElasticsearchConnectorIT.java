@@ -37,7 +37,6 @@ import io.confluent.common.utils.IntegrationTest;
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig;
 import io.confluent.connect.elasticsearch.helper.ElasticsearchContainer;
 
-
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BATCH_SIZE_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BEHAVIOR_ON_NULL_VALUES_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BULK_SIZE_BYTES_CONFIG;
@@ -286,31 +285,17 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
 
   @Test
   public void testRoutingSmtSynchronousMode() throws Exception {
-    props.put("transforms", "TimestampRouter");
-    props.put("transforms.TimestampRouter.type", "org.apache.kafka.connect.transforms.TimestampRouter");
-    String timestampFormat = "YYYYMM";
-    SimpleDateFormat formatter = new SimpleDateFormat(timestampFormat);
-    Date date = new Date(System.currentTimeMillis());
-    props.put("transforms.TimestampRouter.topic.format", "route-it-to-here-${topic}-at-${timestamp}");
-    props.put("transforms.TimestampRouter.timestamp.format", timestampFormat);
+    index = addRoutingSmt("YYYYMM", "route-it-to-here-${topic}-at-${timestamp}");
     props.put(FLUSH_SYNCHRONOUSLY_CONFIG, "true");
-    index = String.format("route-it-to-here-%s-at-%s", TOPIC, formatter.format(date));
     runSimpleTest(props);
     waitForCommittedOffsets(CONNECTOR_NAME, TOPIC, 0, NUM_RECORDS);
   }
 
   @Test
   public void testRoutingSmtAsynchronousMode() throws Exception {
-    props.put("transforms", "TimestampRouter");
-    props.put("transforms.TimestampRouter.type", "org.apache.kafka.connect.transforms.TimestampRouter");
-    String timestampFormat = "YYYYMM";
-    SimpleDateFormat formatter = new SimpleDateFormat(timestampFormat);
-    Date date = new Date(System.currentTimeMillis());
-    props.put("transforms.TimestampRouter.topic.format", "route-it-to-here-${topic}-at-${timestamp}");
-    props.put("transforms.TimestampRouter.timestamp.format", timestampFormat);
+    index = addRoutingSmt("YYYYMM", "route-it-to-here-${topic}-at-${timestamp}");
     props.put(FLUSH_SYNCHRONOUSLY_CONFIG, "false");
-    index = String.format("route-it-to-here-%s-at-%s", TOPIC, formatter.format(date));
-    assertConnectorFails(props, "Connector doesn't support topic mutating SMTs");
+    assertConnectorFailsOnWriteRecords(props, "Connector doesn't support topic mutating SMTs");
   }
 
   @Test
@@ -320,27 +305,29 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
     runSimpleTest(props);
     // reconfigure connector to use a routing SMT in synchronous mode
     props.put(FLUSH_SYNCHRONOUSLY_CONFIG, "true");
-    props.put("transforms", "TimestampRouter");
-    props.put("transforms.TimestampRouter.type", "org.apache.kafka.connect.transforms.TimestampRouter");
-    String timestampFormat = "YYYYMM";
-    props.put("transforms.TimestampRouter.topic.format", "route-it-to-here-${topic}-at-${timestamp}");
-    props.put("transforms.TimestampRouter.timestamp.format", timestampFormat);
-    SimpleDateFormat formatter = new SimpleDateFormat(timestampFormat);
-    Date date = new Date(System.currentTimeMillis());
-    index = String.format("route-it-to-here-%s-at-%s", TOPIC, formatter.format(date));
+    index = addRoutingSmt("YYYYMM", "route-it-to-here-${topic}-at-${timestamp}");
     runSimpleTest(props);
     waitForCommittedOffsets(CONNECTOR_NAME, TOPIC, 0, NUM_RECORDS * 2);
     // reconfigure connector to use a routing SMT in asynchronous mode
     props.put(FLUSH_SYNCHRONOUSLY_CONFIG, "false");
-    assertConnectorFails(props, "Connector doesn't support topic mutating SMTs");
+    assertConnectorFailsOnWriteRecords(props, "Connector doesn't support topic mutating SMTs");
   }
 
-  public long waitForCommittedOffsets(String connectorName, String topicName, int partition, int expectedOffset) throws InterruptedException {
+  public void waitForCommittedOffsets(String connectorName, String topicName, int partition, int expectedOffset) throws InterruptedException {
     TestUtils.waitForCondition(
         () -> expectedOffset == getConnectorOffset(connectorName, topicName, partition),
         CONNECTOR_COMMIT_DURATION_MS,
         "Connector tasks did not commit offsets in time."
     );
-    return System.currentTimeMillis();
+  }
+
+  private String addRoutingSmt(String timestampFormat, String topicFormat) {
+    SimpleDateFormat formatter = new SimpleDateFormat(timestampFormat);
+    Date date = new Date(System.currentTimeMillis());
+    props.put("transforms", "TimestampRouter");
+    props.put("transforms.TimestampRouter.type", "org.apache.kafka.connect.transforms.TimestampRouter");
+    props.put("transforms.TimestampRouter.topic.format", topicFormat);
+    props.put("transforms.TimestampRouter.timestamp.format", timestampFormat);
+    return topicFormat.replace("${topic}", TOPIC).replace("${timestamp}", formatter.format(date));
   }
 }

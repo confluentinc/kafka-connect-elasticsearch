@@ -22,7 +22,6 @@ import org.apache.kafka.connect.runtime.AbstractStatus;
 import org.apache.kafka.connect.runtime.rest.entities.ConnectorStateInfo;
 import org.apache.kafka.connect.util.clusters.EmbeddedConnectCluster;
 import org.apache.kafka.test.IntegrationTest;
-import org.apache.kafka.test.TestCondition;
 import org.apache.kafka.test.TestUtils;
 import org.junit.experimental.categories.Category;
 import org.slf4j.Logger;
@@ -59,16 +58,14 @@ public abstract class BaseConnectorIT {
    *
    * @param name     the name of the connector
    * @param numTasks the minimum number of tasks that are expected
-   * @return the time this method discovered the connector has started, in milliseconds past epoch
    * @throws InterruptedException if this was interrupted
    */
-  protected long waitForConnectorToStart(String name, int numTasks) throws InterruptedException {
+  protected void waitForConnectorToStart(String name, int numTasks) throws InterruptedException {
     TestUtils.waitForCondition(
         () -> assertConnectorAndTasksRunning(name, numTasks).orElse(false),
         CONNECTOR_STARTUP_DURATION_MS,
         "Connector tasks did not start in time."
     );
-    return System.currentTimeMillis();
   }
 
   /**

@@ -42,7 +42,6 @@ import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig;
 import io.confluent.connect.elasticsearch.helper.ElasticsearchContainer;
 import io.confluent.connect.elasticsearch.helper.ElasticsearchHelperClient;
 
-
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_PASSWORD_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_USERNAME_CONFIG;
@@ -154,7 +153,7 @@ public class ElasticsearchConnectorBaseIT extends BaseConnectorIT {
     verifySearchResults(NUM_RECORDS);
   }
 
-  protected void assertConnectorFails(Map<String, String> props, String trace) throws Exception {
+  protected void assertConnectorFailsOnWriteRecords(Map<String, String> props, String trace) throws Exception {
     // start the connector
     connect.configureConnector(CONNECTOR_NAME, props);
 

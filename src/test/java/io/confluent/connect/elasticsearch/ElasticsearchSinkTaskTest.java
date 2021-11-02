@@ -51,6 +51,7 @@ import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfi
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assume.assumeFalse;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
@@ -432,16 +433,15 @@ public class ElasticsearchSinkTaskTest {
 
   @Test
   public void testShouldVerifyChangingTopic() {
+    assumeFalse(flushSynchronously);
     setUpTask();
     String changedTopic = "routed-to-another-topic";
     SinkRecord record = record(changedTopic, false, false, 0);
     when(context.assignment()).thenReturn(Collections.singleton(new TopicPartition("original-topic-name", 1)));
-    if (!flushSynchronously) {
-      assertThrows(String.format("Found a topic name '%s' that doesn't match assigned partitions."
-              + " Connector doesn't support topic mutating SMTs", record.topic()),
-          ConnectException.class,
-          () -> task.put(Collections.singletonList(record)));
-    }
+    assertThrows(String.format("Found a topic name '%s' that doesn't match assigned partitions."
+            + " Connector doesn't support topic mutating SMTs", record.topic()),
+        ConnectException.class,
+        () -> task.put(Collections.singletonList(record)));
   }
 
   private String dataStreamName(String type, String dataset, String namespace) {
