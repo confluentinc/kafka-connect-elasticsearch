@@ -117,7 +117,6 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
 
   public static final String FLUSH_SYNCHRONOUSLY_CONFIG = "flush.synchronously";
   private static final String FLUSH_SYNCHRONOUSLY_DOC =
-          // TODO expand
           "True if flushes should wait for background processing to finish. This has a throughput"
             + " penalty and makes the connector less responsive but allows for topic-mutating SMTs"
             + " (e.g. RegexRouter or TimestampRouter)";
