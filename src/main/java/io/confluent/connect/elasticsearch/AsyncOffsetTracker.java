@@ -15,18 +15,21 @@
 
 package io.confluent.connect.elasticsearch;
 
-import org.apache.kafka.clients.consumer.OffsetAndMetadata;
-import org.apache.kafka.common.TopicPartition;
-import org.apache.kafka.connect.sink.SinkRecord;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
+
+import org.apache.kafka.clients.consumer.OffsetAndMetadata;
+import org.apache.kafka.common.TopicPartition;
+import org.apache.kafka.connect.errors.ConnectException;
+import org.apache.kafka.connect.sink.SinkRecord;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 
 import static java.util.stream.Collectors.toMap;
 
@@ -93,11 +96,20 @@ class AsyncOffsetTracker implements OffsetTracker {
    * Older records can be re-added, and the same Offset object will be return if its
    * offset hasn't been reported yet.
    * @param sinkRecord record to add
+   * @param assignment set of topic partitions, assigned to this task
    * @return offset state record that can be used to mark the record as processed
    */
-  public synchronized OffsetState addPendingRecord(SinkRecord sinkRecord) {
+  public synchronized OffsetState addPendingRecord(
+      SinkRecord sinkRecord,
+      Set<TopicPartition> assignment
+  ) {
     log.trace("Adding pending record");
     TopicPartition tp = new TopicPartition(sinkRecord.topic(), sinkRecord.kafkaPartition());
+    if (!assignment.contains(tp)) {
+      String msg = String.format("Found a topic name '%s' that doesn't match assigned partitions."
+          + " Connector doesn't support topic mutating SMTs", sinkRecord.topic());
+      throw new ConnectException(msg);
+    }
     Long partitionMax = maxOffsetByPartition.get(tp);
     if (partitionMax == null || sinkRecord.kafkaOffset() > partitionMax) {
       numEntries.incrementAndGet();
@@ -149,15 +161,19 @@ class AsyncOffsetTracker implements OffsetTracker {
   }
 
   /**
+   * @param client Elasticsearch client
+   * @param currentOffsets current offsets from a task
    * @return offsets to commit
    */
-  public synchronized Map<TopicPartition, OffsetAndMetadata> offsets() {
+  public synchronized Map<TopicPartition, OffsetAndMetadata> offsets(
+      ElasticsearchClient client,
+      Map<TopicPartition, OffsetAndMetadata> currentOffsets
+  ) {
     return maxOffsetByPartition.entrySet().stream()
-            .collect(toMap(
-                Map.Entry::getKey,
-                // The offsets you commit are the offsets of the messages you want to read next
-                // (not the offsets of the messages you did read last)
-                e -> new OffsetAndMetadata(e.getValue() + 1)));
+        .collect(toMap(
+            Map.Entry::getKey,
+            // The offsets you commit are the offsets of the messages you want to read next
+            // (not the offsets of the messages you did read last)
+            e -> new OffsetAndMetadata(e.getValue() + 1)));
   }
-
 }

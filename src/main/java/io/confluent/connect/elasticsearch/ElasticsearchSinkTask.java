@@ -16,7 +16,6 @@
 package io.confluent.connect.elasticsearch;
 
 import java.util.Collection;
-import java.util.Collections;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
@@ -107,7 +106,7 @@ public class ElasticsearchSinkTask extends SinkTask {
 
     for (SinkRecord record : records) {
       verifyChangingTopic(record);
-      OffsetState offsetState = offsetTracker.addPendingRecord(record);
+      OffsetState offsetState = offsetTracker.addPendingRecord(record, context.assignment());
       if (shouldSkipRecord(record)) {
         logTrace("Ignoring {} with null value.", record);
         offsetState.markProcessed();
@@ -125,12 +124,7 @@ public class ElasticsearchSinkTask extends SinkTask {
    * support it.
    */
   private void verifyChangingTopic(SinkRecord record) {
-    TopicPartition tp = new TopicPartition(record.topic(), record.kafkaPartition());
-    if (!config.flushSynchronously() && !context.assignment().contains(tp)) {
-      String msg = String.format("Found a topic name '%s' that doesn't match assigned partitions."
-          + " Connector doesn't support topic mutating SMTs", record.topic());
-      throw new ConnectException(msg);
-    }
+
   }
 
   @Override
@@ -142,14 +136,9 @@ public class ElasticsearchSinkTask extends SinkTask {
     } catch (IllegalStateException e) {
       log.debug("Tried to flush data to Elasticsearch, but BulkProcessor is already closed.", e);
     }
-    if (config.flushSynchronously()) {
-      client.waitForInFlightRequests();
-      return client.isFailed() ? Collections.emptyMap() : currentOffsets;
-    } else {
-      Map<TopicPartition, OffsetAndMetadata> offsets = offsetTracker.offsets();
-      log.debug("preCommitting offsets {}", offsets);
-      return offsets;
-    }
+    Map<TopicPartition, OffsetAndMetadata> offsets = offsetTracker.offsets(client, currentOffsets);
+    log.debug("preCommitting offsets {}", offsets);
+    return offsets;
   }
 
   @Override
