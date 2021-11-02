@@ -392,7 +392,7 @@ public class ElasticsearchSinkTaskIT {
    */
   @Test
   public void testRebalance() throws Exception {
-    if (synchronousFlush) return; // This test only applies to asynchronous flushing
+    assumeFalse(synchronousFlush);
 
     wireMockRule.stubFor(post(urlPathEqualTo("/_bulk"))
             .withRequestBody(WireMock.containing("{\"doc_num\":0}"))
