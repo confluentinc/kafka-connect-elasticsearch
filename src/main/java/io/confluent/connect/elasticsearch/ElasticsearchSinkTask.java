@@ -105,7 +105,6 @@ public class ElasticsearchSinkTask extends SinkTask {
     partitionPauser.maybeResumePartitions();
 
     for (SinkRecord record : records) {
-      verifyChangingTopic(record);
       OffsetState offsetState = offsetTracker.addPendingRecord(record, context.assignment());
       if (shouldSkipRecord(record)) {
         logTrace("Ignoring {} with null value.", record);
@@ -117,14 +116,6 @@ public class ElasticsearchSinkTask extends SinkTask {
       tryWriteRecord(record, offsetState);
     }
     partitionPauser.maybePausePartitions();
-  }
-
-  /**
-   * Fail fast in cases where topic mutating SMTs are used and connector configuration doesn't
-   * support it.
-   */
-  private void verifyChangingTopic(SinkRecord record) {
-
   }
 
   @Override
