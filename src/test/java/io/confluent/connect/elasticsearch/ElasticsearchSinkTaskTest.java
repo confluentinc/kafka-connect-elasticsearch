@@ -48,8 +48,8 @@ import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfi
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.FLUSH_SYNCHRONOUSLY_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_KEY_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_SCHEMA_CONFIG;
-import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotEquals;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -436,11 +436,11 @@ public class ElasticsearchSinkTaskTest {
     String changedTopic = "routed-to-another-topic";
     SinkRecord record = record(changedTopic, false, false, 0);
     when(context.assignment()).thenReturn(Collections.singleton(new TopicPartition("original-topic-name", 1)));
-    try {
-      task.put(Collections.singletonList(record));
-    } catch (ConnectException e) {
-      assertEquals(String.format("Found a topic name '%s' that doesn't match assigned partitions."
-          + " Connector doesn't support topic mutating SMTs", record.topic()), e.getMessage());
+    if (!flushSynchronously) {
+      assertThrows(String.format("Found a topic name '%s' that doesn't match assigned partitions."
+              + " Connector doesn't support topic mutating SMTs", record.topic()),
+          ConnectException.class,
+          () -> task.put(Collections.singletonList(record)));
     }
   }
 
