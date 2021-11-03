@@ -111,19 +111,8 @@ public class ElasticsearchClient {
   private final RestHighLevelClient client;
   private final ExecutorService bulkExecutorService;
   private final Time clock;
-  private final Lock lock = new ReentrantLock();
-  private final Condition inFlightRequestsUpdated = lock.newCondition();
-
-  // Visible for testing
-  public ElasticsearchClient(
-      ElasticsearchSinkConnectorConfig config,
-      ErrantRecordReporter reporter
-  ) {
-    this(config, reporter, config.flushSynchronously()
-        ? new SyncOffsetTracker()
-        : new AsyncOffsetTracker()
-    );
-  }
+  private final Lock inFlightRequestLock = new ReentrantLock();
+  private final Condition inFlightRequestsUpdated = inFlightRequestLock.newCondition();
 
   public ElasticsearchClient(
       ElasticsearchSinkConnectorConfig config,
@@ -257,7 +246,7 @@ public class ElasticsearchClient {
   }
 
   public void waitForInFlightRequests() {
-    lock.lock();
+    inFlightRequestLock.lock();
     try {
       while (numBufferedRecords.get() > 0) {
         inFlightRequestsUpdated.await();
@@ -266,7 +255,7 @@ public class ElasticsearchClient {
       Thread.currentThread().interrupt();
       throw new ConnectException(e);
     } finally {
-      lock.unlock();
+      inFlightRequestLock.unlock();
     }
   }
 
@@ -411,12 +400,12 @@ public class ElasticsearchClient {
       private void bulkFinished(long executionId, BulkRequest request) {
         request.requests().forEach(requestToSinkRecord::remove);
         removeFromInFlightRequests(executionId);
-        lock.lock();
+        inFlightRequestLock.lock();
         try {
           numBufferedRecords.addAndGet(-request.requests().size());
           inFlightRequestsUpdated.signalAll();
         } finally {
-          lock.unlock();
+          inFlightRequestLock.unlock();
         }
       }
     };

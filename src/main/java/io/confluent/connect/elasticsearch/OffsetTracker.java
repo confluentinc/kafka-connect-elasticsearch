@@ -17,24 +17,54 @@ package io.confluent.connect.elasticsearch;
 
 import java.util.Collection;
 import java.util.Map;
-import java.util.Set;
 
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.connect.sink.SinkRecord;
 
+/**
+ * Tracks processed records to calculate safe offsets to commit.
+ *
+ */
 public interface OffsetTracker {
 
-  long numOffsetStateEntries();
+  /**
+   * Method that return a total number of offset entries, that is in memory
+   */
+  default long numOffsetStateEntries() {
+    return 0;
+  }
 
-  void updateOffsets();
+  /**
+   * Method that cleans up entries that are not needed anymore
+   * (all the contiguous processed entries since the last reported offset)
+   */
+  default void updateOffsets() {
+  }
 
-  OffsetState addPendingRecord(SinkRecord record, Set<TopicPartition> assignment);
+  /**
+   * Add a pending record
+   * @param record record that has to be added
+   * @return offset state, associated with this record
+   */
+  OffsetState addPendingRecord(SinkRecord record);
 
+  /**
+   * Method that returns offsets, that are safe to commit
+   *
+   * @param client Elasticsearch client
+   * @param currentOffsets current offsets, that are provided by a task
+   * @return offsets that are safe to commit
+   */
   Map<TopicPartition, OffsetAndMetadata> offsets(
       ElasticsearchClient client,
       Map<TopicPartition, OffsetAndMetadata> currentOffsets
   );
 
-  void closePartitions(Collection<TopicPartition> partitions);
+  /**
+   * Close partitions that are no longer assigned to the task
+   * @param partitions partitions that have to be closed
+   */
+  default void closePartitions(Collection<TopicPartition> partitions) {
+  }
 }
