@@ -64,9 +64,6 @@ class AsyncOffsetTracker implements OffsetTracker {
       this.offset = offset;
     }
 
-    /**
-     * Marks the offset as processed (ready to report to preCommit)
-     */
     @Override
     public void markProcessed() {
       processed = true;
