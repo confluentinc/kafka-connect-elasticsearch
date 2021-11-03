@@ -30,11 +30,10 @@ import org.apache.kafka.connect.sink.SinkRecord;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-
 import static java.util.stream.Collectors.toMap;
 
 /**
- * Tracks processed records to calculate safe offsets to commit.
+ * It's an asynchronous implementation of <code>OffsetTracker</code>
  *
  * <p>Since ElasticsearchClient can potentially process multiple batches asynchronously for the same
  * partition, if we don't want to wait for all in-flight batches at the end of the put call
@@ -50,6 +49,11 @@ class AsyncOffsetTracker implements OffsetTracker {
   private final Map<TopicPartition, Long> maxOffsetByPartition = new HashMap<>();
 
   private final AtomicLong numEntries = new AtomicLong();
+  private final Set<TopicPartition> assignment;
+
+  public AsyncOffsetTracker(Set<TopicPartition> assignment) {
+    this.assignment = assignment;
+  }
 
   static class AsyncOffsetState implements OffsetState {
 
@@ -63,10 +67,12 @@ class AsyncOffsetTracker implements OffsetTracker {
     /**
      * Marks the offset as processed (ready to report to preCommit)
      */
+    @Override
     public void markProcessed() {
       processed = true;
     }
 
+    @Override
     public boolean isProcessed() {
       return processed;
     }
@@ -81,6 +87,7 @@ class AsyncOffsetTracker implements OffsetTracker {
    * Partitions are no longer owned, we should release all related resources.
    * @param topicPartitions partitions to close
    */
+  @Override
   public synchronized void closePartitions(Collection<TopicPartition> topicPartitions) {
     topicPartitions.forEach(tp -> {
       Map<Long, OffsetState> offsets = offsetsByPartition.remove(tp);
@@ -96,12 +103,11 @@ class AsyncOffsetTracker implements OffsetTracker {
    * Older records can be re-added, and the same Offset object will be return if its
    * offset hasn't been reported yet.
    * @param sinkRecord record to add
-   * @param assignment set of topic partitions, assigned to this task
    * @return offset state record that can be used to mark the record as processed
    */
+  @Override
   public synchronized OffsetState addPendingRecord(
-      SinkRecord sinkRecord,
-      Set<TopicPartition> assignment
+      SinkRecord sinkRecord
   ) {
     log.trace("Adding pending record");
     TopicPartition tp = new TopicPartition(sinkRecord.topic(), sinkRecord.kafkaPartition());
@@ -123,10 +129,9 @@ class AsyncOffsetTracker implements OffsetTracker {
   }
 
   /**
-   * @return overall number of entries currently in memory. {@link #updateOffsets()} is the one
-   *         cleaning up entries that are not needed anymore (all the contiguos processed entries
-   *         since the last reported offset)
+   * @return overall number of entries currently in memory.
    */
+  @Override
   public long numOffsetStateEntries() {
     return numEntries.get();
   }
@@ -134,6 +139,7 @@ class AsyncOffsetTracker implements OffsetTracker {
   /**
    * Move offsets to the highest we can.
    */
+  @Override
   public synchronized void updateOffsets() {
     log.trace("Updating offsets");
     offsetsByPartition.forEach(((topicPartition, offsets) -> {
@@ -165,6 +171,7 @@ class AsyncOffsetTracker implements OffsetTracker {
    * @param currentOffsets current offsets from a task
    * @return offsets to commit
    */
+  @Override
   public synchronized Map<TopicPartition, OffsetAndMetadata> offsets(
       ElasticsearchClient client,
       Map<TopicPartition, OffsetAndMetadata> currentOffsets

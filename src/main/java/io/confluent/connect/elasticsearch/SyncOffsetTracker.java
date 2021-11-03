@@ -15,35 +15,24 @@
 
 package io.confluent.connect.elasticsearch;
 
-import java.util.Collection;
 import java.util.Collections;
 import java.util.Map;
-import java.util.Set;
 
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.connect.sink.SinkRecord;
 
 /**
- * It's a no-op offset tracker to use with <code>FLUSH_SYNCHRONOUSLY_CONFIG=true</code>
+ * It's a synchronous offset tracker to use with <code>FLUSH_SYNCHRONOUSLY_CONFIG=true</code>,
+ * that will block on {@link #offsets()}.
  *
  */
 public class SyncOffsetTracker implements OffsetTracker {
 
   @Override
-  public long numOffsetStateEntries() {
-    return 0;
-  }
-
-  @Override
-  public void updateOffsets() {
-  }
-
-  @Override
-  public SyncOffsetState addPendingRecord(SinkRecord record, Set<TopicPartition> assignment) {
+  public SyncOffsetState addPendingRecord(SinkRecord record) {
     return new SyncOffsetState();
   }
-
 
   /**
    * This is a blocking method,
@@ -60,10 +49,6 @@ public class SyncOffsetTracker implements OffsetTracker {
   ) {
     client.waitForInFlightRequests();
     return client.isFailed() ? Collections.emptyMap() : currentOffsets;
-  }
-
-  @Override
-  public void closePartitions(Collection<TopicPartition> partitions) {
   }
 
   static class SyncOffsetState implements OffsetState {

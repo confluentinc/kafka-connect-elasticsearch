@@ -69,7 +69,7 @@ public class ElasticsearchSinkTask extends SinkTask {
     this.existingMappings = new HashSet<>();
     this.indexCache = new HashSet<>();
     if (!config.flushSynchronously()) {
-      this.offsetTracker = new AsyncOffsetTracker();
+      this.offsetTracker = new AsyncOffsetTracker(context.assignment());
     } else {
       this.offsetTracker = new SyncOffsetTracker();
     }
@@ -105,7 +105,7 @@ public class ElasticsearchSinkTask extends SinkTask {
     partitionPauser.maybeResumePartitions();
 
     for (SinkRecord record : records) {
-      OffsetState offsetState = offsetTracker.addPendingRecord(record, context.assignment());
+      OffsetState offsetState = offsetTracker.addPendingRecord(record);
       if (shouldSkipRecord(record)) {
         logTrace("Ignoring {} with null value.", record);
         offsetState.markProcessed();

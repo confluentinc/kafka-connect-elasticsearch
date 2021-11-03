@@ -37,7 +37,7 @@ public class AsyncOffsetTrackerTest {
 
   @Test
   public void testHappyPath() {
-    AsyncOffsetTracker offsetTracker = new AsyncOffsetTracker();
+    AsyncOffsetTracker offsetTracker = new AsyncOffsetTracker(assignment);
 
     TopicPartition tp = new TopicPartition("t1", 0);
     assignment.add(tp);
@@ -46,9 +46,9 @@ public class AsyncOffsetTrackerTest {
     SinkRecord record2 = sinkRecord(tp, 1);
     SinkRecord record3 = sinkRecord(tp, 2);
 
-    OffsetState offsetState1 = offsetTracker.addPendingRecord(record1, assignment);
-    OffsetState offsetState2 = offsetTracker.addPendingRecord(record2, assignment);
-    OffsetState offsetState3 = offsetTracker.addPendingRecord(record3, assignment);
+    OffsetState offsetState1 = offsetTracker.addPendingRecord(record1);
+    OffsetState offsetState2 = offsetTracker.addPendingRecord(record2);
+    OffsetState offsetState3 = offsetTracker.addPendingRecord(record3);
 
     assertThat(offsetTracker.offsets(client, currentOffsets)).isEmpty();
 
@@ -78,7 +78,7 @@ public class AsyncOffsetTrackerTest {
    */
   @Test
   public void testBelowWatermark() {
-    AsyncOffsetTracker offsetTracker = new AsyncOffsetTracker();
+    AsyncOffsetTracker offsetTracker = new AsyncOffsetTracker(assignment);
 
     TopicPartition tp = new TopicPartition("t1", 0);
     assignment.add(tp);
@@ -86,15 +86,15 @@ public class AsyncOffsetTrackerTest {
     SinkRecord record1 = sinkRecord(tp, 0);
     SinkRecord record2 = sinkRecord(tp, 1);
 
-    OffsetState offsetState1 = offsetTracker.addPendingRecord(record1, assignment);
-    OffsetState offsetState2 = offsetTracker.addPendingRecord(record2, assignment);
+    OffsetState offsetState1 = offsetTracker.addPendingRecord(record1);
+    OffsetState offsetState2 = offsetTracker.addPendingRecord(record2);
 
     offsetState1.markProcessed();
     offsetState2.markProcessed();
     offsetTracker.updateOffsets();
     assertThat(offsetTracker.offsets(client, currentOffsets).get(tp).offset()).isEqualTo(2);
 
-    offsetState2 = offsetTracker.addPendingRecord(record2, assignment);
+    offsetState2 = offsetTracker.addPendingRecord(record2);
     offsetTracker.updateOffsets();
     assertThat(offsetTracker.offsets(client, currentOffsets).get(tp).offset()).isEqualTo(2);
 
@@ -105,7 +105,7 @@ public class AsyncOffsetTrackerTest {
 
   @Test
   public void testBatchRetry() {
-    AsyncOffsetTracker offsetTracker = new AsyncOffsetTracker();
+    AsyncOffsetTracker offsetTracker = new AsyncOffsetTracker(assignment);
 
     TopicPartition tp = new TopicPartition("t1", 0);
     assignment.add(tp);
@@ -113,8 +113,8 @@ public class AsyncOffsetTrackerTest {
     SinkRecord record1 = sinkRecord(tp, 0);
     SinkRecord record2 = sinkRecord(tp, 1);
 
-    OffsetState offsetState1A = offsetTracker.addPendingRecord(record1, assignment);
-    OffsetState offsetState2A = offsetTracker.addPendingRecord(record2, assignment);
+    OffsetState offsetState1A = offsetTracker.addPendingRecord(record1);
+    OffsetState offsetState2A = offsetTracker.addPendingRecord(record2);
 
     // first fails but second succeeds
     offsetState2A.markProcessed();
@@ -122,8 +122,8 @@ public class AsyncOffsetTrackerTest {
     assertThat(offsetTracker.offsets(client, currentOffsets)).isEmpty();
 
     // now simulate the batch being retried by the framework (e.g. after a RetriableException)
-    OffsetState offsetState1B = offsetTracker.addPendingRecord(record1, assignment);
-    OffsetState offsetState2B = offsetTracker.addPendingRecord(record2, assignment);
+    OffsetState offsetState1B = offsetTracker.addPendingRecord(record1);
+    OffsetState offsetState2B = offsetTracker.addPendingRecord(record2);
 
     offsetState2B.markProcessed();
     offsetState1B.markProcessed();
@@ -133,7 +133,7 @@ public class AsyncOffsetTrackerTest {
 
   @Test
   public void testRebalance() {
-    AsyncOffsetTracker offsetTracker = new AsyncOffsetTracker();
+    AsyncOffsetTracker offsetTracker = new AsyncOffsetTracker(assignment);
 
     TopicPartition tp1 = new TopicPartition("t1", 0);
     TopicPartition tp2 = new TopicPartition("t2", 0);
@@ -142,9 +142,9 @@ public class AsyncOffsetTrackerTest {
     assignment.add(tp2);
     assignment.add(tp3);
 
-    offsetTracker.addPendingRecord(sinkRecord(tp1, 0), assignment).markProcessed();
-    offsetTracker.addPendingRecord(sinkRecord(tp1, 1), assignment);
-    offsetTracker.addPendingRecord(sinkRecord(tp2, 0), assignment).markProcessed();
+    offsetTracker.addPendingRecord(sinkRecord(tp1, 0)).markProcessed();
+    offsetTracker.addPendingRecord(sinkRecord(tp1, 1));
+    offsetTracker.addPendingRecord(sinkRecord(tp2, 0)).markProcessed();
     assertThat(offsetTracker.numOffsetStateEntries()).isEqualTo(3);
 
     offsetTracker.updateOffsets();
