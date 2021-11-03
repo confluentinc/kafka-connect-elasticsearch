@@ -29,6 +29,12 @@ import org.apache.kafka.connect.sink.SinkRecord;
  */
 public class SyncOffsetTracker implements OffsetTracker {
 
+  private ElasticsearchClient client;
+
+  public SyncOffsetTracker(ElasticsearchClient client) {
+    this.client = client;
+  }
+
   @Override
   public SyncOffsetState addPendingRecord(SinkRecord record) {
     return new SyncOffsetState();
@@ -38,13 +44,11 @@ public class SyncOffsetTracker implements OffsetTracker {
    * This is a blocking method,
    * that blocks until client doesn't have any in-flight requests
    *
-   * @param client Elasticsearch client
    * @param currentOffsets current offsets from a task
    * @return offsets to commit
    */
   @Override
   public Map<TopicPartition, OffsetAndMetadata> offsets(
-      ElasticsearchClient client,
       Map<TopicPartition, OffsetAndMetadata> currentOffsets
   ) {
     client.waitForInFlightRequests();
