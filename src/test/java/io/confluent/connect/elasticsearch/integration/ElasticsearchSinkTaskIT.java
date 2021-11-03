@@ -49,6 +49,7 @@ import io.confluent.common.utils.IntegrationTest;
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnector;
 import io.confluent.connect.elasticsearch.ElasticsearchSinkTask;
 
+
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.any;
 import static com.github.tomakehurst.wiremock.client.WireMock.anyUrl;
@@ -81,8 +82,8 @@ public class ElasticsearchSinkTaskIT {
 
   @Parameterized.Parameters(name = "{index}: syncFlush={0}")
   public static Collection<Object[]> data() {
-    return Arrays.asList(new Object[][] {
-            { true }, { false }
+    return Arrays.asList(new Object[][]{
+        {true}, {false}
     });
   }
 
