@@ -91,7 +91,7 @@ public class ElasticsearchSinkTask extends SinkTask {
     if (!config.flushSynchronously()) {
       this.offsetTracker = new AsyncOffsetTracker(context.assignment());
     } else {
-      this.offsetTracker = new SyncOffsetTracker(client);
+      this.offsetTracker = new SyncOffsetTracker(this.client);
     }
 
     log.info("Started ElasticsearchSinkTask. Connecting to ES server version: {}",
