@@ -167,13 +167,11 @@ class AsyncOffsetTracker implements OffsetTracker {
   }
 
   /**
-   * @param client Elasticsearch client
    * @param currentOffsets current offsets from a task
    * @return offsets to commit
    */
   @Override
   public synchronized Map<TopicPartition, OffsetAndMetadata> offsets(
-      ElasticsearchClient client,
       Map<TopicPartition, OffsetAndMetadata> currentOffsets
   ) {
     return maxOffsetByPartition.entrySet().stream()

@@ -50,21 +50,21 @@ public class AsyncOffsetTrackerTest {
     OffsetState offsetState2 = offsetTracker.addPendingRecord(record2);
     OffsetState offsetState3 = offsetTracker.addPendingRecord(record3);
 
-    assertThat(offsetTracker.offsets(client, currentOffsets)).isEmpty();
+    assertThat(offsetTracker.offsets(currentOffsets)).isEmpty();
 
     offsetState2.markProcessed();
-    assertThat(offsetTracker.offsets(client, currentOffsets)).isEmpty();
+    assertThat(offsetTracker.offsets(currentOffsets)).isEmpty();
 
     offsetState1.markProcessed();
 
     offsetTracker.updateOffsets();
-    Map<TopicPartition, OffsetAndMetadata> offsetMap = offsetTracker.offsets(client, currentOffsets);
+    Map<TopicPartition, OffsetAndMetadata> offsetMap = offsetTracker.offsets(currentOffsets);
     assertThat(offsetMap).hasSize(1);
     assertThat(offsetMap.get(tp).offset()).isEqualTo(2);
 
     offsetState3.markProcessed();
     offsetTracker.updateOffsets();
-    offsetMap = offsetTracker.offsets(client, currentOffsets);
+    offsetMap = offsetTracker.offsets(currentOffsets);
     assertThat(offsetMap).hasSize(1);
     assertThat(offsetMap.get(tp).offset()).isEqualTo(3);
 
@@ -92,15 +92,15 @@ public class AsyncOffsetTrackerTest {
     offsetState1.markProcessed();
     offsetState2.markProcessed();
     offsetTracker.updateOffsets();
-    assertThat(offsetTracker.offsets(client, currentOffsets).get(tp).offset()).isEqualTo(2);
+    assertThat(offsetTracker.offsets(currentOffsets).get(tp).offset()).isEqualTo(2);
 
     offsetState2 = offsetTracker.addPendingRecord(record2);
     offsetTracker.updateOffsets();
-    assertThat(offsetTracker.offsets(client, currentOffsets).get(tp).offset()).isEqualTo(2);
+    assertThat(offsetTracker.offsets(currentOffsets).get(tp).offset()).isEqualTo(2);
 
     offsetState2.markProcessed();
     offsetTracker.updateOffsets();
-    assertThat(offsetTracker.offsets(client, currentOffsets).get(tp).offset()).isEqualTo(2);
+    assertThat(offsetTracker.offsets(currentOffsets).get(tp).offset()).isEqualTo(2);
   }
 
   @Test
@@ -119,7 +119,7 @@ public class AsyncOffsetTrackerTest {
     // first fails but second succeeds
     offsetState2A.markProcessed();
     offsetTracker.updateOffsets();
-    assertThat(offsetTracker.offsets(client, currentOffsets)).isEmpty();
+    assertThat(offsetTracker.offsets(currentOffsets)).isEmpty();
 
     // now simulate the batch being retried by the framework (e.g. after a RetriableException)
     OffsetState offsetState1B = offsetTracker.addPendingRecord(record1);
@@ -128,7 +128,7 @@ public class AsyncOffsetTrackerTest {
     offsetState2B.markProcessed();
     offsetState1B.markProcessed();
     offsetTracker.updateOffsets();
-    assertThat(offsetTracker.offsets(client, currentOffsets).get(tp).offset()).isEqualTo(2);
+    assertThat(offsetTracker.offsets(currentOffsets).get(tp).offset()).isEqualTo(2);
   }
 
   @Test
@@ -148,11 +148,11 @@ public class AsyncOffsetTrackerTest {
     assertThat(offsetTracker.numOffsetStateEntries()).isEqualTo(3);
 
     offsetTracker.updateOffsets();
-    assertThat(offsetTracker.offsets(client, currentOffsets).size()).isEqualTo(2);
+    assertThat(offsetTracker.offsets(currentOffsets).size()).isEqualTo(2);
     assertThat(offsetTracker.numOffsetStateEntries()).isEqualTo(1);
 
     offsetTracker.closePartitions(ImmutableList.of(tp1, tp3));
-    assertThat(offsetTracker.offsets(client, currentOffsets).keySet()).containsExactly(tp2);
+    assertThat(offsetTracker.offsets(currentOffsets).keySet()).containsExactly(tp2);
     assertThat(offsetTracker.numOffsetStateEntries()).isEqualTo(0);
   }
 

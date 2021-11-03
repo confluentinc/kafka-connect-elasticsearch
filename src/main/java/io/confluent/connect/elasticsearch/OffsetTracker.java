@@ -52,12 +52,10 @@ public interface OffsetTracker {
   /**
    * Method that returns offsets, that are safe to commit
    *
-   * @param client Elasticsearch client
    * @param currentOffsets current offsets, that are provided by a task
    * @return offsets that are safe to commit
    */
   Map<TopicPartition, OffsetAndMetadata> offsets(
-      ElasticsearchClient client,
       Map<TopicPartition, OffsetAndMetadata> currentOffsets
   );
 

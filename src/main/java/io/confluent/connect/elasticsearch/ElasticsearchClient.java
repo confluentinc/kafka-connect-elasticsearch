@@ -65,7 +65,6 @@ import org.slf4j.LoggerFactory;
 
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BehaviorOnMalformedDoc;
 
-
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.FLUSH_TIMEOUT_MS_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.MAX_BUFFERED_RECORDS_CONFIG;
 import static java.util.stream.Collectors.toList;
@@ -117,7 +116,7 @@ public class ElasticsearchClient {
   public ElasticsearchClient(
       ElasticsearchSinkConnectorConfig config,
       ErrantRecordReporter reporter,
-      OffsetTracker offsetTracker
+      Runnable afterBulkCallback
   ) {
     this.bulkExecutorService = Executors.newFixedThreadPool(config.maxInFlightRequests());
     this.numBufferedRecords = new AtomicInteger(0);
@@ -141,7 +140,7 @@ public class ElasticsearchClient {
             .setHttpClientConfigCallback(configCallbackHandler)
     );
     this.bulkProcessor = BulkProcessor
-        .builder(buildConsumer(), buildListener(offsetTracker))
+        .builder(buildConsumer(), buildListener(afterBulkCallback))
         .setBulkActions(config.batchSize())
         .setBulkSize(config.bulkSize())
         .setConcurrentRequests(config.maxInFlightRequests() - 1) // 0 = no concurrent requests
@@ -359,7 +358,7 @@ public class ElasticsearchClient {
    *
    * @return the listener
    */
-  private BulkProcessor.Listener buildListener(OffsetTracker offsetTracker) {
+  private BulkProcessor.Listener buildListener(Runnable afterBulkCallback) {
     return new Listener() {
       @Override
       public void beforeBulk(long executionId, BulkRequest request) {
@@ -385,7 +384,7 @@ public class ElasticsearchClient {
           idx++;
         }
 
-        offsetTracker.updateOffsets();
+        afterBulkCallback.run();
 
         bulkFinished(executionId, request);
       }

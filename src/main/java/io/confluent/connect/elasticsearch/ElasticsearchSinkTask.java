@@ -68,11 +68,6 @@ public class ElasticsearchSinkTask extends SinkTask {
     this.converter = new DataConverter(config);
     this.existingMappings = new HashSet<>();
     this.indexCache = new HashSet<>();
-    if (!config.flushSynchronously()) {
-      this.offsetTracker = new AsyncOffsetTracker(context.assignment());
-    } else {
-      this.offsetTracker = new SyncOffsetTracker();
-    }
     int offsetHighWaterMark = config.maxBufferedRecords() * 10;
     int offsetLowWaterMark = config.maxBufferedRecords() * 5;
     this.partitionPauser = new PartitionPauser(context,
@@ -89,9 +84,15 @@ public class ElasticsearchSinkTask extends SinkTask {
       // Will occur in Connect runtimes earlier than 2.6
       log.warn("AK versions prior to 2.6 do not support the errant record reporter.");
     }
-
+    Runnable afterBulkCallback = () -> offsetTracker.updateOffsets();
     this.client = client != null ? client
-        : new ElasticsearchClient(config, reporter, offsetTracker);
+        : new ElasticsearchClient(config, reporter, afterBulkCallback);
+
+    if (!config.flushSynchronously()) {
+      this.offsetTracker = new AsyncOffsetTracker(context.assignment());
+    } else {
+      this.offsetTracker = new SyncOffsetTracker(client);
+    }
 
     log.info("Started ElasticsearchSinkTask. Connecting to ES server version: {}",
         getServerVersion());
@@ -127,7 +128,7 @@ public class ElasticsearchSinkTask extends SinkTask {
     } catch (IllegalStateException e) {
       log.debug("Tried to flush data to Elasticsearch, but BulkProcessor is already closed.", e);
     }
-    Map<TopicPartition, OffsetAndMetadata> offsets = offsetTracker.offsets(client, currentOffsets);
+    Map<TopicPartition, OffsetAndMetadata> offsets = offsetTracker.offsets(currentOffsets);
     log.debug("preCommitting offsets {}", offsets);
     return offsets;
   }
