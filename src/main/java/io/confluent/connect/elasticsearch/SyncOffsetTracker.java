@@ -24,7 +24,7 @@ import org.apache.kafka.connect.sink.SinkRecord;
 
 /**
  * It's a synchronous offset tracker to use with <code>FLUSH_SYNCHRONOUSLY_CONFIG=true</code>,
- * that will block on {@link #offsets()}.
+ * that will block on {@link SyncOffsetTracker#offsets(Map<TopicPartition, OffsetAndMetadata>)}.
  *
  */
 public class SyncOffsetTracker implements OffsetTracker {
