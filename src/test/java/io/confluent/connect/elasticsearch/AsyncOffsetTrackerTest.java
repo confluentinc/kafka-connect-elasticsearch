@@ -15,24 +15,34 @@
 
 package io.confluent.connect.elasticsearch;
 
-import io.confluent.connect.elasticsearch.OffsetTracker.OffsetState;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.connect.sink.SinkRecord;
+import org.apache.kafka.connect.sink.SinkTaskContext;
 import org.junit.Test;
 import org.testcontainers.shaded.com.google.common.collect.ImmutableList;
 
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
-public class OffsetTrackerTest {
+public class AsyncOffsetTrackerTest {
+
+  @SuppressWarnings("unchecked")
+  private final Map<TopicPartition, OffsetAndMetadata> currentOffsets = mock(Map.class);
+  private SinkTaskContext context = mock(SinkTaskContext.class);
 
   @Test
   public void testHappyPath() {
-    OffsetTracker offsetTracker = new OffsetTracker();
+    AsyncOffsetTracker offsetTracker = new AsyncOffsetTracker(context);
 
     TopicPartition tp = new TopicPartition("t1", 0);
+    when(context.assignment()).thenReturn(Collections.singleton(tp));
 
     SinkRecord record1 = sinkRecord(tp, 0);
     SinkRecord record2 = sinkRecord(tp, 1);
@@ -42,21 +52,21 @@ public class OffsetTrackerTest {
     OffsetState offsetState2 = offsetTracker.addPendingRecord(record2);
     OffsetState offsetState3 = offsetTracker.addPendingRecord(record3);
 
-    assertThat(offsetTracker.offsets()).isEmpty();
+    assertThat(offsetTracker.offsets(currentOffsets)).isEmpty();
 
     offsetState2.markProcessed();
-    assertThat(offsetTracker.offsets()).isEmpty();
+    assertThat(offsetTracker.offsets(currentOffsets)).isEmpty();
 
     offsetState1.markProcessed();
 
     offsetTracker.updateOffsets();
-    Map<TopicPartition, OffsetAndMetadata> offsetMap = offsetTracker.offsets();
+    Map<TopicPartition, OffsetAndMetadata> offsetMap = offsetTracker.offsets(currentOffsets);
     assertThat(offsetMap).hasSize(1);
     assertThat(offsetMap.get(tp).offset()).isEqualTo(2);
 
     offsetState3.markProcessed();
     offsetTracker.updateOffsets();
-    offsetMap = offsetTracker.offsets();
+    offsetMap = offsetTracker.offsets(currentOffsets);
     assertThat(offsetMap).hasSize(1);
     assertThat(offsetMap.get(tp).offset()).isEqualTo(3);
 
@@ -70,9 +80,10 @@ public class OffsetTrackerTest {
    */
   @Test
   public void testBelowWatermark() {
-    OffsetTracker offsetTracker = new OffsetTracker();
+    AsyncOffsetTracker offsetTracker = new AsyncOffsetTracker(context);
 
     TopicPartition tp = new TopicPartition("t1", 0);
+    when(context.assignment()).thenReturn(Collections.singleton(tp));
 
     SinkRecord record1 = sinkRecord(tp, 0);
     SinkRecord record2 = sinkRecord(tp, 1);
@@ -83,22 +94,23 @@ public class OffsetTrackerTest {
     offsetState1.markProcessed();
     offsetState2.markProcessed();
     offsetTracker.updateOffsets();
-    assertThat(offsetTracker.offsets().get(tp).offset()).isEqualTo(2);
+    assertThat(offsetTracker.offsets(currentOffsets).get(tp).offset()).isEqualTo(2);
 
     offsetState2 = offsetTracker.addPendingRecord(record2);
     offsetTracker.updateOffsets();
-    assertThat(offsetTracker.offsets().get(tp).offset()).isEqualTo(2);
+    assertThat(offsetTracker.offsets(currentOffsets).get(tp).offset()).isEqualTo(2);
 
     offsetState2.markProcessed();
     offsetTracker.updateOffsets();
-    assertThat(offsetTracker.offsets().get(tp).offset()).isEqualTo(2);
+    assertThat(offsetTracker.offsets(currentOffsets).get(tp).offset()).isEqualTo(2);
   }
 
   @Test
   public void testBatchRetry() {
-    OffsetTracker offsetTracker = new OffsetTracker();
+    AsyncOffsetTracker offsetTracker = new AsyncOffsetTracker(context);
 
     TopicPartition tp = new TopicPartition("t1", 0);
+    when(context.assignment()).thenReturn(Collections.singleton(tp));
 
     SinkRecord record1 = sinkRecord(tp, 0);
     SinkRecord record2 = sinkRecord(tp, 1);
@@ -109,7 +121,7 @@ public class OffsetTrackerTest {
     // first fails but second succeeds
     offsetState2A.markProcessed();
     offsetTracker.updateOffsets();
-    assertThat(offsetTracker.offsets()).isEmpty();
+    assertThat(offsetTracker.offsets(currentOffsets)).isEmpty();
 
     // now simulate the batch being retried by the framework (e.g. after a RetriableException)
     OffsetState offsetState1B = offsetTracker.addPendingRecord(record1);
@@ -118,16 +130,18 @@ public class OffsetTrackerTest {
     offsetState2B.markProcessed();
     offsetState1B.markProcessed();
     offsetTracker.updateOffsets();
-    assertThat(offsetTracker.offsets().get(tp).offset()).isEqualTo(2);
+    assertThat(offsetTracker.offsets(currentOffsets).get(tp).offset()).isEqualTo(2);
   }
 
   @Test
   public void testRebalance() {
-    OffsetTracker offsetTracker = new OffsetTracker();
+    AsyncOffsetTracker offsetTracker = new AsyncOffsetTracker(context);
 
     TopicPartition tp1 = new TopicPartition("t1", 0);
     TopicPartition tp2 = new TopicPartition("t2", 0);
     TopicPartition tp3 = new TopicPartition("t3", 0);
+
+    when(context.assignment()).thenReturn(new HashSet<>(Arrays.asList(tp1, tp2, tp3)));
 
     offsetTracker.addPendingRecord(sinkRecord(tp1, 0)).markProcessed();
     offsetTracker.addPendingRecord(sinkRecord(tp1, 1));
@@ -135,11 +149,11 @@ public class OffsetTrackerTest {
     assertThat(offsetTracker.numOffsetStateEntries()).isEqualTo(3);
 
     offsetTracker.updateOffsets();
-    assertThat(offsetTracker.offsets().size()).isEqualTo(2);
+    assertThat(offsetTracker.offsets(currentOffsets).size()).isEqualTo(2);
     assertThat(offsetTracker.numOffsetStateEntries()).isEqualTo(1);
 
     offsetTracker.closePartitions(ImmutableList.of(tp1, tp3));
-    assertThat(offsetTracker.offsets().keySet()).containsExactly(tp2);
+    assertThat(offsetTracker.offsets(currentOffsets).keySet()).containsExactly(tp2);
     assertThat(offsetTracker.numOffsetStateEntries()).isEqualTo(0);
   }
 

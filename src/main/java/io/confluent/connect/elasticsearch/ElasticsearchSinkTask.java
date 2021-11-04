@@ -15,7 +15,13 @@
 
 package io.confluent.connect.elasticsearch;
 
-import io.confluent.connect.elasticsearch.OffsetTracker.OffsetState;
+import java.util.Collection;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
+import java.util.function.BooleanSupplier;
+import java.util.stream.Collectors;
+
 import org.apache.http.HttpHost;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
@@ -32,13 +38,6 @@ import org.elasticsearch.client.RestHighLevelClient;
 import org.elasticsearch.client.core.MainResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.util.Collection;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Set;
-import java.util.function.BooleanSupplier;
-import java.util.stream.Collectors;
 
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BehaviorOnNullValues;
 
@@ -69,14 +68,11 @@ public class ElasticsearchSinkTask extends SinkTask {
     this.converter = new DataConverter(config);
     this.existingMappings = new HashSet<>();
     this.indexCache = new HashSet<>();
-    this.offsetTracker = new OffsetTracker();
-
     int offsetHighWaterMark = config.maxBufferedRecords() * 10;
     int offsetLowWaterMark = config.maxBufferedRecords() * 5;
     this.partitionPauser = new PartitionPauser(context,
         () -> offsetTracker.numOffsetStateEntries() > offsetHighWaterMark,
         () -> offsetTracker.numOffsetStateEntries() <= offsetLowWaterMark);
-
     this.reporter = null;
     try {
       if (context.errantRecordReporter() == null) {
@@ -88,9 +84,15 @@ public class ElasticsearchSinkTask extends SinkTask {
       // Will occur in Connect runtimes earlier than 2.6
       log.warn("AK versions prior to 2.6 do not support the errant record reporter.");
     }
-
+    Runnable afterBulkCallback = () -> offsetTracker.updateOffsets();
     this.client = client != null ? client
-            : new ElasticsearchClient(config, reporter, offsetTracker);
+        : new ElasticsearchClient(config, reporter, afterBulkCallback);
+
+    if (!config.flushSynchronously()) {
+      this.offsetTracker = new AsyncOffsetTracker(context);
+    } else {
+      this.offsetTracker = new SyncOffsetTracker(this.client);
+    }
 
     log.info("Started ElasticsearchSinkTask. Connecting to ES server version: {}",
         getServerVersion());
@@ -105,14 +107,12 @@ public class ElasticsearchSinkTask extends SinkTask {
 
     for (SinkRecord record : records) {
       OffsetState offsetState = offsetTracker.addPendingRecord(record);
-
       if (shouldSkipRecord(record)) {
         logTrace("Ignoring {} with null value.", record);
         offsetState.markProcessed();
         reportBadRecord(record, new ConnectException("Cannot write null valued record."));
         continue;
       }
-
       logTrace("Writing {} to Elasticsearch.", record);
 
       tryWriteRecord(record, offsetState);
@@ -122,14 +122,14 @@ public class ElasticsearchSinkTask extends SinkTask {
 
   @Override
   public Map<TopicPartition, OffsetAndMetadata> preCommit(
-          Map<TopicPartition, OffsetAndMetadata> currentOffsets) {
+      Map<TopicPartition, OffsetAndMetadata> currentOffsets) {
     try {
       // This will just trigger an asynchronous execution of any buffered records
       client.flush();
     } catch (IllegalStateException e) {
       log.debug("Tried to flush data to Elasticsearch, but BulkProcessor is already closed.", e);
     }
-    Map<TopicPartition, OffsetAndMetadata> offsets = offsetTracker.offsets();
+    Map<TopicPartition, OffsetAndMetadata> offsets = offsetTracker.offsets(currentOffsets);
     log.debug("preCommitting offsets {}", offsets);
     return offsets;
   }
