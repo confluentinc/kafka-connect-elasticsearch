@@ -30,6 +30,8 @@ public interface OffsetTracker {
 
   /**
    * Method that return a total number of offset entries, that is in memory
+   *
+   * @return number of offset entries
    */
   default long numOffsetStateEntries() {
     return 0;
