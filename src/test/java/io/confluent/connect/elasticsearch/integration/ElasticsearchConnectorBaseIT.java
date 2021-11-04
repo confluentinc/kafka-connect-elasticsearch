@@ -15,6 +15,14 @@
 
 package io.confluent.connect.elasticsearch.integration;
 
+import java.io.IOException;
+import java.net.ConnectException;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
 import org.apache.kafka.connect.json.JsonConverter;
 import org.apache.kafka.connect.storage.StringConverter;
 import org.apache.kafka.test.TestUtils;
@@ -23,18 +31,11 @@ import org.elasticsearch.client.security.user.User;
 import org.elasticsearch.client.security.user.privileges.IndicesPrivileges;
 import org.elasticsearch.client.security.user.privileges.Role;
 import org.elasticsearch.client.security.user.privileges.Role.Builder;
+import org.elasticsearch.rest.RestStatus;
 import org.elasticsearch.search.SearchHit;
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Before;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.net.ConnectException;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
 
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnector;
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig;
@@ -44,10 +45,10 @@ import io.confluent.connect.elasticsearch.helper.ElasticsearchHelperClient;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_PASSWORD_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_USERNAME_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_KEY_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_SCHEMA_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.DATA_STREAM_DATASET_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.DATA_STREAM_TYPE_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_KEY_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_SCHEMA_CONFIG;
 import static org.apache.kafka.connect.json.JsonConverterConfig.SCHEMAS_ENABLE_CONFIG;
 import static org.apache.kafka.connect.runtime.ConnectorConfig.CONNECTOR_CLASS_CONFIG;
 import static org.apache.kafka.connect.runtime.ConnectorConfig.KEY_CONVERTER_CLASS_CONFIG;
@@ -110,6 +111,12 @@ public class ElasticsearchConnectorBaseIT extends BaseConnectorIT {
           helperClient.close();
         } catch (ConnectException e) {
           // Server is already down. No need to close
+        } catch (ElasticsearchStatusException e) {
+          if (RestStatus.NOT_FOUND.equals(e.status())) {
+            // index wasn't created, nothing to clean
+          } else {
+            throw e;
+          }
         }
       }
     }
@@ -144,6 +151,17 @@ public class ElasticsearchConnectorBaseIT extends BaseConnectorIT {
     writeRecords(NUM_RECORDS);
 
     verifySearchResults(NUM_RECORDS);
+  }
+
+  protected void assertConnectorFailsOnWriteRecords(Map<String, String> props, String trace) throws Exception {
+    // start the connector
+    connect.configureConnector(CONNECTOR_NAME, props);
+
+    // wait for tasks to spin up
+    waitForConnectorToStart(CONNECTOR_NAME, TASKS_MAX);
+
+    writeRecords(NUM_RECORDS);
+    waitForConnectorToFail(CONNECTOR_NAME, 1, trace);
   }
 
   protected void setDataStream() {
@@ -203,7 +221,7 @@ public class ElasticsearchConnectorBaseIT extends BaseConnectorIT {
   }
 
   protected void writeRecordsFromStartIndex(int start, int numRecords) {
-    for (int i  = start; i < start + numRecords; i++) {
+    for (int i = start; i < start + numRecords; i++) {
       connect.kafka().produce(
           TOPIC,
           String.valueOf(i),
@@ -242,8 +260,8 @@ public class ElasticsearchConnectorBaseIT extends BaseConnectorIT {
   }
 
   private static User getMinimalPrivilegesUser(boolean forDataStream) {
-        return new User(forDataStream ? ELASTIC_DATA_STREAM_MINIMAL_PRIVILEGES_NAME : ELASTIC_MINIMAL_PRIVILEGES_NAME,
-            Collections.singletonList(forDataStream ? ES_SINK_CONNECTOR_DS_ROLE : ES_SINK_CONNECTOR_ROLE));
+    return new User(forDataStream ? ELASTIC_DATA_STREAM_MINIMAL_PRIVILEGES_NAME : ELASTIC_MINIMAL_PRIVILEGES_NAME,
+        Collections.singletonList(forDataStream ? ES_SINK_CONNECTOR_DS_ROLE : ES_SINK_CONNECTOR_ROLE));
   }
 
   private static String getMinimalPrivilegesPassword(boolean forDataStream) {

@@ -15,7 +15,25 @@
 
 package io.confluent.connect.elasticsearch;
 
-import io.confluent.connect.elasticsearch.OffsetTracker.OffsetState;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.locks.Condition;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.BiConsumer;
+
 import org.apache.http.HttpHost;
 import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.connect.data.Schema;
@@ -44,22 +62,6 @@ import org.elasticsearch.cluster.metadata.MappingMetadata;
 import org.elasticsearch.common.unit.TimeValue;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
-import java.util.concurrent.Callable;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.BiConsumer;
 
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BehaviorOnMalformedDoc;
 
@@ -108,19 +110,13 @@ public class ElasticsearchClient {
   private final RestHighLevelClient client;
   private final ExecutorService bulkExecutorService;
   private final Time clock;
-
-  // Visible for testing
-  public ElasticsearchClient(
-          ElasticsearchSinkConnectorConfig config,
-          ErrantRecordReporter reporter
-  ) {
-    this(config, reporter, new OffsetTracker());
-  }
+  private final Lock inFlightRequestLock = new ReentrantLock();
+  private final Condition inFlightRequestsUpdated = inFlightRequestLock.newCondition();
 
   public ElasticsearchClient(
       ElasticsearchSinkConnectorConfig config,
       ErrantRecordReporter reporter,
-      OffsetTracker offsetTracker
+      Runnable afterBulkCallback
   ) {
     this.bulkExecutorService = Executors.newFixedThreadPool(config.maxInFlightRequests());
     this.numBufferedRecords = new AtomicInteger(0);
@@ -144,7 +140,7 @@ public class ElasticsearchClient {
             .setHttpClientConfigCallback(configCallbackHandler)
     );
     this.bulkProcessor = BulkProcessor
-        .builder(buildConsumer(), buildListener(offsetTracker))
+        .builder(buildConsumer(), buildListener(afterBulkCallback))
         .setBulkActions(config.batchSize())
         .setBulkSize(config.bulkSize())
         .setConcurrentRequests(config.maxInFlightRequests() - 1) // 0 = no concurrent requests
@@ -248,6 +244,20 @@ public class ElasticsearchClient {
     bulkProcessor.flush();
   }
 
+  public void waitForInFlightRequests() {
+    inFlightRequestLock.lock();
+    try {
+      while (numBufferedRecords.get() > 0) {
+        inFlightRequestsUpdated.await();
+      }
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+      throw new ConnectException(e);
+    } finally {
+      inFlightRequestLock.unlock();
+    }
+  }
+
   /**
    * Checks whether the index already has a mapping or not.
    * @param index the index to check
@@ -273,6 +283,7 @@ public class ElasticsearchClient {
    *
    * @param record the record to index
    * @param request the associated request to send
+   * @param offsetState record's offset state
    * @throws ConnectException if one of the requests failed
    */
   public void index(SinkRecord record, DocWriteRequest<?> request, OffsetState offsetState) {
@@ -347,7 +358,7 @@ public class ElasticsearchClient {
    *
    * @return the listener
    */
-  private BulkProcessor.Listener buildListener(OffsetTracker offsetTracker) {
+  private BulkProcessor.Listener buildListener(Runnable afterBulkCallback) {
     return new Listener() {
       @Override
       public void beforeBulk(long executionId, BulkRequest request) {
@@ -373,7 +384,7 @@ public class ElasticsearchClient {
           idx++;
         }
 
-        offsetTracker.updateOffsets();
+        afterBulkCallback.run();
 
         bulkFinished(executionId, request);
       }
@@ -388,7 +399,13 @@ public class ElasticsearchClient {
       private void bulkFinished(long executionId, BulkRequest request) {
         request.requests().forEach(requestToSinkRecord::remove);
         removeFromInFlightRequests(executionId);
-        numBufferedRecords.addAndGet(-request.requests().size());
+        inFlightRequestLock.lock();
+        try {
+          numBufferedRecords.addAndGet(-request.requests().size());
+          inFlightRequestsUpdated.signalAll();
+        } finally {
+          inFlightRequestLock.unlock();
+        }
       }
     };
   }
@@ -566,7 +583,7 @@ public class ElasticsearchClient {
    *
    * @return true if a response has failed, false if none have failed
    */
-  private boolean isFailed() {
+  public boolean isFailed() {
     return error.get() != null;
   }
 
