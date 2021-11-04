@@ -18,29 +18,31 @@ package io.confluent.connect.elasticsearch;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.connect.sink.SinkRecord;
+import org.apache.kafka.connect.sink.SinkTaskContext;
 import org.junit.Test;
 import org.testcontainers.shaded.com.google.common.collect.ImmutableList;
 
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.Map;
-import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 public class AsyncOffsetTrackerTest {
 
-  private final ElasticsearchClient client = mock(ElasticsearchClient.class);
   @SuppressWarnings("unchecked")
   private final Map<TopicPartition, OffsetAndMetadata> currentOffsets = mock(Map.class);
-  private final Set<TopicPartition> assignment = new HashSet<>();
+  private SinkTaskContext context = mock(SinkTaskContext.class);
 
   @Test
   public void testHappyPath() {
-    AsyncOffsetTracker offsetTracker = new AsyncOffsetTracker(assignment);
+    AsyncOffsetTracker offsetTracker = new AsyncOffsetTracker(context);
 
     TopicPartition tp = new TopicPartition("t1", 0);
-    assignment.add(tp);
+    when(context.assignment()).thenReturn(Collections.singleton(tp));
 
     SinkRecord record1 = sinkRecord(tp, 0);
     SinkRecord record2 = sinkRecord(tp, 1);
@@ -78,10 +80,10 @@ public class AsyncOffsetTrackerTest {
    */
   @Test
   public void testBelowWatermark() {
-    AsyncOffsetTracker offsetTracker = new AsyncOffsetTracker(assignment);
+    AsyncOffsetTracker offsetTracker = new AsyncOffsetTracker(context);
 
     TopicPartition tp = new TopicPartition("t1", 0);
-    assignment.add(tp);
+    when(context.assignment()).thenReturn(Collections.singleton(tp));
 
     SinkRecord record1 = sinkRecord(tp, 0);
     SinkRecord record2 = sinkRecord(tp, 1);
@@ -105,10 +107,10 @@ public class AsyncOffsetTrackerTest {
 
   @Test
   public void testBatchRetry() {
-    AsyncOffsetTracker offsetTracker = new AsyncOffsetTracker(assignment);
+    AsyncOffsetTracker offsetTracker = new AsyncOffsetTracker(context);
 
     TopicPartition tp = new TopicPartition("t1", 0);
-    assignment.add(tp);
+    when(context.assignment()).thenReturn(Collections.singleton(tp));
 
     SinkRecord record1 = sinkRecord(tp, 0);
     SinkRecord record2 = sinkRecord(tp, 1);
@@ -133,14 +135,13 @@ public class AsyncOffsetTrackerTest {
 
   @Test
   public void testRebalance() {
-    AsyncOffsetTracker offsetTracker = new AsyncOffsetTracker(assignment);
+    AsyncOffsetTracker offsetTracker = new AsyncOffsetTracker(context);
 
     TopicPartition tp1 = new TopicPartition("t1", 0);
     TopicPartition tp2 = new TopicPartition("t2", 0);
     TopicPartition tp3 = new TopicPartition("t3", 0);
-    assignment.add(tp1);
-    assignment.add(tp2);
-    assignment.add(tp3);
+
+    when(context.assignment()).thenReturn(new HashSet<>(Arrays.asList(tp1, tp2, tp3)));
 
     offsetTracker.addPendingRecord(sinkRecord(tp1, 0)).markProcessed();
     offsetTracker.addPendingRecord(sinkRecord(tp1, 1));
