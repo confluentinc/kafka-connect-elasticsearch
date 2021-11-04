@@ -89,7 +89,7 @@ public class ElasticsearchSinkTask extends SinkTask {
         : new ElasticsearchClient(config, reporter, afterBulkCallback);
 
     if (!config.flushSynchronously()) {
-      this.offsetTracker = new AsyncOffsetTracker(context.assignment());
+      this.offsetTracker = new AsyncOffsetTracker(context);
     } else {
       this.offsetTracker = new SyncOffsetTracker(this.client);
     }

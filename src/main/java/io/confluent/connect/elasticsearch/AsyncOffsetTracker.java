@@ -20,13 +20,13 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
 
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.sink.SinkRecord;
+import org.apache.kafka.connect.sink.SinkTaskContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -49,10 +49,10 @@ class AsyncOffsetTracker implements OffsetTracker {
   private final Map<TopicPartition, Long> maxOffsetByPartition = new HashMap<>();
 
   private final AtomicLong numEntries = new AtomicLong();
-  private final Set<TopicPartition> assignment;
+  private final SinkTaskContext context;
 
-  public AsyncOffsetTracker(Set<TopicPartition> assignment) {
-    this.assignment = assignment;
+  public AsyncOffsetTracker(SinkTaskContext context) {
+    this.context = context;
   }
 
   static class AsyncOffsetState implements OffsetState {
@@ -108,7 +108,7 @@ class AsyncOffsetTracker implements OffsetTracker {
   ) {
     log.trace("Adding pending record");
     TopicPartition tp = new TopicPartition(sinkRecord.topic(), sinkRecord.kafkaPartition());
-    if (!assignment.contains(tp)) {
+    if (!context.assignment().contains(tp)) {
       String msg = String.format("Found a topic name '%s' that doesn't match assigned partitions."
           + " Connector doesn't support topic mutating SMTs", sinkRecord.topic());
       throw new ConnectException(msg);
