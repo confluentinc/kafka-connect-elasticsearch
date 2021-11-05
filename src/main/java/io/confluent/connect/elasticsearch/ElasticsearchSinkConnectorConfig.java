@@ -121,7 +121,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
             + " penalty and makes the connector less responsive but allows for topic-mutating SMTs"
             + " (e.g. RegexRouter or TimestampRouter)";
   private static final String FLUSH_SYNCHRONOUSLY_DISPLAY = "Flush synchronously";
-  private static final boolean FLUSH_SYNCHRONOUSLY_DEFAULT = true;
+  private static final boolean FLUSH_SYNCHRONOUSLY_DEFAULT = false;
 
   public static final String MAX_RETRIES_CONFIG = "max.retries";
   private static final String MAX_RETRIES_DOC =
