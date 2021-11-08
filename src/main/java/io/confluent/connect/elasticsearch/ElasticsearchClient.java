@@ -25,6 +25,7 @@ import org.apache.kafka.connect.sink.SinkRecord;
 import org.elasticsearch.ElasticsearchStatusException;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.DocWriteRequest;
+import org.elasticsearch.action.admin.indices.alias.get.GetAliasesRequest;
 import org.elasticsearch.action.bulk.BackoffPolicy;
 import org.elasticsearch.action.bulk.BulkItemResponse;
 import org.elasticsearch.action.bulk.BulkProcessor;
@@ -221,7 +222,7 @@ public class ElasticsearchClient {
    * @return true if the index or data stream was created, false if it already exists
    */
   public boolean createIndexOrDataStream(String name) {
-    if (indexExists(name)) {
+    if (indexExists(name) || aliasExists(name)) {
       return false;
     }
     return config.isDataStream() ? createDataStream(name) : createIndex(name);
@@ -339,6 +340,20 @@ public class ElasticsearchClient {
     return callWithRetries(
         "check if index " + index + " exists",
         () -> client.indices().exists(request, RequestOptions.DEFAULT)
+    );
+  }
+
+  /**
+   * Checks whether the alias exists.
+   *
+   * @param alias the alias to check
+   * @return true if it exists, false if it does not
+   */
+  public boolean aliasExists(String alias) {
+    GetAliasesRequest request = new GetAliasesRequest(alias);
+    return callWithRetries(
+        "check if alias " + alias + " exists",
+        () -> client.indices().existsAlias(request, RequestOptions.DEFAULT)
     );
   }
 

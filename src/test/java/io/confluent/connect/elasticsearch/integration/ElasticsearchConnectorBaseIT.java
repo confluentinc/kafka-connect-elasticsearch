@@ -155,6 +155,13 @@ public class ElasticsearchConnectorBaseIT extends BaseConnectorIT {
     props.put(CONNECTION_PASSWORD_CONFIG, ELASTIC_DS_MINIMAL_PRIVILEGES_PASSWORD);
   }
 
+  protected void setAlias() throws IOException {
+    String alias = TOPIC;
+    index = "backing_index";
+    helperClient.createIndex(index, "{}");
+    helperClient.createAlias(alias, index);
+  }
+
   protected void setupFromContainer() {
     String address = container.getConnectionUrl();
     props.put(CONNECTION_URL_CONFIG, address);

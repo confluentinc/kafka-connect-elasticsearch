@@ -76,6 +76,7 @@ import org.junit.Test;
 public class ElasticsearchClientTest {
 
   private static final String INDEX = "index";
+  private static final String ALIAS = "alias";
   private static final String ELASTIC_SUPERUSER_NAME = "elastic";
   private static final String ELASTIC_SUPERUSER_PASSWORD = "elastic";
   private static final String TOPIC = "index";
@@ -218,6 +219,24 @@ public class ElasticsearchClientTest {
     assertFalse(helperClient.indexExists(index));
 
     assertFalse(client.indexExists(index));
+    client.close();
+  }
+
+  @Test
+  public void testAliasExists() throws IOException {
+    ElasticsearchClient client = new ElasticsearchClient(config, null);
+    assertTrue(client.createIndexOrDataStream(index));
+
+    helperClient.createAlias(ALIAS, index);
+    assertTrue(client.aliasExists(ALIAS));
+    client.close();
+  }
+
+  @Test
+  public void testAliasDoesNotExist() {
+    ElasticsearchClient client = new ElasticsearchClient(config, null);
+
+    assertFalse(client.aliasExists(ALIAS));
     client.close();
   }
 
