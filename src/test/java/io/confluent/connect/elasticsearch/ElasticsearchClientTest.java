@@ -535,8 +535,8 @@ public class ElasticsearchClientTest {
     client.flush();
 
     // Make sure that no error was reported for either offset [1, 2] record(s)
-    verify(reporter, never()).report(eq(sinkRecord(1)), any(Throwable.class));
-    verify(reporter, never()).report(eq(sinkRecord(2)), any(Throwable.class));
+    verify(reporter, never()).report(eq(sinkRecord("key0", 1)), any(Throwable.class));
+    verify(reporter, never()).report(eq(sinkRecord("key0", 2)), any(Throwable.class));
     client.close();
   }
 
