@@ -391,6 +391,20 @@ public class DataConverterTest {
   }
 
   @Test
+  public void testAddExternalVersioningIfNotDataStream() {
+    props.put(ElasticsearchSinkConnectorConfig.IGNORE_KEY_CONFIG, "false");
+    converter = new DataConverter(new ElasticsearchSinkConnectorConfig(props));
+    Schema preProcessedSchema = converter.preProcessSchema(schema);
+    Struct struct = new Struct(preProcessedSchema).put("string", "myValue");
+    SinkRecord sinkRecord = createSinkRecordWithValue(struct);
+
+    IndexRequest actualRecord = (IndexRequest) converter.convertRecord(sinkRecord, index);
+
+    assertEquals(VersionType.EXTERNAL, actualRecord.versionType());
+  }
+
+
+  @Test
   public void testDoNotInjectMissingPayloadTimestampIfDataStreamAndTimestampMapNotFound() {
     configureDataStream();
     props.put(ElasticsearchSinkConnectorConfig.DATA_STREAM_TIMESTAMP_CONFIG, "timestampFieldNotPresent");

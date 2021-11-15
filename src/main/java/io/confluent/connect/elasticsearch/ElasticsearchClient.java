@@ -60,6 +60,7 @@ import org.elasticsearch.client.indices.GetMappingsResponse;
 import org.elasticsearch.client.indices.PutMappingRequest;
 import org.elasticsearch.cluster.metadata.MappingMetadata;
 import org.elasticsearch.common.unit.TimeValue;
+import org.elasticsearch.index.VersionType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -377,9 +378,10 @@ public class ElasticsearchClient {
 
         int idx = 0;
         for (BulkItemResponse bulkItemResponse : response) {
-          boolean failed = handleResponse(bulkItemResponse, executionId);
+          DocWriteRequest<?> req = requests.get(idx);
+          boolean failed = handleResponse(bulkItemResponse, req, executionId);
           if (!failed && idx < requests.size()) {
-            requestToSinkRecord.get(requests.get(idx)).offsetState.markProcessed();
+            requestToSinkRecord.get(req).offsetState.markProcessed();
           }
           idx++;
         }
@@ -504,11 +506,13 @@ public class ElasticsearchClient {
    * according to configuration (ignore or fail). Version conflicts are ignored.
    *
    * @param response    the response to process
+   * @param request     the request which generated the response
    * @param executionId the execution id of the request
    * @return true if the record was not successfully processed, and we should not commit its offset
    */
   private boolean handleResponse(BulkItemResponse response,
-                              long executionId) {
+                                 DocWriteRequest<?> request,
+                                 long executionId) {
     if (response.isFailed()) {
       for (String error : MALFORMED_DOC_ERRORS) {
         if (response.getFailureMessage().contains(error)) {
@@ -519,17 +523,35 @@ public class ElasticsearchClient {
           return failed;
         }
       }
-
       if (response.getFailureMessage().contains(VERSION_CONFLICT_EXCEPTION)) {
-        log.warn(
-            "Ignoring version conflict for operation {} on document '{}' version {} in index '{}'.",
-            response.getOpType(),
-            response.getId(),
-            response.getVersion(),
-            response.getIndex()
+        // For external version conflicts, response.getVersion() will be returned as -1,
+        // but we have the actual version number for this record because we set it in
+        // the request.
+        long thisRecordVersion = request.versionType() == VersionType.EXTERNAL
+                ? request.version() : response.getVersion();
+        String message = String.format("Ignoring %s version conflict for operation %s on "
+                        + "document '%s' version %d in index '%s'.",
+                request.versionType(),
+                response.getOpType(),
+                response.getId(),
+                thisRecordVersion,
+                response.getIndex()
         );
-
-        reportBadRecord(response, executionId);
+        // Now check if this version conflict is caused by external version number
+        // which was set by us (set explicitly to the topic's offset), in which case
+        // the version conflict is due to a repeated or out-of-order message offset
+        // and thus can be ignored, since the newer value (higher offset) should
+        // remain the key's value in any case.
+        if (request.versionType() != VersionType.EXTERNAL) {
+          log.warn(message);
+          // Maybe this was a race condition?  Put it in the DLQ in case someone
+          // wishes to investigate.
+          reportBadRecord(response, executionId);
+        } else {
+          // This is an out-of-order or (more likely) repeated topic offset.  Allow the
+          // higher offset's value for this key to remain.
+          log.debug(message);
+        }
         return false;
       }
 

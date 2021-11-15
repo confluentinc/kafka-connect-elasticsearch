@@ -547,6 +547,43 @@ public class ElasticsearchClientTest {
     client.close();
   }
 
+  /**
+   * If the record version is set to VersionType.EXTERNAL (normal case for non-streaming),
+   * then same or less
+   * @throws Exception will be thrown if the test fails
+   */
+  @Test
+  public void testExternalVersionConflictReporterNotCalled() throws Exception {
+    props.put(IGNORE_KEY_CONFIG, "true");
+    config = new ElasticsearchSinkConnectorConfig(props);
+    converter = new DataConverter(config);
+
+    ErrantRecordReporter reporter = mock(ErrantRecordReporter.class);
+    when(reporter.report(any(), any()))
+            .thenReturn(CompletableFuture.completedFuture(null));
+    ElasticsearchClient client = new ElasticsearchClient(config, reporter, () -> offsetTracker.updateOffsets());
+    client.createIndexOrDataStream(index);
+
+    // Sequentially increase out record version (which comes from the offset)
+    writeRecord(sinkRecord("key0", 0), client);
+    writeRecord(sinkRecord("key0", 1), client);
+    writeRecord(sinkRecord("key0", 2), client);
+    client.flush();
+
+    // At the end of the day, it's just one record being overwritten
+    waitUntilRecordsInES(3);
+
+    // Now duplcate the last and then the one before that
+    writeRecord(sinkRecord("key0", 2), client);
+    writeRecord(sinkRecord("key0", 1), client);
+    client.flush();
+
+    // Make sure that no error was reported for either offset [1, 2] record(s)
+    verify(reporter, never()).report(eq(sinkRecord(1)), any(Throwable.class));
+    verify(reporter, never()).report(eq(sinkRecord(2)), any(Throwable.class));
+    client.close();
+  }
+
   @Test
   public void testNoVersionConflict() throws Exception {
     props.put(IGNORE_KEY_CONFIG, "false");
