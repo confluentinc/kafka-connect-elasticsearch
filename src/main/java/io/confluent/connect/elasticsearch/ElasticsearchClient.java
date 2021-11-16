@@ -429,33 +429,37 @@ public class ElasticsearchClient {
         }
       }
       if (response.getFailureMessage().contains(VERSION_CONFLICT_EXCEPTION)) {
-        // For external version conflicts, response.getVersion() will be returned as -1,
-        // but we have the actual version number for this record because we set it in
-        // the request.
-        long thisRecordVersion = request.versionType() == VersionType.EXTERNAL
-                ? request.version() : response.getVersion();
-        String message = String.format("Ignoring %s version conflict for operation %s on "
-                        + "document '%s' version %d in index '%s'.",
-                request.versionType(),
-                response.getOpType(),
-                response.getId(),
-                thisRecordVersion,
-                response.getIndex()
-        );
         // Now check if this version conflict is caused by external version number
         // which was set by us (set explicitly to the topic's offset), in which case
         // the version conflict is due to a repeated or out-of-order message offset
         // and thus can be ignored, since the newer value (higher offset) should
         // remain the key's value in any case.
         if (request.versionType() != VersionType.EXTERNAL) {
-          log.warn(message);
+          log.warn("{} version conflict for operation {} on document '{}' version {}"
+                          + " in index '{}'.",
+                  request.versionType(),
+                  response.getOpType(),
+                  response.getId(),
+                  response.getVersion(),
+                  response.getIndex()
+          );
           // Maybe this was a race condition?  Put it in the DLQ in case someone
           // wishes to investigate.
           reportBadRecord(response, executionId);
         } else {
           // This is an out-of-order or (more likely) repeated topic offset.  Allow the
           // higher offset's value for this key to remain.
-          log.debug(message);
+          //
+          // Note: For external version conflicts, response.getVersion() will be returned as -1,
+          // but we have the actual version number for this record because we set it in
+          // the request.
+          log.debug("Ignoring EXTERNAL version conflict for operation {} on"
+                  + " document '{}' version {} in index '{}'.",
+                  response.getOpType(),
+                  response.getId(),
+                  request.version(),
+                  response.getIndex()
+          );
         }
         return;
       }
