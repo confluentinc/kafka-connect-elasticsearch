@@ -544,6 +544,8 @@ public class ElasticsearchClientTest {
   public void testNoVersionConflict() throws Exception {
     props.put(IGNORE_KEY_CONFIG, "false");
     props.put(WRITE_METHOD_CONFIG, WriteMethod.UPSERT.name());
+    // Suppress asynchronous operations
+    props.put(MAX_IN_FLIGHT_REQUESTS_CONFIG, 1);
     config = new ElasticsearchSinkConnectorConfig(props);
     converter = new DataConverter(config);
 
