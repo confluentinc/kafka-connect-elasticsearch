@@ -529,7 +529,7 @@ public class ElasticsearchClientTest {
     // At the end of the day, it's just one record being overwritten
     waitUntilRecordsInES(3);
 
-    // Now duplcate the last and then the one before that
+    // Now duplicate the last and then the one before that
     writeRecord(sinkRecord("key0", 2), client);
     writeRecord(sinkRecord("key0", 1), client);
     client.flush();
