@@ -188,7 +188,7 @@ public class DataConverter {
   }
 
   /**
-   * In many cases, we explicitly set the record version using the topic's offset
+   * In many cases, we explicitly set the record version using the topic's offset.
    * This version will, in turn, be checked by ElasticSearch and will throw a versioning
    * error if the request represents an equivalent or older version of the record.
    *
