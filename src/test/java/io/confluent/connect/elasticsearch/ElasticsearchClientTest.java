@@ -592,7 +592,7 @@ public class ElasticsearchClientTest {
 
     causeExternalVersionConflictError(client);
 
-    // Make sure that no error was reported for either offset [1, 2] record(s)
+    // Make sure that error was reported for either offset [1, 2] record(s)
     verify(reporter, times(1)).report(eq(sinkRecord(1)), any(Throwable.class));
     verify(reporter, times(1)).report(eq(sinkRecord(2)), any(Throwable.class));
     client.close();
