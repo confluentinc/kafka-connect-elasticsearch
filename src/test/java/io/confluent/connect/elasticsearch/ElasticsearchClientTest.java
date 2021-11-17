@@ -512,7 +512,7 @@ public class ElasticsearchClientTest {
   /**
    * Cause a version conflict error.
    * Assumes that Elasticsearch VersionType is 'EXTERNAL' for the records
-   * @param client
+   * @param client The Elasticsearch client object to which to send records
    */
   private void causeExternalVersionConflictError(ElasticsearchClient client) throws InterruptedException {
     client.createIndex(INDEX);
