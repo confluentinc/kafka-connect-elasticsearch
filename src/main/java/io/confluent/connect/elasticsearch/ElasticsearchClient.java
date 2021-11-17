@@ -418,7 +418,7 @@ public class ElasticsearchClient {
    * @param request     the request which generated the response
    * @param executionId the execution id of the request
    */
-  private void handleResponse(BulkItemResponse response, DocWriteRequest<?> request,
+  protected void handleResponse(BulkItemResponse response, DocWriteRequest<?> request,
                               long executionId) {
     if (response.isFailed()) {
       for (String error : MALFORMED_DOC_ERRORS) {
