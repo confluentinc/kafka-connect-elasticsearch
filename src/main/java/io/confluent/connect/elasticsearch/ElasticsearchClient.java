@@ -454,7 +454,7 @@ public class ElasticsearchClient {
           // but we have the actual version number for this record because we set it in
           // the request.
           log.debug("Ignoring EXTERNAL version conflict for operation {} on"
-                  + " document '{}' version {} in index '{}'.",
+                          + " document '{}' version {} in index '{}'.",
                   response.getOpType(),
                   response.getId(),
                   request.version(),

@@ -510,9 +510,54 @@ public class ElasticsearchClientTest {
    * then same or less
    * @throws Exception will be thrown if the test fails
    */
+//  @Test
+//  public void testIgnoreKeyInternalVersionConflictReporterCalled() throws Exception {
+//    props.put(IGNORE_KEY_CONFIG, "true");
+//    // Suppress asynchronous operations
+//    props.put(MAX_IN_FLIGHT_REQUESTS_CONFIG, "1");
+//    config = new ElasticsearchSinkConnectorConfig(props);
+//
+//    final String keyName = "key0";
+//
+//    // Set the key to being ignored
+//    config.ignoreKeyTopics().add(keyName);
+//
+//    converter = new DataConverter(config);
+//
+//    ErrantRecordReporter reporter = mock(ErrantRecordReporter.class);
+//    ElasticsearchClient client = new ElasticsearchClient(config, reporter);
+//    client.createIndex(INDEX);
+//
+//    // Sequentially increase out record version (which comes from the offset)
+//    writeRecord(sinkRecord(keyName, 0), client);
+//    writeRecord(sinkRecord(keyName, 1), client);
+//    writeRecord(sinkRecord(keyName, 2), client);
+//    client.flush();
+//
+//    // At the end of the day, it's just one record being overwritten
+//    waitUntilRecordsInES(3);
+//
+//    // Now duplicate the last and then the one before that
+//    writeRecord(sinkRecord(keyName, 2), client);
+//    writeRecord(sinkRecord(keyName, 1), client);
+//    client.flush();
+//
+//    // Make sure that no error was reported for either offset [1, 2] record(s)
+//    verify(reporter, never()).report(eq(sinkRecord(keyName, 1)), any(Throwable.class));
+//    verify(reporter, never()).report(eq(sinkRecord(keyName, 2)), any(Throwable.class));
+//    client.close();
+//  }
+
+  /**
+   * If the record version is set to VersionType.EXTERNAL (normal case for non-streaming),
+   * then same or less
+   * @throws Exception will be thrown if the test fails
+   */
   @Test
   public void testExternalVersionConflictReporterNotCalled() throws Exception {
-    props.put(IGNORE_KEY_CONFIG, "true");
+    props.put(IGNORE_KEY_CONFIG, "false");
+    // Suppress asynchronous operations
+    props.put(MAX_IN_FLIGHT_REQUESTS_CONFIG, "1");
     config = new ElasticsearchSinkConnectorConfig(props);
     converter = new DataConverter(config);
 
@@ -520,23 +565,25 @@ public class ElasticsearchClientTest {
     ElasticsearchClient client = new ElasticsearchClient(config, reporter);
     client.createIndex(INDEX);
 
+    //final String keyName = "key0";
+
     // Sequentially increase out record version (which comes from the offset)
-    writeRecord(sinkRecord("key0", 0), client);
-    writeRecord(sinkRecord("key0", 1), client);
-    writeRecord(sinkRecord("key0", 2), client);
+    writeRecord(sinkRecord(0), client);
+    writeRecord(sinkRecord(1), client);
+    writeRecord(sinkRecord(2), client);
     client.flush();
 
     // At the end of the day, it's just one record being overwritten
-    waitUntilRecordsInES(3);
+    waitUntilRecordsInES(1);
 
     // Now duplicate the last and then the one before that
-    writeRecord(sinkRecord("key0", 2), client);
-    writeRecord(sinkRecord("key0", 1), client);
+    writeRecord(sinkRecord(2), client);
+    writeRecord(sinkRecord(1), client);
     client.flush();
 
     // Make sure that no error was reported for either offset [1, 2] record(s)
-    verify(reporter, never()).report(eq(sinkRecord("key0", 1)), any(Throwable.class));
-    verify(reporter, never()).report(eq(sinkRecord("key0", 2)), any(Throwable.class));
+    verify(reporter, never()).report(eq(sinkRecord(1)), any(Throwable.class));
+    verify(reporter, never()).report(eq(sinkRecord(2)), any(Throwable.class));
     client.close();
   }
 
@@ -544,8 +591,6 @@ public class ElasticsearchClientTest {
   public void testNoVersionConflict() throws Exception {
     props.put(IGNORE_KEY_CONFIG, "false");
     props.put(WRITE_METHOD_CONFIG, WriteMethod.UPSERT.name());
-    // Suppress asynchronous operations
-    props.put(MAX_IN_FLIGHT_REQUESTS_CONFIG, 1);
     config = new ElasticsearchSinkConnectorConfig(props);
     converter = new DataConverter(config);
 
