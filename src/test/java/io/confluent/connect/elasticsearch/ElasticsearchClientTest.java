@@ -61,6 +61,9 @@ import org.apache.kafka.connect.sink.ErrantRecordReporter;
 import org.apache.kafka.connect.sink.SinkRecord;
 import org.apache.kafka.test.TestUtils;
 import org.elasticsearch.ElasticsearchStatusException;
+import org.elasticsearch.action.DocWriteRequest;
+import org.elasticsearch.action.bulk.BulkItemResponse;
+import org.elasticsearch.index.VersionType;
 import org.elasticsearch.search.SearchHit;
 import org.junit.After;
 import org.junit.AfterClass;
@@ -502,6 +505,96 @@ public class ElasticsearchClientTest {
     waitUntilRecordsInES(3);
     assertEquals(3, helperClient.getDocCount(INDEX));
     verify(reporter, never()).report(eq(sinkRecord(0)), any(Throwable.class));
+    client.close();
+  }
+
+
+  /**
+   * Cause a version conflict error.
+   * Assumes that Elasticsearch VersionType is 'EXTERNAL' for the records
+   * @param client The Elasticsearch client object to which to send records
+   */
+  private void causeExternalVersionConflictError(ElasticsearchClient client) throws InterruptedException {
+    client.createIndex(INDEX);
+
+    // Sequentially increase out record version (which comes from the offset)
+    writeRecord(sinkRecord(0), client);
+    writeRecord(sinkRecord(1), client);
+    writeRecord(sinkRecord(2), client);
+    client.flush();
+
+    // At the end of the day, it's just one record being overwritten
+    waitUntilRecordsInES(1);
+
+    // Now duplicate the last and then the one before that
+    writeRecord(sinkRecord(2), client);
+    writeRecord(sinkRecord(1), client);
+    client.flush();
+  }
+
+  /**
+   * If the record version is set to VersionType.EXTERNAL (normal case for non-streaming),
+   * then same or less version number will throw a version conflict exception.
+   * @throws Exception will be thrown if the test fails
+   */
+  @Test
+  public void testExternalVersionConflictReporterNotCalled() throws Exception {
+    props.put(IGNORE_KEY_CONFIG, "false");
+    // Suppress asynchronous operations
+    props.put(MAX_IN_FLIGHT_REQUESTS_CONFIG, "1");
+    config = new ElasticsearchSinkConnectorConfig(props);
+    converter = new DataConverter(config);
+
+    ErrantRecordReporter reporter = mock(ErrantRecordReporter.class);
+    ElasticsearchClient client = new ElasticsearchClient(config, reporter);
+
+    causeExternalVersionConflictError(client);
+
+    // Make sure that no error was reported for either offset [1, 2] record(s)
+    verify(reporter, never()).report(eq(sinkRecord(1)), any(Throwable.class));
+    verify(reporter, never()).report(eq(sinkRecord(2)), any(Throwable.class));
+    client.close();
+  }
+
+  /**
+   * If the record version is set to VersionType.INTERNAL (normal case streaming/logging),
+   * then same or less version number will throw a version conflict exception.
+   * In this test, we are checking that the client function `handleResponse`
+   * properly reports an error for seeing the version conflict error along with
+   * VersionType of INTERNAL.  We still actually cause the error via an external
+   * version conflict error, but flip the version type to internal before it is interpreted.
+   * @throws Exception will be thrown if the test fails
+   */
+  @Test
+  public void testHandleResponseInternalVersionConflictReporterCalled() throws Exception {
+    props.put(IGNORE_KEY_CONFIG, "false");
+    // Suppress asynchronous operations
+    props.put(MAX_IN_FLIGHT_REQUESTS_CONFIG, "1");
+    config = new ElasticsearchSinkConnectorConfig(props);
+    converter = new DataConverter(config);
+
+    ErrantRecordReporter reporter = mock(ErrantRecordReporter.class);
+
+    // We will cause a version conflict error, but test that handleResponse()
+    // correctly reports the error when it interprets the version conflict as
+    // "INTERNAL" (version maintained by Elasticsearch) rather than
+    // "EXTERNAL" (version maintained by the connector as kafka offset)
+    ElasticsearchClient client = new ElasticsearchClient(config, reporter) {
+      protected void handleResponse(BulkItemResponse response, DocWriteRequest<?> request,
+                                    long executionId) {
+        // Make it think it was an internal version conflict.
+        // Note that we don't make any attempt to reset the response version number,
+        // which will be -1 here.
+        request.versionType(VersionType.INTERNAL);
+        super.handleResponse(response, request, executionId);
+      }
+    };
+
+    causeExternalVersionConflictError(client);
+
+    // Make sure that error was reported for either offset [1, 2] record(s)
+    verify(reporter, times(1)).report(eq(sinkRecord(1)), any(Throwable.class));
+    verify(reporter, times(1)).report(eq(sinkRecord(2)), any(Throwable.class));
     client.close();
   }
 
