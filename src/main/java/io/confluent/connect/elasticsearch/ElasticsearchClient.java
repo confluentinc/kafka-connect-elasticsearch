@@ -352,7 +352,8 @@ public class ElasticsearchClient {
         List<DocWriteRequest<?>> requests = request.requests();
         int idx = 0;
         for (BulkItemResponse bulkItemResponse : response) {
-          handleResponse(bulkItemResponse, requests.get(idx), executionId);
+          DocWriteRequest<?> req = idx < requests.size() ? requests.get(idx) : null;
+          handleResponse(bulkItemResponse, req, executionId);
           idx++;
         }
         removeFromInFlightRequests(executionId);
@@ -434,10 +435,10 @@ public class ElasticsearchClient {
         // the version conflict is due to a repeated or out-of-order message offset
         // and thus can be ignored, since the newer value (higher offset) should
         // remain the key's value in any case.
-        if (request.versionType() != VersionType.EXTERNAL) {
+        if (request == null || request.versionType() != VersionType.EXTERNAL) {
           log.warn("{} version conflict for operation {} on document '{}' version {}"
                           + " in index '{}'.",
-                  request.versionType(),
+                  request != null ? request.versionType() : "UNKNOWN",
                   response.getOpType(),
                   response.getId(),
                   response.getVersion(),
