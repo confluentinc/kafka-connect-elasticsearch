@@ -84,6 +84,11 @@
             <artifactId>elasticsearch</artifactId>
             <version>${es.version}</version>
         </dependency>
+        <dependency>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>log4j-api</artifactId>
+            <version>2.15.0</version>
+        </dependency>
         <!-- pin jackson-dataformat-cbor for CVE - the version comes from confluentinc/common -->
         <dependency>
             <groupId>com.fasterxml.jackson.dataformat</groupId>
