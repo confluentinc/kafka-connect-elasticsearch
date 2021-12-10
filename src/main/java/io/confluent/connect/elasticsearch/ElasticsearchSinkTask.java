@@ -58,6 +58,7 @@ public class ElasticsearchSinkTask extends SinkTask {
   // visible for testing
   protected void start(Map<String, String> props, ElasticsearchClient client) {
     log.info("Starting ElasticsearchSinkTask.");
+    log.info("testing build");
 
     this.config = new ElasticsearchSinkConnectorConfig(props);
     this.converter = new DataConverter(config);
