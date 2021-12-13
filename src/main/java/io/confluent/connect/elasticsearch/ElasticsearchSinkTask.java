@@ -146,8 +146,9 @@ public class ElasticsearchSinkTask extends SinkTask {
 
   private void checkMapping(String index, SinkRecord record) {
     if (!config.shouldIgnoreSchema(record.topic()) && !existingMappings.contains(index)) {
-      if (!client.hasMapping(index)) {
-        client.createMapping(index, record.valueSchema());
+      String targetIndex = client.resolveIndexIfAlias(index);
+      if (!client.hasMapping(targetIndex)) {
+        client.createMapping(targetIndex, record.valueSchema());
       }
       log.debug("Caching mapping for index '{}' locally.", index);
       existingMappings.add(index);

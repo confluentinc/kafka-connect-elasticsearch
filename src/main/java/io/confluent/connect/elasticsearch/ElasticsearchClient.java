@@ -32,6 +32,7 @@ import org.elasticsearch.action.bulk.BulkProcessor;
 import org.elasticsearch.action.bulk.BulkProcessor.Listener;
 import org.elasticsearch.action.bulk.BulkRequest;
 import org.elasticsearch.action.bulk.BulkResponse;
+import org.elasticsearch.client.GetAliasesResponse;
 import org.elasticsearch.client.RequestOptions;
 import org.elasticsearch.client.RestClient;
 import org.elasticsearch.client.RestHighLevelClient;
@@ -41,6 +42,7 @@ import org.elasticsearch.client.indices.GetIndexRequest;
 import org.elasticsearch.client.indices.GetMappingsRequest;
 import org.elasticsearch.client.indices.GetMappingsResponse;
 import org.elasticsearch.client.indices.PutMappingRequest;
+import org.elasticsearch.cluster.metadata.AliasMetadata;
 import org.elasticsearch.cluster.metadata.MappingMetadata;
 import org.elasticsearch.common.unit.TimeValue;
 import org.slf4j.Logger;
@@ -52,6 +54,7 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.Map;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -358,6 +361,25 @@ public class ElasticsearchClient {
   }
 
   /**
+   * Resolves input target to an actual index. Indexes and data streams are returned as-is,
+   * while aliases are resolved to write index.
+   *
+   * @param target the target to check
+   * @return actual index name
+   * @throws ConnectException if alias does not have write index
+   */
+  public String resolveIndexIfAlias(String target) {
+    if (config.isDataStream()) {
+      return target;
+    }
+    String actualIndex = aliasWriteIndex(target);
+    if (actualIndex != null) {
+      return actualIndex;
+    }
+    throw new ConnectException(String.format("Alias '%s' has no write index", target));
+  }
+
+  /**
    * Creates a listener with callback functions to handle completed requests for the BulkProcessor.
    *
    * @return the listener
@@ -598,6 +620,33 @@ public class ElasticsearchClient {
         () -> client.indices().getMapping(request, RequestOptions.DEFAULT)
     );
     return response.mappings().get(index);
+  }
+
+  /**
+   * Gets the write index for an alias.
+   *
+   * @param alias the alias to check
+   * @return the write index
+   */
+  private String aliasWriteIndex(String alias) {
+    GetAliasesRequest request = new GetAliasesRequest().indices(alias);
+    GetAliasesResponse response = callWithRetries(
+        "get indexes for alias " + alias,
+        () -> client.indices().getAlias(request, RequestOptions.DEFAULT)
+    );
+    Map<String, Set<AliasMetadata>> indexAliasMappings = response.getAliases();
+    // alias maps to only one index or is itself an index
+    if (indexAliasMappings.size() == 1) {
+      return indexAliasMappings.keySet().iterator().next();
+    }
+    for (Map.Entry<String, Set<AliasMetadata>> indexEntry : indexAliasMappings.entrySet()) {
+      for (AliasMetadata aliasInfo : indexEntry.getValue()) {
+        if (aliasInfo.alias().equals(alias) && aliasInfo.writeIndex() == Boolean.TRUE) {
+          return indexEntry.getKey();
+        }
+      }
+    }
+    return null;
   }
 
   /**

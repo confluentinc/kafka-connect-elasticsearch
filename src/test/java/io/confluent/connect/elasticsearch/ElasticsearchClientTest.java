@@ -241,6 +241,52 @@ public class ElasticsearchClientTest {
   }
 
   @Test
+  public void testResolveIndexIfAliasForIndex() {
+    ElasticsearchClient client = new ElasticsearchClient(config, null);
+    assertTrue(client.createIndexOrDataStream(index));
+
+    assertEquals(index, client.resolveIndexIfAlias(index));
+    client.close();
+  }
+
+  @Test
+  public void testResolveIndexIfAliasForAlias() throws IOException {
+    ElasticsearchClient client = new ElasticsearchClient(config, null);
+    assertTrue(client.createIndexOrDataStream(index));
+
+    helperClient.createAlias(ALIAS, index);
+    assertEquals(index, client.resolveIndexIfAlias(ALIAS));
+    client.close();
+  }
+
+  @Test
+  public void testResolveIndexIfAliasForAliasWithNoWriteIndex() throws IOException {
+    String secondIndex = "test";
+    ElasticsearchClient client = new ElasticsearchClient(config, null);
+    assertTrue(client.createIndexOrDataStream(index));
+    assertTrue(client.createIndexOrDataStream(secondIndex));
+
+    helperClient.createAlias(ALIAS, index);
+    helperClient.createAlias(ALIAS, secondIndex);
+    assertThrows(ConnectException.class, () -> client.resolveIndexIfAlias(ALIAS));
+    client.close();
+  }
+
+  @Test
+  public void testResolveIndexIfAliasForDataStream() {
+    props.put(DATA_STREAM_TYPE_CONFIG, DATA_STREAM_TYPE);
+    props.put(DATA_STREAM_DATASET_CONFIG, DATA_STREAM_DATASET);
+    config = new ElasticsearchSinkConnectorConfig(props);
+    index = createIndexName(TOPIC);
+    ElasticsearchClient client = new ElasticsearchClient(config, null);
+    index = createIndexName(TOPIC);
+    assertTrue(client.createIndexOrDataStream(index));
+
+    assertEquals(index, client.resolveIndexIfAlias(index));
+    client.close();
+  }
+
+  @Test
   @SuppressWarnings("unchecked")
   public void testCreateMapping() throws IOException {
     ElasticsearchClient client = new ElasticsearchClient(config, null);

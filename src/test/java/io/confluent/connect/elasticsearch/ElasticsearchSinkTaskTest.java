@@ -54,6 +54,7 @@ import java.util.Collections;
 public class ElasticsearchSinkTaskTest {
 
   protected static final String TOPIC = "topic";
+  private static final String ALIAS = "alias";
 
   protected ElasticsearchClient client;
   private ElasticsearchSinkTask task;
@@ -158,10 +159,12 @@ public class ElasticsearchSinkTaskTest {
 
   @Test
   public void testCheckMapping() {
+    when(client.resolveIndexIfAlias(TOPIC)).thenReturn(TOPIC);
     when(client.hasMapping(TOPIC)).thenReturn(true);
 
     SinkRecord record = record();
     task.put(Collections.singletonList(record));
+    verify(client, times(1)).resolveIndexIfAlias(eq(TOPIC));
     verify(client, times(1)).hasMapping(eq(TOPIC));
     verify(client, never()).createMapping(eq(TOPIC), eq(record.valueSchema()));
   }
@@ -169,19 +172,39 @@ public class ElasticsearchSinkTaskTest {
   @Test
   public void testAddMapping() {
     SinkRecord record = record();
+    when(client.resolveIndexIfAlias(TOPIC)).thenReturn(TOPIC);
     task.put(Collections.singletonList(record));
+    verify(client, times(1)).resolveIndexIfAlias(eq(TOPIC));
     verify(client, times(1)).hasMapping(eq(TOPIC));
     verify(client, times(1)).createMapping(eq(TOPIC), eq(record.valueSchema()));
   }
 
   @Test
   public void testDoNotAddCachedMapping() {
+    when(client.resolveIndexIfAlias(TOPIC)).thenReturn(TOPIC);
     SinkRecord record = record();
     task.put(Collections.singletonList(record));
+    verify(client, times(1)).resolveIndexIfAlias(eq(TOPIC));
     verify(client, times(1)).hasMapping(eq(TOPIC));
     verify(client, times(1)).createMapping(eq(TOPIC), eq(record.valueSchema()));
 
     task.put(Collections.singletonList(record));
+    verify(client, times(1)).resolveIndexIfAlias(eq(TOPIC));
+    verify(client, times(1)).hasMapping(eq(TOPIC));
+    verify(client, times(1)).createMapping(eq(TOPIC), eq(record.valueSchema()));
+  }
+
+  @Test
+  public void testDoNotAddCachedMappingForAlias() {
+    when(client.resolveIndexIfAlias(ALIAS)).thenReturn(TOPIC);
+    SinkRecord record = record(ALIAS, true, false, 0);
+    task.put(Collections.singletonList(record));
+    verify(client, times(1)).resolveIndexIfAlias(eq(ALIAS));
+    verify(client, times(1)).hasMapping(eq(TOPIC));
+    verify(client, times(1)).createMapping(eq(TOPIC), eq(record.valueSchema()));
+
+    task.put(Collections.singletonList(record));
+    verify(client, times(1)).resolveIndexIfAlias(eq(ALIAS));
     verify(client, times(1)).hasMapping(eq(TOPIC));
     verify(client, times(1)).createMapping(eq(TOPIC), eq(record.valueSchema()));
   }
