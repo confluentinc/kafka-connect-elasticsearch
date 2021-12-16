@@ -15,7 +15,25 @@
 
 package io.confluent.connect.elasticsearch;
 
-import io.confluent.connect.elasticsearch.OffsetTracker.OffsetState;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.locks.Condition;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.BiConsumer;
+
 import org.apache.http.HttpHost;
 import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.connect.data.Schema;
@@ -42,24 +60,9 @@ import org.elasticsearch.client.indices.GetMappingsResponse;
 import org.elasticsearch.client.indices.PutMappingRequest;
 import org.elasticsearch.cluster.metadata.MappingMetadata;
 import org.elasticsearch.common.unit.TimeValue;
+import org.elasticsearch.index.VersionType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
-import java.util.concurrent.Callable;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.BiConsumer;
 
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BehaviorOnMalformedDoc;
 
@@ -108,19 +111,13 @@ public class ElasticsearchClient {
   private final RestHighLevelClient client;
   private final ExecutorService bulkExecutorService;
   private final Time clock;
-
-  // Visible for testing
-  public ElasticsearchClient(
-          ElasticsearchSinkConnectorConfig config,
-          ErrantRecordReporter reporter
-  ) {
-    this(config, reporter, new OffsetTracker());
-  }
+  private final Lock inFlightRequestLock = new ReentrantLock();
+  private final Condition inFlightRequestsUpdated = inFlightRequestLock.newCondition();
 
   public ElasticsearchClient(
       ElasticsearchSinkConnectorConfig config,
       ErrantRecordReporter reporter,
-      OffsetTracker offsetTracker
+      Runnable afterBulkCallback
   ) {
     this.bulkExecutorService = Executors.newFixedThreadPool(config.maxInFlightRequests());
     this.numBufferedRecords = new AtomicInteger(0);
@@ -144,7 +141,7 @@ public class ElasticsearchClient {
             .setHttpClientConfigCallback(configCallbackHandler)
     );
     this.bulkProcessor = BulkProcessor
-        .builder(buildConsumer(), buildListener(offsetTracker))
+        .builder(buildConsumer(), buildListener(afterBulkCallback))
         .setBulkActions(config.batchSize())
         .setBulkSize(config.bulkSize())
         .setConcurrentRequests(config.maxInFlightRequests() - 1) // 0 = no concurrent requests
@@ -248,6 +245,20 @@ public class ElasticsearchClient {
     bulkProcessor.flush();
   }
 
+  public void waitForInFlightRequests() {
+    inFlightRequestLock.lock();
+    try {
+      while (numBufferedRecords.get() > 0) {
+        inFlightRequestsUpdated.await();
+      }
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+      throw new ConnectException(e);
+    } finally {
+      inFlightRequestLock.unlock();
+    }
+  }
+
   /**
    * Checks whether the index already has a mapping or not.
    * @param index the index to check
@@ -273,6 +284,7 @@ public class ElasticsearchClient {
    *
    * @param record the record to index
    * @param request the associated request to send
+   * @param offsetState record's offset state
    * @throws ConnectException if one of the requests failed
    */
   public void index(SinkRecord record, DocWriteRequest<?> request, OffsetState offsetState) {
@@ -347,7 +359,7 @@ public class ElasticsearchClient {
    *
    * @return the listener
    */
-  private BulkProcessor.Listener buildListener(OffsetTracker offsetTracker) {
+  private BulkProcessor.Listener buildListener(Runnable afterBulkCallback) {
     return new Listener() {
       @Override
       public void beforeBulk(long executionId, BulkRequest request) {
@@ -366,14 +378,15 @@ public class ElasticsearchClient {
 
         int idx = 0;
         for (BulkItemResponse bulkItemResponse : response) {
-          boolean failed = handleResponse(bulkItemResponse, executionId);
-          if (!failed && idx < requests.size()) {
-            requestToSinkRecord.get(requests.get(idx)).offsetState.markProcessed();
+          DocWriteRequest<?> req = idx < requests.size() ? requests.get(idx) : null;
+          boolean failed = handleResponse(bulkItemResponse, req, executionId);
+          if (!failed && req != null) {
+            requestToSinkRecord.get(req).offsetState.markProcessed();
           }
           idx++;
         }
 
-        offsetTracker.updateOffsets();
+        afterBulkCallback.run();
 
         bulkFinished(executionId, request);
       }
@@ -388,7 +401,13 @@ public class ElasticsearchClient {
       private void bulkFinished(long executionId, BulkRequest request) {
         request.requests().forEach(requestToSinkRecord::remove);
         removeFromInFlightRequests(executionId);
-        numBufferedRecords.addAndGet(-request.requests().size());
+        inFlightRequestLock.lock();
+        try {
+          numBufferedRecords.addAndGet(-request.requests().size());
+          inFlightRequestsUpdated.signalAll();
+        } finally {
+          inFlightRequestLock.unlock();
+        }
       }
     };
   }
@@ -487,11 +506,13 @@ public class ElasticsearchClient {
    * according to configuration (ignore or fail). Version conflicts are ignored.
    *
    * @param response    the response to process
+   * @param request     the request which generated the response
    * @param executionId the execution id of the request
    * @return true if the record was not successfully processed, and we should not commit its offset
    */
-  private boolean handleResponse(BulkItemResponse response,
-                              long executionId) {
+  protected boolean handleResponse(BulkItemResponse response,
+                                   DocWriteRequest<?> request,
+                                   long executionId) {
     if (response.isFailed()) {
       for (String error : MALFORMED_DOC_ERRORS) {
         if (response.getFailureMessage().contains(error)) {
@@ -502,17 +523,39 @@ public class ElasticsearchClient {
           return failed;
         }
       }
-
       if (response.getFailureMessage().contains(VERSION_CONFLICT_EXCEPTION)) {
-        log.warn(
-            "Ignoring version conflict for operation {} on document '{}' version {} in index '{}'.",
-            response.getOpType(),
-            response.getId(),
-            response.getVersion(),
-            response.getIndex()
-        );
-
-        reportBadRecord(response, executionId);
+        // Now check if this version conflict is caused by external version number
+        // which was set by us (set explicitly to the topic's offset), in which case
+        // the version conflict is due to a repeated or out-of-order message offset
+        // and thus can be ignored, since the newer value (higher offset) should
+        // remain the key's value in any case.
+        if (request == null || request.versionType() != VersionType.EXTERNAL) {
+          log.warn("{} version conflict for operation {} on document '{}' version {}"
+                          + " in index '{}'.",
+                  request != null ? request.versionType() : "UNKNOWN",
+                  response.getOpType(),
+                  response.getId(),
+                  response.getVersion(),
+                  response.getIndex()
+          );
+          // Maybe this was a race condition?  Put it in the DLQ in case someone
+          // wishes to investigate.
+          reportBadRecord(response, executionId);
+        } else {
+          // This is an out-of-order or (more likely) repeated topic offset.  Allow the
+          // higher offset's value for this key to remain.
+          //
+          // Note: For external version conflicts, response.getVersion() will be returned as -1,
+          // but we have the actual version number for this record because we set it in
+          // the request.
+          log.debug("Ignoring EXTERNAL version conflict for operation {} on"
+                          + " document '{}' version {} in index '{}'.",
+                  response.getOpType(),
+                  response.getId(),
+                  request.version(),
+                  response.getIndex()
+          );
+        }
         return false;
       }
 
@@ -566,7 +609,7 @@ public class ElasticsearchClient {
    *
    * @return true if a response has failed, false if none have failed
    */
-  private boolean isFailed() {
+  public boolean isFailed() {
     return error.get() != null;
   }
 
