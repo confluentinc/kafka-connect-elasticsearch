@@ -15,6 +15,7 @@
 
 package io.confluent.connect.elasticsearch;
 
+import io.confluent.connect.elasticsearch.producer.DualWriteProducer;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -36,6 +37,7 @@ import java.util.function.BiConsumer;
 
 import org.apache.http.HttpHost;
 import org.apache.kafka.common.utils.Time;
+import org.apache.kafka.connect.connector.ConnectRecord;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.sink.ErrantRecordReporter;
@@ -113,12 +115,18 @@ public class ElasticsearchClient {
   private final Time clock;
   private final Lock inFlightRequestLock = new ReentrantLock();
   private final Condition inFlightRequestsUpdated = inFlightRequestLock.newCondition();
+  private final DualWriteProducer<ConnectRecord> dualWriteProducer;
 
   public ElasticsearchClient(
       ElasticsearchSinkConnectorConfig config,
       ErrantRecordReporter reporter,
       Runnable afterBulkCallback
   ) {
+    this.dualWriteProducer =
+        new DualWriteProducer<>(
+            config.getBoolean(ElasticsearchSinkConnectorConfig.ENABLE_DUAL_WRITE_CONFIG),
+            config.getProducerConfig(),
+            config.getString(ElasticsearchSinkConnectorConfig.OUTPUT_TOPIC_CONFIG));
     this.bulkExecutorService = Executors.newFixedThreadPool(config.maxInFlightRequests());
     this.numBufferedRecords = new AtomicInteger(0);
     this.error = new AtomicReference<>();
@@ -399,6 +407,12 @@ public class ElasticsearchClient {
       }
 
       private void bulkFinished(long executionId, BulkRequest request) {
+        if (request != null && requestToSinkRecord.containsKey(request)) {
+          SinkRecordAndOffset sinkRecordAndOffset = requestToSinkRecord.get(request);
+          if (sinkRecordAndOffset != null && sinkRecordAndOffset.sinkRecord != null) {
+            dualWriteProducer.submit(sinkRecordAndOffset.sinkRecord);
+          }
+        }
         request.requests().forEach(requestToSinkRecord::remove);
         removeFromInFlightRequests(executionId);
         inFlightRequestLock.lock();

@@ -18,12 +18,16 @@ package io.confluent.connect.elasticsearch;
 import java.io.File;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.concurrent.TimeUnit;
+import org.apache.kafka.clients.CommonClientConfigs;
+import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.common.config.ConfigException;
@@ -39,6 +43,15 @@ import static org.apache.kafka.common.config.SslConfigs.SSL_ENDPOINT_IDENTIFICAT
 import static org.apache.kafka.common.config.SslConfigs.addClientSslSupport;
 
 public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
+  public static final String OUTPUT_TOPIC_CONFIG = "output.topic";
+  public static final String OUTPUT_TOPIC_DOC = "Kafka topic to write to upon "
+      + "Elasticsearch index success.";
+
+  public static final String ENABLE_DUAL_WRITE_CONFIG = "enable.dual.write";
+  public static final String ENABLE_DUAL_WRITE_DOC = "Enables the ability to "
+      + "dual write the messages to downstream topic only if successfully "
+      + "indexed into Elasticsearch.";
+
   // Connector group
   public static final String CONNECTION_URL_CONFIG = "connection.url";
   private static final String CONNECTION_URL_DOC =
@@ -398,6 +411,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
     addSslConfigs(configDef);
     addKerberosConfigs(configDef);
     addDataStreamConfigs(configDef);
+    addDualWriteConfigs(configDef);
     return configDef;
   }
 
@@ -814,6 +828,57 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
     );
   }
 
+  private static void addDualWriteConfigs(ConfigDef configDef) {
+    final String group = "Dual Writer";
+    int order = 0;
+    configDef.define(OUTPUT_TOPIC_CONFIG,
+        Type.STRING,
+        "",
+        Importance.HIGH,
+        OUTPUT_TOPIC_DOC,
+        group,
+        ++order,
+        Width.LONG,
+        "Output Kafka Topic on ES Success"
+    ).define(ENABLE_DUAL_WRITE_CONFIG,
+        Type.BOOLEAN,
+        false,
+        Importance.HIGH,
+        ENABLE_DUAL_WRITE_DOC,
+        group,
+        ++order,
+        Width.SHORT,
+        "Enable Dual Write functionality"
+    ).define(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG,
+        Type.LIST,
+        Collections.emptyList(),
+        Importance.HIGH,
+        CommonClientConfigs.BOOTSTRAP_SERVERS_DOC,
+        group,
+        ++order,
+        Width.LONG,
+        "Bootstrap Servers for Dual Write"
+    ).define("producer." + ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG,
+        Type.CLASS,
+        "io.confluent.kafka.serializers.KafkaAvroSerializer",
+        Importance.HIGH,
+        ProducerConfig.KEY_SERIALIZER_CLASS_DOC,
+        group,
+        ++order,
+        Width.LONG,
+        "Key Serializer for Output Topic"
+    ).define("producer." + ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG,
+        Type.CLASS,
+        "io.confluent.kafka.serializers.KafkaAvroSerializer",
+        Importance.HIGH,
+        ProducerConfig.VALUE_SERIALIZER_CLASS_DOC,
+        group,
+        ++order,
+        Width.LONG,
+        "Value Serializer for Output Topic"
+    );
+  }
+
   public static final ConfigDef CONFIG = baseConfigDef();
 
   public ElasticsearchSinkConnectorConfig(Map<String, String> props) {
@@ -1106,6 +1171,17 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
     public String toString() {
       return "Existing file with " + extension + " extension.";
     }
+  }
+
+  public Properties getProducerConfig() {
+    Properties properties = new Properties();
+    originals().keySet().forEach(s -> {
+      if (s.startsWith("producer.")) {
+        String producerKey = s.substring(9);
+        properties.put(producerKey, originals().get(s));
+      }
+    });
+    return properties;
   }
 
   public static void main(String[] args) {

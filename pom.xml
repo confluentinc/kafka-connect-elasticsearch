@@ -15,9 +15,9 @@
     <name>kafka-connect-elasticsearch</name>
     <organization>
         <name>Confluent, Inc.</name>
-        <url>http://confluent.io</url>
+        <url>https://confluent.io</url>
     </organization>
-    <url>http://confluent.io</url>
+    <url>https://confluent.io</url>
     <description>
         Elasticsearch Sink Connector for Kafka Connect
     </description>
@@ -25,7 +25,7 @@
     <licenses>
         <license>
             <name>Confluent Community License</name>
-            <url>http://www.confluent.io/confluent-community-license</url>
+            <url>https://www.confluent.io/confluent-community-license</url>
             <distribution>repo</distribution>
         </license>
     </licenses>
@@ -51,7 +51,7 @@
         <!-- temporary fix by pinning the version until we upgrade to a version of common that contains this or newer version.
             See https://github.com/confluentinc/common/pull/332 for details -->
         <dependency.check.version>6.1.6</dependency.check.version>
-        <confluent.maven.repo>http://packages.confluent.io/maven/</confluent.maven.repo>
+        <confluent.maven.repo>https://packages.confluent.io/maven/</confluent.maven.repo>
         <commons.codec.version>1.15</commons.codec.version>
     </properties>
 
@@ -64,6 +64,18 @@
     </repositories>
 
     <dependencies>
+        <dependency>
+            <groupId>io.confluent</groupId>
+            <artifactId>kafka-connect-avro-converter</artifactId>
+            <version>6.2.0</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.confluent</groupId>
+            <artifactId>kafka-avro-serializer</artifactId>
+            <version>6.2.0</version>
+            <scope>provided</scope>
+        </dependency>
         <dependency>
             <groupId>org.apache.kafka</groupId>
             <artifactId>connect-api</artifactId>
