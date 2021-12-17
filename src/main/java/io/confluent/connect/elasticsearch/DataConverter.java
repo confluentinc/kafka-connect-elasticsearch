@@ -155,9 +155,6 @@ public class DataConverter {
       }
     }
 
-    String payload = getPayload(record);
-    payload = maybeAddTimestamp(payload, record.timestamp());
-
     final String id = config.shouldIgnoreKey(record.topic())
         ? String.format("%s+%d+%d", record.topic(), record.kafkaPartition(), record.kafkaOffset())
         : convertKey(record.keySchema(), record.key());
@@ -169,6 +166,9 @@ public class DataConverter {
     if (record.value() == null) {
       return maybeAddExternalVersioning(new DeleteRequest(index).id(id), record);
     }
+
+    String payload = getPayload(record);
+    payload = maybeAddTimestamp(payload, record.timestamp());
 
     // index
     switch (config.writeMethod()) {
@@ -305,7 +305,7 @@ public class DataConverter {
     return new String(rawJsonPayload, StandardCharsets.UTF_8);
   }
 
-  private String maybeAddTimestamp(String payload, long timestamp) {
+  private String maybeAddTimestamp(String payload, Long timestamp) {
     if (!config.isDataStream()) {
       return payload;
     }
@@ -328,6 +328,15 @@ public class DataConverter {
     return payload;
   }
 
+  /**
+   * In many cases, we explicitly set the record version using the topic's offset.
+   * This version will, in turn, be checked by Elasticsearch and will throw a versioning
+   * error if the request represents an equivalent or older version of the record.
+   *
+   * @param request the request currently being constructed for `record`
+   * @param record the record to be processed
+   * @return the (possibly modified) request which was passed in
+   */
   private DocWriteRequest<?> maybeAddExternalVersioning(
       DocWriteRequest<?> request,
       SinkRecord record

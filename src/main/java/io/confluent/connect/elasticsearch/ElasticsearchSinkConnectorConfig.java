@@ -115,6 +115,14 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   private static final String FLUSH_TIMEOUT_MS_DISPLAY = "Flush Timeout (ms)";
   private static final int FLUSH_TIMEOUT_MS_DEFAULT = (int) TimeUnit.MINUTES.toMillis(3);
 
+  public static final String FLUSH_SYNCHRONOUSLY_CONFIG = "flush.synchronously";
+  private static final String FLUSH_SYNCHRONOUSLY_DOC =
+          "True if flushes should wait for background processing to finish. This has a throughput"
+            + " penalty and makes the connector less responsive but allows for topic-mutating SMTs"
+            + " (e.g. RegexRouter or TimestampRouter)";
+  private static final String FLUSH_SYNCHRONOUSLY_DISPLAY = "Flush synchronously";
+  private static final boolean FLUSH_SYNCHRONOUSLY_DEFAULT = false;
+
   public static final String MAX_RETRIES_CONFIG = "max.retries";
   private static final String MAX_RETRIES_DOC =
       "The maximum number of retries that are allowed for failed indexing requests. If the retry "
@@ -501,6 +509,16 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
             ++order,
             Width.SHORT,
             FLUSH_TIMEOUT_MS_DISPLAY
+        ).define(
+            FLUSH_SYNCHRONOUSLY_CONFIG,
+            Type.BOOLEAN,
+            FLUSH_SYNCHRONOUSLY_DEFAULT,
+            Importance.LOW,
+            FLUSH_SYNCHRONOUSLY_DOC,
+            CONNECTOR_GROUP,
+            ++order,
+            Width.SHORT,
+            FLUSH_SYNCHRONOUSLY_DISPLAY
         ).define(
             MAX_RETRIES_CONFIG,
             Type.INT,
@@ -911,6 +929,10 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
 
   public long flushTimeoutMs() {
     return getLong(FLUSH_TIMEOUT_MS_CONFIG);
+  }
+
+  public boolean flushSynchronously() {
+    return getBoolean(FLUSH_SYNCHRONOUSLY_CONFIG);
   }
 
   public boolean ignoreKey() {

@@ -47,6 +47,12 @@ public class ElasticsearchSinkConnectorConfigTest {
   }
 
   @Test
+  public void testDefaultFlushSynchronously() {
+    ElasticsearchSinkConnectorConfig config = new ElasticsearchSinkConnectorConfig(props);
+    assertEquals(false, config.flushSynchronously());
+  }
+
+  @Test
   public void testSetHttpTimeoutsConfig() {
     props.put(READ_TIMEOUT_MS_CONFIG, "10000");
     props.put(CONNECTION_TIMEOUT_MS_CONFIG, "15000");
