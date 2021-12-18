@@ -407,10 +407,13 @@ public class ElasticsearchClient {
       }
 
       private void bulkFinished(long executionId, BulkRequest request) {
-        if (request != null && requestToSinkRecord.containsKey(request)) {
-          SinkRecordAndOffset sinkRecordAndOffset = requestToSinkRecord.get(request);
-          if (sinkRecordAndOffset != null && sinkRecordAndOffset.sinkRecord != null) {
-            dualWriteProducer.submit(sinkRecordAndOffset.sinkRecord);
+        if (request != null) {
+          List<SinkRecord> sinkRecords = request.requests().stream()
+              .map(requestToSinkRecord::get)
+              .map(sinkRecordAndOffset -> sinkRecordAndOffset.sinkRecord)
+              .collect(toList());
+          if (sinkRecords != null && sinkRecords.size() > 0) {
+            dualWriteProducer.submitAll(sinkRecords);
           }
         }
         request.requests().forEach(requestToSinkRecord::remove);
