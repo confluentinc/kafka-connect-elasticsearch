@@ -37,8 +37,8 @@ import org.elasticsearch.client.security.RefreshPolicy;
 import org.elasticsearch.client.security.user.User;
 import org.elasticsearch.client.security.user.privileges.Role;
 import org.elasticsearch.cluster.metadata.MappingMetadata;
-import org.elasticsearch.common.xcontent.XContentType;
 import org.elasticsearch.search.SearchHits;
+import org.elasticsearch.xcontent.XContentType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
