@@ -377,6 +377,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   public enum DataStreamType {
     LOGS,
     METRICS,
+    TRACES,
     NONE
   }
 
