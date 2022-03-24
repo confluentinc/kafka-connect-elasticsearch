@@ -92,7 +92,11 @@ public class ElasticsearchClientTest {
 
   @AfterClass
   public static void cleanupAfterAll() {
-    container.close();
+    // If the container pull failed, don't litter the error messages with
+    // red-herring null pointer exceptions.
+    if (container != null) {
+      container.close();
+    }
   }
 
   @Before
