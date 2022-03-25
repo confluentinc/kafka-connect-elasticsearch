@@ -1,7 +1,6 @@
 package io.confluent.connect.elasticsearch.integration;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.github.tomakehurst.wiremock.junit.WireMockRule;
@@ -28,7 +27,6 @@ import static com.github.tomakehurst.wiremock.client.WireMock.anyUrl;
 import static com.github.tomakehurst.wiremock.client.WireMock.containing;
 import static com.github.tomakehurst.wiremock.client.WireMock.lessThan;
 import static com.github.tomakehurst.wiremock.client.WireMock.moreThanOrExactly;
-import static com.github.tomakehurst.wiremock.client.WireMock.ok;
 import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
@@ -49,6 +47,10 @@ import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfi
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.MAX_RETRIES_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.READ_TIMEOUT_MS_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.RETRY_BACKOFF_MS_CONFIG;
+import static io.confluent.connect.elasticsearch.helper.ElasticSearchMockUtil.basicEmptyOk;
+import static io.confluent.connect.elasticsearch.helper.ElasticSearchMockUtil.addMinimalHeaders;
+import static io.confluent.connect.elasticsearch.helper.ElasticSearchMockUtil.minimumResponseJson;
+import static io.confluent.connect.elasticsearch.helper.ElasticSearchMockUtil.MAPPER;
 import static java.util.stream.Collectors.toSet;
 import static org.apache.kafka.connect.json.JsonConverterConfig.SCHEMAS_ENABLE_CONFIG;
 import static org.apache.kafka.connect.runtime.ConnectorConfig.CONNECTOR_CLASS_CONFIG;
@@ -65,9 +67,7 @@ public class ElasticsearchConnectorNetworkIT extends BaseConnectorIT {
   @Rule
   public WireMockRule wireMockRule = new WireMockRule(options()
           .dynamicPort()
-          .extensions(BlockingTransformer.class.getName()), false);
-
-  private static final ObjectMapper MAPPER = new ObjectMapper();
+          .extensions(BlockingTransformer.class.getName()), true);
 
   private static final int NUM_RECORDS = 5;
   private static final int TASKS_MAX = 1;
@@ -82,7 +82,8 @@ public class ElasticsearchConnectorNetworkIT extends BaseConnectorIT {
     connect.kafka().createTopic(TOPIC);
     props = createProps();
 
-    stubFor(any(anyUrl()).atPriority(10).willReturn(ok()));
+    // Send a generic "success" back for anything not explictly mocked
+    stubFor(any(anyUrl()).atPriority(10).willReturn(basicEmptyOk()));
   }
 
   @After
@@ -96,7 +97,9 @@ public class ElasticsearchConnectorNetworkIT extends BaseConnectorIT {
             .inScenario("bulkRetry1")
             .whenScenarioStateIs(Scenario.STARTED)
             .withRequestBody(containing("{\"doc_num\":0}"))
-            .willReturn(aResponse().withStatus(500))
+            .willReturn(
+                addMinimalHeaders(aResponse().withStatus(500).withBody(minimumResponseJson()))
+            )
             .willSetStateTo("Failed"));
 
     wireMockRule.stubFor(post(urlPathEqualTo("/_bulk"))
@@ -104,7 +107,7 @@ public class ElasticsearchConnectorNetworkIT extends BaseConnectorIT {
             .whenScenarioStateIs("Failed")
             .withRequestBody(containing("{\"doc_num\":0}"))
             .willSetStateTo("Fixed")
-            .willReturn(okJson(errorBulkResponse())));
+            .willReturn(addMinimalHeaders(okJson(errorBulkResponse()))));
 
     connect.configureConnector(CONNECTOR_NAME, props);
     waitForConnectorToStart(CONNECTOR_NAME, TASKS_MAX);
@@ -123,7 +126,6 @@ public class ElasticsearchConnectorNetworkIT extends BaseConnectorIT {
     wireMockRule.stubFor(post(urlPathEqualTo("/_bulk"))
             .willReturn(okJson(errorBulkResponse())
                     .withTransformers(BlockingTransformer.NAME)));
-    wireMockRule.stubFor(any(anyUrl()).atPriority(10).willReturn(ok()));
 
     props.put(CONNECTION_URL_CONFIG, wireMockRule.url("/"));
     props.put(READ_TIMEOUT_MS_CONFIG, "60000");
@@ -153,7 +155,10 @@ public class ElasticsearchConnectorNetworkIT extends BaseConnectorIT {
   @Test
   public void testReadTimeout() throws Exception {
     wireMockRule.stubFor(post(urlPathEqualTo("/_bulk"))
-            .willReturn(ok().withFixedDelay(2_000)));
+        .willReturn(
+            okJson(minimumResponseJson()).withFixedDelay(2_000)
+        )
+    );
 
     connect.configureConnector(CONNECTOR_NAME, props);
     waitForConnectorToStart(CONNECTOR_NAME, TASKS_MAX);
@@ -240,7 +245,6 @@ public class ElasticsearchConnectorNetworkIT extends BaseConnectorIT {
     wireMockRule.stubFor(post(urlPathEqualTo("/_bulk"))
             .willReturn(okJson(errorBulkResponse())
             .withTransformers(BlockingTransformer.NAME)));
-    wireMockRule.stubFor(any(anyUrl()).atPriority(10).willReturn(ok()));
 
     props.put(CONNECTION_URL_CONFIG, wireMockRule.url("/"));
     props.put(READ_TIMEOUT_MS_CONFIG, "600000");
@@ -296,7 +300,6 @@ public class ElasticsearchConnectorNetworkIT extends BaseConnectorIT {
             .willReturn(aResponse()
                     .withStatus(500)
                     .withTransformers(BlockingTransformer.NAME)));
-    wireMockRule.stubFor(any(anyUrl()).atPriority(10).willReturn(ok()));
 
     props.put(CONNECTION_URL_CONFIG, wireMockRule.url("/"));
     props.put(READ_TIMEOUT_MS_CONFIG, "600000");
