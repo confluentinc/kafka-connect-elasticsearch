@@ -1,15 +1,10 @@
 package io.confluent.connect.elasticsearch.helper;
 
-import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.github.tomakehurst.wiremock.client.ResponseDefinitionBuilder;
 import com.github.tomakehurst.wiremock.client.WireMock;
-import org.apache.kafka.connect.errors.ConnectException;
-
-import java.io.IOException;
 
 import static com.google.common.net.HttpHeaders.CONTENT_TYPE;
 
@@ -54,25 +49,6 @@ public class ElasticSearchMockUtil {
     return builder
         .withHeader("X-Elastic-Product", "Elasticsearch")
         .withHeader(CONTENT_TYPE, "application/json");
-  }
-
-  /**
-   * Add standard ElasticSearch version info to a JSON string
-   * @param jsonText String serialization of a json object
-   * @return The string updated with insertion of the version information
-   *         at the top level of the Json text, re-serialized to text.
-   */
-  static public String addStandardVersionInfo(String jsonText) {
-    try {
-      JsonParser parser = MAPPER.getFactory().createParser(jsonText);
-      JsonNode node = MAPPER.readTree(parser);
-      ObjectNode objectNode = node.deepCopy();
-      return MAPPER.writerWithDefaultPrettyPrinter().writeValueAsString(
-          addStandardVersionInfo(objectNode)
-      );
-    } catch (IOException e) {
-      throw new ConnectException("Could not parse JSON text: \"" + jsonText + "\"");
-    }
   }
 
   /**
