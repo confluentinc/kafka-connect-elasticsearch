@@ -67,7 +67,7 @@ public class ElasticsearchContainer
   /**
    * Default Elasticsearch version.
    */
-  public static final String DEFAULT_ES_VERSION = "7.9.3";
+  public static final String DEFAULT_ES_VERSION = "7.15.2";
 
   /**
    * Default Elasticsearch port.
@@ -355,6 +355,9 @@ public class ElasticsearchContainer
       builder
           .copy("instances.yml", CONFIG_SSL_PATH + "/instances.yml")
           .copy("start-elasticsearch.sh", CONFIG_SSL_PATH + "/start-elasticsearch.sh")
+          // On the 7.15.2 ElasticSearch container, yum is not working by default, so enable it
+          .run("sed -i 's/mirrorlist/#mirrorlist/g' /etc/yum.repos.d/CentOS-*")
+          .run("sed -i 's|#baseurl=http://mirror.centos.org|baseurl=http://vault.centos.org|g' /etc/yum.repos.d/CentOS-*")
           // OpenSSL and Java's Keytool used to generate the certs, so install them
           .run("yum -y install openssl")
           .run("chmod +x " + CONFIG_SSL_PATH + "/start-elasticsearch.sh")

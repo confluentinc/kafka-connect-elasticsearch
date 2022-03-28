@@ -284,6 +284,21 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
   }
 
   @Test
+  public void testBackwardsCompatibilityDataStream2() throws Exception {
+    container.close();
+    container = ElasticsearchContainer.withESVersion("7.9.3");
+    container.start();
+    setupFromContainer();
+
+    runSimpleTest(props);
+
+    helperClient = null;
+    container.close();
+    container = ElasticsearchContainer.fromSystemProperties();
+    container.start();
+  }
+
+  @Test
   public void testRoutingSmtSynchronousMode() throws Exception {
     index = addRoutingSmt("YYYYMM", "route-it-to-here-${topic}-at-${timestamp}");
     props.put(FLUSH_SYNCHRONOUSLY_CONFIG, "true");
