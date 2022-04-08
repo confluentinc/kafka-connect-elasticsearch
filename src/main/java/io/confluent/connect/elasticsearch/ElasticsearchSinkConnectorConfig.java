@@ -264,6 +264,15 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   private static final String WRITE_METHOD_DISPLAY = "Write Method";
   private static final String WRITE_METHOD_DEFAULT = WriteMethod.INSERT.name();
 
+  public static final String IGNORE_VERSION_CONFIG = "version.ignore";
+  private static final String IGNORE_VERSION_DOC =
+      "Whether to use kafka record offset as Elasticsearch document EXTERNAL version."
+          + " When this is set to ``true``, kafka records with offset lower than previously"
+          + " indexed will overwrite the document. When set to ``false``, the kafka record with"
+          + " offset lower than one previously indexed will be ignored.";
+  private static final String IGNORE_VERSION_DISPLAY = "Ignore Version mode";
+  private static final boolean IGNORE_VERSION_DEFAULT = false;
+
   // Proxy group
   public static final String PROXY_HOST_CONFIG = "proxy.host";
   private static final String PROXY_HOST_DISPLAY = "Proxy Host";
@@ -678,6 +687,16 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
             Width.SHORT,
             WRITE_METHOD_DISPLAY,
             new EnumRecommender<>(WriteMethod.class)
+        ).define(
+            IGNORE_VERSION_CONFIG,
+            Type.BOOLEAN,
+            IGNORE_VERSION_DEFAULT,
+            Importance.LOW,
+            IGNORE_VERSION_DOC,
+            DATA_CONVERSION_GROUP,
+            ++order,
+            Width.SHORT,
+            IGNORE_VERSION_DISPLAY
     );
   }
 
@@ -1009,6 +1028,10 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
 
   public WriteMethod writeMethod() {
     return WriteMethod.valueOf(getString(WRITE_METHOD_CONFIG).toUpperCase());
+  }
+
+  public boolean shouldIgnoreVersion() {
+    return getBoolean(IGNORE_VERSION_CONFIG);
   }
 
   private static class DataStreamDatasetValidator implements Validator {

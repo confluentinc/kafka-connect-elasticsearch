@@ -32,6 +32,7 @@ import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfi
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.SECURITY_PROTOCOL_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.SSL_CONFIG_PREFIX;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.WRITE_METHOD_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_VERSION_CONFIG;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertThrows;
@@ -122,7 +123,7 @@ public class ElasticsearchClientTest {
 
   @After
   public void cleanup() throws IOException {
-    if (helperClient != null && helperClient.indexExists(index)){
+    if (helperClient != null && helperClient.indexExists(index)) {
       helperClient.deleteIndex(index, config.isDataStream());
     }
   }
@@ -596,6 +597,42 @@ public class ElasticsearchClientTest {
     client.waitForInFlightRequests();
 
     return conflict_list;
+  }
+
+  /**
+   * VERSION_IGNORE_CONFIG is set to true, then Version.EXTERNAL is not used
+   * even if the IGNORE_KEY_CONFIG is said to false.
+   *
+   * In this case, even if records
+   * are written with a kafka offset, less than the previous indexed record and no
+   * exception should be thrown.
+   * 
+   * @throws Exception will be thrown if the test fails
+   */
+  @Test
+  public void testInternalVersionUsedForVersionIgnore() throws Exception {
+    props.put(IGNORE_VERSION_CONFIG, "true");
+    props.put(IGNORE_KEY_CONFIG, "false");
+    config = new ElasticsearchSinkConnectorConfig(props);
+    converter = new DataConverter(config);
+
+    ErrantRecordReporter reporter = mock(ErrantRecordReporter.class);
+    ElasticsearchClient client = new ElasticsearchClient(config, reporter, () -> offsetTracker.updateOffsets()) {
+      protected boolean handleResponse(BulkItemResponse response, DocWriteRequest<?> request,
+          long executionId) {
+        // Check if request version type is INTERNAL
+        assertEquals(request.versionType(), VersionType.INTERNAL);
+        return super.handleResponse(response, request, executionId);
+      }
+    };
+
+    List<SinkRecord> duplicate_records = causeExternalVersionConflictError(client);
+
+    // Make sure that no error was reported for any record(s)
+    for (SinkRecord duplicated_record : duplicate_records) {
+      verify(reporter, never()).report(eq(duplicated_record), any(Throwable.class));
+    }
+    client.close();
   }
 
   /**
