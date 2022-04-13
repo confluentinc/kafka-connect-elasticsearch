@@ -100,25 +100,27 @@ public class Validator {
       return new Config(validations);
     }
 
-    try (RestHighLevelClient client = clientFactory.client()) {
-      validateCredentials();
-      validateDataStreamConfigs();
-      validateIgnoreConfigs();
-      validateKerberos();
-      validateLingerMs();
-      validateMaxBufferedRecords();
-      validateProxy();
-      validateSsl();
+    validateCredentials();
+    validateDataStreamConfigs();
+    validateIgnoreConfigs();
+    validateKerberos();
+    validateLingerMs();
+    validateMaxBufferedRecords();
+    validateProxy();
+    validateSsl();
 
-      if (!hasErrors()) {
-        // no point if previous configs are invalid
+    if (!hasErrors()) {
+      // no point in connection validation if previous ones fails
+      try (RestHighLevelClient client = clientFactory.client()) {
         validateConnection(client);
-      }
-      if (!hasErrors()) {
         validateVersion(client);
+      } catch (IOException e) {
+        log.warn("Closing the client failed.", e);
+      } catch (Throwable e) {
+        log.error("Failed to create client to verify connection. ", e);
+        addErrorMessage(CONNECTION_URL_CONFIG, "Failed to create client to verify connection. "
+            + e.getMessage());
       }
-    } catch (IOException e) {
-      log.warn("Closing the client failed.", e);
     }
 
     return new Config(validations);
