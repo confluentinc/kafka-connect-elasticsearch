@@ -117,9 +117,9 @@ public class Validator {
       } catch (IOException e) {
         log.warn("Closing the client failed.", e);
       } catch (Throwable e) {
-        log.error("Validation failed ", e);
+        log.error("Failed to create client to verify connection. ", e);
         addErrorMessage(CONNECTION_URL_CONFIG, "Failed to create client to verify connection. "
-            + "Error: " + e.getMessage());
+            + e.getMessage());
       }
     }
 
