@@ -49,7 +49,10 @@ public abstract class BaseConnectorIT {
 
   protected void stopConnect() {
     // stop all Connect, Kafka and Zk threads.
-    connect.stop();
+    if (connect != null) {
+      connect.stop();
+      connect = null;
+    }
   }
 
   /**
