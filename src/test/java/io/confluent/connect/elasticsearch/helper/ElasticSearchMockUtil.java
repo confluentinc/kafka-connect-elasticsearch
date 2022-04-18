@@ -9,7 +9,7 @@ import com.github.tomakehurst.wiremock.client.WireMock;
 import static com.google.common.net.HttpHeaders.CONTENT_TYPE;
 
 /**
- * Some utility functions to help mocking ElasticSearch via WireMock
+ * Some utility functions to help mocking Elasticsearch via WireMock
  */
 public class ElasticSearchMockUtil {
   public static final ObjectMapper MAPPER = new ObjectMapper();
