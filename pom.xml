@@ -334,7 +334,8 @@
                 <configuration>
                     <compilerArgs>
                         <arg>-Xlint:all,-try</arg>
-                        <arg>-Werror</arg>
+                        <!-- migrate to the new Java Client and uncomment -->
+                        <!--<arg>-Werror</arg>-->
                     </compilerArgs>
                 </configuration>
             </plugin>
