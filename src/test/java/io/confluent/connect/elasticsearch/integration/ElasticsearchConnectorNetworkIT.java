@@ -156,7 +156,7 @@ public class ElasticsearchConnectorNetworkIT extends BaseConnectorIT {
   public void testReadTimeout() throws Exception {
     wireMockRule.stubFor(post(urlPathEqualTo("/_bulk"))
         .willReturn(
-            addMinimalHeaders(aResponse().withBody(minimumResponseJson()).withFixedDelay(2_000))
+            addMinimalHeaders(aResponse().withFixedDelay(2_000))
         )
     );
 
