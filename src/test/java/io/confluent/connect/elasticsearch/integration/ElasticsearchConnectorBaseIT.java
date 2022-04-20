@@ -251,7 +251,7 @@ public class ElasticsearchConnectorBaseIT extends BaseConnectorIT {
         .privileges("create_index", "read", "write", "view_index_metadata")
         .build();
     // Historically (i.e. ES the previous test base version 7.9.3), ES_SINK_CONNECTOR_ROLE would not require the
-    // "monitor" cluster privilege.  However, this has changed for 7.15.2, although leaving the surrounding
+    // "monitor" cluster privilege.  However, this has changed for 7.16.3, although leaving the surrounding
     // logic in place in the case that future ES versions or tests wish to diverge the permissions.
     return Role.builder()
         .name(forDataStream ? ES_SINK_CONNECTOR_DS_ROLE : ES_SINK_CONNECTOR_ROLE)
