@@ -68,7 +68,7 @@ public class ElasticsearchContainer
   /**
    * Default Elasticsearch version.
    */
-  public static final String DEFAULT_ES_VERSION = "7.15.2";
+  public static final String DEFAULT_ES_VERSION = "7.16.3";
 
   /**
    * Default Elasticsearch port.
@@ -378,17 +378,14 @@ public class ElasticsearchContainer
           .copy("instances.yml", CONFIG_SSL_PATH + "/instances.yml")
           .copy("start-elasticsearch.sh", CONFIG_SSL_PATH + "/start-elasticsearch.sh");
       if (versionsInt.get(0) >= 7 && versionsInt.get(1) >= 15) {
-        // On the 7.15.2 ElasticSearch container, yum is not working by default, so enable it
-          builder
-            .run("sed -i 's/mirrorlist/#mirrorlist/g' /etc/yum.repos.d/CentOS-*")
-            .run("sed -i 's|#baseurl=http://mirror.centos.org|baseurl=http://vault.centos.org|g' /etc/yum.repos.d/CentOS-*");
-          // SSL cert issues with the newer installed java using hmacPBESHA256, which isn't
-          // supported by java 1.8
-          builder.run("yum install -y java-1.8.0-openjdk-headless");
+        // Install keytool from java 1.8 since our connector is built with
+        // java 1.8 and the cert algoritm's won;t be compatible when using the newer
+        // java version on the container
+        // Also note that 7.16.3 test container uses Ubuntu now instead of CentOS
+        builder.run("apt update");
+        builder.run("apt install -y openjdk-8-jre-headless");
       }
       builder
-          // OpenSSL and Java's Keytool used to generate the certs, so install them
-          .run("yum -y install openssl")
           .run("chmod +x " + CONFIG_SSL_PATH + "/start-elasticsearch.sh")
           .entryPoint(CONFIG_SSL_PATH + "/start-elasticsearch.sh");
     }

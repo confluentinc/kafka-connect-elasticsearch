@@ -29,7 +29,7 @@ public class ElasticSearchMockUtil {
         .put("cluster_uuid", "83EJmDNrRVirBWcZDgs9ew")
         .put("tagline", "You Know, for Search")
         .putObject("version")
-        .put("number", "7.15.2")
+        .put("number", "7.16.3")
         .put("build_hash", "83EJmDNrRVirBWcZDgs9ew")
         .put("build_date", "2018-04-12T16:25:14.838Z")
         .put("build_snapshot", "false")
