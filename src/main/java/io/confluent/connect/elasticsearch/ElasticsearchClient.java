@@ -52,6 +52,7 @@ import org.elasticsearch.action.bulk.BulkResponse;
 import org.elasticsearch.client.RequestOptions;
 import org.elasticsearch.client.RestClient;
 import org.elasticsearch.client.RestHighLevelClient;
+import org.elasticsearch.client.RestHighLevelClientBuilder;
 import org.elasticsearch.client.indices.CreateDataStreamRequest;
 import org.elasticsearch.client.indices.CreateIndexRequest;
 import org.elasticsearch.client.indices.GetIndexRequest;
@@ -130,17 +131,16 @@ public class ElasticsearchClient {
     this.clock = Time.SYSTEM;
 
     ConfigCallbackHandler configCallbackHandler = new ConfigCallbackHandler(config);
-    this.client = new RestHighLevelClient(
-        RestClient
-            .builder(
-                config.connectionUrls()
-                    .stream()
-                    .map(HttpHost::create)
-                    .collect(toList())
-                    .toArray(new HttpHost[config.connectionUrls().size()])
-            )
-            .setHttpClientConfigCallback(configCallbackHandler)
-    );
+    RestClient client = RestClient
+        .builder(
+            config.connectionUrls()
+                .stream()
+                .map(HttpHost::create)
+                .collect(toList())
+                .toArray(new HttpHost[config.connectionUrls().size()])
+        ).setHttpClientConfigCallback(configCallbackHandler).build();
+    this.client = new RestHighLevelClientBuilder(client).setApiCompatibilityMode(true).build();
+
     this.bulkProcessor = BulkProcessor
         .builder(buildConsumer(), buildListener(afterBulkCallback))
         .setBulkActions(config.batchSize())
