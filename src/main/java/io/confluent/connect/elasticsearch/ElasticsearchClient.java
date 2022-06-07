@@ -53,6 +53,7 @@ import org.elasticsearch.client.RequestOptions;
 import org.elasticsearch.client.RestClient;
 import org.elasticsearch.client.RestHighLevelClient;
 import org.elasticsearch.client.RestHighLevelClientBuilder;
+import org.elasticsearch.client.core.MainResponse;
 import org.elasticsearch.client.indices.CreateDataStreamRequest;
 import org.elasticsearch.client.indices.CreateIndexRequest;
 import org.elasticsearch.client.indices.GetIndexRequest;
@@ -101,6 +102,7 @@ public class ElasticsearchClient {
           "action_request_validation_exception"
       )
   );
+  private static final String UNKNOWN_VERSION_TAG = "Unknown";
 
   protected final AtomicInteger numBufferedRecords;
   private final AtomicReference<ConnectException> error;
@@ -114,6 +116,7 @@ public class ElasticsearchClient {
   private final Time clock;
   private final Lock inFlightRequestLock = new ReentrantLock();
   private final Condition inFlightRequestsUpdated = inFlightRequestLock.newCondition();
+  private final String esVersion;
 
   @SuppressWarnings("deprecation")
   public ElasticsearchClient(
@@ -139,7 +142,16 @@ public class ElasticsearchClient {
                 .collect(toList())
                 .toArray(new HttpHost[config.connectionUrls().size()])
         ).setHttpClientConfigCallback(configCallbackHandler).build();
-    this.client = new RestHighLevelClientBuilder(client).setApiCompatibilityMode(true).build();
+
+    esVersion = getServerVersion(client);
+
+    RestHighLevelClientBuilder clientBuilder = new RestHighLevelClientBuilder(client);
+
+    if (shouldSetCompatibilityToES8()) {
+      clientBuilder.setApiCompatibilityMode(true);
+    }
+
+    this.client = clientBuilder.build();
 
     this.bulkProcessor = BulkProcessor
         .builder(buildConsumer(), buildListener(afterBulkCallback))
@@ -152,6 +164,38 @@ public class ElasticsearchClient {
         // We are doing retries in the async thread instead.
         .setBackoffPolicy(BackoffPolicy.noBackoff())
         .build();
+  }
+
+  /**
+   * Elastic High level Rest Client 7.17 has a compatibility mode to support ES 8. Checks the
+   * version number of ES to determine if we should be running in compatibility mode while using
+   * HLRC 7.17 to talk to ES.
+   */
+  private boolean shouldSetCompatibilityToES8() {
+    return !version().equals(UNKNOWN_VERSION_TAG) &&
+        Integer.parseInt(version().split("\\.", 1)[0]) >= 8;
+  }
+
+  private String getServerVersion(RestClient client) {
+    RestHighLevelClient highLevelClient = new RestHighLevelClientBuilder(client).build();
+    MainResponse response;
+    String esVersionNumber = "Unknown";
+    try {
+      response = highLevelClient.info(RequestOptions.DEFAULT);
+      esVersionNumber = response.getVersion().getNumber();
+    } catch (Exception e) {
+      // Same error messages as from validating the connection for IOException.
+      // Insufficient privileges to validate the version number if caught
+      // ElasticsearchStatusException.
+      log.warn("Failed to get ES server version", e);
+    } finally {
+      try {
+        highLevelClient.close();
+      } catch (Exception e) {
+        log.warn("Failed to close high level client", e);
+      }
+    }
+    return esVersionNumber;
   }
 
   private BiConsumer<BulkRequest, ActionListener<BulkResponse>> buildConsumer() {
@@ -239,6 +283,9 @@ public class ElasticsearchClient {
     );
   }
 
+  public String version() {
+    return esVersion;
+  }
   /**
    * Triggers a flush of any buffered records.
    */

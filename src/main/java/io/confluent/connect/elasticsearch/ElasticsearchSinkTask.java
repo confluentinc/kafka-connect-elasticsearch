@@ -95,7 +95,7 @@ public class ElasticsearchSinkTask extends SinkTask {
     }
 
     log.info("Started ElasticsearchSinkTask. Connecting to ES server version: {}",
-        getServerVersion());
+        this.client.version());
   }
 
   @Override
@@ -153,39 +153,6 @@ public class ElasticsearchSinkTask extends SinkTask {
       log.debug("Caching mapping for index '{}' locally.", index);
       existingMappings.add(index);
     }
-  }
-
-  private String getServerVersion() {
-    ConfigCallbackHandler configCallbackHandler = new ConfigCallbackHandler(config);
-    RestHighLevelClient highLevelClient = new RestHighLevelClient(
-        RestClient
-            .builder(
-                config.connectionUrls()
-                    .stream()
-                    .map(HttpHost::create)
-                    .collect(Collectors.toList())
-                    .toArray(new HttpHost[config.connectionUrls().size()])
-            )
-            .setHttpClientConfigCallback(configCallbackHandler)
-    );
-    MainResponse response;
-    String esVersionNumber = "Unknown";
-    try {
-      response = highLevelClient.info(RequestOptions.DEFAULT);
-      esVersionNumber = response.getVersion().getNumber();
-    } catch (Exception e) {
-      // Same error messages as from validating the connection for IOException.
-      // Insufficient privileges to validate the version number if caught
-      // ElasticsearchStatusException.
-      log.warn("Failed to get ES server version", e);
-    } finally {
-      try {
-        highLevelClient.close();
-      } catch (Exception e) {
-        log.warn("Failed to close high level client", e);
-      }
-    }
-    return esVersionNumber;
   }
 
   /**
