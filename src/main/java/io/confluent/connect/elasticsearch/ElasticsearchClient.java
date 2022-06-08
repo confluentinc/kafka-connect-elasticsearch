@@ -173,7 +173,7 @@ public class ElasticsearchClient {
    */
   private boolean shouldSetCompatibilityToES8() {
     return !version().equals(UNKNOWN_VERSION_TAG) &&
-        Integer.parseInt(version().split("\\.", 1)[0]) >= 8;
+        Integer.parseInt(version().split("\\.")[0]) >= 8;
   }
 
   private String getServerVersion(RestClient client) {
