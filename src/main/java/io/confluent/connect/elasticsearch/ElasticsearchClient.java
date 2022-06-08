@@ -148,6 +148,7 @@ public class ElasticsearchClient {
     RestHighLevelClientBuilder clientBuilder = new RestHighLevelClientBuilder(client);
 
     if (shouldSetCompatibilityToES8()) {
+      log.info("Staring client in es 8 compatibility mode");
       clientBuilder.setApiCompatibilityMode(true);
     }
 
@@ -179,7 +180,7 @@ public class ElasticsearchClient {
   private String getServerVersion(RestClient client) {
     RestHighLevelClient highLevelClient = new RestHighLevelClientBuilder(client).build();
     MainResponse response;
-    String esVersionNumber = "Unknown";
+    String esVersionNumber = UNKNOWN_VERSION_TAG;
     try {
       response = highLevelClient.info(RequestOptions.DEFAULT);
       esVersionNumber = response.getVersion().getNumber();
@@ -188,12 +189,6 @@ public class ElasticsearchClient {
       // Insufficient privileges to validate the version number if caught
       // ElasticsearchStatusException.
       log.warn("Failed to get ES server version", e);
-    } finally {
-      try {
-        highLevelClient.close();
-      } catch (Exception e) {
-        log.warn("Failed to close high level client", e);
-      }
     }
     return esVersionNumber;
   }
