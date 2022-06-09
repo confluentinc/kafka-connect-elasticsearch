@@ -15,7 +15,10 @@
 
 package io.confluent.connect.elasticsearch.helper;
 
+import io.confluent.connect.elasticsearch.ElasticsearchClient;
+import io.confluent.connect.elasticsearch.RetryUtil;
 import org.apache.kafka.common.config.SslConfigs;
+import org.apache.kafka.test.TestUtils;
 import org.elasticsearch.client.security.user.User;
 import org.elasticsearch.client.security.user.privileges.Role;
 import org.slf4j.Logger;
@@ -23,6 +26,7 @@ import org.slf4j.LoggerFactory;
 import org.testcontainers.containers.ContainerLaunchException;
 import org.testcontainers.containers.output.OutputFrame;
 import org.testcontainers.containers.wait.strategy.Wait;
+import org.testcontainers.containers.wait.strategy.WaitStrategyTarget;
 import org.testcontainers.images.RemoteDockerImage;
 import org.testcontainers.images.builder.ImageFromDockerfile;
 import org.testcontainers.images.builder.dockerfile.DockerfileBuilder;
@@ -68,7 +72,7 @@ public class ElasticsearchContainer
   /**
    * Default Elasticsearch version.
    */
-  public static final String DEFAULT_ES_VERSION = "7.16.3";
+  public static final String DEFAULT_ES_VERSION = "8.2.2";
 
   /**
    * Default Elasticsearch port.
@@ -159,6 +163,7 @@ public class ElasticsearchContainer
   @Override
   public void start() {
     super.start();
+
     String address;
     if (isBasicAuthEnabled()) {
       Map<String, String> props = new HashMap<>();
@@ -172,6 +177,7 @@ public class ElasticsearchContainer
       }
       props.put(CONNECTION_URL_CONFIG, address);
       ElasticsearchHelperClient helperClient = getHelperClient(props);
+      helperClient.waitForConnection(30000);
       createUsersAndRoles(helperClient);
     }
   }
@@ -186,6 +192,11 @@ public class ElasticsearchContainer
   }
 
   private void createUsersAndRoles(ElasticsearchHelperClient helperClient ) {
+    try {
+      Thread.sleep(10000);
+    } catch (Exception e) {
+      //
+    }
     try {
       for (Role role: this.rolesToCreate) {
         helperClient.createRole(role);
@@ -582,7 +593,21 @@ public class ElasticsearchContainer
     superUserProps.put(CONNECTION_USERNAME_CONFIG, ELASTIC_SUPERUSER_NAME);
     superUserProps.put(CONNECTION_PASSWORD_CONFIG, ELASTIC_SUPERUSER_PASSWORD);
     ElasticsearchSinkConnectorConfig config = new ElasticsearchSinkConnectorConfig(superUserProps);
-    ElasticsearchHelperClient client = new ElasticsearchHelperClient(props.get(CONNECTION_URL_CONFIG), config);
+    ElasticsearchHelperClient client = new ElasticsearchHelperClient(props.get(CONNECTION_URL_CONFIG), config,
+        shouldStartClientInCompatibilityMode());
     return client;
+  }
+
+  /**
+   * For high level rest client v7.17 api compatibility mode must be turned on for working with
+   * ES 8.
+   * @return true if the major version of image used is 8 i.e (ES 8.x.x)
+   */
+  public boolean shouldStartClientInCompatibilityMode() {
+    return esMajorVersion() == 8;
+  }
+
+  public int esMajorVersion() {
+    return getImageVersion().get(0);
   }
 }

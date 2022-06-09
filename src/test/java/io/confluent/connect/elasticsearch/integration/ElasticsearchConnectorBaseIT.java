@@ -178,7 +178,8 @@ public class ElasticsearchConnectorBaseIT extends BaseConnectorIT {
     props.put(CONNECTION_URL_CONFIG, address);
     helperClient = new ElasticsearchHelperClient(
         props.get(CONNECTION_URL_CONFIG),
-        new ElasticsearchSinkConnectorConfig(props)
+        new ElasticsearchSinkConnectorConfig(props),
+        container.shouldStartClientInCompatibilityMode()
     );
   }
 
