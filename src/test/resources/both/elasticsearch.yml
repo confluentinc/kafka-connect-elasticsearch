@@ -5,6 +5,7 @@ transport.host: 0.0.0.0
 
 node.store.allow_mmap: false
 cluster.routing.allocation.disk.threshold_enabled: false
+discovery.type: single-node
 
 xpack.license.self_generated.type: trial
 xpack.security.enabled: true

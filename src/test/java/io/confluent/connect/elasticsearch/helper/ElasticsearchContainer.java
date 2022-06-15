@@ -308,7 +308,7 @@ public class ElasticsearchContainer
     } else if (isBasicAuthEnabled()) {
       return "/basic/" + resourceName;
     } else {
-      return resourceName;
+      return "/none/" + resourceName;
     }
   }
 
@@ -321,10 +321,10 @@ public class ElasticsearchContainer
             .withStartupTimeout(Duration.ofMinutes(5))
     );
 
-    if (!isSslEnabled() && !isKerberosEnabled() && !isBasicAuthEnabled()) {
-      setImage(new RemoteDockerImage(DockerImageName.parse(imageName)));
-      return;
-    }
+//    if (!isSslEnabled() && !isKerberosEnabled() && !isBasicAuthEnabled()) {
+//      setImage(new RemoteDockerImage(DockerImageName.parse(imageName)));
+//      return;
+//    }
 
     ImageFromDockerfile image = new ImageFromDockerfile()
         // Copy the Elasticsearch config file
@@ -386,9 +386,10 @@ public class ElasticsearchContainer
       ArrayList<Integer> versionsInt = getImageVersion();
       log.info("Building Elasticsearch image with SSL configuration");
       builder
+          .user("root")
           .copy("instances.yml", CONFIG_SSL_PATH + "/instances.yml")
           .copy("start-elasticsearch.sh", CONFIG_SSL_PATH + "/start-elasticsearch.sh");
-      if (versionsInt.get(0) >= 7 && versionsInt.get(1) >= 15) {
+      if (versionsInt.get(0) == 8 || versionsInt.get(0) == 7 && versionsInt.get(1) >= 15) {
         // Install keytool from java 1.8 since our connector is built with
         // java 1.8 and the cert algoritm's won;t be compatible when using the newer
         // java version on the container
