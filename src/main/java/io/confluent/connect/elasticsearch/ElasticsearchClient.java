@@ -173,8 +173,8 @@ public class ElasticsearchClient {
    * HLRC 7.17 to talk to ES.
    */
   private boolean shouldSetCompatibilityToES8() {
-    return !version().equals(UNKNOWN_VERSION_TAG) &&
-        Integer.parseInt(version().split("\\.")[0]) >= 8;
+    return !version().equals(UNKNOWN_VERSION_TAG)
+        && Integer.parseInt(version().split("\\.")[0]) >= 8;
   }
 
   private String getServerVersion(RestClient client) {
@@ -281,6 +281,7 @@ public class ElasticsearchClient {
   public String version() {
     return esVersion;
   }
+
   /**
    * Triggers a flush of any buffered records.
    */
