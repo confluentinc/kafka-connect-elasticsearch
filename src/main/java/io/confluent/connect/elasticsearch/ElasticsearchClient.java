@@ -148,7 +148,7 @@ public class ElasticsearchClient {
     RestHighLevelClientBuilder clientBuilder = new RestHighLevelClientBuilder(client);
 
     if (shouldSetCompatibilityToES8()) {
-      log.info("Staring client in es 8 compatibility mode");
+      log.info("Staring client in ES 8 compatibility mode");
       clientBuilder.setApiCompatibilityMode(true);
     }
 

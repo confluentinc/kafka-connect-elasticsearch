@@ -321,11 +321,6 @@ public class ElasticsearchContainer
             .withStartupTimeout(Duration.ofMinutes(5))
     );
 
-//    if (!isSslEnabled() && !isKerberosEnabled() && !isBasicAuthEnabled()) {
-//      setImage(new RemoteDockerImage(DockerImageName.parse(imageName)));
-//      return;
-//    }
-
     ImageFromDockerfile image = new ImageFromDockerfile()
         // Copy the Elasticsearch config file
         .withFileFromClasspath("elasticsearch.yml", getFullResourcePath("elasticsearch.yml"))
