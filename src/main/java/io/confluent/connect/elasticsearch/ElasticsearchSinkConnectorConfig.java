@@ -33,6 +33,7 @@ import org.apache.kafka.common.config.ConfigDef.Validator;
 import org.apache.kafka.common.config.ConfigDef.Width;
 import org.apache.kafka.common.config.types.Password;
 import org.elasticsearch.common.unit.ByteSizeValue;
+import org.elasticsearch.index.VersionType;
 
 import static org.apache.kafka.common.config.ConfigDef.Range.between;
 import static org.apache.kafka.common.config.SslConfigs.SSL_ENDPOINT_IDENTIFICATION_ALGORITHM_CONFIG;
@@ -362,7 +363,17 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   private static final String KERBEROS_GROUP = "Kerberos";
   private static final String DATA_STREAM_GROUP = "Data Stream";
 
-  public enum BehaviorOnMalformedDoc {
+  public static final String VERSION_TYPE_CONFIG = "version.type";
+
+  public static final String VERSION_TYPE_DOC = "Elasticsearch version type, will be append when key.ignored is set to false";
+
+  public static final String VERSION_TYPE_DEFAULT = "external_gte";
+
+    public static final String VERSION_TYPE_DISPLAY = "Elasticsearch Version Type";
+
+
+
+    public enum BehaviorOnMalformedDoc {
     IGNORE,
     WARN,
     FAIL
@@ -678,7 +689,19 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
             Width.SHORT,
             WRITE_METHOD_DISPLAY,
             new EnumRecommender<>(WriteMethod.class)
-    );
+        ).define(
+            VERSION_TYPE_CONFIG,
+            Type.STRING,
+            VERSION_TYPE_DEFAULT,
+            new EnumRecommender<>(VersionType.class),
+            Importance.LOW,
+            VERSION_TYPE_DOC,
+            DATA_CONVERSION_GROUP,
+            ++order,
+            Width.SHORT,
+            VERSION_TYPE_DISPLAY,
+            new EnumRecommender<>(VersionType.class)
+            );
   }
 
   private static void addProxyConfigs(ConfigDef configDef) {
@@ -904,7 +927,6 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   public DataStreamType dataStreamType() {
     return DataStreamType.valueOf(getString(DATA_STREAM_TYPE_CONFIG).toUpperCase());
   }
-
   public List<String> dataStreamTimestampField() {
     return getList(DATA_STREAM_TIMESTAMP_CONFIG);
   }
@@ -1009,6 +1031,10 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
 
   public WriteMethod writeMethod() {
     return WriteMethod.valueOf(getString(WRITE_METHOD_CONFIG).toUpperCase());
+  }
+
+  public VersionType versionType() {
+    return VersionType.valueOf(getString(VERSION_TYPE_CONFIG).toUpperCase());
   }
 
   private static class DataStreamDatasetValidator implements Validator {
