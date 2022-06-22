@@ -16,6 +16,7 @@ import java.util.Map;
 import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.config.SslConfigs;
 import org.apache.kafka.common.config.types.Password;
+import org.elasticsearch.index.VersionType;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -242,6 +243,25 @@ public class ElasticsearchSinkConnectorConfigTest {
   public void shouldNotAllowInvalidVersionType() {
     props.put(VERSION_TYPE_CONFIG, "notInternal");
     new ElasticsearchSinkConnectorConfig(props);
+  }
+
+  @Test
+  public void testVersionTypeDefault() {
+    ElasticsearchSinkConnectorConfig config = new ElasticsearchSinkConnectorConfig(props);
+    assertEquals(config.versionType(), VersionType.EXTERNAL_GTE);
+  }
+
+  @Test
+  public void testVersionTypeFieldDefault() {
+    ElasticsearchSinkConnectorConfig config = new ElasticsearchSinkConnectorConfig(props);
+    assertFalse(config.isVersionTypeFieldConfigured());
+  }
+
+  @Test
+  public void testVersionTypeFieldConfig() {
+    props.put(VERSION_TYPE_FIELD_CONFIG, "version");
+    ElasticsearchSinkConnectorConfig config = new ElasticsearchSinkConnectorConfig(props);
+    assertEquals("version", config.versionTypeField());
   }
 
   public static Map<String, String> addNecessaryProps(Map<String, String> props) {

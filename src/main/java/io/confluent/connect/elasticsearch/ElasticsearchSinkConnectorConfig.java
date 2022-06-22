@@ -364,12 +364,17 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   private static final String DATA_STREAM_GROUP = "Data Stream";
 
   public static final String VERSION_TYPE_CONFIG = "version.type";
-
   public static final String VERSION_TYPE_DOC = "Elasticsearch version type, will be append when key.ignored is set to false";
-
   public static final String VERSION_TYPE_DEFAULT = "external_gte";
+  public static final String VERSION_TYPE_DISPLAY = "Elasticsearch Version Type";
 
-    public static final String VERSION_TYPE_DISPLAY = "Elasticsearch Version Type";
+  public static final String VERSION_TYPE_FIELD_CONFIG = "version.type.field";
+  public static final String VERSION_TYPE_FIELD_DOC = String.format(
+          "When %s is not set as internal and %s is false, you can set the version to a payload field, if set to empty, will use kafka offset",
+          VERSION_TYPE_FIELD_CONFIG,
+          IGNORE_KEY_CONFIG);
+  public static final String VERSION_TYPE_FIELD_DEFAULT = "";
+  public static final String VERSION_TYPE_FIELD_DISPLAY = "Version Type Field In Payload";
 
 
 
@@ -701,7 +706,17 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
             Width.SHORT,
             VERSION_TYPE_DISPLAY,
             new EnumRecommender<>(VersionType.class)
-            );
+        ).define(
+            VERSION_TYPE_FIELD_CONFIG,
+            Type.STRING,
+            VERSION_TYPE_FIELD_DEFAULT,
+            Importance.LOW,
+            VERSION_TYPE_FIELD_DOC,
+            DATA_CONVERSION_GROUP,
+            ++order,
+            Width.SHORT,
+            VERSION_TYPE_FIELD_DISPLAY
+        );
   }
 
   private static void addProxyConfigs(ConfigDef configDef) {
@@ -1035,6 +1050,13 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
 
   public VersionType versionType() {
     return VersionType.valueOf(getString(VERSION_TYPE_CONFIG).toUpperCase());
+  }
+
+  public boolean isVersionTypeFieldConfigured() {
+    return !getString(VERSION_TYPE_FIELD_CONFIG).isEmpty();
+  }
+  public String versionTypeField() {
+    return getString(VERSION_TYPE_FIELD_CONFIG);
   }
 
   private static class DataStreamDatasetValidator implements Validator {
