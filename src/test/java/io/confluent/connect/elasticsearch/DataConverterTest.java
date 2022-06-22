@@ -492,6 +492,49 @@ public class DataConverterTest {
     assertEquals(VersionType.INTERNAL, actualRecord.versionType());
   }
 
+  @Test
+  public void testVersionType() {
+    props.put(ElasticsearchSinkConnectorConfig.IGNORE_KEY_CONFIG, "false");
+    props.put(ElasticsearchSinkConnectorConfig.VERSION_TYPE_CONFIG, "external");
+    converter = new DataConverter(new ElasticsearchSinkConnectorConfig(props));
+    Schema preProcessedSchema = converter.preProcessSchema(schema);
+    Struct struct = new Struct(preProcessedSchema).put("string", "myValue");
+    SinkRecord sinkRecord = createSinkRecordWithValue(struct);
+    IndexRequest actualRecord = (IndexRequest) converter.convertRecord(sinkRecord, index);
+
+    assertEquals(VersionType.EXTERNAL, actualRecord.versionType());
+  }
+
+  @Test
+  public void testVersionTypeField() {
+
+    Schema versionSchema = SchemaBuilder
+            .struct()
+            .name("struct")
+            .field("version", Schema.INT64_SCHEMA)
+            .build();
+    props.put(ElasticsearchSinkConnectorConfig.IGNORE_KEY_CONFIG, "false");
+    props.put(ElasticsearchSinkConnectorConfig.IGNORE_SCHEMA_CONFIG, "true");
+    props.put(ElasticsearchSinkConnectorConfig.VERSION_TYPE_CONFIG, "external");
+    props.put(ElasticsearchSinkConnectorConfig.VERSION_TYPE_FIELD_CONFIG, "version");
+    converter = new DataConverter(new ElasticsearchSinkConnectorConfig(props));
+
+    Struct struct = new Struct(versionSchema).put("version", 1L);
+    SinkRecord sinkRecord = new SinkRecord(
+            topic,
+            partition,
+            Schema.STRING_SCHEMA,
+            key, versionSchema,
+            struct,
+            offset,
+            recordTimestamp,
+            TimestampType.CREATE_TIME
+    );
+    IndexRequest actualRecord = (IndexRequest) converter.convertRecord(sinkRecord, index);
+
+    assertEquals(1L, actualRecord.version());
+  }
+
   private void configureDataStream() {
     props.put(ElasticsearchSinkConnectorConfig.DATA_STREAM_TYPE_CONFIG, "logs");
     props.put(ElasticsearchSinkConnectorConfig.DATA_STREAM_DATASET_CONFIG, "dataset");
