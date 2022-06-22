@@ -516,7 +516,7 @@ public class DataConverterTest {
     props.put(ElasticsearchSinkConnectorConfig.IGNORE_KEY_CONFIG, "false");
     props.put(ElasticsearchSinkConnectorConfig.IGNORE_SCHEMA_CONFIG, "true");
     props.put(ElasticsearchSinkConnectorConfig.VERSION_TYPE_CONFIG, "external");
-    props.put(ElasticsearchSinkConnectorConfig.VERSION_TYPE_FIELD_CONFIG, "version");
+    props.put(ElasticsearchSinkConnectorConfig.VERSION_FIELD_CONFIG, "version");
     converter = new DataConverter(new ElasticsearchSinkConnectorConfig(props));
 
     Struct struct = new Struct(versionSchema).put("version", 1L);

@@ -258,8 +258,8 @@ public class ElasticsearchSinkConnectorConfigTest {
   }
 
   @Test
-  public void testVersionTypeFieldConfig() {
-    props.put(VERSION_TYPE_FIELD_CONFIG, "version");
+  public void testVersionFieldConfig() {
+    props.put(VERSION_FIELD_CONFIG, "version");
     ElasticsearchSinkConnectorConfig config = new ElasticsearchSinkConnectorConfig(props);
     assertEquals("version", config.versionTypeField());
   }
