@@ -5,12 +5,11 @@
     <parent>
         <groupId>io.confluent</groupId>
         <artifactId>common</artifactId>
-        <version>6.0.3</version>
+        <version>6.2.3</version>
     </parent>
 
-    <groupId>io.confluent</groupId>
     <artifactId>kafka-connect-elasticsearch</artifactId>
-    <version>12.1.0-SNAPSHOT</version>
+    <version>13.2.0-SNAPSHOT</version>
     <packaging>jar</packaging>
     <name>kafka-connect-elasticsearch</name>
     <organization>
@@ -34,22 +33,23 @@
         <connection>scm:git:git://github.com/confluentinc/kafka-connect-elasticsearch.git</connection>
         <developerConnection>scm:git:git@github.com:confluentinc/kafka-connect-elasticsearch.git</developerConnection>
         <url>https://github.com/confluentinc/kafka-connect-elasticsearch</url>
-        <tag>11.1.x</tag>
+        <tag>13.0.x</tag>
     </scm>
 
     <properties>
-        <es.version>7.9.3</es.version>
+        <es.version>7.17.1</es.version>
         <hamcrest.version>1.3</hamcrest.version>
         <mockito.version>2.28.2</mockito.version>
-        <gson.version>2.8.6</gson.version>
-        <test.containers.version>1.15.0</test.containers.version>
+        <gson.version>2.9.0</gson.version>
+        <test.containers.version>1.16.3</test.containers.version>
         <kafka.connect.maven.plugin.version>0.11.1</kafka.connect.maven.plugin.version>
         <maven.release.plugin.version>2.5.3</maven.release.plugin.version>
-        <hadoop.version>3.3.0</hadoop.version>
+        <hadoop.version>3.3.1</hadoop.version>
         <apacheds-jdbm1.version>2.0.0-M2</apacheds-jdbm1.version>
-        <jackson.databind.version>2.10.5.1</jackson.databind.version>
+        <jackson.databind.version>2.13.2.1</jackson.databind.version>
+        <jackson.version>2.13.2</jackson.version>
         <!-- temporary fix by pinning the version until we upgrade to a version of common that contains this or newer version.
-            See https://github.com/confluentinc/common/pull/332 for details -->
+            See https://github.com/confluentinc/common/pull/332 for details (common-parent 7.0.0-0) -->
         <dependency.check.version>6.1.6</dependency.check.version>
         <aws-java-sdk.version>1.11.1029</aws-java-sdk.version>
         <confluent.maven.repo>http://packages.confluent.io/maven/</confluent.maven.repo>
@@ -119,6 +119,7 @@
             <version>${gson.version}</version>
             <scope>test</scope>
         </dependency>
+
         <dependency>
             <groupId>org.apache.httpcomponents</groupId>
             <artifactId>httpclient</artifactId>
@@ -130,6 +131,7 @@
             <artifactId>auth</artifactId>
         </dependency>
         <!-- AWS signer -->
+
         <!-- Force commons-codec (httpclient transitive dependency) version to address CVE CCMSG-835 -->
         <dependency>
             <groupId>commons-codec</groupId>
@@ -156,13 +158,17 @@
         <dependency>
             <groupId>junit</groupId>
             <artifactId>junit</artifactId>
-            <version>${junit.version}</version>
             <exclusions>
                 <exclusion>
                     <groupId>org.hamcrest</groupId>
                     <artifactId>hamcrest-core</artifactId>
                 </exclusion>
             </exclusions>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter-api</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -243,15 +249,38 @@
         <dependencies>
             <dependency>
                 <groupId>com.fasterxml.jackson.core</groupId>
+                <artifactId>jackson-core</artifactId>
+                <version>${jackson.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.fasterxml.jackson.core</groupId>
+                <artifactId>jackson-annotations</artifactId>
+                <version>${jackson.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.fasterxml.jackson.core</groupId>
                 <artifactId>jackson-databind</artifactId>
                 <version>${jackson.databind.version}</version>
             </dependency>
             <dependency>
+
                 <groupId>software.amazon.awssdk</groupId>
                 <artifactId>bom</artifactId>
                 <version>2.17.4</version>
                 <type>pom</type>
                 <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>com.fasterxml.jackson</groupId>
+                <artifactId>jackson-bom</artifactId>
+                <version>${jackson.version}</version>
+                <scope>import</scope>
+                <type>pom</type>
+            </dependency>
+            <dependency>
+                <groupId>com.fasterxml.jackson.dataformat</groupId>
+                <artifactId>jackson-dataformat-cbor</artifactId>
+                <version>${jackson.version}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>
@@ -327,7 +356,8 @@
                 <configuration>
                     <compilerArgs>
                         <arg>-Xlint:all,-try</arg>
-                        <arg>-Werror</arg>
+                        <!-- migrate to the new Java Client and uncomment -->
+                        <!--<arg>-Werror</arg>-->
                     </compilerArgs>
                 </configuration>
             </plugin>
