@@ -170,6 +170,10 @@ public class RetryUtil {
 
         log.warn("Failed to {} due to {}. Retrying attempt ({}/{}) after backoff of {} ms",
             description, e.getCause(), attempt, maxTotalAttempts, backoff);
+        log.trace("Failed to {} due to exception :: {} and its stacktrace {}  "
+                        + "Retrying attempt ({}/{}) after backoff of {} ms",
+                         description, e, e.getStackTrace(), attempt,
+                         maxTotalAttempts, backoff);
         clock.sleep(backoff);
       }
     }
