@@ -193,11 +193,6 @@ public class ElasticsearchContainer
 
   private void createUsersAndRoles(ElasticsearchHelperClient helperClient ) {
     try {
-      Thread.sleep(10000);
-    } catch (Exception e) {
-      //
-    }
-    try {
       for (Role role: this.rolesToCreate) {
         helperClient.createRole(role);
       }
