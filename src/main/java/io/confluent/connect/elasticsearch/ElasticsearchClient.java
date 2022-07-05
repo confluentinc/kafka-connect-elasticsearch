@@ -546,6 +546,7 @@ public class ElasticsearchClient {
                   response.getId(),
                   response.getVersion(),
                   response.getIndex(),
+                  response.getFailure().getCause(),
                   response.getFailure().getCause().getStackTrace()
           );
           // Maybe this was a race condition?  Put it in the DLQ in case someone
