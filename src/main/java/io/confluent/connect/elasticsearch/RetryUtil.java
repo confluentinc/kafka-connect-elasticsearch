@@ -174,6 +174,7 @@ public class RetryUtil {
                         + "Retrying attempt ({}/{}) after backoff of {} ms",
                          description, e, e.getStackTrace(), attempt,
                          maxTotalAttempts, backoff);
+        log.trace("exception::", e);
         clock.sleep(backoff);
       }
     }
