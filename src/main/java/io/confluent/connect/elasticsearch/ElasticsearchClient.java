@@ -539,6 +539,17 @@ public class ElasticsearchClient {
                   response.getVersion(),
                   response.getIndex()
           );
+
+          log.trace("{} version conflict for operation {} on document '{}' version {}"
+                          + " in index '{}' and stacktrace '{}'",
+                  request != null ? request.versionType() : "UNKNOWN",
+                  response.getOpType(),
+                  response.getId(),
+                  response.getVersion(),
+                  response.getIndex(),
+                  response.getFailure().getCause(),
+                  response.getFailure().getCause().getStackTrace()
+          );
           // Maybe this was a race condition?  Put it in the DLQ in case someone
           // wishes to investigate.
           reportBadRecord(response, executionId);
