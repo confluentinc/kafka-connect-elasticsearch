@@ -18,30 +18,27 @@ package io.confluent.connect.elasticsearch;
 import java.io.File;
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
+import java.util.concurrent.TimeUnit;
 import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.common.config.ConfigDef;
-import org.apache.kafka.common.config.ConfigDef.CaseInsensitiveValidString;
+import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.config.ConfigDef.Importance;
 import org.apache.kafka.common.config.ConfigDef.Type;
 import org.apache.kafka.common.config.ConfigDef.Validator;
 import org.apache.kafka.common.config.ConfigDef.Width;
-
-import java.util.Map;
-import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.config.types.Password;
+import org.elasticsearch.common.unit.ByteSizeValue;
 
 import static org.apache.kafka.common.config.ConfigDef.Range.between;
 import static org.apache.kafka.common.config.SslConfigs.SSL_ENDPOINT_IDENTIFICATION_ALGORITHM_CONFIG;
 import static org.apache.kafka.common.config.SslConfigs.addClientSslSupport;
 
 public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
-
   // Connector group
   public static final String CONNECTION_URL_CONFIG = "connection.url";
   private static final String CONNECTION_URL_DOC =
@@ -72,6 +69,15 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
       "The number of records to process as a batch when writing to Elasticsearch.";
   private static final String BATCH_SIZE_DISPLAY = "Batch Size";
   private static final int BATCH_SIZE_DEFAULT = 2000;
+
+  public static final String BULK_SIZE_BYTES_CONFIG = "bulk.size.bytes";
+  private static final String BULK_SIZE_BYTES_DOC =
+      "The maximum size (in bytes) to be process as a batch when"
+      + " writing records to Elasticsearch. Setting to '-1' will disable "
+      + "this configuration. If the condition set by '" + BATCH_SIZE_CONFIG
+      + "' is met first, it will be used instead.";
+  private static final String BULK_SIZE_BYTES_DISPLAY = "Bulk Size (bytes)";
+  private static final int BULK_SIZE_BYTES_DEFAULT = 5 * 1024 * 1024;
 
   public static final String MAX_IN_FLIGHT_REQUESTS_CONFIG = "max.in.flight.requests";
   private static final String MAX_IN_FLIGHT_REQUESTS_DOC =
@@ -108,6 +114,14 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
           + " exceeded the task will fail.";
   private static final String FLUSH_TIMEOUT_MS_DISPLAY = "Flush Timeout (ms)";
   private static final int FLUSH_TIMEOUT_MS_DEFAULT = (int) TimeUnit.MINUTES.toMillis(3);
+
+  public static final String FLUSH_SYNCHRONOUSLY_CONFIG = "flush.synchronously";
+  private static final String FLUSH_SYNCHRONOUSLY_DOC =
+          "True if flushes should wait for background processing to finish. This has a throughput"
+            + " penalty and makes the connector less responsive but allows for topic-mutating SMTs"
+            + " (e.g. RegexRouter or TimestampRouter)";
+  private static final String FLUSH_SYNCHRONOUSLY_DISPLAY = "Flush synchronously";
+  private static final boolean FLUSH_SYNCHRONOUSLY_DEFAULT = true;
 
   public static final String MAX_RETRIES_CONFIG = "max.retries";
   private static final String MAX_RETRIES_DOC =
@@ -296,11 +310,57 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
       + " authentication with Kerberos.";
   private static final String KERBEROS_KEYTAB_PATH_DEFAULT = null;
 
+  // Data stream configs
+  public static final String DATA_STREAM_DATASET_CONFIG = "data.stream.dataset";
+  private static final String DATA_STREAM_DATASET_DOC =
+      "Generic name describing data ingested and its structure to be written to a data stream. Can "
+          + "be any arbitrary string that is no longer than 100 characters, is in all lowercase, "
+          + "and does not contain spaces or any of these special characters ``/\\*\"<>|,#:-``. "
+          + "Otherwise, no value indicates the connector will write to regular indices instead. "
+          + "If set, this configuration will be used alongside ``data.stream.type`` to "
+          + "construct the data stream name in the form of {``data.stream.type``"
+          + "}-{``" + DATA_STREAM_DATASET_CONFIG + "``}-{topic}.";
+  private static final String DATA_STREAM_DATASET_DISPLAY = "Data Stream Dataset";
+  private static final String DATA_STREAM_DATASET_DEFAULT = "";
+
+  public static final String DATA_STREAM_TYPE_CONFIG = "data.stream.type";
+  private static final String DATA_STREAM_TYPE_DOC = String.format(
+      "Generic type describing the data to be written to data stream. "
+          + "The default is %s which indicates the connector will write "
+          + "to regular indices instead. If set, this configuration will "
+          + "be used alongside %s to construct the data stream name in the form of "
+          + "{``%s``}-{``%s``}-{topic}.",
+      DataStreamType.NONE.name(),
+      DATA_STREAM_DATASET_CONFIG,
+      DATA_STREAM_TYPE_CONFIG,
+      DATA_STREAM_DATASET_CONFIG
+  );
+  private static final String DATA_STREAM_TYPE_DISPLAY = "Data Stream Type";
+  private static final DataStreamType DATA_STREAM_TYPE_DEFAULT = DataStreamType.NONE;
+
+  public static final String DATA_STREAM_TIMESTAMP_CONFIG = "data.stream.timestamp.field";
+  private static final String DATA_STREAM_TIMESTAMP_DOC = String.format(
+      "The Kafka record field to use as the timestamp for the ``@timestamp`` field in documents "
+          + "sent to a data stream.\n All documents sent to a data stream needs an ``@timestamp`` "
+          + "field with values of type ``date`` or ``data_nanos``. Otherwise, the document "
+          + "will not be sent. If multiple fields are provided, the first field listed that "
+          + "also appears in the record will be used. If this configuration is left empty, "
+          + "all of the documents will use the Kafka record timestamp as the ``@timestamp`` field "
+          + "value. Note that ``@timestamp`` still needs to be explicitly listed if records "
+          + "already contain this field. This configuration can only be set if ``%s`` and ``%s`` "
+          + "are set.",
+      DATA_STREAM_TYPE_CONFIG,
+      DATA_STREAM_DATASET_CONFIG
+  );
+  private static final String DATA_STREAM_TIMESTAMP_DISPLAY = "Data Stream Timestamp Field";
+  private static final String DATA_STREAM_TIMESTAMP_DEFAULT = "";
+
   private static final String CONNECTOR_GROUP = "Connector";
   private static final String DATA_CONVERSION_GROUP = "Data Conversion";
   private static final String PROXY_GROUP = "Proxy";
   private static final String SSL_GROUP = "Security";
   private static final String KERBEROS_GROUP = "Kerberos";
+  private static final String DATA_STREAM_GROUP = "Data Stream";
 
   public enum BehaviorOnMalformedDoc {
     IGNORE,
@@ -312,6 +372,12 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
     IGNORE,
     DELETE,
     FAIL
+  }
+
+  public enum DataStreamType {
+    LOGS,
+    METRICS,
+    NONE
   }
 
   public enum SecurityProtocol {
@@ -331,6 +397,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
     addProxyConfigs(configDef);
     addSslConfigs(configDef);
     addKerberosConfigs(configDef);
+    addDataStreamConfigs(configDef);
     return configDef;
   }
 
@@ -380,6 +447,17 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
             Width.SHORT,
             BATCH_SIZE_DISPLAY
         ).define(
+            BULK_SIZE_BYTES_CONFIG,
+            Type.LONG,
+            BULK_SIZE_BYTES_DEFAULT,
+            between(-1, Integer.MAX_VALUE),
+            Importance.LOW,
+            BULK_SIZE_BYTES_DOC,
+            CONNECTOR_GROUP,
+            ++order,
+            Width.SHORT,
+            BULK_SIZE_BYTES_DISPLAY
+        ).define(
             MAX_IN_FLIGHT_REQUESTS_CONFIG,
             Type.INT,
             MAX_IN_FLIGHT_REQUESTS_DEFAULT,
@@ -423,6 +501,16 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
             ++order,
             Width.SHORT,
             FLUSH_TIMEOUT_MS_DISPLAY
+        ).define(
+            FLUSH_SYNCHRONOUSLY_CONFIG,
+            Type.BOOLEAN,
+            FLUSH_SYNCHRONOUSLY_DEFAULT,
+            Importance.LOW,
+            FLUSH_SYNCHRONOUSLY_DOC,
+            CONNECTOR_GROUP,
+            ++order,
+            Width.SHORT,
+            FLUSH_SYNCHRONOUSLY_DISPLAY
         ).define(
             MAX_RETRIES_CONFIG,
             Type.INT,
@@ -558,50 +646,38 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
             BEHAVIOR_ON_NULL_VALUES_CONFIG,
             Type.STRING,
             BEHAVIOR_ON_NULL_VALUES_DEFAULT.name(),
-            ConfigDef.CaseInsensitiveValidString.in(
-                Arrays.stream(BehaviorOnNullValues.values())
-                    .map(BehaviorOnNullValues::name)
-                    .collect(Collectors.toList())
-                    .toArray(new String[BehaviorOnNullValues.values().length])
-            ),
+            new EnumRecommender<>(BehaviorOnNullValues.class),
             Importance.LOW,
             BEHAVIOR_ON_NULL_VALUES_DOC,
             DATA_CONVERSION_GROUP,
             ++order,
             Width.SHORT,
-            BEHAVIOR_ON_NULL_VALUES_DISPLAY
+            BEHAVIOR_ON_NULL_VALUES_DISPLAY,
+            new EnumRecommender<>(BehaviorOnNullValues.class)
         ).define(
             BEHAVIOR_ON_MALFORMED_DOCS_CONFIG,
             Type.STRING,
             BEHAVIOR_ON_MALFORMED_DOCS_DEFAULT.name(),
-            ConfigDef.CaseInsensitiveValidString.in(
-                Arrays.stream(BehaviorOnMalformedDoc.values())
-                    .map(BehaviorOnMalformedDoc::name)
-                    .collect(Collectors.toList())
-                    .toArray(new String[BehaviorOnMalformedDoc.values().length])
-            ),
+            new EnumRecommender<>(BehaviorOnMalformedDoc.class),
             Importance.LOW,
             BEHAVIOR_ON_MALFORMED_DOCS_DOC,
             DATA_CONVERSION_GROUP,
             ++order,
             Width.SHORT,
-            BEHAVIOR_ON_MALFORMED_DOCS_DISPLAY
+            BEHAVIOR_ON_MALFORMED_DOCS_DISPLAY,
+            new EnumRecommender<>(BehaviorOnMalformedDoc.class)
         ).define(
             WRITE_METHOD_CONFIG,
             Type.STRING,
             WRITE_METHOD_DEFAULT,
-            ConfigDef.CaseInsensitiveValidString.in(
-                Arrays.stream(WriteMethod.values())
-                    .map(WriteMethod::name)
-                    .collect(Collectors.toList())
-                    .toArray(new String[WriteMethod.values().length])
-            ),
+            new EnumRecommender<>(WriteMethod.class),
             Importance.LOW,
             WRITE_METHOD_DOC,
             DATA_CONVERSION_GROUP,
             ++order,
             Width.SHORT,
-            WRITE_METHOD_DISPLAY
+            WRITE_METHOD_DISPLAY,
+            new EnumRecommender<>(WriteMethod.class)
     );
   }
 
@@ -660,18 +736,14 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
         SECURITY_PROTOCOL_CONFIG,
         Type.STRING,
         SECURITY_PROTOCOL_DEFAULT,
-        CaseInsensitiveValidString.in(
-            Arrays.stream(SecurityProtocol.values())
-                .map(SecurityProtocol::name)
-                .collect(Collectors.toList())
-                .toArray(new String[SecurityProtocol.values().length])
-        ),
+        new EnumRecommender<>(SecurityProtocol.class),
         Importance.MEDIUM,
         SECURITY_PROTOCOL_DOC,
         SSL_GROUP,
         ++order,
         Width.SHORT,
-        SECURITY_PROTOCOL_DISPLAY
+        SECURITY_PROTOCOL_DISPLAY,
+        new EnumRecommender<>(SecurityProtocol.class)
     );
     configDef.embed(SSL_CONFIG_PREFIX, SSL_GROUP, configDef.configKeys().size() + 2, sslConfigDef);
   }
@@ -703,6 +775,45 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
     );
   }
 
+  private static void addDataStreamConfigs(ConfigDef configDef) {
+    int order = 0;
+    configDef
+        .define(
+            DATA_STREAM_DATASET_CONFIG,
+            Type.STRING,
+            DATA_STREAM_DATASET_DEFAULT,
+            new DataStreamDatasetValidator(),
+            Importance.LOW,
+            DATA_STREAM_DATASET_DOC,
+            DATA_STREAM_GROUP,
+            ++order,
+            Width.MEDIUM,
+            DATA_STREAM_DATASET_DISPLAY
+        ).define(
+            DATA_STREAM_TYPE_CONFIG,
+            Type.STRING,
+            DATA_STREAM_TYPE_DEFAULT.name(),
+            new EnumRecommender<>(DataStreamType.class),
+            Importance.LOW,
+            DATA_STREAM_TYPE_DOC,
+            DATA_STREAM_GROUP,
+            ++order,
+            Width.SHORT,
+            DATA_STREAM_TYPE_DISPLAY,
+            new EnumRecommender<>(DataStreamType.class)
+        ).define(
+            DATA_STREAM_TIMESTAMP_CONFIG,
+            Type.LIST,
+            DATA_STREAM_TIMESTAMP_DEFAULT,
+            Importance.LOW,
+            DATA_STREAM_TIMESTAMP_DOC,
+            DATA_STREAM_GROUP,
+            ++order,
+            Width.LONG,
+            DATA_STREAM_TIMESTAMP_DISPLAY
+    );
+  }
+
   public static final ConfigDef CONFIG = baseConfigDef();
 
   public ElasticsearchSinkConnectorConfig(Map<String, String> props) {
@@ -715,6 +826,10 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
 
   public boolean isBasicProxyConfigured() {
     return !getString(PROXY_HOST_CONFIG).isEmpty();
+  }
+
+  public boolean isDataStream() {
+    return dataStreamType() != DataStreamType.NONE && !dataStreamDataset().isEmpty();
   }
 
   public boolean isProxyWithAuthenticationConfigured() {
@@ -760,6 +875,10 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
     return BehaviorOnNullValues.valueOf(getString(BEHAVIOR_ON_NULL_VALUES_CONFIG).toUpperCase());
   }
 
+  public ByteSizeValue bulkSize() {
+    return new ByteSizeValue(getLong(BULK_SIZE_BYTES_CONFIG));
+  }
+
   public boolean compression() {
     return getBoolean(CONNECTION_COMPRESSION_CONFIG);
   }
@@ -769,15 +888,33 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   }
 
   public Set<String> connectionUrls() {
-    return new HashSet<>(getList(CONNECTION_URL_CONFIG));
+    return getList(CONNECTION_URL_CONFIG)
+        .stream().map(s -> s.endsWith("/") ? s.substring(0, s.length() - 1) : s)
+        .collect(Collectors.toCollection(HashSet::new));
   }
 
   public boolean dropInvalidMessage() {
     return getBoolean(DROP_INVALID_MESSAGE_CONFIG);
   }
 
+  public String dataStreamDataset() {
+    return getString(DATA_STREAM_DATASET_CONFIG);
+  }
+
+  public DataStreamType dataStreamType() {
+    return DataStreamType.valueOf(getString(DATA_STREAM_TYPE_CONFIG).toUpperCase());
+  }
+
+  public List<String> dataStreamTimestampField() {
+    return getList(DATA_STREAM_TIMESTAMP_CONFIG);
+  }
+
   public long flushTimeoutMs() {
     return getLong(FLUSH_TIMEOUT_MS_CONFIG);
+  }
+
+  public boolean flushSynchronously() {
+    return getBoolean(FLUSH_SYNCHRONOUSLY_CONFIG);
   }
 
   public boolean ignoreKey() {
@@ -853,7 +990,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   }
 
   private SecurityProtocol securityProtocol() {
-    return SecurityProtocol.valueOf(getString(SECURITY_PROTOCOL_CONFIG));
+    return SecurityProtocol.valueOf(getString(SECURITY_PROTOCOL_CONFIG).toUpperCase());
   }
 
   public Map<String, Object> sslConfigs() {
@@ -872,6 +1009,45 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
 
   public WriteMethod writeMethod() {
     return WriteMethod.valueOf(getString(WRITE_METHOD_CONFIG).toUpperCase());
+  }
+
+  private static class DataStreamDatasetValidator implements Validator {
+
+    @Override
+    @SuppressWarnings("unchecked")
+    public void ensureValid(String name, Object value) {
+      if (value == null) {
+        return;
+      }
+
+      String dataset = (String) value;
+
+      if (dataset.length() > 100) {
+        throw new ConfigException(
+            name, dataset, "The specified dataset must be no longer than 100 characters."
+        );
+      }
+
+      if (!dataset.equals(dataset.toLowerCase())) {
+        throw new ConfigException(
+            name, dataset, "The specified dataset must be in all lowercase."
+        );
+      }
+
+      if (dataset.matches(".*[\\\\\\/\\*\\?\\\"<>| ,#\\-:]+.*")) {
+        throw new ConfigException(
+            name, dataset,
+            "The specified dataset must not contain any spaces or "
+            + "invalid characters \\/*?\"<>|,#-:"
+        );
+      }
+    }
+
+    @Override
+    public String toString() {
+      return "A valid dataset name that is all lowercase, less than 100 characters, and "
+          + "does not contain any spaces or invalid characters \\/*?\"<>|,#-:";
+    }
   }
 
   private static class UrlListValidator implements Validator {
