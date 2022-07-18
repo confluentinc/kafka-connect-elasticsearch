@@ -374,7 +374,7 @@ public class ValidatorTest {
   @Test
   public void testIncompatibleESVersionWithConnector() {
     validator = new Validator(props, () -> mockClient);
-    when(mockInfoResponse.getVersion().getNumber()).thenReturn("6.0.0");
+    when(mockInfoResponse.getVersion().getNumber()).thenReturn("1.0.0");
     Config result = validator.validate();
     assertHasErrorMessage(result, CONNECTION_URL_CONFIG, "not compatible with Elasticsearch");
   }
@@ -384,7 +384,6 @@ public class ValidatorTest {
     validator = new Validator(props, () -> mockClient);
     String[] compatibleESVersions = {"7.0.0", "7.9.3", "7.10.0", "7.12.1", "8.0.0", "10.10.10", "1.2.4"};
     for (String version : compatibleESVersions) {
-      when(mockInfoResponse.getVersion().getNumber()).thenReturn(version);
       when(mockInfoResponse.getVersion().getNumber()).thenReturn(version);
       Config result = validator.validate();
 
@@ -464,7 +463,7 @@ public class ValidatorTest {
   public void testIncompatibleVersionDataStreamSet() {
     configureDataStream();
     validator = new Validator(props, () -> mockClient);
-    when(mockInfoResponse.getVersion().getNumber()).thenReturn("7.8.1");
+    when(mockInfoResponse.getVersion().getNumber()).thenReturn("1.0.1");
 
     Config result = validator.validate();
     assertHasErrorMessage(result, CONNECTION_URL_CONFIG, "not compatible with data streams");
@@ -475,7 +474,7 @@ public class ValidatorTest {
   @Test
   public void testIncompatibleVersionDataStreamNotSet() {
     validator = new Validator(props, () -> mockClient);
-    String[] incompatibleESVersions = {"7.8.0", "7.7.1", "7.6.2", "7.2.0", "7.1.1", "7.0.0-rc2"};
+    String[] incompatibleESVersions = {"7.8.0", "7.7.1", "7.6.2", "7.2.0", "7.1.1", "7.0.0-rc2", "1.2.4"};
     for (String version : incompatibleESVersions) {
       when(mockInfoResponse.getVersion().getNumber()).thenReturn(version);
       Config result = validator.validate();
@@ -488,7 +487,7 @@ public class ValidatorTest {
   public void testCompatibleVersionDataStreamNotSet() {
     validator = new Validator(props, () -> mockClient);
     String[] compatibleESVersions = {"7.9.0", "7.9.3", "7.9.3-amd64", "7.10.0", "7.10.2", "7.11.0", "7.11.2", "7.12.0", "7.12.1",
-        "8.0.0", "10.10.10", "10.1.10", "10.1.1", "8.10.10"};
+        "8.0.0", "10.10.10", "10.1.10", "10.1.1", "8.10.10", "1.2.4"};
     for (String version : compatibleESVersions) {
       when(mockInfoResponse.getVersion().getNumber()).thenReturn(version);
       Config result = validator.validate();
@@ -502,7 +501,7 @@ public class ValidatorTest {
     configureDataStream();
     validator = new Validator(props, () -> mockClient);
     String[] compatibleESVersions = {"7.9.0", "7.9.3", "7.9.3-amd64", "7.10.0", "7.10.2", "7.11.0", "7.11.2", "7.12.0", "7.12.1",
-        "8.0.0", "10.10.10", "10.1.10", "10.1.1", "8.10.10"};
+        "8.0.0", "10.10.10", "10.1.10", "10.1.1", "8.10.10", "1.2.4"};
     for (String version : compatibleESVersions) {
       when(mockInfoResponse.getVersion().getNumber()).thenReturn(version);
       Config result = validator.validate();
