@@ -69,8 +69,8 @@ public class Validator {
 
   private static final Logger log = LoggerFactory.getLogger(Validator.class);
 
-  private static final String CONNECTOR_V11_COMPATIBLE_ES_VERSION = "7.0.0";
-  private static final String DATA_STREAM_COMPATIBLE_ES_VERSION = "7.9.0";
+  private static final String CONNECTOR_V11_COMPATIBLE_ES_VERSION = "1.2.0";
+  private static final String DATA_STREAM_COMPATIBLE_ES_VERSION = "1.2.0";
 
   private ElasticsearchSinkConnectorConfig config;
   private Map<String, ConfigValue> values;
