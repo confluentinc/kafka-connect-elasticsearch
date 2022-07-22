@@ -29,6 +29,7 @@ import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
+import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.errors.DataException;
 import org.apache.kafka.connect.json.JsonConverter;
 import org.apache.kafka.connect.sink.SinkRecord;
@@ -210,9 +211,18 @@ public class DataConverter {
           if (jsonNode.has(timestampField)) {
             ((ObjectNode) jsonNode).put(TIMESTAMP_FIELD, jsonNode.get(timestampField).asText());
             return objectMapper.writeValueAsString(jsonNode);
+          } else {
+            log.debug("Timestamp field {} is not present in payload. This record may be skipped",
+                timestampField);
           }
         }
       } else {
+
+        if (!jsonNode.isObject()) {
+          throw new DataException("Required json object. Payload contains data of json type " +
+              jsonNode.getNodeType());
+        }
+
         ((ObjectNode) jsonNode).put(TIMESTAMP_FIELD, timestamp);
         return objectMapper.writeValueAsString(jsonNode);
       }
