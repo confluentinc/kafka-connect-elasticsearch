@@ -207,8 +207,8 @@ public class DataConverter {
       JsonNode jsonNode = objectMapper.readTree(payload);
 
       if (!jsonNode.isObject()) {
-        throw new DataException("Top level payload contains data of Json type " +
-            jsonNode.getNodeType() + ". Required Json object.");
+        throw new DataException("Top level payload contains data of Json type "
+            + jsonNode.getNodeType() + ". Required Json object.");
       }
 
       if (!config.dataStreamTimestampField().isEmpty()) {
