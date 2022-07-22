@@ -29,7 +29,6 @@ import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
-import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.errors.DataException;
 import org.apache.kafka.connect.json.JsonConverter;
 import org.apache.kafka.connect.sink.SinkRecord;
@@ -206,23 +205,24 @@ public class DataConverter {
     }
     try {
       JsonNode jsonNode = objectMapper.readTree(payload);
+
+      if (!jsonNode.isObject()) {
+        throw new DataException("Top level payload contains data of Json type " +
+            jsonNode.getNodeType() + ". Required Json object.");
+      }
+
       if (!config.dataStreamTimestampField().isEmpty()) {
         for (String timestampField : config.dataStreamTimestampField()) {
           if (jsonNode.has(timestampField)) {
             ((ObjectNode) jsonNode).put(TIMESTAMP_FIELD, jsonNode.get(timestampField).asText());
             return objectMapper.writeValueAsString(jsonNode);
           } else {
-            log.debug("Timestamp field {} is not present in payload. This record may be skipped",
+            log.debug("Timestamp field {} is not present in payload. This record may fail or "
+                    + "be skipped",
                 timestampField);
           }
         }
       } else {
-
-        if (!jsonNode.isObject()) {
-          throw new DataException("Required json object. Payload contains data of json type " +
-              jsonNode.getNodeType());
-        }
-
         ((ObjectNode) jsonNode).put(TIMESTAMP_FIELD, timestamp);
         return objectMapper.writeValueAsString(jsonNode);
       }
