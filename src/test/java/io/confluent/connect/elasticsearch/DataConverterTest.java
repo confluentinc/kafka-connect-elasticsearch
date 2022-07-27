@@ -478,6 +478,16 @@ public class DataConverterTest {
     assertEquals(timestamp, actualRecord.sourceAsMap().get(TIMESTAMP_FIELD));
   }
 
+  @Test(expected = DataException.class)
+  public void testExceptionWhenNonObjectPayloadInDataStream() {
+    configureDataStream();
+    converter = new DataConverter(new ElasticsearchSinkConnectorConfig(props));
+    SinkRecord record = new SinkRecord("t", 0, Schema.STRING_SCHEMA, key,
+        SchemaBuilder.array(Schema.STRING_SCHEMA).build(), Arrays.asList("a", "b"), offset,
+        recordTimestamp, TimestampType.CREATE_TIME);
+    converter.convertRecord(record, index);
+  }
+
   @Test
   public void testDoNotAddExternalVersioningIfDataStream() {
     configureDataStream();
