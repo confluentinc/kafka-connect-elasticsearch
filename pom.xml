@@ -166,10 +166,9 @@
             <type>test-jar</type>
             <scope>test</scope>
         </dependency>
-        <!-- Use a repackaged version of log4j with security patches. Default log4j v1.2 is a transitive dependency of connect-runtime, but it is excluded in common/pom.xml -->
-        <dependency>
-            <groupId>io.confluent</groupId>
-            <artifactId>confluent-log4j</artifactId>
+       <dependency>
+            <groupId>ch.qos.reload4j</groupId>
+            <artifactId>reload4j</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>
