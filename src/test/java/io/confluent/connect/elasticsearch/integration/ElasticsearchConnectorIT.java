@@ -299,6 +299,11 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
   }
 
   @Test
+  public void testBackwardsCompatibility() throws Exception {
+    testBackwardsCompatibilityDataStreamVersionHelper("7.16.3");
+  }
+
+  @Test
   public void testRoutingSmtSynchronousMode() throws Exception {
     index = addRoutingSmt("YYYYMM", "route-it-to-here-${topic}-at-${timestamp}");
     props.put(FLUSH_SYNCHRONOUSLY_CONFIG, "true");
