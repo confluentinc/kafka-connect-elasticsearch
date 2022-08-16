@@ -116,7 +116,9 @@ public class ElasticsearchClientTest {
     props.put(LINGER_MS_CONFIG, "1000");
     config = new ElasticsearchSinkConnectorConfig(props);
     converter = new DataConverter(config);
-    helperClient = new ElasticsearchHelperClient(container.getConnectionUrl(), config);
+    helperClient = new ElasticsearchHelperClient(container.getConnectionUrl(), config,
+        container.shouldStartClientInCompatibilityMode());
+    helperClient.waitForConnection(30000);
     offsetTracker = mock(OffsetTracker.class);
   }
 
@@ -711,7 +713,8 @@ public class ElasticsearchClientTest {
     converter = new DataConverter(config);
 
     ElasticsearchClient client = new ElasticsearchClient(config, null, () -> offsetTracker.updateOffsets());
-    helperClient = new ElasticsearchHelperClient(address, config);
+    helperClient = new ElasticsearchHelperClient(address, config,
+        container.shouldStartClientInCompatibilityMode());
     client.createIndexOrDataStream(index);
 
     writeRecord(sinkRecord(0), client);
