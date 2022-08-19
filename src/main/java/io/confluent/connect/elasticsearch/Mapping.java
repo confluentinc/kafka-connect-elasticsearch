@@ -216,8 +216,9 @@ public class Mapping {
       case Timestamp.LOGICAL_NAME:
         return inferPrimitive(builder, DATE_TYPE, schema.defaultValue());
       case Decimal.LOGICAL_NAME:
-        return inferPrimitive(builder, DOUBLE_TYPE, ((BigDecimal) schema.defaultValue())
-            .doubleValue());
+        Double defaultValue = schema.defaultValue() != null ? ((BigDecimal) schema.defaultValue())
+            .doubleValue() : null;
+        return inferPrimitive(builder, DOUBLE_TYPE, defaultValue);
       default:
         // User-defined type or unknown built-in
         return null;
