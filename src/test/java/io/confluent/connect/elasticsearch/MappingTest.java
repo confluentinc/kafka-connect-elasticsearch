@@ -15,15 +15,19 @@
 
 package io.confluent.connect.elasticsearch;
 
+import com.github.tomakehurst.wiremock.common.Json;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.math.BigDecimal;
 import java.util.HashMap;
+import org.apache.kafka.connect.data.ConnectSchema;
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Field;
 import org.apache.kafka.connect.data.Schema;
+import org.apache.kafka.connect.data.Schema.Type;
 import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
@@ -119,6 +123,15 @@ public class MappingTest {
     JsonObject result = runTest(schema);
 
     assertNull(result.getAsJsonObject("properties").getAsJsonObject("string").get("null_value"));
+  }
+
+  @Test
+  public void testDecimalTypeMapping() throws Exception {
+    Schema schema = new ConnectSchema(Type.INT64, true, BigDecimal.valueOf(100),
+        Decimal.LOGICAL_NAME, 1, "");
+    JsonObject result = runTest(schema);
+    assertEquals("double", result.get("type").getAsString());
+    assertEquals(100, result.get("null_value").getAsInt());
   }
 
   private Schema createSchema() {
