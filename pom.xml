@@ -9,7 +9,7 @@
     </parent>
 
     <artifactId>kafka-connect-elasticsearch</artifactId>
-    <version>14.0.1-SNAPSHOT</version>
+    <version>13.1.3-SNAPSHOT</version>
     <packaging>jar</packaging>
     <name>kafka-connect-elasticsearch</name>
     <organization>
@@ -33,11 +33,11 @@
         <connection>scm:git:git://github.com/confluentinc/kafka-connect-elasticsearch.git</connection>
         <developerConnection>scm:git:git@github.com:confluentinc/kafka-connect-elasticsearch.git</developerConnection>
         <url>https://github.com/confluentinc/kafka-connect-elasticsearch</url>
-        <tag>14.0.x</tag>
+        <tag>13.1.x</tag>
     </scm>
 
     <properties>
-        <es.version>7.17.3</es.version>
+        <es.version>7.17.1</es.version>
         <hamcrest.version>1.3</hamcrest.version>
         <mockito.version>2.28.2</mockito.version>
         <gson.version>2.9.0</gson.version>
@@ -83,6 +83,12 @@
             <groupId>org.elasticsearch</groupId>
             <artifactId>elasticsearch</artifactId>
             <version>${es.version}</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.yaml</groupId>
+                    <artifactId>snakeyaml</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
         <dependency>
             <groupId>org.apache.logging.log4j</groupId>
@@ -99,12 +105,6 @@
             <groupId>commons-codec</groupId>
             <artifactId>commons-codec</artifactId>
             <version>1.15</version>
-        </dependency>
-        <!-- pin snakeyaml for CVE -->
-        <dependency>
-            <groupId>org.yaml</groupId>
-            <artifactId>snakeyaml</artifactId>
-            <version>1.27</version>
         </dependency>
         <dependency>
             <groupId>co.elastic.clients</groupId>
