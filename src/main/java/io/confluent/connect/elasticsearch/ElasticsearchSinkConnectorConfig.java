@@ -365,13 +365,11 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   private static final String KERBEROS_GROUP = "Kerberos";
   private static final String DATA_STREAM_GROUP = "Data Stream";
 
-  public static final String TOPIC_MAPPER_CONFIG = "topic.mapper";
-  private static final String TOPIC_MAPPER_DISPLAY = "The topic mapper class";
-  private static final String TOPIC_MAPPER_DOC =
-      "The class that determines the topic to write the source data to. "
-        + "By default this will be based on the 'ns' field in the change stream document, "
-        + "along with any configured prefix and suffix.";
-  private static final String TOPIC_MAPPER_DEFAULT =
+  public static final String INDEX_MAPPER_CONFIG = "index.mapper";
+  private static final String INDEX_MAPPER_DISPLAY = "The topic mapper class";
+  private static final String INDEX_MAPPER_DOC =
+      "The class that determines the index to write the sink data to. ";
+  private static final String INDEX_MAPPER_DEFAULT =
           "io.confluent.connect.elasticsearch.index.mapping.DefaultIndexMapper";
   private IndexMapper indexMapper;
 
@@ -598,15 +596,15 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
     int order = 0;
     configDef
         .define(
-        TOPIC_MAPPER_CONFIG,
+            INDEX_MAPPER_CONFIG,
         ConfigDef.Type.STRING,
-        TOPIC_MAPPER_DEFAULT,
+            INDEX_MAPPER_DEFAULT,
         ConfigDef.Importance.HIGH,
-        TOPIC_MAPPER_DOC,
+            INDEX_MAPPER_DOC,
         DATA_CONVERSION_GROUP,
         ++order,
         ConfigDef.Width.LONG,
-        TOPIC_MAPPER_DISPLAY
+            INDEX_MAPPER_DISPLAY
     );
   }
 
@@ -1045,7 +1043,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   public IndexMapper getIndexMapper() {
     if (indexMapper == null) {
       indexMapper = createInstance(
-              TOPIC_MAPPER_CONFIG, getString(TOPIC_MAPPER_CONFIG), IndexMapper.class);
+          INDEX_MAPPER_CONFIG, getString(INDEX_MAPPER_CONFIG), IndexMapper.class);
       indexMapper.configure(this);
     }
     return indexMapper;
