@@ -15,6 +15,7 @@
 
 package io.confluent.connect.elasticsearch;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BehaviorOnNullValues;
 import org.apache.kafka.common.record.TimestampType;
 import org.apache.kafka.connect.data.*;
@@ -500,6 +501,22 @@ public class DataConverterTest {
     IndexRequest actualRecord = (IndexRequest) converter.convertRecord(sinkRecord, index);
 
     assertEquals(VersionType.INTERNAL, actualRecord.versionType());
+  }
+
+  @Test
+  public void testGetValueAsJsonWithNullValue(){
+    SinkRecord sinkRecord = createSinkRecordWithValue(null);
+    JsonNode jsonValue = converter.getValueAsJson(sinkRecord);
+    assertNull(jsonValue);
+  }
+
+  @Test
+  public void testGetValueAsJsonWithValidValue(){
+    Schema preProcessedSchema = converter.preProcessSchema(schema);
+    Struct struct = new Struct(preProcessedSchema).put("string", "myValue");
+    SinkRecord sinkRecord = createSinkRecordWithValue(struct);
+    JsonNode jsonValue = converter.getValueAsJson(sinkRecord);
+    assertEquals(jsonValue.toString(), "{\"string\":\"myValue\"}");
   }
 
   private void configureDataStream() {

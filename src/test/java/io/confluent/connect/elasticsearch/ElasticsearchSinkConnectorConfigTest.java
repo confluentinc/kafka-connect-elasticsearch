@@ -133,6 +133,12 @@ public class ElasticsearchSinkConnectorConfigTest {
   }
 
   @Test
+  public void testDefaultIndexMapperConfig() {
+    ElasticsearchSinkConnectorConfig config = new ElasticsearchSinkConnectorConfig(props);
+    assertEquals(config.getIndexMapper().getClass().getName(), "io.confluent.connect.elasticsearch.index.mapping.DefaultIndexMapper");
+  }
+
+  @Test
   public void testSecured() {
     props.put(CONNECTION_URL_CONFIG, "http://host:9999");
     assertFalse(new ElasticsearchSinkConnectorConfig(props).isSslEnabled());
