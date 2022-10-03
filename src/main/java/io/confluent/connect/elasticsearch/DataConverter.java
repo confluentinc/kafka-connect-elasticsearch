@@ -88,6 +88,9 @@ public class DataConverter {
     if (key == null) {
       throw new DataException("Key is used as document id and can not be null.");
     }
+    if (String.valueOf(key).isEmpty()) {
+      throw new DataException("Key is used as document id and can not be empty.");
+    }
 
     final Schema.Type schemaType;
     if (keySchema == null) {
