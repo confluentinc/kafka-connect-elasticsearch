@@ -17,8 +17,6 @@ package io.confluent.connect.elasticsearch.util;
 
 import static java.lang.String.format;
 
-import java.util.List;
-
 public final class ClassHelper {
 
   @SuppressWarnings("unchecked")

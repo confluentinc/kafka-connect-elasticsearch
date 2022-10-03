@@ -189,7 +189,11 @@ public class DataConverter {
       return null;
     }
 
-    byte[] rawJsonPayload = JSON_CONVERTER.fromConnectData(record.topic(), record.valueSchema(), record.value());
+    byte[] rawJsonPayload = JSON_CONVERTER.fromConnectData(
+        record.topic(),
+        record.valueSchema(),
+        record.value()
+    );
     JsonNode jsonPayload;
     try {
       jsonPayload = objectMapper.readTree(rawJsonPayload);
