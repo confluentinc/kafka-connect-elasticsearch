@@ -163,6 +163,28 @@ public class ElasticsearchSinkTaskTest {
   }
 
   @Test
+  public void testPutIgnoreOnInvalidRecord() {
+    props.put(DROP_INVALID_MESSAGE_CONFIG, "true");
+    props.put(IGNORE_KEY_CONFIG, "false");
+    setUpTask();
+
+    SinkRecord nullRecord = record(true, false, 0);
+    when(assignment.contains(eq(new TopicPartition(TOPIC, 1)))).thenReturn(true);
+    task.put(Collections.singletonList(nullRecord));
+  }
+
+  @Test(expected = DataException.class)
+  public void testPutFailOnInvalidRecord() {
+    props.put(DROP_INVALID_MESSAGE_CONFIG, "false");
+    props.put(IGNORE_KEY_CONFIG, "false");
+    setUpTask();
+
+    SinkRecord nullRecord = record(true, false, 0);
+    when(assignment.contains(eq(new TopicPartition(TOPIC, 1)))).thenReturn(true);
+    task.put(Collections.singletonList(nullRecord));
+  }
+
+  @Test
   public void testCreateIndex() {
     when(assignment.contains(eq(new TopicPartition(TOPIC, 1)))).thenReturn(true);
     task.put(Collections.singletonList(record()));
