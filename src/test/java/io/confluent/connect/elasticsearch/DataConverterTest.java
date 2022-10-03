@@ -40,6 +40,7 @@ import static io.confluent.connect.elasticsearch.DataConverter.TIMESTAMP_FIELD;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.fail;
 
 public class DataConverterTest {
@@ -318,6 +319,27 @@ public class DataConverterTest {
 
     SinkRecord sinkRecord = createSinkRecordWithValue(null);
     assertNull(converter.convertRecord(sinkRecord, index));
+  }
+
+  @Test
+  public void throwExceptionOnEmptyOrNullKey() {
+
+    props.put(ElasticsearchSinkConnectorConfig.COMPACT_MAP_ENTRIES_CONFIG, "true");
+    props.put(ElasticsearchSinkConnectorConfig.IGNORE_KEY_CONFIG, "false");
+    props.put(ElasticsearchSinkConnectorConfig.IGNORE_SCHEMA_CONFIG, "false");
+    props.put(ElasticsearchSinkConnectorConfig.BEHAVIOR_ON_NULL_VALUES_CONFIG, BehaviorOnNullValues.IGNORE.name());
+    converter = new DataConverter(new ElasticsearchSinkConnectorConfig(props));
+
+    Schema preProcessedSchema = converter.preProcessSchema(schema);
+    Struct struct = new Struct(preProcessedSchema).put("string", "myValue");
+
+    key = "";
+    SinkRecord sinkRecord1 = createSinkRecordWithValue(struct);
+    assertThrows(DataException.class, () -> converter.convertRecord(sinkRecord1, index));
+
+    key = null;
+    SinkRecord sinkRecord2 = createSinkRecordWithValue(struct);
+    assertThrows(DataException.class, () -> converter.convertRecord(sinkRecord2, index));
   }
 
   @Test
