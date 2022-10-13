@@ -1006,18 +1006,16 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
     Map<String, Object> sslConfigs = originalsWithPrefix(SSL_CONFIG_PREFIX);
     // if empty path is provided for the keystore/truststore location remove it and associated
     // passwords, otherwise it will lead to an exception while creating the ssl context
-    if (sslConfigs.getOrDefault(SSL_CONFIG_PREFIX + SSL_KEYSTORE_LOCATION_CONFIG, "")
-        .toString().isEmpty()) {
-      sslConfigs.remove(SSL_CONFIG_PREFIX + SSL_KEYSTORE_LOCATION_CONFIG);
-      sslConfigs.remove(SSL_CONFIG_PREFIX + SSL_KEYSTORE_PASSWORD_CONFIG);
-      sslConfigs.remove(SSL_CONFIG_PREFIX + SSL_KEY_PASSWORD_CONFIG);
-      sslConfigs.remove(SSL_CONFIG_PREFIX + SSL_KEYSTORE_TYPE_CONFIG);
+    if (sslConfigs.getOrDefault(SSL_KEYSTORE_LOCATION_CONFIG, "").toString().isEmpty()) {
+      sslConfigs.remove(SSL_KEYSTORE_LOCATION_CONFIG);
+      sslConfigs.remove(SSL_KEYSTORE_PASSWORD_CONFIG);
+      sslConfigs.remove(SSL_KEY_PASSWORD_CONFIG);
+      sslConfigs.remove(SSL_KEYSTORE_TYPE_CONFIG);
     }
-    if (sslConfigs.getOrDefault(SSL_CONFIG_PREFIX + SSL_TRUSTSTORE_LOCATION_CONFIG, "")
-        .toString().isEmpty()) {
-      sslConfigs.remove(SSL_CONFIG_PREFIX + SSL_TRUSTSTORE_LOCATION_CONFIG);
-      sslConfigs.remove(SSL_CONFIG_PREFIX + SSL_TRUSTSTORE_PASSWORD_CONFIG);
-      sslConfigs.remove(SSL_CONFIG_PREFIX + SSL_TRUSTSTORE_TYPE_CONFIG);
+    if (sslConfigs.getOrDefault(SSL_TRUSTSTORE_LOCATION_CONFIG, "").toString().isEmpty()) {
+      sslConfigs.remove(SSL_TRUSTSTORE_LOCATION_CONFIG);
+      sslConfigs.remove(SSL_TRUSTSTORE_PASSWORD_CONFIG);
+      sslConfigs.remove(SSL_TRUSTSTORE_TYPE_CONFIG);
     }
     return sslConfigDef.parse(sslConfigs);
   }
