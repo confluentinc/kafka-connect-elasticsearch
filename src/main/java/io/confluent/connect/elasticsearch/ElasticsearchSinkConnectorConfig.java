@@ -36,6 +36,13 @@ import org.elasticsearch.common.unit.ByteSizeValue;
 
 import static org.apache.kafka.common.config.ConfigDef.Range.between;
 import static org.apache.kafka.common.config.SslConfigs.SSL_ENDPOINT_IDENTIFICATION_ALGORITHM_CONFIG;
+import static org.apache.kafka.common.config.SslConfigs.SSL_KEYSTORE_LOCATION_CONFIG;
+import static org.apache.kafka.common.config.SslConfigs.SSL_KEYSTORE_PASSWORD_CONFIG;
+import static org.apache.kafka.common.config.SslConfigs.SSL_KEYSTORE_TYPE_CONFIG;
+import static org.apache.kafka.common.config.SslConfigs.SSL_KEY_PASSWORD_CONFIG;
+import static org.apache.kafka.common.config.SslConfigs.SSL_TRUSTSTORE_LOCATION_CONFIG;
+import static org.apache.kafka.common.config.SslConfigs.SSL_TRUSTSTORE_PASSWORD_CONFIG;
+import static org.apache.kafka.common.config.SslConfigs.SSL_TRUSTSTORE_TYPE_CONFIG;
 import static org.apache.kafka.common.config.SslConfigs.addClientSslSupport;
 
 public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
@@ -996,7 +1003,21 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   public Map<String, Object> sslConfigs() {
     ConfigDef sslConfigDef = new ConfigDef();
     addClientSslSupport(sslConfigDef);
-    return sslConfigDef.parse(originalsWithPrefix(SSL_CONFIG_PREFIX));
+    Map<String, Object> sslConfigs = originalsWithPrefix(SSL_CONFIG_PREFIX);
+    // if empty path is provided for the keystore/truststore location remove it and associated
+    // passwords, otherwise it will lead to an exception while creating the ssl context
+    if (sslConfigs.getOrDefault(SSL_KEYSTORE_LOCATION_CONFIG, "").toString().isEmpty()) {
+      sslConfigs.remove(SSL_KEYSTORE_LOCATION_CONFIG);
+      sslConfigs.remove(SSL_KEYSTORE_PASSWORD_CONFIG);
+      sslConfigs.remove(SSL_KEY_PASSWORD_CONFIG);
+      sslConfigs.remove(SSL_KEYSTORE_TYPE_CONFIG);
+    }
+    if (sslConfigs.getOrDefault(SSL_TRUSTSTORE_LOCATION_CONFIG, "").toString().isEmpty()) {
+      sslConfigs.remove(SSL_TRUSTSTORE_LOCATION_CONFIG);
+      sslConfigs.remove(SSL_TRUSTSTORE_PASSWORD_CONFIG);
+      sslConfigs.remove(SSL_TRUSTSTORE_TYPE_CONFIG);
+    }
+    return sslConfigDef.parse(sslConfigs);
   }
 
   public String username() {
