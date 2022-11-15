@@ -46,8 +46,6 @@
         <maven.release.plugin.version>2.5.3</maven.release.plugin.version>
         <hadoop.version>3.3.1</hadoop.version>
         <apacheds-jdbm1.version>2.0.0-M2</apacheds-jdbm1.version>
-        <jackson.databind.version>2.13.2.1</jackson.databind.version>
-        <jackson.version>2.13.2</jackson.version>
         <!-- temporary fix by pinning the version until we upgrade to a version of common that contains this or newer version.
             See https://github.com/confluentinc/common/pull/332 for details (common-parent 7.0.0-0) -->
         <dependency.check.version>6.1.6</dependency.check.version>
