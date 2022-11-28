@@ -9,7 +9,7 @@
     </parent>
 
     <artifactId>kafka-connect-elasticsearch</artifactId>
-    <version>14.1.0-SNAPSHOT</version>
+    <version>14.1.1-SNAPSHOT</version>
     <packaging>jar</packaging>
     <name>kafka-connect-elasticsearch</name>
     <organization>
@@ -30,9 +30,9 @@
     </licenses>
 
     <scm>
-        <connection>scm:git:git://github.com/confluentinc/kafka-connect-elasticsearch.git</connection>
-        <developerConnection>scm:git:git@github.com:confluentinc/kafka-connect-elasticsearch.git</developerConnection>
-        <url>https://github.com/confluentinc/kafka-connect-elasticsearch</url>
+        <connection>scm:git:git://github.com/qati/kafka-connect-elasticsearch.git</connection>
+        <developerConnection>scm:git:git@github.com:qati/kafka-connect-elasticsearch.git</developerConnection>
+        <url>https://github.com/qati/kafka-connect-elasticsearch</url>
         <tag>HEAD</tag>
     </scm>
 

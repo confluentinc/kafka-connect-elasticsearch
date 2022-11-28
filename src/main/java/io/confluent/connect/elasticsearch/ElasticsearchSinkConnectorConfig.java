@@ -71,6 +71,13 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   private static final String CONNECTION_PASSWORD_DISPLAY = "Connection Password";
   private static final String CONNECTION_PASSWORD_DEFAULT = null;
 
+  public static final String CONNECTION_BEARER_TOKEN_CONFIG = "connection.token";
+  private static final String CONNECTION_BEARER_TOKEN_DOC =
+      "The API token used to authenticate with Elasticsearch. "
+      + "The default is the null";
+  private static final String CONNECTION_BEARER_TOKEN_DISPLAY = "Connection Bearer token";
+  private static final String CONNECTION_BEARER_TOKEN_DEFAULT = null;
+
   public static final String BATCH_SIZE_CONFIG = "batch.size";
   private static final String BATCH_SIZE_DOC =
       "The number of records to process as a batch when writing to Elasticsearch.";
@@ -389,6 +396,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
 
   public enum SecurityProtocol {
     PLAINTEXT,
+    BEARER,
     SSL
   }
 
@@ -442,6 +450,16 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
             ++order,
             Width.SHORT,
             CONNECTION_PASSWORD_DISPLAY
+        ).define(
+            CONNECTION_BEARER_TOKEN_CONFIG,
+            Type.PASSWORD,
+            CONNECTION_BEARER_TOKEN_DEFAULT,
+            Importance.MEDIUM,
+            CONNECTION_BEARER_TOKEN_DOC,
+            CONNECTOR_GROUP,
+            ++order,
+            Width.SHORT,
+            CONNECTION_BEARER_TOKEN_DISPLAY
         ).define(
             BATCH_SIZE_CONFIG,
             Type.INT,
@@ -831,6 +849,10 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
     return username() != null && password() != null;
   }
 
+  public boolean isBearerAuthenticatedConnection() {
+    return 
+  }
+
   public boolean isBasicProxyConfigured() {
     return !getString(PROXY_HOST_CONFIG).isEmpty();
   }
@@ -986,6 +1008,10 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
 
   public String proxyUsername() {
     return getString(PROXY_USERNAME_CONFIG);
+  }
+
+  public String bearerToken() {
+    return getString(CONNECTION_BEARER_TOKEN_CONFIG);
   }
 
   public int readTimeoutMs() {

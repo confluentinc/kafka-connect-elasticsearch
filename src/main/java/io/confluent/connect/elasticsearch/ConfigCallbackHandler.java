@@ -134,6 +134,20 @@ public class ConfigCallbackHandler implements HttpClientConfigCallback {
       builder.setDefaultCredentialsProvider(credentialsProvider);
     }
 
+    if (config.isBearerAuthenticatedConnection()) {
+      config.connectionUrls().forEach(url -> credentialsProvider.setCredentials(
+              new AuthScope(HttpHost.create(url)),
+              new TokenCredentials(config.bearerToken())
+          )
+      );
+      Lookup<AuthSchemeProvider> authSchemeRegistry =
+        RegistryBuilder.<AuthSchemeProvider>create()
+            .register("Bearer", new BearerAuthSchemeProvider())
+            .build();
+      builder.setDefaultAuthSchemeRegistry(authSchemeRegistry);
+      builder.setDefaultCredentialsProvider(credentialsProvider);
+    }
+
     if (config.isBasicProxyConfigured()) {
       HttpHost proxy = new HttpHost(config.proxyHost(), config.proxyPort());
       builder.setProxy(proxy);
