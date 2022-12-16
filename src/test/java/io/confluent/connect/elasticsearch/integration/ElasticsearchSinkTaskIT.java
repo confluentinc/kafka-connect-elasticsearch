@@ -299,7 +299,7 @@ public class ElasticsearchSinkTaskIT {
 
     assertThatThrownBy(() -> task.put(records))
             .isInstanceOf(DataException.class)
-            .hasMessageContaining("null value encountered");
+            .hasMessageContaining("has a null value ");
     currentOffsets = ImmutableMap.of(tp, new OffsetAndMetadata(0));
     assertThat(task.preCommit(currentOffsets).get(tp).offset())
             .isLessThanOrEqualTo(1);
