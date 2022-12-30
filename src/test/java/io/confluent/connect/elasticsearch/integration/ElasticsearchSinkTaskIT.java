@@ -25,6 +25,7 @@ import java.util.Map;
 import java.util.stream.IntStream;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.github.tomakehurst.wiremock.client.ResponseDefinitionBuilder;
 import com.github.tomakehurst.wiremock.client.WireMock;
 import com.github.tomakehurst.wiremock.junit.WireMockRule;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
@@ -53,7 +54,6 @@ import io.confluent.connect.elasticsearch.ElasticsearchSinkTask;
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.any;
 import static com.github.tomakehurst.wiremock.client.WireMock.anyUrl;
-import static com.github.tomakehurst.wiremock.client.WireMock.ok;
 import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.stubFor;
@@ -70,9 +70,7 @@ import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfi
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.WRITE_METHOD_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.WriteMethod;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.*;
-import static io.confluent.connect.elasticsearch.integration.ElasticsearchConnectorNetworkIT.errorBulkResponse;
-import static java.util.stream.Collectors.toList;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.*;
+import static io.confluent.connect.elasticsearch.helper.ElasticSearchMockUtil.basicEmptyOk;
 import static io.confluent.connect.elasticsearch.integration.ElasticsearchConnectorNetworkIT.errorBulkResponse;
 import static java.util.stream.Collectors.toList;
 import static org.apache.kafka.connect.json.JsonConverterConfig.SCHEMAS_ENABLE_CONFIG;
@@ -114,6 +112,11 @@ public class ElasticsearchSinkTaskIT {
     this.synchronousFlush = synchronousFlush;
   }
 
+  // Convenience drop-in replacement for static import of WireMock.ok()
+  private static ResponseDefinitionBuilder ok() {
+    return basicEmptyOk();
+  }
+
   @Before
   public void setup() {
     stubFor(any(anyUrl()).atPriority(10).willReturn(ok()));
@@ -121,6 +124,8 @@ public class ElasticsearchSinkTaskIT {
 
   @Test
   public void testOffsetCommit() {
+    wireMockRule.stubFor(post(urlPathEqualTo("/"))
+        .willReturn(ok().withFixedDelay(10_000)));
     wireMockRule.stubFor(post(urlPathEqualTo("/_bulk"))
             .willReturn(ok().withFixedDelay(60_000)));
 
@@ -294,7 +299,7 @@ public class ElasticsearchSinkTaskIT {
 
     assertThatThrownBy(() -> task.put(records))
             .isInstanceOf(DataException.class)
-            .hasMessageContaining("null value encountered");
+            .hasMessageContaining("has a null value ");
     currentOffsets = ImmutableMap.of(tp, new OffsetAndMetadata(0));
     assertThat(task.preCommit(currentOffsets).get(tp).offset())
             .isLessThanOrEqualTo(1);

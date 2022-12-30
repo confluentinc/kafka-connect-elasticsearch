@@ -15,7 +15,10 @@
 
 package io.confluent.connect.elasticsearch.helper;
 
+import io.confluent.connect.elasticsearch.ElasticsearchClient;
+import io.confluent.connect.elasticsearch.RetryUtil;
 import org.apache.kafka.common.config.SslConfigs;
+import org.apache.kafka.test.TestUtils;
 import org.elasticsearch.client.security.user.User;
 import org.elasticsearch.client.security.user.privileges.Role;
 import org.slf4j.Logger;
@@ -23,6 +26,7 @@ import org.slf4j.LoggerFactory;
 import org.testcontainers.containers.ContainerLaunchException;
 import org.testcontainers.containers.output.OutputFrame;
 import org.testcontainers.containers.wait.strategy.Wait;
+import org.testcontainers.containers.wait.strategy.WaitStrategyTarget;
 import org.testcontainers.images.RemoteDockerImage;
 import org.testcontainers.images.builder.ImageFromDockerfile;
 import org.testcontainers.images.builder.dockerfile.DockerfileBuilder;
@@ -37,6 +41,7 @@ import java.net.InetAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -67,7 +72,7 @@ public class ElasticsearchContainer
   /**
    * Default Elasticsearch version.
    */
-  public static final String DEFAULT_ES_VERSION = "7.9.3";
+  public static final String DEFAULT_ES_VERSION = "8.2.2";
 
   /**
    * Default Elasticsearch port.
@@ -158,6 +163,7 @@ public class ElasticsearchContainer
   @Override
   public void start() {
     super.start();
+
     String address;
     if (isBasicAuthEnabled()) {
       Map<String, String> props = new HashMap<>();
@@ -171,6 +177,7 @@ public class ElasticsearchContainer
       }
       props.put(CONNECTION_URL_CONFIG, address);
       ElasticsearchHelperClient helperClient = getHelperClient(props);
+      helperClient.waitForConnection(30000);
       createUsersAndRoles(helperClient);
     }
   }
@@ -296,7 +303,7 @@ public class ElasticsearchContainer
     } else if (isBasicAuthEnabled()) {
       return "/basic/" + resourceName;
     } else {
-      return resourceName;
+      return "/none/" + resourceName;
     }
   }
 
@@ -308,11 +315,6 @@ public class ElasticsearchContainer
         Wait.forLogMessage(".*(Security is enabled|license .* valid).*", 1)
             .withStartupTimeout(Duration.ofMinutes(5))
     );
-
-    if (!isSslEnabled() && !isKerberosEnabled() && !isBasicAuthEnabled()) {
-      setImage(new RemoteDockerImage(DockerImageName.parse(imageName)));
-      return;
-    }
 
     ImageFromDockerfile image = new ImageFromDockerfile()
         // Copy the Elasticsearch config file
@@ -344,6 +346,26 @@ public class ElasticsearchContainer
     setImage(image);
   }
 
+  private ArrayList<Integer> getImageVersion() {
+    ArrayList<Integer> versions = new ArrayList<>(3);
+    String[] tokens = imageName.split(":");
+    String versionString = tokens[tokens.length - 1];
+    String[] versionTokens = versionString.split("\\.");
+    for (String v : versionTokens) {
+      try {
+        versions.add(Integer.parseInt(v));
+      } catch (Exception e) {
+        // Maybe ends with garbage like -rc7894237
+        versions.add(Integer.parseInt(v.substring(0, v.indexOf('-'))));
+      }
+    }
+    // Pad with zeros to at least three positions
+    while (versions.size() < 3) {
+      versions.add(0);
+    }
+    return versions;
+  }
+
   private void buildImage(DockerfileBuilder builder) {
     builder
         .from(imageName)
@@ -351,12 +373,21 @@ public class ElasticsearchContainer
         .copy("elasticsearch.yml", CONFIG_PATH + "/elasticsearch.yml");
 
     if (isSslEnabled()) {
+      ArrayList<Integer> versionsInt = getImageVersion();
       log.info("Building Elasticsearch image with SSL configuration");
       builder
+          .user("root")
           .copy("instances.yml", CONFIG_SSL_PATH + "/instances.yml")
-          .copy("start-elasticsearch.sh", CONFIG_SSL_PATH + "/start-elasticsearch.sh")
-          // OpenSSL and Java's Keytool used to generate the certs, so install them
-          .run("yum -y install openssl")
+          .copy("start-elasticsearch.sh", CONFIG_SSL_PATH + "/start-elasticsearch.sh");
+      if (versionsInt.get(0) == 8 || (versionsInt.get(0) == 7 && versionsInt.get(1) >= 15)) {
+        // Install keytool from java 1.8 since our connector is built with
+        // java 1.8 and the cert algoritm's won;t be compatible when using the newer
+        // java version on the container
+        // Also note that 7.16.3 test container uses Ubuntu now instead of CentOS
+        builder.run("apt update");
+        builder.run("apt install -y openjdk-8-jre-headless");
+      }
+      builder
           .run("chmod +x " + CONFIG_SSL_PATH + "/start-elasticsearch.sh")
           .entryPoint(CONFIG_SSL_PATH + "/start-elasticsearch.sh");
     }
@@ -553,7 +584,21 @@ public class ElasticsearchContainer
     superUserProps.put(CONNECTION_USERNAME_CONFIG, ELASTIC_SUPERUSER_NAME);
     superUserProps.put(CONNECTION_PASSWORD_CONFIG, ELASTIC_SUPERUSER_PASSWORD);
     ElasticsearchSinkConnectorConfig config = new ElasticsearchSinkConnectorConfig(superUserProps);
-    ElasticsearchHelperClient client = new ElasticsearchHelperClient(props.get(CONNECTION_URL_CONFIG), config);
+    ElasticsearchHelperClient client = new ElasticsearchHelperClient(props.get(CONNECTION_URL_CONFIG), config,
+        shouldStartClientInCompatibilityMode());
     return client;
+  }
+
+  /**
+   * For high level rest client v7.17 api compatibility mode must be turned on for working with
+   * ES 8.
+   * @return true if the major version of image used is 8 i.e (ES 8.x.x)
+   */
+  public boolean shouldStartClientInCompatibilityMode() {
+    return esMajorVersion() == 8;
+  }
+
+  public int esMajorVersion() {
+    return getImageVersion().get(0);
   }
 }

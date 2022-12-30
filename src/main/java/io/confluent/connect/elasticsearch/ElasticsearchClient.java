@@ -52,6 +52,8 @@ import org.elasticsearch.action.bulk.BulkResponse;
 import org.elasticsearch.client.RequestOptions;
 import org.elasticsearch.client.RestClient;
 import org.elasticsearch.client.RestHighLevelClient;
+import org.elasticsearch.client.RestHighLevelClientBuilder;
+import org.elasticsearch.client.core.MainResponse;
 import org.elasticsearch.client.indices.CreateDataStreamRequest;
 import org.elasticsearch.client.indices.CreateIndexRequest;
 import org.elasticsearch.client.indices.GetIndexRequest;
@@ -59,7 +61,7 @@ import org.elasticsearch.client.indices.GetMappingsRequest;
 import org.elasticsearch.client.indices.GetMappingsResponse;
 import org.elasticsearch.client.indices.PutMappingRequest;
 import org.elasticsearch.cluster.metadata.MappingMetadata;
-import org.elasticsearch.common.unit.TimeValue;
+import org.elasticsearch.core.TimeValue;
 import org.elasticsearch.index.VersionType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -100,6 +102,7 @@ public class ElasticsearchClient {
           "action_request_validation_exception"
       )
   );
+  private static final String UNKNOWN_VERSION_TAG = "Unknown";
 
   protected final AtomicInteger numBufferedRecords;
   private final AtomicReference<ConnectException> error;
@@ -113,7 +116,9 @@ public class ElasticsearchClient {
   private final Time clock;
   private final Lock inFlightRequestLock = new ReentrantLock();
   private final Condition inFlightRequestsUpdated = inFlightRequestLock.newCondition();
+  private final String esVersion;
 
+  @SuppressWarnings("deprecation")
   public ElasticsearchClient(
       ElasticsearchSinkConnectorConfig config,
       ErrantRecordReporter reporter,
@@ -129,17 +134,26 @@ public class ElasticsearchClient {
     this.clock = Time.SYSTEM;
 
     ConfigCallbackHandler configCallbackHandler = new ConfigCallbackHandler(config);
-    this.client = new RestHighLevelClient(
-        RestClient
-            .builder(
-                config.connectionUrls()
-                    .stream()
-                    .map(HttpHost::create)
-                    .collect(toList())
-                    .toArray(new HttpHost[config.connectionUrls().size()])
-            )
-            .setHttpClientConfigCallback(configCallbackHandler)
-    );
+    RestClient client = RestClient
+        .builder(
+            config.connectionUrls()
+                .stream()
+                .map(HttpHost::create)
+                .collect(toList())
+                .toArray(new HttpHost[config.connectionUrls().size()])
+        ).setHttpClientConfigCallback(configCallbackHandler).build();
+
+    esVersion = getServerVersion(client);
+
+    RestHighLevelClientBuilder clientBuilder = new RestHighLevelClientBuilder(client);
+
+    if (shouldSetCompatibilityToES8()) {
+      log.info("Staring client in ES 8 compatibility mode");
+      clientBuilder.setApiCompatibilityMode(true);
+    }
+
+    this.client = clientBuilder.build();
+
     this.bulkProcessor = BulkProcessor
         .builder(buildConsumer(), buildListener(afterBulkCallback))
         .setBulkActions(config.batchSize())
@@ -151,6 +165,32 @@ public class ElasticsearchClient {
         // We are doing retries in the async thread instead.
         .setBackoffPolicy(BackoffPolicy.noBackoff())
         .build();
+  }
+
+  /**
+   * Elastic High level Rest Client 7.17 has a compatibility mode to support ES 8. Checks the
+   * version number of ES to determine if we should be running in compatibility mode while using
+   * HLRC 7.17 to talk to ES.
+   */
+  private boolean shouldSetCompatibilityToES8() {
+    return !version().equals(UNKNOWN_VERSION_TAG)
+        && Integer.parseInt(version().split("\\.")[0]) >= 8;
+  }
+
+  private String getServerVersion(RestClient client) {
+    RestHighLevelClient highLevelClient = new RestHighLevelClientBuilder(client).build();
+    MainResponse response;
+    String esVersionNumber = UNKNOWN_VERSION_TAG;
+    try {
+      response = highLevelClient.info(RequestOptions.DEFAULT);
+      esVersionNumber = response.getVersion().getNumber();
+    } catch (Exception e) {
+      // Same error messages as from validating the connection for IOException.
+      // Insufficient privileges to validate the version number if caught
+      // ElasticsearchStatusException.
+      log.warn("Failed to get ES server version", e);
+    }
+    return esVersionNumber;
   }
 
   private BiConsumer<BulkRequest, ActionListener<BulkResponse>> buildConsumer() {
@@ -236,6 +276,10 @@ public class ElasticsearchClient {
         String.format("create mapping for index %s with schema %s", index, schema),
         () -> client.indices().putMapping(request, RequestOptions.DEFAULT)
     );
+  }
+
+  public String version() {
+    return esVersion;
   }
 
   /**
@@ -658,6 +702,13 @@ public class ElasticsearchClient {
    */
   private synchronized void reportBadRecord(BulkItemResponse response,
                                             long executionId) {
+
+    // RCCA-7507 : Don't push to DLQ if we receive Internal version conflict on data streams
+    if (response.getFailureMessage().contains(VERSION_CONFLICT_EXCEPTION)
+            && config.isDataStream()) {
+      log.info("Skipping DLQ insertion for DataStream type.");
+      return;
+    }
     if (reporter != null) {
       List<SinkRecordAndOffset> sinkRecords =
           inFlightRequests.getOrDefault(executionId, new ArrayList<>());

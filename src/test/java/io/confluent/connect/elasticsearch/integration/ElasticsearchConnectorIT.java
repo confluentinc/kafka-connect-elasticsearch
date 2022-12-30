@@ -209,7 +209,11 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
 
     runSimpleTest(props);
 
-    assertEquals(index, helperClient.getDataStream(index).getName());
+    if (container.esMajorVersion() == 8) {
+      assertEquals(index, helperClient.getDataStreamWithJavaAPIClient(index).name());
+    } else {
+      assertEquals(index, helperClient.getDataStream(index).getName());
+    }
   }
 
   @Test
@@ -268,10 +272,12 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
     }
   }
 
-  @Test
-  public void testBackwardsCompatibilityDataStream() throws Exception {
+  private void testBackwardsCompatibilityDataStreamVersionHelper(
+      String version
+  ) throws Exception {
+    // since we require older ES container we close the current one and set it back up
     container.close();
-    container = ElasticsearchContainer.withESVersion("7.0.1");
+    container = ElasticsearchContainer.withESVersion(version);
     container.start();
     setupFromContainer();
 
@@ -279,8 +285,22 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
 
     helperClient = null;
     container.close();
-    container = ElasticsearchContainer.fromSystemProperties();
-    container.start();
+    setupBeforeAll();
+  }
+
+  @Test
+  public void testBackwardsCompatibilityDataStream() throws Exception {
+    testBackwardsCompatibilityDataStreamVersionHelper("7.0.1");
+  }
+
+  @Test
+  public void testBackwardsCompatibilityDataStream2() throws Exception {
+    testBackwardsCompatibilityDataStreamVersionHelper("7.9.3");
+  }
+
+  @Test
+  public void testBackwardsCompatibility() throws Exception {
+    testBackwardsCompatibilityDataStreamVersionHelper("7.16.3");
   }
 
   @Test

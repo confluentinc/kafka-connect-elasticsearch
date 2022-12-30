@@ -15,12 +15,18 @@
 
 package io.confluent.connect.elasticsearch.helper;
 
+import co.elastic.clients.elasticsearch.ElasticsearchClient;
+import co.elastic.clients.elasticsearch.indices.GetDataStreamRequest.Builder;
+import co.elastic.clients.json.jackson.JacksonJsonpMapper;
+import co.elastic.clients.transport.rest_client.RestClientTransport;
 import org.apache.http.HttpHost;
+import org.apache.kafka.test.TestUtils;
 import org.elasticsearch.action.admin.indices.delete.DeleteIndexRequest;
 import org.elasticsearch.action.search.SearchRequest;
 import org.elasticsearch.client.RequestOptions;
 import org.elasticsearch.client.RestClient;
 import org.elasticsearch.client.RestHighLevelClient;
+import org.elasticsearch.client.RestHighLevelClientBuilder;
 import org.elasticsearch.client.core.CountRequest;
 import org.elasticsearch.client.indices.CreateIndexRequest;
 import org.elasticsearch.client.indices.DataStream;
@@ -37,8 +43,8 @@ import org.elasticsearch.client.security.RefreshPolicy;
 import org.elasticsearch.client.security.user.User;
 import org.elasticsearch.client.security.user.privileges.Role;
 import org.elasticsearch.cluster.metadata.MappingMetadata;
-import org.elasticsearch.common.xcontent.XContentType;
 import org.elasticsearch.search.SearchHits;
+import org.elasticsearch.xcontent.XContentType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -53,15 +59,36 @@ public class ElasticsearchHelperClient {
 
   private static final Logger log = LoggerFactory.getLogger(ElasticsearchHelperClient.class);
 
+  private final String url;
+  private final ElasticsearchSinkConnectorConfig config;
   private RestHighLevelClient client;
 
-  public ElasticsearchHelperClient(String url, ElasticsearchSinkConnectorConfig config) {
+  public ElasticsearchHelperClient(String url, ElasticsearchSinkConnectorConfig config,
+      boolean compatibilityMode) {
     ConfigCallbackHandler configCallbackHandler = new ConfigCallbackHandler(config);
-    this.client = new RestHighLevelClient(
+    this.url = url;
+    this.config = config;
+    this.client = new RestHighLevelClientBuilder(
         RestClient
             .builder(HttpHost.create(url))
             .setHttpClientConfigCallback(configCallbackHandler)
-    );
+        .build()
+        // compatibility mode should be true for 7.17 high level rest clients while talking to ES 8.
+    ).setApiCompatibilityMode(compatibilityMode).build();
+  }
+
+  public ElasticsearchHelperClient(String url, ElasticsearchSinkConnectorConfig config) {
+    this(url, config, false);
+  }
+
+  public ElasticsearchClient getNewJavaAPIClient() {
+    ConfigCallbackHandler configCallbackHandler = new ConfigCallbackHandler(config);
+    RestClient client = RestClient
+        .builder(HttpHost.create(url))
+        .setHttpClientConfigCallback(configCallbackHandler)
+        .build();
+    return new ElasticsearchClient(new RestClientTransport(
+        client, new JacksonJsonpMapper()));
   }
 
   public void deleteIndex(String index, boolean isDataStream) throws IOException {
@@ -80,6 +107,18 @@ public class ElasticsearchHelperClient {
         .getDataStream(request, RequestOptions.DEFAULT)
         .getDataStreams();
     return datastreams.size() == 0 ? null : datastreams.get(0);
+  }
+
+  public co.elastic.clients.elasticsearch.indices.DataStream getDataStreamWithJavaAPIClient(
+      String dataStream
+  ) throws IOException {
+    List<co.elastic.clients.elasticsearch.indices.DataStream> dataStreams =
+        getNewJavaAPIClient().indices().getDataStream(
+            new Builder()
+                .name(dataStream)
+                .build()
+        ).dataStreams();
+    return dataStreams.size() == 0 ? null : dataStreams.get(0);
   }
 
   public long getDocCount(String index) throws IOException {
@@ -126,6 +165,14 @@ public class ElasticsearchHelperClient {
     PutUserResponse putUserResponse = client.security().putUser(putUserRequest, RequestOptions.DEFAULT);
     if (!putUserResponse.isCreated()) {
       throw new RuntimeException(String.format("Failed to create a user %s", userToPassword.getKey().getUsername()));
+    }
+  }
+
+  public void waitForConnection(long timeMs) {
+    try {
+      TestUtils.retryOnExceptionWithTimeout(timeMs, () -> client.info(RequestOptions.DEFAULT));
+    } catch (InterruptedException e) {
+      // do nothing
     }
   }
 

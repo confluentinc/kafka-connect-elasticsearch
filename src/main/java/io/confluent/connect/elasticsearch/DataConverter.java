@@ -38,8 +38,8 @@ import org.elasticsearch.action.DocWriteRequest.OpType;
 import org.elasticsearch.action.delete.DeleteRequest;
 import org.elasticsearch.action.index.IndexRequest;
 import org.elasticsearch.action.update.UpdateRequest;
-import org.elasticsearch.common.xcontent.XContentType;
 import org.elasticsearch.index.VersionType;
+import org.elasticsearch.xcontent.XContentType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -87,6 +87,9 @@ public class DataConverter {
   private String convertKey(Schema keySchema, Object key) {
     if (key == null) {
       throw new DataException("Key is used as document id and can not be null.");
+    }
+    if (String.valueOf(key).isEmpty()) {
+      throw new DataException("Key is used as document id and can not be empty.");
     }
 
     final Schema.Type schemaType;
@@ -141,10 +144,9 @@ public class DataConverter {
         default:
           throw new DataException(
               String.format(
-                  "%s with key of %s and null value encountered (to ignore future records like"
+                  "%s has a null value (to ignore future records like"
                       + " this change the configuration property '%s' from '%s' to '%s')",
                   recordString(record),
-                  record.key(),
                   ElasticsearchSinkConnectorConfig.BEHAVIOR_ON_NULL_VALUES_CONFIG,
                   BehaviorOnNullValues.FAIL,
                   BehaviorOnNullValues.IGNORE
@@ -205,11 +207,21 @@ public class DataConverter {
     }
     try {
       JsonNode jsonNode = objectMapper.readTree(payload);
+
+      if (!jsonNode.isObject()) {
+        throw new DataException("Top level payload contains data of Json type "
+            + jsonNode.getNodeType() + ". Required Json object.");
+      }
+
       if (!config.dataStreamTimestampField().isEmpty()) {
         for (String timestampField : config.dataStreamTimestampField()) {
           if (jsonNode.has(timestampField)) {
             ((ObjectNode) jsonNode).put(TIMESTAMP_FIELD, jsonNode.get(timestampField).asText());
             return objectMapper.writeValueAsString(jsonNode);
+          } else {
+            log.debug("Timestamp field {} is not present in payload. This record may fail or "
+                    + "be skipped",
+                timestampField);
           }
         }
       } else {
