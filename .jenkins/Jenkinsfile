@@ -47,7 +47,7 @@ spec:
     stage('Deploy') {
       when { branch 'master' }
       steps {
-        sh 'mvn deploy -q -B -s settings.xml -DskipTests=true'
+        sh 'mvn deploy -q -B -s settings.xml -P standalone -DskipTests=true'
       }
     }
   }
