@@ -7,9 +7,6 @@ pipeline {
       yaml '''
 apiVersion: v1
 kind: Pod
-metadata:
-  labels:
-    jenkins/build: emb-m2
 spec:
   affinity:
     podAffinity:
