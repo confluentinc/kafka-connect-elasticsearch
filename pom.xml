@@ -5,7 +5,7 @@
     <parent>
         <groupId>io.confluent</groupId>
         <artifactId>common</artifactId>
-        <version>6.2.3</version>
+        <version>6.0.1</version>
     </parent>
 
     <groupId>io.confluent</groupId>
@@ -160,6 +160,7 @@
             </exclusions>
             <scope>test</scope>
         </dependency>
+        <!--Require newer version than inherited-->
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter-api</artifactId>
