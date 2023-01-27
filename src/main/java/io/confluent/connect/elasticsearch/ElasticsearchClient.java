@@ -540,14 +540,12 @@ public class ElasticsearchClient {
           );
 
           log.trace("{} version conflict for operation {} on document '{}' version {}"
-                          + " in index '{}' and stacktrace '{}'",
+                          + " in index '{}'",
                   request != null ? request.versionType() : "UNKNOWN",
                   response.getOpType(),
                   response.getId(),
                   response.getVersion(),
-                  response.getIndex(),
-                  response.getFailure().getCause(),
-                  response.getFailure().getCause().getStackTrace()
+                  response.getIndex()
           );
           // Maybe this was a race condition?  Put it in the DLQ in case someone
           // wishes to investigate.
@@ -572,7 +570,11 @@ public class ElasticsearchClient {
 
       error.compareAndSet(
           null,
-          new ConnectException("Indexing record failed.", response.getFailure().getCause())
+          new ConnectException(
+                  "Indexing record failed -> Response status: "
+                  + response.getFailure().getStatus()
+                  + ",\n Index: " + response.getFailure().getIndex()
+                  + ",\n Document Id: " + response.getFailure().getId())
       );
       return true;
     }
@@ -588,8 +590,12 @@ public class ElasticsearchClient {
    */
   private boolean handleMalformedDocResponse(BulkItemResponse response) {
     String errorMsg = String.format(
-        "Encountered an illegal document error '%s'. Ignoring and will not index record.",
-        response.getFailureMessage()
+        "Encountered an illegal document error -> Response status: '%s',\n"
+                + "Index: '%s',\n Document Id: '%s'. \n"
+                + "Ignoring and will not index record.",
+        response.getFailure().getStatus(),
+        response.getFailure().getIndex(),
+        response.getFailure().getId()
     );
     switch (config.behaviorOnMalformedDoc()) {
       case IGNORE:
@@ -601,15 +607,23 @@ public class ElasticsearchClient {
       case FAIL:
       default:
         log.error(
-            "Encountered an illegal document error '{}'. To ignore future records like this,"
-                + " change the configuration '{}' to '{}'.",
-            response.getFailureMessage(),
+            "Encountered an illegal document error -> Response status: '{}',\n "
+                    + "Index: '{}',\n Document Id: '{}'\n"
+                    + " To ignore future records like this,"
+                    + " change the configuration '{}' to '{}'.",
+            response.getFailure().getStatus(),
+            response.getFailure().getIndex(),
+            response.getFailure().getId(),
             ElasticsearchSinkConnectorConfig.BEHAVIOR_ON_MALFORMED_DOCS_CONFIG,
             BehaviorOnMalformedDoc.IGNORE
         );
         error.compareAndSet(
             null,
-            new ConnectException("Indexing record failed.", response.getFailure().getCause())
+            new ConnectException(
+                    "Indexing record failed -> Response status: "
+                    + response.getFailure().getStatus()
+                    + ",\n Index: " + response.getFailure().getIndex()
+                    + ",\n Document Id: " + response.getFailure().getId())
         );
         return true;
     }
@@ -672,9 +686,13 @@ public class ElasticsearchClient {
           ? sinkRecords.get(response.getItemId())
           : null;
       if (original != null) {
+        // log only status, index and document id for record failure
         reporter.report(
             original.sinkRecord,
-            new ReportingException("Indexing failed: " + response.getFailureMessage())
+            new ReportingException(
+                    "Indexing failed -> Response status: " + response.getFailure().getStatus()
+                    + ",\n Index: " + response.getFailure().getIndex()
+                    + ",\n Document Id: " + response.getFailure().getId())
         );
       }
     }
