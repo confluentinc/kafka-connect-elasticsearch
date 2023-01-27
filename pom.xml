@@ -9,7 +9,7 @@
     </parent>
 
     <artifactId>kafka-connect-elasticsearch</artifactId>
-    <version>13.1.4-SNAPSHOT</version>
+    <version>13.1.4</version>
     <packaging>jar</packaging>
     <name>kafka-connect-elasticsearch</name>
     <organization>
@@ -33,7 +33,7 @@
         <connection>scm:git:git://github.com/confluentinc/kafka-connect-elasticsearch.git</connection>
         <developerConnection>scm:git:git@github.com:confluentinc/kafka-connect-elasticsearch.git</developerConnection>
         <url>https://github.com/confluentinc/kafka-connect-elasticsearch</url>
-        <tag>13.1.x</tag>
+        <tag>v13.1.4</tag>
     </scm>
 
     <properties>
