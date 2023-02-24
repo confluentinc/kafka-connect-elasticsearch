@@ -88,6 +88,9 @@ public class DataConverter {
     if (key == null) {
       throw new DataException("Key is used as document id and can not be null.");
     }
+    if (String.valueOf(key).isEmpty()) {
+      throw new DataException("Key is used as document id and can not be empty.");
+    }
 
     final Schema.Type schemaType;
     if (keySchema == null) {
@@ -157,9 +160,6 @@ public class DataConverter {
       return null;
     }
 
-    String payload = getPayload(record);
-    payload = maybeAddTimestamp(payload, record.timestamp());
-
     final String id = config.shouldIgnoreKey(record.topic())
         ? String.format("%s+%d+%d", record.topic(), record.kafkaPartition(), record.kafkaOffset())
         : convertKey(record.keySchema(), record.key());
@@ -168,6 +168,9 @@ public class DataConverter {
     if (record.value() == null) {
       return maybeAddExternalVersioning(new DeleteRequest(index).id(id), record);
     }
+
+    String payload = getPayload(record);
+    payload = maybeAddTimestamp(payload, record.timestamp());
 
     // index
     switch (config.writeMethod()) {
@@ -205,17 +208,27 @@ public class DataConverter {
     return new String(rawJsonPayload, StandardCharsets.UTF_8);
   }
 
-  private String maybeAddTimestamp(String payload, long timestamp) {
+  private String maybeAddTimestamp(String payload, Long timestamp) {
     if (!config.isDataStream()) {
       return payload;
     }
     try {
       JsonNode jsonNode = objectMapper.readTree(payload);
+
+      if (!jsonNode.isObject()) {
+        throw new DataException("Top level payload contains data of Json type "
+            + jsonNode.getNodeType() + ". Required Json object.");
+      }
+
       if (!config.dataStreamTimestampField().isEmpty()) {
         for (String timestampField : config.dataStreamTimestampField()) {
           if (jsonNode.has(timestampField)) {
             ((ObjectNode) jsonNode).put(TIMESTAMP_FIELD, jsonNode.get(timestampField).asText());
             return objectMapper.writeValueAsString(jsonNode);
+          } else {
+            log.debug("Timestamp field {} is not present in payload. This record may fail or "
+                    + "be skipped",
+                timestampField);
           }
         }
       } else {
@@ -228,6 +241,15 @@ public class DataConverter {
     return payload;
   }
 
+  /**
+   * In many cases, we explicitly set the record version using the topic's offset.
+   * This version will, in turn, be checked by Elasticsearch and will throw a versioning
+   * error if the request represents an equivalent or older version of the record.
+   *
+   * @param request the request currently being constructed for `record`
+   * @param record the record to be processed
+   * @return the (possibly modified) request which was passed in
+   */
   private DocWriteRequest<?> maybeAddExternalVersioning(
       DocWriteRequest<?> request,
       SinkRecord record

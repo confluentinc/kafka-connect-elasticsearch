@@ -13,10 +13,13 @@ import java.util.Map;
 import java.util.Properties;
 import org.apache.hadoop.minikdc.MiniKdc;
 import org.apache.kafka.connect.errors.ConnectException;
+import io.confluent.common.utils.IntegrationTest;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
+@Category(IntegrationTest.class)
 public class ElasticsearchConnectorKerberosIT extends ElasticsearchConnectorBaseIT {
 
   private static File baseDir;

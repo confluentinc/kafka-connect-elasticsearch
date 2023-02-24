@@ -36,6 +36,13 @@ import org.elasticsearch.common.unit.ByteSizeValue;
 
 import static org.apache.kafka.common.config.ConfigDef.Range.between;
 import static org.apache.kafka.common.config.SslConfigs.SSL_ENDPOINT_IDENTIFICATION_ALGORITHM_CONFIG;
+import static org.apache.kafka.common.config.SslConfigs.SSL_KEYSTORE_LOCATION_CONFIG;
+import static org.apache.kafka.common.config.SslConfigs.SSL_KEYSTORE_PASSWORD_CONFIG;
+import static org.apache.kafka.common.config.SslConfigs.SSL_KEYSTORE_TYPE_CONFIG;
+import static org.apache.kafka.common.config.SslConfigs.SSL_KEY_PASSWORD_CONFIG;
+import static org.apache.kafka.common.config.SslConfigs.SSL_TRUSTSTORE_LOCATION_CONFIG;
+import static org.apache.kafka.common.config.SslConfigs.SSL_TRUSTSTORE_PASSWORD_CONFIG;
+import static org.apache.kafka.common.config.SslConfigs.SSL_TRUSTSTORE_TYPE_CONFIG;
 import static org.apache.kafka.common.config.SslConfigs.addClientSslSupport;
 
 public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
@@ -114,6 +121,14 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
           + " exceeded the task will fail.";
   private static final String FLUSH_TIMEOUT_MS_DISPLAY = "Flush Timeout (ms)";
   private static final int FLUSH_TIMEOUT_MS_DEFAULT = (int) TimeUnit.MINUTES.toMillis(3);
+
+  public static final String FLUSH_SYNCHRONOUSLY_CONFIG = "flush.synchronously";
+  private static final String FLUSH_SYNCHRONOUSLY_DOC =
+          "True if flushes should wait for background processing to finish. This has a throughput"
+            + " penalty and makes the connector less responsive but allows for topic-mutating SMTs"
+            + " (e.g. RegexRouter or TimestampRouter)";
+  private static final String FLUSH_SYNCHRONOUSLY_DISPLAY = "Flush synchronously";
+  private static final boolean FLUSH_SYNCHRONOUSLY_DEFAULT = true;
 
   public static final String MAX_RETRIES_CONFIG = "max.retries";
   private static final String MAX_RETRIES_DOC =
@@ -507,6 +522,16 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
             ++order,
             Width.SHORT,
             FLUSH_TIMEOUT_MS_DISPLAY
+        ).define(
+            FLUSH_SYNCHRONOUSLY_CONFIG,
+            Type.BOOLEAN,
+            FLUSH_SYNCHRONOUSLY_DEFAULT,
+            Importance.LOW,
+            FLUSH_SYNCHRONOUSLY_DOC,
+            CONNECTOR_GROUP,
+            ++order,
+            Width.SHORT,
+            FLUSH_SYNCHRONOUSLY_DISPLAY
         ).define(
             MAX_RETRIES_CONFIG,
             Type.INT,
@@ -919,6 +944,10 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
     return getLong(FLUSH_TIMEOUT_MS_CONFIG);
   }
 
+  public boolean flushSynchronously() {
+    return getBoolean(FLUSH_SYNCHRONOUSLY_CONFIG);
+  }
+
   public boolean ignoreKey() {
     return getBoolean(IGNORE_KEY_CONFIG);
   }
@@ -1002,7 +1031,21 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   public Map<String, Object> sslConfigs() {
     ConfigDef sslConfigDef = new ConfigDef();
     addClientSslSupport(sslConfigDef);
-    return sslConfigDef.parse(originalsWithPrefix(SSL_CONFIG_PREFIX));
+    Map<String, Object> sslConfigs = originalsWithPrefix(SSL_CONFIG_PREFIX);
+    // if empty path is provided for the keystore/truststore location remove it and associated
+    // passwords, otherwise it will lead to an exception while creating the ssl context
+    if (sslConfigs.getOrDefault(SSL_KEYSTORE_LOCATION_CONFIG, "").toString().isEmpty()) {
+      sslConfigs.remove(SSL_KEYSTORE_LOCATION_CONFIG);
+      sslConfigs.remove(SSL_KEYSTORE_PASSWORD_CONFIG);
+      sslConfigs.remove(SSL_KEY_PASSWORD_CONFIG);
+      sslConfigs.remove(SSL_KEYSTORE_TYPE_CONFIG);
+    }
+    if (sslConfigs.getOrDefault(SSL_TRUSTSTORE_LOCATION_CONFIG, "").toString().isEmpty()) {
+      sslConfigs.remove(SSL_TRUSTSTORE_LOCATION_CONFIG);
+      sslConfigs.remove(SSL_TRUSTSTORE_PASSWORD_CONFIG);
+      sslConfigs.remove(SSL_TRUSTSTORE_TYPE_CONFIG);
+    }
+    return sslConfigDef.parse(sslConfigs);
   }
 
   public String username() {
