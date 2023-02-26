@@ -1,17 +1,6 @@
 package io.confluent.connect.elasticsearch;
 
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_TIMEOUT_MS_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.DATA_STREAM_DATASET_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.DATA_STREAM_TYPE_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.KERBEROS_KEYTAB_PATH_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.PROXY_HOST_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.PROXY_PASSWORD_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.PROXY_PORT_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.PROXY_USERNAME_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.READ_TIMEOUT_MS_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.SECURITY_PROTOCOL_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.SSL_CONFIG_PREFIX;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.*;
 import static org.apache.kafka.common.config.SslConfigs.SSL_ENDPOINT_IDENTIFICATION_ALGORITHM_CONFIG;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -27,6 +16,7 @@ import java.util.Map;
 import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.config.SslConfigs;
 import org.apache.kafka.common.config.types.Password;
+import org.elasticsearch.index.VersionType;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -237,6 +227,43 @@ public class ElasticsearchSinkConnectorConfigTest {
     keytab.toFile().delete();
   }
 
+  @Test
+  public void shouldAllowValidVersionType() {
+    props.put(VERSION_TYPE_CONFIG, "internal");
+    new ElasticsearchSinkConnectorConfig(props);
+  }
+
+  @Test
+  public void shouldAllowValidVersionTypeCaseInsensitive() {
+    props.put(VERSION_TYPE_CONFIG, "InTernal");
+    new ElasticsearchSinkConnectorConfig(props);
+  }
+
+  @Test(expected = ConfigException.class)
+  public void shouldNotAllowInvalidVersionType() {
+    props.put(VERSION_TYPE_CONFIG, "notInternal");
+    new ElasticsearchSinkConnectorConfig(props);
+  }
+
+  @Test
+  public void testVersionTypeDefault() {
+    ElasticsearchSinkConnectorConfig config = new ElasticsearchSinkConnectorConfig(props);
+    assertEquals(config.versionType(), VersionType.EXTERNAL_GTE);
+  }
+
+  @Test
+  public void testVersionTypeFieldDefault() {
+    ElasticsearchSinkConnectorConfig config = new ElasticsearchSinkConnectorConfig(props);
+    assertFalse(config.isVersionTypeFieldConfigured());
+  }
+
+  @Test
+  public void testVersionFieldConfig() {
+    props.put(VERSION_FIELD_CONFIG, "version");
+    ElasticsearchSinkConnectorConfig config = new ElasticsearchSinkConnectorConfig(props);
+    assertEquals("version", config.versionTypeField());
+  }
+
   public static Map<String, String> addNecessaryProps(Map<String, String> props) {
     if (props == null) {
       props = new HashMap<>();
@@ -244,4 +271,6 @@ public class ElasticsearchSinkConnectorConfigTest {
     props.put(ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG, "http://localhost:8080");
     return props;
   }
+
+
 }

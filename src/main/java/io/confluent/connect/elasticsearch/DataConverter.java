@@ -38,7 +38,6 @@ import org.elasticsearch.action.DocWriteRequest.OpType;
 import org.elasticsearch.action.delete.DeleteRequest;
 import org.elasticsearch.action.index.IndexRequest;
 import org.elasticsearch.action.update.UpdateRequest;
-import org.elasticsearch.index.VersionType;
 import org.elasticsearch.xcontent.XContentType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -248,8 +247,28 @@ public class DataConverter {
       SinkRecord record
   ) {
     if (!config.isDataStream() && !config.shouldIgnoreKey(record.topic())) {
-      request.versionType(VersionType.EXTERNAL);
-      request.version(record.kafkaOffset());
+      request.versionType(config.versionType());
+
+      if (!config.isVersionTypeFieldConfigured() || record.value() == null) {
+        request.version(record.kafkaOffset());
+      } else {
+        try {
+          Object value = ((Struct)record.value()).get(config.versionTypeField());
+
+          request.version(Long.parseLong(String.valueOf(value)));
+        } catch (Exception e) {
+          // Caused when the version field is not correct
+          // Throw a DataException to let convert fail
+          throw new DataException(
+                  String.format(
+                          "%s with key of %s , the version field [%s] is not correct",
+                          recordString(record),
+                          record.key(),
+                          config.versionTypeField()),
+                  e
+          );
+        }
+      }
     }
 
     return request;

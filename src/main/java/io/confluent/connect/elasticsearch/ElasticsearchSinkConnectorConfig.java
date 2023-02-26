@@ -33,6 +33,7 @@ import org.apache.kafka.common.config.ConfigDef.Validator;
 import org.apache.kafka.common.config.ConfigDef.Width;
 import org.apache.kafka.common.config.types.Password;
 import org.elasticsearch.common.unit.ByteSizeValue;
+import org.elasticsearch.index.VersionType;
 
 import static org.apache.kafka.common.config.ConfigDef.Range.between;
 import static org.apache.kafka.common.config.SslConfigs.SSL_ENDPOINT_IDENTIFICATION_ALGORITHM_CONFIG;
@@ -369,6 +370,24 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   private static final String KERBEROS_GROUP = "Kerberos";
   private static final String DATA_STREAM_GROUP = "Data Stream";
 
+  public static final String VERSION_TYPE_CONFIG = "version.type";
+  public static final String VERSION_TYPE_DOC = "Elasticsearch version type, "
+          + "will be append when key.ignored is set to false";
+  public static final String VERSION_TYPE_DEFAULT = "external_gte";
+  public static final String VERSION_TYPE_DISPLAY = "Elasticsearch Version Type";
+
+  public static final String VERSION_FIELD_CONFIG = "version.field";
+  public static final String VERSION_FIELD_DOC = String.format(
+          "When %s is not set as internal and %s is false, "
+                  + "you can set the version to a payload field, if set to empty,"
+                  + " will use kafka offset",
+          VERSION_FIELD_CONFIG,
+          IGNORE_KEY_CONFIG);
+  public static final String VERSION_FIELD_DEFAULT = "";
+  public static final String VERSION_FIELD_DISPLAY = "Version Field In Payload";
+
+
+
   public enum BehaviorOnMalformedDoc {
     IGNORE,
     WARN,
@@ -685,6 +704,28 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
             Width.SHORT,
             WRITE_METHOD_DISPLAY,
             new EnumRecommender<>(WriteMethod.class)
+        ).define(
+            VERSION_TYPE_CONFIG,
+            Type.STRING,
+            VERSION_TYPE_DEFAULT,
+            new EnumRecommender<>(VersionType.class),
+            Importance.LOW,
+            VERSION_TYPE_DOC,
+            DATA_CONVERSION_GROUP,
+            ++order,
+            Width.SHORT,
+            VERSION_TYPE_DISPLAY,
+            new EnumRecommender<>(VersionType.class)
+        ).define(
+                    VERSION_FIELD_CONFIG,
+            Type.STRING,
+                    VERSION_FIELD_DEFAULT,
+            Importance.LOW,
+                    VERSION_FIELD_DOC,
+            DATA_CONVERSION_GROUP,
+            ++order,
+            Width.SHORT,
+                    VERSION_FIELD_DISPLAY
     );
   }
 
@@ -1030,6 +1071,18 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
 
   public WriteMethod writeMethod() {
     return WriteMethod.valueOf(getString(WRITE_METHOD_CONFIG).toUpperCase());
+  }
+
+  public VersionType versionType() {
+    return VersionType.valueOf(getString(VERSION_TYPE_CONFIG).toUpperCase());
+  }
+
+  public boolean isVersionTypeFieldConfigured() {
+    return !getString(VERSION_FIELD_CONFIG).isEmpty();
+  }
+
+  public String versionTypeField() {
+    return getString(VERSION_FIELD_CONFIG);
   }
 
   private static class DataStreamDatasetValidator implements Validator {
