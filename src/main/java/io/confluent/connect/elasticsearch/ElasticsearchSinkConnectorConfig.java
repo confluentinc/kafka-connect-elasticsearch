@@ -15,6 +15,7 @@
 
 package io.confluent.connect.elasticsearch;
 
+import org.apache.kafka.common.Configurable;
 import java.io.File;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -22,6 +23,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.Collections;
 import java.util.stream.Collectors;
 import java.util.concurrent.TimeUnit;
 import org.apache.kafka.common.config.AbstractConfig;
@@ -31,8 +33,14 @@ import org.apache.kafka.common.config.ConfigDef.Importance;
 import org.apache.kafka.common.config.ConfigDef.Type;
 import org.apache.kafka.common.config.ConfigDef.Validator;
 import org.apache.kafka.common.config.ConfigDef.Width;
+import org.apache.kafka.common.utils.Utils;
+import org.apache.kafka.connect.errors.ConnectException;
+
 import org.apache.kafka.common.config.types.Password;
 import org.elasticsearch.common.unit.ByteSizeValue;
+import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
+import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider;
+import software.amazon.awssdk.regions.Region;
 
 import static org.apache.kafka.common.config.ConfigDef.Range.between;
 import static org.apache.kafka.common.config.SslConfigs.SSL_ENDPOINT_IDENTIFICATION_ALGORITHM_CONFIG;
@@ -369,6 +377,31 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   private static final String KERBEROS_GROUP = "Kerberos";
   private static final String DATA_STREAM_GROUP = "Data Stream";
 
+  public static final String AWS_SIGNING_ENABLED_CONFIG = "aws.signing.enabled";
+  private static final String AWS_SIGNING_ENABLED_DOC = "Whether to sign Elasticsearch requests"
+          + " with the AWS signer";
+
+  public static final String AWS_REGION_CONFIG = "aws.region";
+  private static final String AWS_REGION_DOC = "The AWS region to be used by the connector.";
+  private static final String AWS_REGION_DEFAULT = "us-east-1";
+
+
+  public static final String AWS_CREDENTIALS_PROVIDER_CLASS_CONFIG =
+          "aws.credentials.provider.class";
+  private static final Class<? extends AwsCredentialsProvider>
+          AWS_CREDENTIALS_PROVIDER_CLASS_DEFAULT = DefaultCredentialsProvider.create().getClass();
+
+  /**
+   * The properties that begin with this prefix will be used to configure a class, specified by
+   * {@code aws.credentials.provider.class} if it implements {@link Configurable}.
+   */
+  public static final String AWS_CREDENTIALS_PROVIDER_CONFIG_PREFIX =
+          AWS_CREDENTIALS_PROVIDER_CLASS_CONFIG.substring(
+                  0,
+                  AWS_CREDENTIALS_PROVIDER_CLASS_CONFIG.lastIndexOf(".") + 1
+          );
+
+
   public enum BehaviorOnMalformedDoc {
     IGNORE,
     WARN,
@@ -404,6 +437,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
     addProxyConfigs(configDef);
     addSslConfigs(configDef);
     addKerberosConfigs(configDef);
+    addAwsConfigs(configDef);
     addDataStreamConfigs(configDef);
     return configDef;
   }
@@ -782,6 +816,119 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
     );
   }
 
+  private static void addAwsConfigs(ConfigDef configDef) {
+    final String group = "AWS";
+    int order = 0;
+    configDef.define(
+            AWS_SIGNING_ENABLED_CONFIG,
+            Type.BOOLEAN,
+            false,
+            Importance.MEDIUM,
+            AWS_SIGNING_ENABLED_DOC,
+            group,
+            ++order,
+            Width.SHORT,
+            "Enable AWS Signing"
+    ).define(
+            AWS_REGION_CONFIG,
+            Type.STRING,
+            AWS_REGION_DEFAULT,
+            new RegionValidator(),
+            Importance.MEDIUM,
+            AWS_REGION_DOC,
+            group,
+            ++order,
+            Width.LONG,
+            "AWS region",
+            new RegionRecommender()
+    ).define(
+            AWS_CREDENTIALS_PROVIDER_CLASS_CONFIG,
+            Type.CLASS,
+            AWS_CREDENTIALS_PROVIDER_CLASS_DEFAULT,
+            new CredentialsProviderValidator(),
+            Importance.LOW,
+            "Credentials provider or provider chain to use for authentication to AWS. By default "
+                    + "the connector uses 'DefaultAWSCredentialsProviderChain'.",
+            group,
+            ++order,
+            Width.LONG,
+            "AWS Credentials Provider Class"
+    );
+  }
+
+  @SuppressWarnings("unchecked")
+  public AwsCredentialsProvider getCredentialsProvider() {
+    try {
+      AwsCredentialsProvider provider = ((Class<? extends AwsCredentialsProvider>)
+              getClass(ElasticsearchSinkConnectorConfig.AWS_CREDENTIALS_PROVIDER_CLASS_CONFIG))
+              .newInstance();
+
+      if (provider instanceof Configurable) {
+        Map<String, Object> configs = originalsWithPrefix(AWS_CREDENTIALS_PROVIDER_CONFIG_PREFIX);
+        configs.remove(AWS_CREDENTIALS_PROVIDER_CLASS_CONFIG.substring(
+                AWS_CREDENTIALS_PROVIDER_CONFIG_PREFIX.length()
+        ));
+        ((Configurable) provider).configure(configs);
+      }
+
+      return provider;
+    } catch (IllegalAccessException | InstantiationException e) {
+      throw new ConnectException(
+              "Invalid class for: "
+                      + ElasticsearchSinkConnectorConfig.AWS_CREDENTIALS_PROVIDER_CLASS_CONFIG,
+              e
+      );
+    }
+  }
+
+  private static class CredentialsProviderValidator implements ConfigDef.Validator {
+    @Override
+    public void ensureValid(String name, Object provider) {
+      if (provider instanceof Class
+              && AwsCredentialsProvider.class.isAssignableFrom((Class<?>) provider)) {
+        return;
+      }
+      throw new ConfigException(name, provider, "Class must extend: " + AwsCredentialsProvider.class
+      );
+    }
+
+    @Override
+    public String toString() {
+      return "Any class implementing: " + AwsCredentialsProvider.class;
+    }
+  }
+
+  private static class RegionRecommender implements ConfigDef.Recommender {
+    @Override
+    public List<Object> validValues(String name, Map<String, Object> connectorConfigs) {
+      return Collections.singletonList(Region.regions());
+    }
+
+    @Override
+    public boolean visible(String name, Map<String, Object> connectorConfigs) {
+      return true;
+    }
+  }
+
+  private static class RegionValidator implements ConfigDef.Validator {
+    @Override
+    public void ensureValid(String name, Object region) {
+      String regionStr = ((String) region).toLowerCase().trim();
+      if (Region.of(regionStr) == null) {
+        throw new ConfigException(
+                name,
+                region,
+                "Value must be one of: " + Utils.join(Region.regions(), ", ")
+        );
+      }
+    }
+
+    @Override
+    public String toString() {
+      return "[" + Utils.join(Region.regions(), ", ") + "]";
+    }
+  }
+
   private static void addDataStreamConfigs(ConfigDef configDef) {
     int order = 0;
     configDef
@@ -858,6 +1005,10 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
         getString(SSL_CONFIG_PREFIX + SSL_ENDPOINT_IDENTIFICATION_ALGORITHM_CONFIG);
     return sslEndpointIdentificationAlgorithm != null
         && sslEndpointIdentificationAlgorithm.isEmpty();
+  }
+
+  public boolean isAwsSigned() {
+    return getBoolean(AWS_SIGNING_ENABLED_CONFIG);
   }
 
   public boolean shouldIgnoreKey(String topic) {
