@@ -1,18 +1,17 @@
-/**
+/*
  * Copyright 2020 Confluent Inc.
  *
- * Licensed under the Apache License, Version 2.0 (the "License"); you may not
- * use this file except in compliance with the License. You may obtain a copy of
- * the License at
+ * Licensed under the Confluent Community License (the "License"); you may not use
+ * this file except in compliance with the License.  You may obtain a copy of the
+ * License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.confluent.io/confluent-community-license
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
- * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
- * License for the specific language governing permissions and limitations under
- * the License.
- **/
+ * WARRANTIES OF ANY KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations under the License.
+ */
 
 package io.confluent.connect.elasticsearch;
 
@@ -101,25 +100,27 @@ public class Validator {
       return new Config(validations);
     }
 
-    try (RestHighLevelClient client = clientFactory.client()) {
-      validateCredentials();
-      validateDataStreamConfigs();
-      validateIgnoreConfigs();
-      validateKerberos();
-      validateLingerMs();
-      validateMaxBufferedRecords();
-      validateProxy();
-      validateSsl();
+    validateCredentials();
+    validateDataStreamConfigs();
+    validateIgnoreConfigs();
+    validateKerberos();
+    validateLingerMs();
+    validateMaxBufferedRecords();
+    validateProxy();
+    validateSsl();
 
-      if (!hasErrors()) {
-        // no point if previous configs are invalid
+    if (!hasErrors()) {
+      // no point in connection validation if previous ones fails
+      try (RestHighLevelClient client = clientFactory.client()) {
         validateConnection(client);
-      }
-      if (!hasErrors()) {
         validateVersion(client);
+      } catch (IOException e) {
+        log.warn("Closing the client failed.", e);
+      } catch (Throwable e) {
+        log.error("Failed to create client to verify connection. ", e);
+        addErrorMessage(CONNECTION_URL_CONFIG, "Failed to create client to verify connection. "
+            + e.getMessage());
       }
-    } catch (IOException e) {
-      log.warn("Closing the client failed.", e);
     }
 
     return new Config(validations);
@@ -476,7 +477,6 @@ public class Validator {
                     .toArray(new HttpHost[config.connectionUrls().size()])
             )
             .setHttpClientConfigCallback(configCallbackHandler)
-            .setRequestConfigCallback(configCallbackHandler)
     );
   }
 

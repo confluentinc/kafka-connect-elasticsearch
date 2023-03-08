@@ -42,6 +42,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BehaviorOnMalformedDoc;
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BehaviorOnNullValues;
@@ -52,7 +53,10 @@ import io.confluent.connect.elasticsearch.helper.ElasticsearchHelperClient;
 import io.confluent.connect.elasticsearch.helper.NetworkErrorContainer;
 import java.io.IOException;
 import java.util.HashMap;
+import java.util.LinkedList;
+import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import org.apache.kafka.common.config.SslConfigs;
 import org.apache.kafka.common.record.TimestampType;
@@ -64,6 +68,9 @@ import org.apache.kafka.connect.sink.ErrantRecordReporter;
 import org.apache.kafka.connect.sink.SinkRecord;
 import org.apache.kafka.test.TestUtils;
 import org.elasticsearch.ElasticsearchStatusException;
+import org.elasticsearch.action.DocWriteRequest;
+import org.elasticsearch.action.bulk.BulkItemResponse;
+import org.elasticsearch.index.VersionType;
 import org.elasticsearch.search.SearchHit;
 import org.junit.After;
 import org.junit.AfterClass;
@@ -87,6 +94,7 @@ public class ElasticsearchClientTest {
   private ElasticsearchSinkConnectorConfig config;
   private Map<String, String> props;
   private String index;
+  private OffsetTracker offsetTracker;
 
   @BeforeClass
   public static void setupBeforeAll() {
@@ -109,6 +117,7 @@ public class ElasticsearchClientTest {
     config = new ElasticsearchSinkConnectorConfig(props);
     converter = new DataConverter(config);
     helperClient = new ElasticsearchHelperClient(container.getConnectionUrl(), config);
+    offsetTracker = mock(OffsetTracker.class);
   }
 
   @After
@@ -120,7 +129,8 @@ public class ElasticsearchClientTest {
 
   @Test
   public void testClose() {
-    ElasticsearchClient client = new ElasticsearchClient(config, null);
+
+    ElasticsearchClient client = new ElasticsearchClient(config, null, () -> offsetTracker.updateOffsets());
     client.close();
   }
 
@@ -128,7 +138,7 @@ public class ElasticsearchClientTest {
   public void testCloseFails() throws Exception {
     props.put(BATCH_SIZE_CONFIG, "1");
     props.put(MAX_IN_FLIGHT_REQUESTS_CONFIG, "1");
-    ElasticsearchClient client = new ElasticsearchClient(config, null) {
+    ElasticsearchClient client = new ElasticsearchClient(config, null, () -> offsetTracker.updateOffsets()) {
       @Override
       public void close() {
         try {
@@ -150,7 +160,7 @@ public class ElasticsearchClientTest {
 
   @Test
   public void testCreateIndex() throws IOException {
-    ElasticsearchClient client = new ElasticsearchClient(config, null);
+    ElasticsearchClient client = new ElasticsearchClient(config, null, () -> offsetTracker.updateOffsets());
     assertFalse(helperClient.indexExists(index));
 
     client.createIndexOrDataStream(index);
@@ -164,7 +174,7 @@ public class ElasticsearchClientTest {
     props.put(DATA_STREAM_DATASET_CONFIG, DATA_STREAM_DATASET);
     config = new ElasticsearchSinkConnectorConfig(props);
     index = createIndexName(TOPIC);
-    ElasticsearchClient client = new ElasticsearchClient(config, null);
+    ElasticsearchClient client = new ElasticsearchClient(config, null, () -> offsetTracker.updateOffsets());
     index = createIndexName(TOPIC);
 
     assertTrue(client.createIndexOrDataStream(index));
@@ -179,7 +189,7 @@ public class ElasticsearchClientTest {
     props.put(DATA_STREAM_DATASET_CONFIG, DATA_STREAM_DATASET);
     config = new ElasticsearchSinkConnectorConfig(props);
     index = createIndexName(TOPIC);
-    ElasticsearchClient client = new ElasticsearchClient(config, null);
+    ElasticsearchClient client = new ElasticsearchClient(config, null, () -> offsetTracker.updateOffsets());
     index = createIndexName(TOPIC);
 
     assertTrue(client.createIndexOrDataStream(index));
@@ -189,7 +199,7 @@ public class ElasticsearchClientTest {
 
   @Test
   public void testDoesNotCreateAlreadyExistingIndex() throws IOException {
-    ElasticsearchClient client = new ElasticsearchClient(config, null);
+    ElasticsearchClient client = new ElasticsearchClient(config, null, () -> offsetTracker.updateOffsets());
     assertFalse(helperClient.indexExists(index));
 
     assertTrue(client.createIndexOrDataStream(index));
@@ -202,7 +212,7 @@ public class ElasticsearchClientTest {
 
   @Test
   public void testIndexExists() throws IOException {
-    ElasticsearchClient client = new ElasticsearchClient(config, null);
+    ElasticsearchClient client = new ElasticsearchClient(config, null, () -> offsetTracker.updateOffsets());
     assertFalse(helperClient.indexExists(index));
 
     assertTrue(client.createIndexOrDataStream(index));
@@ -212,7 +222,7 @@ public class ElasticsearchClientTest {
 
   @Test
   public void testIndexDoesNotExist() throws IOException {
-    ElasticsearchClient client = new ElasticsearchClient(config, null);
+    ElasticsearchClient client = new ElasticsearchClient(config, null, () -> offsetTracker.updateOffsets());
     assertFalse(helperClient.indexExists(index));
 
     assertFalse(client.indexExists(index));
@@ -222,7 +232,7 @@ public class ElasticsearchClientTest {
   @Test
   @SuppressWarnings("unchecked")
   public void testCreateMapping() throws IOException {
-    ElasticsearchClient client = new ElasticsearchClient(config, null);
+    ElasticsearchClient client = new ElasticsearchClient(config, null, () -> offsetTracker.updateOffsets());
     client.createIndexOrDataStream(index);
 
     client.createMapping(index, schema());
@@ -245,7 +255,7 @@ public class ElasticsearchClientTest {
 
   @Test
   public void testHasMapping() {
-    ElasticsearchClient client = new ElasticsearchClient(config, null);
+    ElasticsearchClient client = new ElasticsearchClient(config, null, () -> offsetTracker.updateOffsets());
     client.createIndexOrDataStream(index);
 
     client.createMapping(index, schema());
@@ -256,7 +266,7 @@ public class ElasticsearchClientTest {
 
   @Test
   public void testDoesNotHaveMapping() {
-    ElasticsearchClient client = new ElasticsearchClient(config, null);
+    ElasticsearchClient client = new ElasticsearchClient(config, null, () -> offsetTracker.updateOffsets());
     client.createIndexOrDataStream(index);
 
     assertFalse(client.hasMapping(index));
@@ -268,23 +278,23 @@ public class ElasticsearchClientTest {
     props.put(MAX_IN_FLIGHT_REQUESTS_CONFIG, "1");
     props.put(MAX_BUFFERED_RECORDS_CONFIG, "1");
     config = new ElasticsearchSinkConnectorConfig(props);
-    ElasticsearchClient client = new ElasticsearchClient(config, null);
+    ElasticsearchClient client = new ElasticsearchClient(config, null, () -> offsetTracker.updateOffsets());
     client.createIndexOrDataStream(index);
 
     writeRecord(sinkRecord(0), client);
-    assertEquals(1, client.numRecords.get());
+    assertEquals(1, client.numBufferedRecords.get());
     client.flush();
 
     waitUntilRecordsInES(1);
-    assertEquals(1, helperClient.getDocCount(index));
-    assertEquals(0, client.numRecords.get());
+    assertEquals(1, helperClient.getDocCount(INDEX));
+    assertEquals(0, client.numBufferedRecords.get());
 
     writeRecord(sinkRecord(1), client);
-    assertEquals(1, client.numRecords.get());
+    assertEquals(1, client.numBufferedRecords.get());
 
     // will block until the previous record is flushed
     writeRecord(sinkRecord(2), client);
-    assertEquals(1, client.numRecords.get());
+    assertEquals(1, client.numBufferedRecords.get());
 
     waitUntilRecordsInES(3);
     client.close();
@@ -294,12 +304,14 @@ public class ElasticsearchClientTest {
   public void testFlush() throws Exception {
     props.put(LINGER_MS_CONFIG, String.valueOf(TimeUnit.DAYS.toMillis(1)));
     config = new ElasticsearchSinkConnectorConfig(props);
-    ElasticsearchClient client = new ElasticsearchClient(config, null);
+    ElasticsearchClient client = new ElasticsearchClient(config, null, () -> offsetTracker.updateOffsets());
     client.createIndexOrDataStream(index);
 
     writeRecord(sinkRecord(0), client);
     assertEquals(0, helperClient.getDocCount(index)); // should be empty before flush
+
     client.flush();
+
     waitUntilRecordsInES(1);
     assertEquals(1, helperClient.getDocCount(index));
     client.close();
@@ -307,7 +319,7 @@ public class ElasticsearchClientTest {
 
   @Test
   public void testIndexRecord() throws Exception {
-    ElasticsearchClient client = new ElasticsearchClient(config, null);
+    ElasticsearchClient client = new ElasticsearchClient(config, null, () -> offsetTracker.updateOffsets());
     client.createIndexOrDataStream(index);
 
     writeRecord(sinkRecord(0), client);
@@ -324,7 +336,7 @@ public class ElasticsearchClientTest {
     props.put(IGNORE_KEY_CONFIG, "false");
     config = new ElasticsearchSinkConnectorConfig(props);
     converter = new DataConverter(config);
-    ElasticsearchClient client = new ElasticsearchClient(config, null);
+    ElasticsearchClient client = new ElasticsearchClient(config, null, () -> offsetTracker.updateOffsets());
     client.createIndexOrDataStream(index);
 
     writeRecord(sinkRecord("key0", 0), client);
@@ -347,7 +359,7 @@ public class ElasticsearchClientTest {
     props.put(IGNORE_KEY_CONFIG, "false");
     config = new ElasticsearchSinkConnectorConfig(props);
     converter = new DataConverter(config);
-    ElasticsearchClient client = new ElasticsearchClient(config, null);
+    ElasticsearchClient client = new ElasticsearchClient(config, null, () -> offsetTracker.updateOffsets());
     client.createIndexOrDataStream(index);
 
     writeRecord(sinkRecord("key0", 0), client);
@@ -392,7 +404,7 @@ public class ElasticsearchClientTest {
     config = new ElasticsearchSinkConnectorConfig(props);
     converter = new DataConverter(config);
 
-    ElasticsearchClient client = new ElasticsearchClient(config, null);
+    ElasticsearchClient client = new ElasticsearchClient(config, null, () -> offsetTracker.updateOffsets());
     client.createIndexOrDataStream(index);
     client.createMapping(index, schema());
 
@@ -420,7 +432,7 @@ public class ElasticsearchClientTest {
 
   @Test(expected = ConnectException.class)
   public void testFailOnBadRecord() throws Exception {
-    ElasticsearchClient client = new ElasticsearchClient(config, null);
+    ElasticsearchClient client = new ElasticsearchClient(config, null, () -> offsetTracker.updateOffsets());
     client.createIndexOrDataStream(index);
     client.createMapping(index, schema());
 
@@ -453,17 +465,17 @@ public class ElasticsearchClientTest {
   }
 
   @Test
-  public void testRetryRecordsOnFailure() throws Exception {
+  public void testRetryRecordsOnSocketTimeoutFailure() throws Exception {
     props.put(LINGER_MS_CONFIG, "60000");
     props.put(BATCH_SIZE_CONFIG, "2");
     props.put(MAX_RETRIES_CONFIG, "100");
     props.put(RETRY_BACKOFF_MS_CONFIG, "1000");
+    props.put(MAX_IN_FLIGHT_REQUESTS_CONFIG, "1");
     config = new ElasticsearchSinkConnectorConfig(props);
     converter = new DataConverter(config);
 
-
     // mock bulk processor to throw errors
-    ElasticsearchClient client = new ElasticsearchClient(config, null);
+    ElasticsearchClient client = new ElasticsearchClient(config, null, () -> offsetTracker.updateOffsets());
     client.createIndexOrDataStream(index);
 
     // bring down ES service
@@ -475,7 +487,7 @@ public class ElasticsearchClientTest {
     client.flush();
 
     // keep the ES service down for a couple of timeouts
-    Thread.sleep(config.readTimeoutMs() * 4);
+    Thread.sleep(config.readTimeoutMs() * 4L);
 
     // bring up ES service
     delay.stop();
@@ -491,7 +503,9 @@ public class ElasticsearchClientTest {
     converter = new DataConverter(config);
 
     ErrantRecordReporter reporter = mock(ErrantRecordReporter.class);
-    ElasticsearchClient client = new ElasticsearchClient(config, reporter);
+    when(reporter.report(any(), any()))
+            .thenReturn(CompletableFuture.completedFuture(null));
+    ElasticsearchClient client = new ElasticsearchClient(config, reporter, () -> offsetTracker.updateOffsets());
     client.createIndexOrDataStream(index);
     client.createMapping(index, schema());
 
@@ -524,7 +538,7 @@ public class ElasticsearchClientTest {
   @Test
   public void testReporterNotCalled() throws Exception {
     ErrantRecordReporter reporter = mock(ErrantRecordReporter.class);
-    ElasticsearchClient client = new ElasticsearchClient(config, reporter);
+    ElasticsearchClient client = new ElasticsearchClient(config, reporter, () -> offsetTracker.updateOffsets());
     client.createIndexOrDataStream(index);
 
     writeRecord(sinkRecord(0), client);
@@ -538,6 +552,116 @@ public class ElasticsearchClientTest {
     client.close();
   }
 
+
+  /**
+   * Cause a version conflict error.
+   * Assumes that Elasticsearch VersionType is 'EXTERNAL' for the records
+   * @param client The Elasticsearch client object to which to send records
+   * @return List of duplicated SinkRecord objects
+   */
+  private List<SinkRecord> causeExternalVersionConflictError(ElasticsearchClient client) throws InterruptedException {
+    client.createIndexOrDataStream(index);
+
+    final int conflict_record_count = 2;
+
+    int offset = 0;
+
+    // Sequentially increase out record version (which comes from the offset)
+    for (; offset < conflict_record_count; ++offset) {
+      writeRecord(sinkRecord(offset), client);
+    }
+
+    List<SinkRecord> conflict_list = new LinkedList<SinkRecord>();
+
+    // Write the second half and keep the records
+    for (; offset < conflict_record_count * 2; ++offset) {
+      SinkRecord sink_record = sinkRecord(offset);
+      writeRecord(sink_record, client);
+      conflict_list.add(sink_record);
+    }
+
+    client.flush();
+    client.waitForInFlightRequests();
+
+    // At the end of the day, it's just one record being overwritten
+    waitUntilRecordsInES(1);
+
+    // Duplicates arbitrarily in reverse order
+
+    for (SinkRecord sink_record : conflict_list) {
+      writeRecord(sink_record, client);
+    }
+
+    client.flush();
+    client.waitForInFlightRequests();
+
+    return conflict_list;
+  }
+
+  /**
+   * If the record version is set to VersionType.EXTERNAL (normal case for non-streaming),
+   * then same or less version number will throw a version conflict exception.
+   * @throws Exception will be thrown if the test fails
+   */
+  @Test
+  public void testExternalVersionConflictReporterNotCalled() throws Exception {
+    props.put(IGNORE_KEY_CONFIG, "false");
+    config = new ElasticsearchSinkConnectorConfig(props);
+    converter = new DataConverter(config);
+
+    ErrantRecordReporter reporter = mock(ErrantRecordReporter.class);
+    ElasticsearchClient client = new ElasticsearchClient(config, reporter, () -> offsetTracker.updateOffsets());
+
+    List<SinkRecord> duplicate_records = causeExternalVersionConflictError(client);
+
+    // Make sure that no error was reported for any record(s)
+    for (SinkRecord duplicated_record : duplicate_records) {
+      verify(reporter, never()).report(eq(duplicated_record), any(Throwable.class));
+    }
+    client.close();
+  }
+
+  /**
+   * If the record version is set to VersionType.INTERNAL (normal case streaming/logging),
+   * then same or less version number will throw a version conflict exception.
+   * In this test, we are checking that the client function `handleResponse`
+   * properly reports an error for seeing the version conflict error along with
+   * VersionType of INTERNAL.  We still actually cause the error via an external
+   * version conflict error, but flip the version type to internal before it is interpreted.
+   * @throws Exception will be thrown if the test fails
+   */
+  @Test
+  public void testHandleResponseInternalVersionConflictReporterCalled() throws Exception {
+    props.put(IGNORE_KEY_CONFIG, "false");
+    config = new ElasticsearchSinkConnectorConfig(props);
+    converter = new DataConverter(config);
+
+    ErrantRecordReporter reporter = mock(ErrantRecordReporter.class);
+
+    // We will cause a version conflict error, but test that handleResponse()
+    // correctly reports the error when it interprets the version conflict as
+    // "INTERNAL" (version maintained by Elasticsearch) rather than
+    // "EXTERNAL" (version maintained by the connector as kafka offset)
+    ElasticsearchClient client = new ElasticsearchClient(config, reporter, () -> offsetTracker.updateOffsets()) {
+      protected boolean handleResponse(BulkItemResponse response, DocWriteRequest<?> request,
+                                    long executionId) {
+        // Make it think it was an internal version conflict.
+        // Note that we don't make any attempt to reset the response version number,
+        // which will be -1 here.
+        request.versionType(VersionType.INTERNAL);
+        return super.handleResponse(response, request, executionId);
+      }
+    };
+
+    List<SinkRecord> duplicate_records = causeExternalVersionConflictError(client);
+
+    // Make sure that error was reported for either offset [1, 2] record(s)
+    for (SinkRecord duplicated_record : duplicate_records) {
+      verify(reporter, times(1)).report(eq(duplicated_record), any(Throwable.class));
+    }
+    client.close();
+  }
+
   @Test
   public void testNoVersionConflict() throws Exception {
     props.put(IGNORE_KEY_CONFIG, "false");
@@ -547,8 +671,8 @@ public class ElasticsearchClientTest {
 
     ErrantRecordReporter reporter = mock(ErrantRecordReporter.class);
     ErrantRecordReporter reporter2 = mock(ErrantRecordReporter.class);
-    ElasticsearchClient client = new ElasticsearchClient(config, reporter);
-    ElasticsearchClient client2 = new ElasticsearchClient(config, reporter2);
+    ElasticsearchClient client = new ElasticsearchClient(config, reporter, () -> offsetTracker.updateOffsets());
+    ElasticsearchClient client2 = new ElasticsearchClient(config, reporter2, () -> offsetTracker.updateOffsets());
 
     client.createIndexOrDataStream(index);
 
@@ -573,7 +697,7 @@ public class ElasticsearchClientTest {
     container = ElasticsearchContainer.fromSystemProperties().withSslEnabled(true);
     container.start();
 
-    String address = container.getConnectionUrl().replace(container.getContainerIpAddress(), container.hostMachineIpAddress());
+    String address = container.getConnectionUrl(false);
     props.put(CONNECTION_URL_CONFIG, address);
     props.put(CONNECTION_USERNAME_CONFIG, ELASTIC_SUPERUSER_NAME);
     props.put(CONNECTION_PASSWORD_CONFIG, ELASTIC_SUPERUSER_PASSWORD);
@@ -586,7 +710,7 @@ public class ElasticsearchClientTest {
     config = new ElasticsearchSinkConnectorConfig(props);
     converter = new DataConverter(config);
 
-    ElasticsearchClient client = new ElasticsearchClient(config, null);
+    ElasticsearchClient client = new ElasticsearchClient(config, null, () -> offsetTracker.updateOffsets());
     helperClient = new ElasticsearchHelperClient(address, config);
     client.createIndexOrDataStream(index);
 
@@ -609,7 +733,7 @@ public class ElasticsearchClientTest {
     props.put(DATA_STREAM_DATASET_CONFIG, DATA_STREAM_DATASET);
     config = new ElasticsearchSinkConnectorConfig(props);
     converter = new DataConverter(config);
-    ElasticsearchClient client = new ElasticsearchClient(config, null);
+    ElasticsearchClient client = new ElasticsearchClient(config, null, () -> offsetTracker.updateOffsets());
     index = createIndexName(TOPIC);
 
     assertTrue(client.createIndexOrDataStream(index));
@@ -634,7 +758,7 @@ public class ElasticsearchClientTest {
   public void testConnectionUrlExtraSlash() {
     props.put(CONNECTION_URL_CONFIG, container.getConnectionUrl() + "/");
     config = new ElasticsearchSinkConnectorConfig(props);
-    ElasticsearchClient client = new ElasticsearchClient(config, null);
+    ElasticsearchClient client = new ElasticsearchClient(config, null, () -> offsetTracker.updateOffsets());
     client.close();
   }
 
@@ -689,6 +813,7 @@ public class ElasticsearchClientTest {
   }
 
   private void writeRecord(SinkRecord record, ElasticsearchClient client) {
-    client.index(record, converter.convertRecord(record, createIndexName(record.topic())));
+    client.index(record, converter.convertRecord(record, createIndexName(record.topic())),
+            new AsyncOffsetTracker.AsyncOffsetState(record.kafkaOffset()));
   }
 }
