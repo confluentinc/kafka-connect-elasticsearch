@@ -15,6 +15,23 @@
 
 package io.confluent.connect.elasticsearch.integration;
 
+import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
+import io.confluent.connect.elasticsearch.ElasticsearchClient;
+import io.confluent.connect.elasticsearch.ElasticsearchSinkConnector;
+import io.confluent.connect.elasticsearch.jest.JestElasticsearchClient;
+import org.apache.kafka.connect.json.JsonConverter;
+import org.apache.kafka.connect.storage.StringConverter;
+import org.apache.kafka.test.TestUtils;
+import org.junit.After;
+import org.junit.AfterClass;
+import org.junit.Before;
+import org.junit.BeforeClass;
+
+import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
+
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_KEY_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_SCHEMA_CONFIG;
@@ -28,22 +45,7 @@ import static org.apache.kafka.connect.runtime.SinkConnectorConfig.TOPICS_CONFIG
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
-import com.google.gson.JsonArray;
-import com.google.gson.JsonObject;
-import io.confluent.connect.elasticsearch.ElasticsearchClient;
-import io.confluent.connect.elasticsearch.ElasticsearchSinkConnector;
-import io.confluent.connect.elasticsearch.jest.JestElasticsearchClient;
-import java.io.IOException;
-import java.util.HashMap;
-import java.util.Map;
-import org.apache.kafka.connect.json.JsonConverter;
-import org.apache.kafka.connect.storage.StringConverter;
-import org.apache.kafka.test.TestUtils;
-import org.junit.After;
-import org.junit.AfterClass;
-import org.junit.Before;
-
-public class ElasticsearchConnectorBaseIT extends BaseConnectorIT {
+public abstract class ElasticsearchConnectorBaseIT extends BaseConnectorIT {
 
   protected static final int NUM_RECORDS = 5;
   protected static final int TASKS_MAX = 1;
@@ -56,13 +58,19 @@ public class ElasticsearchConnectorBaseIT extends BaseConnectorIT {
   protected ElasticsearchClient client;
   protected Map<String, String> props;
 
+  @BeforeClass
+  public static void setupBeforeAll() {
+    container = ElasticsearchContainer.fromSystemProperties();
+    container.start();
+  }
+
   @AfterClass
   public static void cleanupAfterAll() {
     container.close();
   }
 
   @Before
-  public void setup() {
+  public void setup() throws Exception {
     startConnect();
     connect.kafka().createTopic(TOPIC);
 
@@ -71,7 +79,7 @@ public class ElasticsearchConnectorBaseIT extends BaseConnectorIT {
   }
 
   @After
-  public void cleanup() throws IOException {
+  public void cleanup() throws Exception {
     stopConnect();
     client.deleteAll();
     client.close();
@@ -85,7 +93,7 @@ public class ElasticsearchConnectorBaseIT extends BaseConnectorIT {
     Map<String, String> props = new HashMap<>();
 
     // generic configs
-    props.put(CONNECTOR_CLASS_CONFIG, ElasticsearchSinkConnector.class.getName());
+    props.put(CONNECTOR_CLASS_CONFIG, ElasticsearchSinkConnector.class.getSimpleName());
     props.put(TOPICS_CONFIG, TOPIC);
     props.put(TASKS_MAX_CONFIG, Integer.toString(TASKS_MAX));
     props.put(KEY_CONVERTER_CLASS_CONFIG, StringConverter.class.getName());
@@ -107,7 +115,6 @@ public class ElasticsearchConnectorBaseIT extends BaseConnectorIT {
 
     // wait for tasks to spin up
     waitForConnectorToStart(CONNECTOR_NAME, TASKS_MAX);
-
     writeRecords(NUM_RECORDS);
 
     verifySearchResults(NUM_RECORDS);
@@ -118,7 +125,7 @@ public class ElasticsearchConnectorBaseIT extends BaseConnectorIT {
   }
 
   protected void writeRecordsFromIndex(int start, int numRecords) {
-    for (int i  = start; i < start + numRecords; i++) {
+    for (int i = start; i < start + numRecords; i++) {
       connect.kafka().produce(TOPIC, String.valueOf(i), String.format("{\"doc_num\":%d}", i));
     }
   }
@@ -156,4 +163,5 @@ public class ElasticsearchConnectorBaseIT extends BaseConnectorIT {
         "Sufficient amount of document were not found in ES on time."
     );
   }
+
 }
