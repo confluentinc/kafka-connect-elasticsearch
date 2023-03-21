@@ -23,8 +23,6 @@ import org.slf4j.LoggerFactory;
 
 public class MyJestClientFactory extends JestClientFactory {
 
-  private static final Logger log = LoggerFactory.getLogger(MyJestClientFactory.class);
-
   @Override
   public void setHttpClientConfig(HttpClientConfig httpClientConfig) {
     super.setHttpClientConfig(httpClientConfig);
