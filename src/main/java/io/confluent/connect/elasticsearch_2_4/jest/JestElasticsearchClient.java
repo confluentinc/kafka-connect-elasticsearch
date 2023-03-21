@@ -128,7 +128,7 @@ public class JestElasticsearchClient implements ElasticsearchClient {
   // visible for testing
   public JestElasticsearchClient(String address) {
     try {
-      JestClientFactory factory = new JestClientFactory();
+      JestClientFactory factory = new MyJestClientFactory();
       factory.setHttpClientConfig(new HttpClientConfig.Builder(address)
           .multiThreaded(true)
           .build()
@@ -149,7 +149,7 @@ public class JestElasticsearchClient implements ElasticsearchClient {
   }
 
   public JestElasticsearchClient(Map<String, String> props) {
-    this(props, new JestClientFactory());
+    this(props, new MyJestClientFactory());
   }
 
   // visible for testing
@@ -592,6 +592,7 @@ public class JestElasticsearchClient implements ElasticsearchClient {
   }
 
   public BulkResponse executeBulk(BulkRequest bulk) throws IOException {
+    log.info(">> executeBulk");
     final BulkResult result = client.execute(((JestBulkRequest) bulk).getBulk());
 
     if (result.isSucceeded()) {
@@ -648,7 +649,7 @@ public class JestElasticsearchClient implements ElasticsearchClient {
           items.size()
       );
     }
-
+    log.error("<< executeBulk");
     return BulkResponse.failure(retriable, errorInfo, failedResponses);
   }
 

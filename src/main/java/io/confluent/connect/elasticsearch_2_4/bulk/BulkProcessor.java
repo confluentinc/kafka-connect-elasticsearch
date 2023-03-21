@@ -175,6 +175,7 @@ public class BulkProcessor<R, B> {
 
   // Visible for testing
   synchronized Future<BulkResponse> submitBatchWhenReady() throws InterruptedException {
+    log.info(">> submitBatchWhenReady");
     for (long waitStartTimeMs = time.milliseconds(), elapsedMs = 0;
          !stopRequested && !canSubmit(elapsedMs);
          elapsedMs = time.milliseconds() - waitStartTimeMs) {
@@ -184,6 +185,7 @@ public class BulkProcessor<R, B> {
     }
 
     // at this point, either stopRequested or canSubmit
+    log.info("<< submitBatchWhenReady --> if stopRequested=[{}] is false going to submitBatch()", stopRequested);
     return stopRequested
             ? CompletableFuture.completedFuture(
                     BulkResponse.failure(
@@ -196,6 +198,7 @@ public class BulkProcessor<R, B> {
   }
 
   private synchronized Future<BulkResponse> submitBatch() {
+    log.info(">> submitBatch");
     final int numUnsentRecords = unsentRecords.size();
     assert numUnsentRecords > 0;
     final int batchableSize = Math.min(batchSize, numUnsentRecords);
@@ -205,7 +208,7 @@ public class BulkProcessor<R, B> {
     }
     inFlightRecords += batchableSize;
     log.debug(
-        "Submitting batch of {} records; {} unsent and {} total in-flight records",
+        "<< Submitting batch of {} records; {} unsent and {} total in-flight records",
         batchableSize,
         numUnsentRecords,
         inFlightRecords
@@ -439,6 +442,7 @@ public class BulkProcessor<R, B> {
 
     @Override
     public BulkResponse call() throws Exception {
+      log.info(">> BulkTask.call()");
       final BulkResponse rsp;
       try {
         rsp = execute();
@@ -447,10 +451,12 @@ public class BulkProcessor<R, B> {
         throw e;
       }
       onBatchCompletion(batch.size());
+      log.info("<< BulkTask.call()");
       return rsp;
     }
 
     private BulkResponse execute() throws Exception {
+      log.info(">> BulkTask.execute()");
       final long startTime = System.currentTimeMillis();
       final B bulkReq;
       try {
@@ -469,12 +475,12 @@ public class BulkProcessor<R, B> {
       for (int attempts = 1, retryAttempts = 0; true; ++attempts, ++retryAttempts) {
         boolean retriable = true;
         try {
-          log.trace("Executing batch {} of {} records with attempt {}/{}",
+          log.info("Executing batch {} of {} records with attempt {}/{}",
                   batchId, batch.size(), attempts, maxAttempts);
           final BulkResponse bulkRsp = bulkClient.execute(bulkReq);
           if (bulkRsp.isSucceeded()) {
             if (log.isDebugEnabled()) {
-              log.debug(
+              log.info(
                   "Completed batch {} of {} records with attempt {}/{} in {} ms",
                   batchId,
                   batch.size(),
