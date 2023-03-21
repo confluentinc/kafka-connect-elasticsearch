@@ -129,7 +129,7 @@ public class JestElasticsearchClient implements ElasticsearchClient {
   // visible for testing
   public JestElasticsearchClient(String address) {
     try {
-      JestClientFactory factory = new MyJestClientFactory();
+      JestClientFactory factory = new JestClientFactory();
       factory.setHttpClientConfig(new HttpClientConfig.Builder(address)
           .multiThreaded(true)
           .build()
@@ -150,7 +150,7 @@ public class JestElasticsearchClient implements ElasticsearchClient {
   }
 
   public JestElasticsearchClient(Map<String, String> props) {
-    this(props, new MyJestClientFactory());
+    this(props, new JestClientFactory());
   }
 
   // visible for testing
