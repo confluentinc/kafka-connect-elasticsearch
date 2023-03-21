@@ -18,8 +18,6 @@ package io.confluent.connect.elasticsearch_2_4.jest;
 import io.searchbox.client.JestClientFactory;
 import io.searchbox.client.config.HttpClientConfig;
 import org.apache.http.client.config.RequestConfig;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 public class MyJestClientFactory extends JestClientFactory {
 
