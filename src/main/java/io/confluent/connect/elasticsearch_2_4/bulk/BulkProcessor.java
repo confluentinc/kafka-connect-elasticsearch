@@ -474,7 +474,7 @@ public class BulkProcessor<R, B> {
           final BulkResponse bulkRsp = bulkClient.execute(bulkReq);
           if (bulkRsp.isSucceeded()) {
             if (log.isDebugEnabled()) {
-              log.info(
+              log.debug(
                   "Completed batch {} of {} records with attempt {}/{} in {} ms",
                   batchId,
                   batch.size(),

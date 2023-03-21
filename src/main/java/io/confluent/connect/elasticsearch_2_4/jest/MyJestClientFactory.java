@@ -27,16 +27,12 @@ public class MyJestClientFactory extends JestClientFactory {
 
   @Override
   public void setHttpClientConfig(HttpClientConfig httpClientConfig) {
-    log.info(">> MyJestClientFactory.setHttpClientConfig()");
     super.setHttpClientConfig(httpClientConfig);
-    log.info("<< MyJestClientFactory.setHttpClientConfig()");
   }
 
   @Override
   protected RequestConfig getRequestConfig() {
-    log.info(">> MyJestClientFactory.getRequestConfig()");
     RequestConfig config = super.getRequestConfig();
-    log.info("<< MyJestClientFactory.getRequestConfig()");
     return RequestConfig
             .copy(config)
             .setExpectContinueEnabled(true)
