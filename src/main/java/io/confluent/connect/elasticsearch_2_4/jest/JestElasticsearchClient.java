@@ -51,6 +51,9 @@ import io.searchbox.indices.DeleteIndex;
 import io.searchbox.indices.IndicesExists;
 import io.searchbox.indices.Refresh;
 import io.searchbox.indices.mapping.PutMapping;
+
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.util.HashMap;
 import java.util.Objects;
 import javax.net.ssl.HostnameVerifier;
@@ -593,12 +596,23 @@ public class JestElasticsearchClient implements ElasticsearchClient {
 
   public BulkResponse executeBulk(BulkRequest bulk) throws IOException {
     log.info(">> executeBulk");
-    final BulkResult result = client.execute(((JestBulkRequest) bulk).getBulk());
-
+    BulkResult result;
+    try {
+      result = client.execute(((JestBulkRequest) bulk).getBulk());
+    } catch (Exception e) {
+      StringWriter sw = new StringWriter();
+      PrintWriter pw = new PrintWriter(sw);
+      e.printStackTrace(pw);
+      log.error("-- executeBulk got exception when calling client.execute."
+              + "exception is: {}"
+              + "message is: {}"
+              + "stacktrace is: {}" , e, e.getMessage(), sw);
+      throw e;
+    }
     if (result.isSucceeded()) {
       return BulkResponse.success();
     }
-    log.debug("Bulk request failed; collecting error(s)");
+    log.info("Bulk request failed; collecting error(s)");
 
     boolean retriable = true;
 

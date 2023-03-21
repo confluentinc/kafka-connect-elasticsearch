@@ -185,7 +185,8 @@ public class BulkProcessor<R, B> {
     }
 
     // at this point, either stopRequested or canSubmit
-    log.info("<< submitBatchWhenReady --> if stopRequested=[{}] is false going to submitBatch()", stopRequested);
+    log.info("<< submitBatchWhenReady --> if stopRequested=[{}]"
+            + " is false going to submitBatch()", stopRequested);
     return stopRequested
             ? CompletableFuture.completedFuture(
                     BulkResponse.failure(
