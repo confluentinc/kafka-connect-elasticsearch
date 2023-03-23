@@ -24,6 +24,8 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
+
+import io.confluent.connect.elasticsearch_2_4.index.mapping.IndexMapper;
 import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.common.config.ConfigDef.CaseInsensitiveValidString;
@@ -302,12 +304,21 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   private static final String PROXY_GROUP = "Proxy";
   private static final String SSL_GROUP = "Security";
 
+  public static final String INDEX_MAPPER_CONFIG = "index.mapper";
+  private static final String INDEX_MAPPER_DISPLAY = "The topic mapper class";
+  private static final String INDEX_MAPPER_DOC =
+          "The class that determines the index to write the sink data to. ";
+  private static final String INDEX_MAPPER_DEFAULT =
+          "io.confluent.connect.elasticsearch.index.mapping.DefaultIndexMapper";
+  private IndexMapper indexMapper;
+
   protected static ConfigDef baseConfigDef() {
     final ConfigDef configDef = new ConfigDef();
     addConnectorConfigs(configDef);
     addConversionConfigs(configDef);
     addProxyConfigs(configDef);
     addSecurityConfigs(configDef);
+    addIndexMappingConfigs(configDef);
     return configDef;
   }
 
@@ -665,6 +676,22 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
     );
     configDef.embed(
         SSL_CONFIG_PREFIX, SSL_GROUP, configDef.configKeys().size() + 2, sslConfigDef
+    );
+  }
+
+  private static void addIndexMappingConfigs(ConfigDef configDef) {
+    int order = 0;
+    configDef
+            .define(
+                    INDEX_MAPPER_CONFIG,
+                    ConfigDef.Type.STRING,
+                    INDEX_MAPPER_DEFAULT,
+                    ConfigDef.Importance.HIGH,
+                    INDEX_MAPPER_DOC,
+                    DATA_CONVERSION_GROUP,
+                    ++order,
+                    ConfigDef.Width.LONG,
+                    INDEX_MAPPER_DISPLAY
     );
   }
 

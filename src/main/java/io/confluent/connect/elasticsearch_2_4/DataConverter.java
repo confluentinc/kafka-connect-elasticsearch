@@ -15,6 +15,8 @@
 
 package io.confluent.connect.elasticsearch_2_4;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.connect.data.ConnectSchema;
 import org.apache.kafka.connect.data.Date;
@@ -33,6 +35,7 @@ import org.apache.kafka.connect.storage.Converter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -51,6 +54,8 @@ public class DataConverter {
 
   private static final Logger log = LoggerFactory.getLogger(DataConverter.class);
   private static final Converter JSON_CONVERTER;
+
+  private ObjectMapper objectMapper;
 
   static {
     JSON_CONVERTER = new JsonConverter();
@@ -75,6 +80,7 @@ public class DataConverter {
     this.useCompactMapEntries = useCompactMapEntries;
     this.behaviorOnNullValues =
         Objects.requireNonNull(behaviorOnNullValues, "behaviorOnNullValues cannot be null.");
+    this.objectMapper = new ObjectMapper();
   }
 
   private String convertKey(Schema keySchema, Object key) {
@@ -185,6 +191,27 @@ public class DataConverter {
     final String payload = getPayload(record, ignoreSchema);
     final Long version = ignoreKey ? null : record.kafkaOffset();
     return new IndexableRecord(new Key(index, type, id), payload, version);
+  }
+
+  public JsonNode getValueAsJson(SinkRecord record) {
+    if (record.value() == null) {
+      return null;
+    }
+
+    byte[] rawJsonPayload = JSON_CONVERTER.fromConnectData(
+            record.topic(),
+            record.valueSchema(),
+            record.value()
+    );
+    JsonNode jsonPayload;
+    try {
+      jsonPayload = objectMapper.readTree(rawJsonPayload);
+    } catch (IOException e) {
+      // Should not happen if the payload was retrieved correctly.
+      jsonPayload = null;
+    }
+
+    return jsonPayload;
   }
 
   private String getPayload(SinkRecord record, boolean ignoreSchema) {

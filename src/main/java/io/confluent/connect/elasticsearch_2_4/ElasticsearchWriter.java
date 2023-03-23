@@ -15,7 +15,10 @@
 
 package io.confluent.connect.elasticsearch_2_4;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import io.confluent.connect.elasticsearch_2_4.bulk.BulkProcessor;
+import io.confluent.connect.elasticsearch_2_4.index.mapping.DefaultIndexMapper;
+import io.confluent.connect.elasticsearch_2_4.index.mapping.IndexMapper;
 import org.apache.kafka.common.utils.SystemTime;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.sink.ErrantRecordReporter;
@@ -53,6 +56,8 @@ public class ElasticsearchWriter {
   private final DataConverter converter;
 
   private final Set<String> existingMappings;
+
+  private final IndexMapper indexMapper;
 
   ElasticsearchWriter(
       ElasticsearchClient client,
@@ -101,6 +106,7 @@ public class ElasticsearchWriter {
     );
 
     existingMappings = new HashSet<>();
+    indexMapper = new DefaultIndexMapper();
   }
 
   public static class Builder {
@@ -260,7 +266,7 @@ public class ElasticsearchWriter {
           sinkRecord.kafkaOffset()
       );
 
-      final String index = convertTopicToIndexName(sinkRecord.topic());
+      final String index = getIndexName(sinkRecord.topic(), sinkRecord);
       final boolean ignoreKey = ignoreKeyTopics.contains(sinkRecord.topic()) || this.ignoreKey;
       final boolean ignoreSchema =
           ignoreSchemaTopics.contains(sinkRecord.topic()) || this.ignoreSchema;
@@ -332,8 +338,12 @@ public class ElasticsearchWriter {
    * name. Elasticsearch accepts only lowercase index names
    * (<a href="https://github.com/elastic/elasticsearch/issues/29420">ref</a>_.
    */
-  private String convertTopicToIndexName(String topic) {
-    final String indexOverride = topicToIndexMap.get(topic);
+  private String getIndexName(String topic, SinkRecord sinkRecord) {
+    JsonNode valueJson = null;
+    if (sinkRecord.value() != null) {
+      valueJson = converter.getValueAsJson(sinkRecord);
+    }
+    final String indexOverride = indexMapper.getIndex(topic, valueJson);
     String index = indexOverride != null ? indexOverride : topic.toLowerCase();
     log.trace("Topic '{}' was translated as index '{}'", topic, index);
     return index;
@@ -368,18 +378,4 @@ public class ElasticsearchWriter {
     bulkProcessor.awaitStop(flushTimeoutMs);
     log.debug("Stopped Elastisearch writer");
   }
-
-  public void createIndicesForTopics(Set<String> assignedTopics) {
-    Objects.requireNonNull(assignedTopics);
-    client.createIndices(indicesForTopics(assignedTopics));
-  }
-
-  private Set<String> indicesForTopics(Set<String> assignedTopics) {
-    final Set<String> indices = new HashSet<>();
-    for (String topic : assignedTopics) {
-      indices.add(convertTopicToIndexName(topic));
-    }
-    return indices;
-  }
-
 }

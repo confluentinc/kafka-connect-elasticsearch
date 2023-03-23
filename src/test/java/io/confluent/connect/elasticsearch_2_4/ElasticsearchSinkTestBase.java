@@ -18,6 +18,7 @@ package io.confluent.connect.elasticsearch_2_4;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 
+import io.confluent.connect.elasticsearch_2_4.index.mapping.DefaultIndexMapper;
 import io.confluent.connect.elasticsearch_2_4.jest.JestElasticsearchClient;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.connect.data.Schema;
@@ -33,10 +34,14 @@ import org.junit.Before;
 
 import java.io.IOException;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedList;
 import java.util.Map;
 
 import static io.confluent.connect.elasticsearch_2_4.DataConverter.BehaviorOnNullValues;
+import static java.util.Collections.emptyList;
 
 public class ElasticsearchSinkTestBase extends ESIntegTestCase {
 
@@ -102,19 +107,22 @@ public class ElasticsearchSinkTestBase extends ESIntegTestCase {
   }
 
   protected void verifySearchResults(Collection<SinkRecord> records, boolean ignoreKey, boolean ignoreSchema) throws IOException {
-    verifySearchResults(records, TOPIC, ignoreKey, ignoreSchema);
-  }
+    JsonArray allHits = new JsonArray();
+    Collection<String> indices = new HashSet<>();
+    for (SinkRecord record: records) {
+      indices.add(DefaultIndexMapper.convertTopicToIndexName(record.topic()));
+    }
+    for (String index: indices) {
+      final JsonObject result = client.search("", index, null);
 
-  protected void verifySearchResults(Collection<?> records, String index, boolean ignoreKey, boolean ignoreSchema) throws IOException {
-    final JsonObject result = client.search("", index, null);
-
-    final JsonArray rawHits = result.getAsJsonObject("hits").getAsJsonArray("hits");
-
-    assertEquals(records.size(), rawHits.size());
+      final JsonArray rawHits = result.getAsJsonObject("hits").getAsJsonArray("hits");
+      allHits.addAll(rawHits);
+    }
+    assertEquals(records.size(), allHits.size());
 
     Map<String, String> hits = new HashMap<>();
-    for (int i = 0; i < rawHits.size(); ++i) {
-      final JsonObject hitData = rawHits.get(i).getAsJsonObject();
+    for (int i = 0; i < allHits.size(); ++i) {
+      final JsonObject hitData = allHits.get(i).getAsJsonObject();
       final String id = hitData.get("_id").getAsString();
       final String source = hitData.get("_source").getAsJsonObject().toString();
       hits.put(id, source);
@@ -122,6 +130,7 @@ public class ElasticsearchSinkTestBase extends ESIntegTestCase {
 
     for (Object record : records) {
       if (record instanceof SinkRecord) {
+        String index = DefaultIndexMapper.convertTopicToIndexName(((SinkRecord) record).topic());
         IndexableRecord indexableRecord = converter.convertRecord((SinkRecord) record, index, TYPE, ignoreKey, ignoreSchema);
         assertEquals(indexableRecord.payload, hits.get(indexableRecord.key.id));
       } else {
@@ -140,27 +149,4 @@ public class ElasticsearchSinkTestBase extends ESIntegTestCase {
         .put(Node.HTTP_ENABLED, true)
         .build();
   }
-
-  /* For ES 5.x (requires Java 8) */
-  /*
-  @Override
-  protected Settings nodeSettings(int nodeOrdinal) {
-    int randomPort = randomIntBetween(49152, 65525);
-    return Settings.builder()
-        .put(super.nodeSettings(nodeOrdinal))
-        .put(NetworkModule.HTTP_ENABLED.getKey(), true)
-        .put(HttpTransportSettings.SETTING_HTTP_PORT.getKey(), randomPort)
-        .put("network.host", "127.0.0.1")
-        .build();
-  }
-
-  @Override
-  protected Collection<Class<? extends Plugin>> nodePlugins() {
-    System.setProperty("es.set.netty.runtime.available.processors", "false");
-    Collection<Class<? extends Plugin>> al = new ArrayList<Class<? extends Plugin>>();
-    al.add(Netty4Plugin.class);
-    return al;
-  }
-  */
-
 }

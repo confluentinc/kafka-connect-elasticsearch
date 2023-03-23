@@ -39,6 +39,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import static io.confluent.connect.elasticsearch_2_4.DataConverter.BehaviorOnNullValues;
 import static org.hamcrest.Matchers.containsString;
@@ -112,7 +113,7 @@ public class ElasticsearchWriterTest extends ElasticsearchSinkTestBase {
         false,
         BehaviorOnNullValues.IGNORE);
     writeDataAndRefresh(writer, records);
-    verifySearchResults(records, indexOverride);
+    verifySearchResults(records);
   }
 
   @Test
@@ -268,9 +269,7 @@ public class ElasticsearchWriterTest extends ElasticsearchSinkTestBase {
     ElasticsearchWriter writer = initWriter(client);
     writeDataAndRefresh(writer, Collections.singletonList(sinkRecord));
 
-    Collection<?> expectedRecords =
-        Collections.singletonList(new ObjectMapper().writeValueAsString(map));
-    verifySearchResults(expectedRecords, TOPIC);
+    verifySearchResults(Collections.singleton(sinkRecord));
   }
 
   @Test
@@ -542,7 +541,6 @@ public class ElasticsearchWriterTest extends ElasticsearchSinkTestBase {
         .setBehaviorOnNullValues(behavior)
         .build();
     writer.start();
-    writer.createIndicesForTopics(Collections.singleton(TOPIC));
     return writer;
   }
 
@@ -556,9 +554,5 @@ public class ElasticsearchWriterTest extends ElasticsearchSinkTestBase {
 
   private void verifySearchResults(Collection<SinkRecord> records) throws Exception {
     verifySearchResults(records, ignoreKey, ignoreSchema);
-  }
-
-  private void verifySearchResults(Collection<?> records, String index) throws Exception {
-    verifySearchResults(records, index, ignoreKey, ignoreSchema);
   }
 }
