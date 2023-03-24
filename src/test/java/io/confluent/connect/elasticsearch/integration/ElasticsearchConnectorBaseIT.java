@@ -45,7 +45,7 @@ import static org.apache.kafka.connect.runtime.SinkConnectorConfig.TOPICS_CONFIG
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
-public abstract class ElasticsearchConnectorBaseIT extends BaseConnectorIT {
+public class ElasticsearchConnectorBaseIT extends BaseConnectorIT {
 
   protected static final int NUM_RECORDS = 5;
   protected static final int TASKS_MAX = 1;
