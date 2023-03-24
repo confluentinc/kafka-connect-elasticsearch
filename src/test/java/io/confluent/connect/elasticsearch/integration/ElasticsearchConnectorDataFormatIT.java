@@ -98,7 +98,6 @@ public class ElasticsearchConnectorDataFormatIT extends ElasticsearchConnectorBa
     return Arrays.asList(JsonSchemaConverter.class, ProtobufConverter.class, AvroConverter.class);
   }
 
-
   public ElasticsearchConnectorDataFormatIT(Class<? extends Converter> converter) throws Exception {
     this.converterClass = converter;
     this.converter = converterClass.getConstructor().newInstance();
@@ -115,11 +114,18 @@ public class ElasticsearchConnectorDataFormatIT extends ElasticsearchConnectorBa
         ), false
     );
 
+    // start the connector
+    connect.configureConnector(CONNECTOR_NAME, props);
+
     // wait for schema-registry to spin up
     waitForSchemaRegistryToStart();
 
+    // wait for tasks to spin up
+    waitForConnectorToStart(CONNECTOR_NAME, TASKS_MAX);
+
     // run test
     writeRecords(NUM_RECORDS);
+    verifySearchResults(NUM_RECORDS);
   }
 
   @Override
