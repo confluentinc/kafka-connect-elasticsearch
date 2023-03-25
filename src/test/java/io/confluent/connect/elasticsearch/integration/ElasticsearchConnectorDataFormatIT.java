@@ -57,7 +57,6 @@ public class ElasticsearchConnectorDataFormatIT extends ElasticsearchConnectorBa
     restApp = new RestApp(port, null, connect.kafka().bootstrapServers(),
         KAFKASTORE_TOPIC, CompatibilityLevel.NONE.name, true, new Properties());
     restApp.start();
-    waitForSchemaRegistryToStart();
   }
 
   protected void stopSchemaRegistry() throws Exception {
