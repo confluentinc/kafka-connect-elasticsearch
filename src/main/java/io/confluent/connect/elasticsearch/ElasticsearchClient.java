@@ -61,6 +61,7 @@ import org.elasticsearch.client.indices.GetMappingsRequest;
 import org.elasticsearch.client.indices.GetMappingsResponse;
 import org.elasticsearch.client.indices.PutMappingRequest;
 import org.elasticsearch.cluster.metadata.MappingMetadata;
+import org.elasticsearch.common.unit.ByteSizeValue;
 import org.elasticsearch.core.TimeValue;
 import org.elasticsearch.index.VersionType;
 import org.slf4j.Logger;
@@ -85,7 +86,7 @@ import static java.util.stream.Collectors.toList;
  * in failure of the task.
  */
 @SuppressWarnings("checkstyle:ClassDataAbstractionCoupling")
-public class ElasticsearchClient {
+public class ElasticsearchClient extends SearchClient{
 
   private static final Logger log = LoggerFactory.getLogger(ElasticsearchClient.class);
 
@@ -111,7 +112,7 @@ public class ElasticsearchClient {
   private final ConcurrentMap<Long, List<SinkRecordAndOffset>> inFlightRequests;
   private final ElasticsearchSinkConnectorConfig config;
   private final ErrantRecordReporter reporter;
-  private final RestHighLevelClient client;
+  protected final RestHighLevelClient client;
   private final ExecutorService bulkExecutorService;
   private final Time clock;
   private final Lock inFlightRequestLock = new ReentrantLock();
@@ -157,7 +158,7 @@ public class ElasticsearchClient {
     this.bulkProcessor = BulkProcessor
         .builder(buildConsumer(), buildListener(afterBulkCallback))
         .setBulkActions(config.batchSize())
-        .setBulkSize(config.bulkSize())
+        .setBulkSize((ByteSizeValue) config.bulkSize())
         .setConcurrentRequests(config.maxInFlightRequests() - 1) // 0 = no concurrent requests
         .setFlushInterval(TimeValue.timeValueMillis(config.lingerMs()))
         // Disabling bulk processor retries, because they only cover a small subset of errors

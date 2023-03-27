@@ -70,7 +70,7 @@ public class ValidatorTest {
   private MainResponse mockInfoResponse;
   private Map<String, String> props;
   private RestHighLevelClient mockClient;
-  private Validator validator;
+  private ElasticsearchValidator validator;
 
   @Before
   public void setup() throws IOException {
@@ -85,14 +85,14 @@ public class ValidatorTest {
 
   @Test
   public void testValidDefaultConfig() {
-    validator = new Validator(props, () -> mockClient);
+    validator = new ElasticsearchValidator(props, () -> mockClient);
     Config result = validator.validate();
     assertNoErrors(result);
   }
 
   @Test
   public void testInvalidIndividualConfigs() {
-    validator = new Validator(new HashMap<>(), () -> mockClient);
+    validator = new ElasticsearchValidator(new HashMap<>(), () -> mockClient);
     Config result = validator.validate();
     assertHasErrorMessage(result, CONNECTION_URL_CONFIG, "Missing required configuration");
   }
@@ -101,7 +101,7 @@ public class ValidatorTest {
   public void testValidUpsertDeleteOnDefaultConfig() {
     props.put(BEHAVIOR_ON_NULL_VALUES_CONFIG, "delete");
     props.put(WRITE_METHOD_CONFIG, "upsert");
-    validator = new Validator(props, () -> mockClient);
+    validator = new ElasticsearchValidator(props, () -> mockClient);
     Config result = validator.validate();
     assertNoErrors(result);
   }
@@ -109,7 +109,7 @@ public class ValidatorTest {
   @Test
   public void testInvalidCredentials() {
     props.put(CONNECTION_USERNAME_CONFIG, "username");
-    validator = new Validator(props, () -> mockClient);
+    validator = new ElasticsearchValidator(props, () -> mockClient);
 
     Config result = validator.validate();
     assertHasErrorMessage(result, CONNECTION_USERNAME_CONFIG, "must be set");
@@ -117,7 +117,7 @@ public class ValidatorTest {
     props.remove(CONNECTION_USERNAME_CONFIG);
 
     props.put(CONNECTION_PASSWORD_CONFIG, "password");
-    validator = new Validator(props);
+    validator = new ElasticsearchValidator(props);
     result = validator.validate();
     assertHasErrorMessage(result, CONNECTION_USERNAME_CONFIG, "must be set");
     assertHasErrorMessage(result, CONNECTION_PASSWORD_CONFIG, "must be set");
@@ -126,7 +126,7 @@ public class ValidatorTest {
   @Test
   public void testClientThrowsElasticsearchStatusException() throws IOException {
     when(mockClient.ping(any(RequestOptions.class))).thenThrow(new ElasticsearchStatusException("Deleted resource.", RestStatus.GONE));
-    validator = new Validator(props, () -> mockClient);
+    validator = new ElasticsearchValidator(props, () -> mockClient);
     Config result = validator.validate();
     assertHasErrorMessage(result, CONNECTION_URL_CONFIG, "Could not connect to Elasticsearch. Error message: Deleted resource.");
   }
@@ -134,7 +134,7 @@ public class ValidatorTest {
   @Test
   public void testValidCredentials() {
     // username and password not set
-    validator = new Validator(props, () -> mockClient);
+    validator = new ElasticsearchValidator(props, () -> mockClient);
 
     Config result = validator.validate();
     assertNoErrors(result);
@@ -142,7 +142,7 @@ public class ValidatorTest {
     // both set
     props.put(CONNECTION_USERNAME_CONFIG, "username");
     props.put(CONNECTION_PASSWORD_CONFIG, "password");
-    validator = new Validator(props, () -> mockClient);
+    validator = new ElasticsearchValidator(props, () -> mockClient);
 
     result = validator.validate();
     assertNoErrors(result);
@@ -151,7 +151,7 @@ public class ValidatorTest {
   @Test
   public void testInvalidMissingOneDataStreamConfig() {
     props.put(DATA_STREAM_DATASET_CONFIG, "a_valid_dataset");
-    validator = new Validator(props, () -> mockClient);
+    validator = new ElasticsearchValidator(props, () -> mockClient);
     Config result = validator.validate();
     assertHasErrorMessage(result, DATA_STREAM_DATASET_CONFIG, "must be set");
     assertHasErrorMessage(result, DATA_STREAM_TYPE_CONFIG, "must be set");
@@ -161,13 +161,13 @@ public class ValidatorTest {
   public void testInvalidUpsertDeleteOnValidDataStreamConfigs() {
     props.put(DATA_STREAM_DATASET_CONFIG, "a_valid_dataset");
     props.put(DATA_STREAM_TYPE_CONFIG, "logs");
-    validator = new Validator(props, () -> mockClient);
+    validator = new ElasticsearchValidator(props, () -> mockClient);
     Config result = validator.validate();
     assertNoErrors(result);
 
     props.put(BEHAVIOR_ON_NULL_VALUES_CONFIG, "delete");
     props.put(WRITE_METHOD_CONFIG, "upsert");
-    validator = new Validator(props, () -> mockClient);
+    validator = new ElasticsearchValidator(props, () -> mockClient);
 
     result = validator.validate();
     assertHasErrorMessage(result, BEHAVIOR_ON_NULL_VALUES_CONFIG, "must not be");
@@ -180,7 +180,7 @@ public class ValidatorTest {
     props.put(IGNORE_KEY_TOPICS_CONFIG, "some,topics");
     props.put(IGNORE_SCHEMA_CONFIG, "true");
     props.put(IGNORE_SCHEMA_TOPICS_CONFIG, "some,other,topics");
-    validator = new Validator(props, () -> mockClient);
+    validator = new ElasticsearchValidator(props, () -> mockClient);
 
     Config result = validator.validate();
     assertHasErrorMessage(result, IGNORE_KEY_CONFIG, "is true");
@@ -194,7 +194,7 @@ public class ValidatorTest {
     // topics configs not set
     props.put(IGNORE_KEY_CONFIG, "true");
     props.put(IGNORE_SCHEMA_CONFIG, "true");
-    validator = new Validator(props, () -> mockClient);
+    validator = new ElasticsearchValidator(props, () -> mockClient);
 
     Config result = validator.validate();
     assertNoErrors(result);
@@ -204,7 +204,7 @@ public class ValidatorTest {
     props.put(IGNORE_KEY_TOPICS_CONFIG, "some,topics");
     props.put(IGNORE_SCHEMA_CONFIG, "false");
     props.put(IGNORE_SCHEMA_TOPICS_CONFIG, "some,other,topics");
-    validator = new Validator(props, () -> mockClient);
+    validator = new ElasticsearchValidator(props, () -> mockClient);
 
     result = validator.validate();
     assertNoErrors(result);
@@ -213,7 +213,7 @@ public class ValidatorTest {
   @Test
   public void testInvalidKerberos() throws IOException {
     props.put(KERBEROS_PRINCIPAL_CONFIG, "principal");
-    validator = new Validator(props, () -> mockClient);
+    validator = new ElasticsearchValidator(props, () -> mockClient);
 
     Config result = validator.validate();
     assertHasErrorMessage(result, KERBEROS_PRINCIPAL_CONFIG, "must be set");
@@ -224,7 +224,7 @@ public class ValidatorTest {
     props.put(KERBEROS_PRINCIPAL_CONFIG, "principal");
     props.put(KERBEROS_KEYTAB_PATH_CONFIG, keytab.toString());
     props.put(PROXY_HOST_CONFIG, "proxy.com");
-    validator = new Validator(props, () -> mockClient);
+    validator = new ElasticsearchValidator(props, () -> mockClient);
 
     result = validator.validate();
     assertHasErrorMessage(result, KERBEROS_PRINCIPAL_CONFIG, "not supported with proxy settings");
@@ -235,7 +235,7 @@ public class ValidatorTest {
     props.remove(PROXY_HOST_CONFIG);
     props.put(CONNECTION_USERNAME_CONFIG, "username");
     props.put(CONNECTION_PASSWORD_CONFIG, "password");
-    validator = new Validator(props, () -> mockClient);
+    validator = new ElasticsearchValidator(props, () -> mockClient);
 
     result = validator.validate();
     assertHasErrorMessage(result, KERBEROS_PRINCIPAL_CONFIG, "Either only Kerberos");
@@ -249,7 +249,7 @@ public class ValidatorTest {
   @Test
   public void testValidKerberos() throws IOException {
     // kerberos configs not set
-    validator = new Validator(props, () -> mockClient);
+    validator = new ElasticsearchValidator(props, () -> mockClient);
 
     Config result = validator.validate();
     assertNoErrors(result);
@@ -258,7 +258,7 @@ public class ValidatorTest {
     Path keytab = Files.createTempFile("es", ".keytab");
     props.put(KERBEROS_PRINCIPAL_CONFIG, "principal");
     props.put(KERBEROS_KEYTAB_PATH_CONFIG, keytab.toString());
-    validator = new Validator(props, () -> mockClient);
+    validator = new ElasticsearchValidator(props, () -> mockClient);
 
     result = validator.validate();
     assertNoErrors(result);
@@ -269,7 +269,7 @@ public class ValidatorTest {
   public void testInvalidLingerMs() {
     props.put(LINGER_MS_CONFIG, "1001");
     props.put(FLUSH_TIMEOUT_MS_CONFIG, "1000");
-    validator = new Validator(props, () -> mockClient);
+    validator = new ElasticsearchValidator(props, () -> mockClient);
 
     Config result = validator.validate();
     assertHasErrorMessage(result, LINGER_MS_CONFIG, "can not be larger than");
@@ -280,7 +280,7 @@ public class ValidatorTest {
   public void testValidLingerMs() {
     props.put(LINGER_MS_CONFIG, "999");
     props.put(FLUSH_TIMEOUT_MS_CONFIG, "1000");
-    validator = new Validator(props, () -> mockClient);
+    validator = new ElasticsearchValidator(props, () -> mockClient);
 
     Config result = validator.validate();
     assertNoErrors(result);
@@ -291,7 +291,7 @@ public class ValidatorTest {
     props.put(MAX_BUFFERED_RECORDS_CONFIG, "1");
     props.put(BATCH_SIZE_CONFIG, "2");
     props.put(MAX_IN_FLIGHT_REQUESTS_CONFIG, "2");
-    validator = new Validator(props, () -> mockClient);
+    validator = new ElasticsearchValidator(props, () -> mockClient);
 
     Config result = validator.validate();
     assertHasErrorMessage(result, MAX_BUFFERED_RECORDS_CONFIG, "must be larger than or equal to");
@@ -304,7 +304,7 @@ public class ValidatorTest {
     props.put(MAX_BUFFERED_RECORDS_CONFIG, "5");
     props.put(BATCH_SIZE_CONFIG, "2");
     props.put(MAX_IN_FLIGHT_REQUESTS_CONFIG, "2");
-    validator = new Validator(props, () -> mockClient);
+    validator = new ElasticsearchValidator(props, () -> mockClient);
 
     Config result = validator.validate();
     assertNoErrors(result);
@@ -315,7 +315,7 @@ public class ValidatorTest {
     props.put(PROXY_HOST_CONFIG, "");
     props.put(PROXY_USERNAME_CONFIG, "username");
     props.put(PROXY_PASSWORD_CONFIG, "password");
-    validator = new Validator(props, () -> mockClient);
+    validator = new ElasticsearchValidator(props, () -> mockClient);
 
     Config result = validator.validate();
     assertHasErrorMessage(result, PROXY_HOST_CONFIG, " must be set to use");
@@ -326,7 +326,7 @@ public class ValidatorTest {
 
     props.put(PROXY_HOST_CONFIG, "proxy");
     props.put(PROXY_PASSWORD_CONFIG, "password");
-    validator = new Validator(props, () -> mockClient);
+    validator = new ElasticsearchValidator(props, () -> mockClient);
 
     result = validator.validate();
     assertHasErrorMessage(result, PROXY_USERNAME_CONFIG, "Either both or neither");
@@ -336,7 +336,7 @@ public class ValidatorTest {
   @Test
   public void testValidProxy() {
     props.put(PROXY_HOST_CONFIG, "proxy");
-    validator = new Validator(props, () -> mockClient);
+    validator = new ElasticsearchValidator(props, () -> mockClient);
 
     Config result = validator.validate();
     assertNoErrors(result);
@@ -344,7 +344,7 @@ public class ValidatorTest {
     props.put(PROXY_HOST_CONFIG, "proxy");
     props.put(PROXY_USERNAME_CONFIG, "password");
     props.put(PROXY_PASSWORD_CONFIG, "password");
-    validator = new Validator(props, () -> mockClient);
+    validator = new ElasticsearchValidator(props, () -> mockClient);
 
     result = validator.validate();
     assertNoErrors(result);
@@ -354,7 +354,7 @@ public class ValidatorTest {
   public void testInvalidSsl() {
     // no SSL
     props.put(SECURITY_PROTOCOL_CONFIG, SecurityProtocol.SSL.name());
-    validator = new Validator(props, () -> mockClient);
+    validator = new ElasticsearchValidator(props, () -> mockClient);
 
     Config result = validator.validate();
     assertHasErrorMessage(result, SECURITY_PROTOCOL_CONFIG, "At least these SSL configs ");
@@ -365,7 +365,7 @@ public class ValidatorTest {
     props.put(SSL_CONFIG_PREFIX + SslConfigs.SSL_KEYSTORE_PASSWORD_CONFIG, "b");
     props.put(SSL_CONFIG_PREFIX + SslConfigs.SSL_TRUSTSTORE_LOCATION_CONFIG, "c");
     props.put(SSL_CONFIG_PREFIX + SslConfigs.SSL_TRUSTSTORE_PASSWORD_CONFIG, "d");
-    validator = new Validator(props, () -> mockClient);
+    validator = new ElasticsearchValidator(props, () -> mockClient);
 
     result = validator.validate();
     assertHasErrorMessage(result, SECURITY_PROTOCOL_CONFIG, "to use SSL configs");
@@ -373,7 +373,7 @@ public class ValidatorTest {
 
   @Test
   public void testIncompatibleESVersionWithConnector() {
-    validator = new Validator(props, () -> mockClient);
+    validator = new ElasticsearchValidator(props, () -> mockClient);
     when(mockInfoResponse.getVersion().getNumber()).thenReturn("6.0.0");
     Config result = validator.validate();
     assertHasErrorMessage(result, CONNECTION_URL_CONFIG, "not compatible with Elasticsearch");
@@ -381,7 +381,7 @@ public class ValidatorTest {
 
   @Test
   public void testCompatibleESVersionWithConnector() {
-    validator = new Validator(props, () -> mockClient);
+    validator = new ElasticsearchValidator(props, () -> mockClient);
     String[] compatibleESVersions = {"7.0.0", "7.9.3", "7.10.0", "7.12.1", "8.0.0", "10.10.10"};
     for (String version : compatibleESVersions) {
       when(mockInfoResponse.getVersion().getNumber()).thenReturn(version);
@@ -395,7 +395,7 @@ public class ValidatorTest {
   public void testValidSsl() {
     // no SSL
     props.put(SECURITY_PROTOCOL_CONFIG, SecurityProtocol.PLAINTEXT.name());
-    validator = new Validator(props, () -> mockClient);
+    validator = new ElasticsearchValidator(props, () -> mockClient);
 
     Config result = validator.validate();
     assertNoErrors(result);
@@ -406,7 +406,7 @@ public class ValidatorTest {
     props.put(SSL_CONFIG_PREFIX + SslConfigs.SSL_KEYSTORE_PASSWORD_CONFIG, "b");
     props.put(SSL_CONFIG_PREFIX + SslConfigs.SSL_TRUSTSTORE_LOCATION_CONFIG, "c");
     props.put(SSL_CONFIG_PREFIX + SslConfigs.SSL_TRUSTSTORE_PASSWORD_CONFIG, "d");
-    validator = new Validator(props, () -> mockClient);
+    validator = new ElasticsearchValidator(props, () -> mockClient);
 
     result = validator.validate();
     assertNoErrors(result);
@@ -414,7 +414,7 @@ public class ValidatorTest {
 
   @Test
   public void testValidConnection() {
-    validator = new Validator(props, () -> mockClient);
+    validator = new ElasticsearchValidator(props, () -> mockClient);
 
     Config result = validator.validate();
     assertNoErrors(result);
@@ -423,7 +423,7 @@ public class ValidatorTest {
   @Test
   public void testInvalidConnection() throws IOException {
     when(mockClient.ping(eq(RequestOptions.DEFAULT))).thenReturn(false);
-    validator = new Validator(props, () -> mockClient);
+    validator = new ElasticsearchValidator(props, () -> mockClient);
 
     Config result = validator.validate();
     assertHasErrorMessage(result, CONNECTION_URL_CONFIG, "Could not connect to Elasticsearch.");
@@ -432,7 +432,7 @@ public class ValidatorTest {
   @Test
   public void testInvalidConnectionThrows() throws IOException {
     when(mockClient.ping(eq(RequestOptions.DEFAULT))).thenThrow(new IOException("i iz fake"));
-    validator = new Validator(props, () -> mockClient);
+    validator = new ElasticsearchValidator(props, () -> mockClient);
 
     Config result = validator.validate();
     assertHasErrorMessage(result, CONNECTION_URL_CONFIG, "Could not connect to Elasticsearch.");
@@ -442,7 +442,7 @@ public class ValidatorTest {
   public void testTimestampMappingDataStreamSet() {
     configureDataStream();
     props.put(DATA_STREAM_TIMESTAMP_CONFIG, "one, two, fields");
-    validator = new Validator(props, () -> mockClient);
+    validator = new ElasticsearchValidator(props, () -> mockClient);
 
     Config result = validator.validate();
 
@@ -452,7 +452,7 @@ public class ValidatorTest {
   @Test
   public void testTimestampMappingDataStreamNotSet() {
     props.put(DATA_STREAM_TIMESTAMP_CONFIG, "one, two, fields");
-    validator = new Validator(props, () -> mockClient);
+    validator = new ElasticsearchValidator(props, () -> mockClient);
 
     Config result = validator.validate();
 
@@ -462,7 +462,7 @@ public class ValidatorTest {
   @Test
   public void testIncompatibleVersionDataStreamSet() {
     configureDataStream();
-    validator = new Validator(props, () -> mockClient);
+    validator = new ElasticsearchValidator(props, () -> mockClient);
     when(mockInfoResponse.getVersion().getNumber()).thenReturn("7.8.1");
 
     Config result = validator.validate();
@@ -473,7 +473,7 @@ public class ValidatorTest {
 
   @Test
   public void testIncompatibleVersionDataStreamNotSet() {
-    validator = new Validator(props, () -> mockClient);
+    validator = new ElasticsearchValidator(props, () -> mockClient);
     String[] incompatibleESVersions = {"7.8.0", "7.7.1", "7.6.2", "7.2.0", "7.1.1", "7.0.0-rc2"};
     for (String version : incompatibleESVersions) {
       when(mockInfoResponse.getVersion().getNumber()).thenReturn(version);
@@ -485,7 +485,7 @@ public class ValidatorTest {
 
   @Test
   public void testCompatibleVersionDataStreamNotSet() {
-    validator = new Validator(props, () -> mockClient);
+    validator = new ElasticsearchValidator(props, () -> mockClient);
     String[] compatibleESVersions = {"7.9.0", "7.9.3", "7.9.3-amd64", "7.10.0", "7.10.2", "7.11.0", "7.11.2", "7.12.0", "7.12.1",
         "8.0.0", "10.10.10", "10.1.10", "10.1.1", "8.10.10"};
     for (String version : compatibleESVersions) {
@@ -499,7 +499,7 @@ public class ValidatorTest {
   @Test
   public void testCompatibleVersionDataStreamSet() {
     configureDataStream();
-    validator = new Validator(props, () -> mockClient);
+    validator = new ElasticsearchValidator(props, () -> mockClient);
     String[] compatibleESVersions = {"7.9.0", "7.9.3", "7.9.3-amd64", "7.10.0", "7.10.2", "7.11.0", "7.11.2", "7.12.0", "7.12.1",
         "8.0.0", "10.10.10", "10.1.10", "10.1.1", "8.10.10"};
     for (String version : compatibleESVersions) {

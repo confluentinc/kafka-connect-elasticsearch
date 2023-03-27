@@ -21,6 +21,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.function.BooleanSupplier;
 
+import io.confluent.connect.elasticsearch.opensearch.OpensearchClient;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.connect.errors.ConnectException;
@@ -41,13 +42,14 @@ public class ElasticsearchSinkTask extends SinkTask {
   private static final Logger log = LoggerFactory.getLogger(ElasticsearchSinkTask.class);
 
   private DataConverter converter;
-  private ElasticsearchClient client;
+  private SearchClient client;
   private ElasticsearchSinkConnectorConfig config;
   private ErrantRecordReporter reporter;
   private Set<String> existingMappings;
   private Set<String> indexCache;
   private OffsetTracker offsetTracker;
   private PartitionPauser partitionPauser;
+  public String type;
 
   @Override
   public void start(Map<String, String> props) {
@@ -55,7 +57,7 @@ public class ElasticsearchSinkTask extends SinkTask {
   }
 
   // visible for testing
-  protected void start(Map<String, String> props, ElasticsearchClient client) {
+  protected void start(Map<String, String> props, SearchClient client) {
     log.info("Starting ElasticsearchSinkTask.");
 
     this.config = new ElasticsearchSinkConnectorConfig(props);
@@ -79,8 +81,16 @@ public class ElasticsearchSinkTask extends SinkTask {
       log.warn("AK versions prior to 2.6 do not support the errant record reporter.");
     }
     Runnable afterBulkCallback = () -> offsetTracker.updateOffsets();
-    this.client = client != null ? client
-        : new ElasticsearchClient(config, reporter, afterBulkCallback);
+    if(config.getServiceType().equals("Elasticsearch")){
+      this.type = "Elasticsearch";
+      this.client = client != null ? client
+              : new ElasticsearchClient(config, reporter, afterBulkCallback);
+    } else {
+      log.info("Opensearch client.....");
+      this.type = "Opensearch";
+      this.client = client != null ? client
+              : new OpensearchClient(config, reporter, afterBulkCallback);
+    }
 
     if (!config.flushSynchronously()) {
       this.offsetTracker = new AsyncOffsetTracker(context);

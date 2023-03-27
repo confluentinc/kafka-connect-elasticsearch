@@ -361,7 +361,11 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   );
   private static final String DATA_STREAM_TIMESTAMP_DISPLAY = "Data Stream Timestamp Field";
   private static final String DATA_STREAM_TIMESTAMP_DEFAULT = "";
-
+  private static final String SERVICE_TYPE_CONFIG =
+          "service.type";
+  private static final String SERVICE_TYPE_DISPLAY = "Elasticsearch or Opensearch";
+  private static final String SERVICE_TYPE_DEFAULT = "Elasticsearch";
+  private static final String SERVICE_TYPE_DOC = "Type of end service - Elasticsearch or opensearch";
   private static final String CONNECTOR_GROUP = "Connector";
   private static final String DATA_CONVERSION_GROUP = "Data Conversion";
   private static final String PROXY_GROUP = "Proxy";
@@ -583,6 +587,16 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
             ++order,
             Width.SHORT,
             READ_TIMEOUT_MS_DISPLAY
+        ).define(
+            SERVICE_TYPE_CONFIG,
+            Type.STRING,
+            SERVICE_TYPE_DEFAULT,
+            Importance.LOW,
+            SERVICE_TYPE_DOC,
+            CONNECTOR_GROUP,
+            ++order,
+            Width.SHORT,
+            SERVICE_TYPE_DISPLAY
     );
   }
 
@@ -882,8 +896,14 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
     return BehaviorOnNullValues.valueOf(getString(BEHAVIOR_ON_NULL_VALUES_CONFIG).toUpperCase());
   }
 
-  public ByteSizeValue bulkSize() {
-    return new ByteSizeValue(getLong(BULK_SIZE_BYTES_CONFIG));
+  public Object bulkSize() {
+    if(getServiceType().equals("Elasticsearch")){
+      return new org.elasticsearch.common.unit.ByteSizeValue(getLong(BULK_SIZE_BYTES_CONFIG));
+    }
+    else{
+      return new org.opensearch.common.unit.ByteSizeValue(getLong(BULK_SIZE_BYTES_CONFIG));
+    }
+
   }
 
   public boolean compression() {
@@ -995,6 +1015,8 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   public long retryBackoffMs() {
     return getLong(RETRY_BACKOFF_MS_CONFIG);
   }
+
+  public String getServiceType() { return getString(SERVICE_TYPE_CONFIG); }
 
   private SecurityProtocol securityProtocol() {
     return SecurityProtocol.valueOf(getString(SECURITY_PROTOCOL_CONFIG).toUpperCase());
