@@ -15,23 +15,6 @@
 
 package io.confluent.connect.elasticsearch.integration;
 
-import com.google.gson.JsonArray;
-import com.google.gson.JsonObject;
-import io.confluent.connect.elasticsearch.ElasticsearchClient;
-import io.confluent.connect.elasticsearch.ElasticsearchSinkConnector;
-import io.confluent.connect.elasticsearch.jest.JestElasticsearchClient;
-import org.apache.kafka.connect.json.JsonConverter;
-import org.apache.kafka.connect.storage.StringConverter;
-import org.apache.kafka.test.TestUtils;
-import org.junit.After;
-import org.junit.AfterClass;
-import org.junit.Before;
-import org.junit.BeforeClass;
-
-import java.io.IOException;
-import java.util.HashMap;
-import java.util.Map;
-
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_KEY_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_SCHEMA_CONFIG;
@@ -44,6 +27,22 @@ import static org.apache.kafka.connect.runtime.ConnectorConfig.VALUE_CONVERTER_C
 import static org.apache.kafka.connect.runtime.SinkConnectorConfig.TOPICS_CONFIG;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
+
+import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
+import io.confluent.connect.elasticsearch.ElasticsearchClient;
+import io.confluent.connect.elasticsearch.ElasticsearchSinkConnector;
+import io.confluent.connect.elasticsearch.jest.JestElasticsearchClient;
+import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
+import org.apache.kafka.connect.json.JsonConverter;
+import org.apache.kafka.connect.storage.StringConverter;
+import org.apache.kafka.test.TestUtils;
+import org.junit.After;
+import org.junit.AfterClass;
+import org.junit.Before;
+import org.junit.BeforeClass;
 
 public class ElasticsearchConnectorBaseIT extends BaseConnectorIT {
 
