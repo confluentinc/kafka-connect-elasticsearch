@@ -25,6 +25,7 @@ import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
+import io.confluent.connect.elasticsearch_2_4.cluster.mapping.ClusterMapper;
 import io.confluent.connect.elasticsearch_2_4.index.mapping.IndexMapper;
 import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.common.config.ConfigDef;
@@ -41,6 +42,7 @@ import org.apache.kafka.common.config.types.Password;
 import static io.confluent.connect.elasticsearch_2_4.jest.JestElasticsearchClient.WriteMethod;
 import static io.confluent.connect.elasticsearch_2_4.DataConverter.BehaviorOnNullValues;
 import static io.confluent.connect.elasticsearch_2_4.bulk.BulkProcessor.BehaviorOnMalformedDoc;
+import static io.confluent.connect.elasticsearch_2_4.util.ClassHelper.createInstance;
 import static org.apache.kafka.common.config.ConfigDef.Range.between;
 import static org.apache.kafka.common.config.SslConfigs.SSL_ENDPOINT_IDENTIFICATION_ALGORITHM_CONFIG;
 import static org.apache.kafka.common.config.SslConfigs.addClientSslSupport;
@@ -304,13 +306,41 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   private static final String PROXY_GROUP = "Proxy";
   private static final String SSL_GROUP = "Security";
 
-  public static final String INDEX_MAPPER_CONFIG = "index.mapper";
-  private static final String INDEX_MAPPER_DISPLAY = "The topic mapper class";
-  private static final String INDEX_MAPPER_DOC =
+  public static final String INDEX_MAPPER_TYPE = "index.mapper.type";
+
+  private static final String INDEX_MAPPER_TYPE_DISPLAY = "The topic mapper class";
+  private static final String INDEX_MAPPER_TYPE_DOC =
           "The class that determines the index to write the sink data to. ";
-  private static final String INDEX_MAPPER_DEFAULT =
-          "io.confluent.connect.elasticsearch.index.mapping.DefaultIndexMapper";
+  private static final String INDEX_MAPPER_TYPE_DEFAULT =
+          "io.confluent.connect.elasticsearch_2_4.index.mapping.DefaultIndexMapper";
+
+  public static final String INDEX_MAPPER_FIELD = "index.mapper.field";
+
+  private static final String INDEX_MAPPER_FIELD_DISPLAY =
+          "The field path in the value which is taken as index";
+  private static final String INDEX_MAPPER_FIELD_DOC =
+          "The field path in the value which is taken as index";
+  public static final String INDEX_MAPPER_FIELD_DEFAULT =
+          "";
+
+  public static final String CLUSTER_MAPPER_TYPE = "cluster.mapper.type";
+
+  private static final String CLUSTER_MAPPER_TYPE_DISPLAY = "The cluster mapper class";
+  private static final String CLUSTER_MAPPER_TYPE_DOC =
+          "The class that determines the cluster to write the sink data to. ";
+  private static final String CLUSTER_MAPPER_TYPE_DEFAULT =
+          "io.confluent.connect.elasticsearch_2_4.cluster.mapping.DefaultClusterMapper";
+
+  public static final String CLUSTER_MAPPER_FIELD = "cluster.mapper.field";
+
+  private static final String CLUSTER_MAPPER_FIELD_DISPLAY =
+          "The field path in the value which is taken as cluster";
+  private static final String CLUSTER_MAPPER_FIELD_DOC =
+          "The field path in the value which is taken as cluster";
+
+
   private IndexMapper indexMapper;
+  private ClusterMapper clusterMapper;
 
   protected static ConfigDef baseConfigDef() {
     final ConfigDef configDef = new ConfigDef();
@@ -682,16 +712,26 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   private static void addIndexMappingConfigs(ConfigDef configDef) {
     int order = 0;
     configDef
-            .define(
-                    INDEX_MAPPER_CONFIG,
-                    ConfigDef.Type.STRING,
-                    INDEX_MAPPER_DEFAULT,
-                    ConfigDef.Importance.HIGH,
-                    INDEX_MAPPER_DOC,
-                    DATA_CONVERSION_GROUP,
-                    ++order,
-                    ConfigDef.Width.LONG,
-                    INDEX_MAPPER_DISPLAY
+        .define(
+          INDEX_MAPPER_TYPE,
+          ConfigDef.Type.STRING,
+          INDEX_MAPPER_TYPE_DEFAULT,
+          ConfigDef.Importance.HIGH,
+          INDEX_MAPPER_TYPE_DOC,
+          DATA_CONVERSION_GROUP,
+          ++order,
+          ConfigDef.Width.LONG,
+          INDEX_MAPPER_TYPE_DISPLAY
+        ).define(
+          INDEX_MAPPER_FIELD,
+          ConfigDef.Type.STRING,
+          INDEX_MAPPER_FIELD_DEFAULT,
+          ConfigDef.Importance.HIGH,
+          INDEX_MAPPER_FIELD_DOC,
+          DATA_CONVERSION_GROUP,
+          ++order,
+          ConfigDef.Width.LONG,
+          INDEX_MAPPER_FIELD_DISPLAY
     );
   }
 
@@ -858,6 +898,28 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
 
   public WriteMethod writeMethod() {
     return WriteMethod.valueOf(getString(WRITE_METHOD_CONFIG).toUpperCase());
+  }
+
+  public IndexMapper getIndexMapper() {
+    if (indexMapper == null) {
+      indexMapper = createInstance(
+              INDEX_MAPPER_TYPE,
+              getString(INDEX_MAPPER_TYPE),
+              IndexMapper.class);
+      indexMapper.configure(this);
+    }
+    return indexMapper;
+  }
+
+  public ClusterMapper getClusterMapper() {
+    if (clusterMapper == null) {
+      clusterMapper = createInstance(
+              CLUSTER_MAPPER_TYPE,
+              getString(CLUSTER_MAPPER_TYPE),
+              ClusterMapper.class);
+      clusterMapper.configure(this);
+    }
+    return clusterMapper;
   }
 
   private Map<String, String> parseMapConfig(List<String> values) {

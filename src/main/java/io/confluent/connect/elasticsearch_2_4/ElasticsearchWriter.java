@@ -17,7 +17,7 @@ package io.confluent.connect.elasticsearch_2_4;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import io.confluent.connect.elasticsearch_2_4.bulk.BulkProcessor;
-import io.confluent.connect.elasticsearch_2_4.index.mapping.DefaultIndexMapper;
+import io.confluent.connect.elasticsearch_2_4.cluster.mapping.ClusterMapper;
 import io.confluent.connect.elasticsearch_2_4.index.mapping.IndexMapper;
 import org.apache.kafka.common.utils.SystemTime;
 import org.apache.kafka.connect.errors.ConnectException;
@@ -59,6 +59,8 @@ public class ElasticsearchWriter {
 
   private final IndexMapper indexMapper;
 
+  private final ClusterMapper clusterMapper;
+
   ElasticsearchWriter(
       ElasticsearchClient client,
       String type,
@@ -78,8 +80,9 @@ public class ElasticsearchWriter {
       boolean dropInvalidMessage,
       BehaviorOnNullValues behaviorOnNullValues,
       BehaviorOnMalformedDoc behaviorOnMalformedDoc,
-      ErrantRecordReporter reporter
-  ) {
+      ErrantRecordReporter reporter,
+      IndexMapper indexMapper,
+      ClusterMapper clusterMapper) {
     this.client = client;
     this.type = type;
     this.ignoreKey = ignoreKey;
@@ -91,6 +94,8 @@ public class ElasticsearchWriter {
     this.dropInvalidMessage = dropInvalidMessage;
     this.behaviorOnNullValues = behaviorOnNullValues;
     this.converter = new DataConverter(useCompactMapEntries, behaviorOnNullValues);
+    this.indexMapper = indexMapper;
+    this.clusterMapper = clusterMapper;
 
     bulkProcessor = new BulkProcessor<>(
         new SystemTime(),
@@ -106,7 +111,6 @@ public class ElasticsearchWriter {
     );
 
     existingMappings = new HashSet<>();
-    indexMapper = new DefaultIndexMapper();
   }
 
   public static class Builder {
@@ -129,6 +133,9 @@ public class ElasticsearchWriter {
     private BehaviorOnNullValues behaviorOnNullValues = BehaviorOnNullValues.DEFAULT;
     private BehaviorOnMalformedDoc behaviorOnMalformedDoc;
     private ErrantRecordReporter reporter;
+
+    private IndexMapper indexMapper;
+    private ClusterMapper clusterMapper;
 
     public Builder(ElasticsearchClient client) {
       this.client = client;
@@ -223,6 +230,17 @@ public class ElasticsearchWriter {
       return this;
     }
 
+    public Builder setIndexMapper(IndexMapper indexMapper) {
+      this.indexMapper = indexMapper;
+      return this;
+    }
+
+    public Builder setClusterMapper(ClusterMapper clusterMapper) {
+      this.clusterMapper = clusterMapper;
+      return this;
+    }
+
+
     public ElasticsearchWriter build() {
       return new ElasticsearchWriter(
           client,
@@ -243,7 +261,9 @@ public class ElasticsearchWriter {
           dropInvalidMessage,
           behaviorOnNullValues,
           behaviorOnMalformedDoc,
-          reporter
+          reporter,
+          indexMapper,
+          clusterMapper
       );
     }
   }
@@ -265,8 +285,12 @@ public class ElasticsearchWriter {
           sinkRecord.kafkaPartition(),
           sinkRecord.kafkaOffset()
       );
-
-      final String index = getIndexName(sinkRecord.topic(), sinkRecord);
+      String index = "";
+      try {
+        index = getIndexName(sinkRecord.topic(), sinkRecord);
+      } catch (Exception e) {
+        throw new ConnectException(e.getMessage());
+      }
       final boolean ignoreKey = ignoreKeyTopics.contains(sinkRecord.topic()) || this.ignoreKey;
       final boolean ignoreSchema =
           ignoreSchemaTopics.contains(sinkRecord.topic()) || this.ignoreSchema;
@@ -338,15 +362,30 @@ public class ElasticsearchWriter {
    * name. Elasticsearch accepts only lowercase index names
    * (<a href="https://github.com/elastic/elasticsearch/issues/29420">ref</a>_.
    */
-  private String getIndexName(String topic, SinkRecord sinkRecord) {
+  private String getIndexName(String topic, SinkRecord sinkRecord) throws Exception {
     JsonNode valueJson = null;
     if (sinkRecord.value() != null) {
       valueJson = converter.getValueAsJson(sinkRecord);
     }
     final String indexOverride = indexMapper.getIndex(topic, valueJson);
     String index = indexOverride != null ? indexOverride : topic.toLowerCase();
-    log.trace("Topic '{}' was translated as index '{}'", topic, index);
+    log.trace("calculated index is '{}'", index);
     return index;
+  }
+
+  /**
+   * Return the expected cluster name for a given topic, using the configured mapping or the topic
+   * name. Elasticsearch accepts only lowercase index names
+   * (<a href="https://github.com/elastic/elasticsearch/issues/29420">ref</a>_.
+   */
+  private Set<String> getClusterName(String topic, SinkRecord sinkRecord) throws Exception {
+    JsonNode valueJson = null;
+    if (sinkRecord.value() != null) {
+      valueJson = converter.getValueAsJson(sinkRecord);
+    }
+    final Set<String> cluster = clusterMapper.getCluster(topic, valueJson);;
+    log.trace("calculated cluster is '{}'", cluster);
+    return cluster;
   }
 
   public void flush() {

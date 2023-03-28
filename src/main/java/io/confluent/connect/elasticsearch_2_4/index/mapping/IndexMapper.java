@@ -22,5 +22,5 @@ import com.fasterxml.jackson.databind.JsonNode;
 public interface IndexMapper  {
   void configure(ElasticsearchSinkConnectorConfig configuration);
 
-  String getIndex(String topic, JsonNode jsonNode);
+  String getIndex(String topic, JsonNode jsonNode) throws Exception;
 }

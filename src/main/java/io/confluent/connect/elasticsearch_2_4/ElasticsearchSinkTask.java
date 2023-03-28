@@ -86,7 +86,10 @@ public class ElasticsearchSinkTask extends SinkTask {
           .setMaxRetry(config.maxRetries())
           .setDropInvalidMessage(config.dropInvalidMessage())
           .setBehaviorOnNullValues(config.behaviorOnNullValues())
-          .setBehaviorOnMalformedDoc(config.behaviorOnMalformedDoc());
+          .setBehaviorOnMalformedDoc(config.behaviorOnMalformedDoc())
+          .setIndexMapper(config.getIndexMapper())
+          .setClusterMapper(config.getClusterMapper());
+
 
       try {
         if (context.errantRecordReporter() == null) {

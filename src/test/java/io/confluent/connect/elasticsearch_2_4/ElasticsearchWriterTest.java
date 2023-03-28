@@ -17,6 +17,7 @@ package io.confluent.connect.elasticsearch_2_4;
 
 import com.carrotsearch.randomizedtesting.annotations.ThreadLeakScope;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.confluent.connect.elasticsearch_2_4.index.mapping.DefaultIndexMapper;
 import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaBuilder;
@@ -539,6 +540,7 @@ public class ElasticsearchWriterTest extends ElasticsearchSinkTestBase {
         .setMaxRetry(3)
         .setDropInvalidMessage(dropInvalidMessage)
         .setBehaviorOnNullValues(behavior)
+        .setIndexMapper(new DefaultIndexMapper())
         .build();
     writer.start();
     return writer;
