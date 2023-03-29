@@ -96,6 +96,7 @@ public class ElasticsearchClient {
       )
   );
 
+  private final boolean logSensitiveData;
   protected final AtomicInteger numRecords;
   private final AtomicReference<ConnectException> error;
   protected final BulkProcessor bulkProcessor;
@@ -119,6 +120,7 @@ public class ElasticsearchClient {
     this.config = config;
     this.reporter = reporter;
     this.clock = Time.SYSTEM;
+    this.logSensitiveData = config.shouldLogSensitiveData();
 
     ConfigCallbackHandler configCallbackHandler = new ConfigCallbackHandler(config);
     this.client = new RestHighLevelClient(
@@ -371,6 +373,25 @@ public class ElasticsearchClient {
   }
 
   /**
+   * Returns the formatted error message based on customers need to
+   * log exception traces.
+   * @param response The BulkItemResponse returned from Elasticsearch
+   * @param logSensitiveData Boolean flag to identify if customer needs to
+   *                         log exception traces for debugging
+   * @return String Formatted error message
+   */
+  private String getErrorMessage(BulkItemResponse response, boolean logSensitiveData) {
+    if (logSensitiveData) {
+      return response.getFailureMessage();
+    }
+    return String.format("Response status: '%s',\n"
+            + "Index: '%s',\n Document Id: '%s'. \n",
+            response.getFailure().getStatus(),
+            response.getFailure().getIndex(),
+            response.getFailure().getId());
+  }
+
+  /**
    * Calls the specified function with retries and backoffs until the retries are exhausted or the
    * function succeeds.
    *
@@ -467,7 +488,8 @@ public class ElasticsearchClient {
 
       error.compareAndSet(
           null,
-          new ConnectException("Indexing record failed.", response.getFailure().getCause())
+          new ConnectException("Indexing record failed.",
+                  new Throwable(getErrorMessage(response, logSensitiveData)))
       );
     }
   }
@@ -479,14 +501,8 @@ public class ElasticsearchClient {
    * @param response the failed response from ES
    */
   private void handleMalformedDocResponse(BulkItemResponse response) {
-    String errorMsg = String.format(
-        "Encountered an illegal document error -> Response status: '%s',\n"
-                + "Index: '%s',\n Document Id: '%s'. \n"
-                + "Ignoring and will not index record.",
-        response.getFailure().getStatus(),
-        response.getFailure().getIndex(),
-        response.getFailure().getId()
-    );
+    String errorMsg = String.format("Encountered an illegal document error '%s'."
+            + " Ignoring and will not index record." , getErrorMessage(response, logSensitiveData));
     switch (config.behaviorOnMalformedDoc()) {
       case IGNORE:
         log.debug(errorMsg);
@@ -496,24 +512,17 @@ public class ElasticsearchClient {
         return;
       case FAIL:
       default:
-        log.error(
-            "Encountered an illegal document error -> Response status: '{}',\n "
-                    + "Index: '{}',\n Document Id: '{}'\n"
-                    + " To ignore future records like this,"
-                    + " change the configuration '{}' to '{}'.",
-            response.getFailure().getStatus(),
-            response.getFailure().getIndex(),
-            response.getFailure().getId(),
-            ElasticsearchSinkConnectorConfig.BEHAVIOR_ON_MALFORMED_DOCS_CONFIG,
-            BehaviorOnMalformedDoc.IGNORE
+        log.error(String.format("Encountered an illegal document error '%s'."
+              + " To ignore future records like this,"
+              + " change the configuration '%s' to '%s'.",
+              getErrorMessage(response, logSensitiveData),
+              ElasticsearchSinkConnectorConfig.BEHAVIOR_ON_MALFORMED_DOCS_CONFIG,
+              BehaviorOnMalformedDoc.IGNORE)
         );
         error.compareAndSet(
             null,
             new ConnectException(
-                    "Indexing record failed -> Response status: "
-                    + response.getFailure().getStatus()
-                    + ",\n Index: " + response.getFailure().getIndex()
-                    + ",\n Document Id: " + response.getFailure().getId())
+                    "Indexing record failed -> " + getErrorMessage(response, logSensitiveData))
         );
     }
   }
@@ -566,13 +575,9 @@ public class ElasticsearchClient {
           ? sinkRecords.get(response.getItemId())
           : null;
       if (original != null) {
-        // log only status, index and document id for record failure
         reporter.report(
             original,
-            new ReportingException(
-                    "Indexing failed -> Response status: " + response.getFailure().getStatus()
-                    + ",\n Index: " + response.getFailure().getIndex()
-                    + ",\n Document Id: " + response.getFailure().getId())
+            new ReportingException("Indexing failed: " + getErrorMessage(response,logSensitiveData))
         );
       }
     }

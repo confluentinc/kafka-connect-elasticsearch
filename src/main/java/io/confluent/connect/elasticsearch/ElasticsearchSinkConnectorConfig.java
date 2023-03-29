@@ -246,6 +246,13 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   );
   private static final String WRITE_METHOD_DISPLAY = "Write Method";
   private static final String WRITE_METHOD_DEFAULT = WriteMethod.INSERT.name();
+  public static final String LOG_SENSITIVE_DATA_CONFIG = "log.sensitive.data";
+  private static final String LOG_SENSITIVE_DATA_DISPLAY = "Log Sensitive data";
+  private static final String LOG_SENSITIVE_DATA_DOC = "If true, logs sensitive data "
+          + "(such as exception traces containing sensitive data). "
+          + "Set this to true only in exceptional scenarios where logging sensitive data "
+          + "is acceptable and is necessary for troubleshooting.";
+  private static final Boolean LOG_SENSITIVE_DATA_DEFAULT = Boolean.FALSE;
 
   // Proxy group
   public static final String PROXY_HOST_CONFIG = "proxy.host";
@@ -485,6 +492,16 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
             ++order,
             Width.SHORT,
             READ_TIMEOUT_MS_DISPLAY
+        ).define(
+            LOG_SENSITIVE_DATA_CONFIG,
+            Type.BOOLEAN,
+            LOG_SENSITIVE_DATA_DEFAULT,
+            Importance.LOW,
+            LOG_SENSITIVE_DATA_DOC,
+            CONNECTOR_GROUP,
+            ++order,
+            Width.SHORT,
+            LOG_SENSITIVE_DATA_DISPLAY
     );
   }
 
@@ -743,6 +760,10 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
 
   public boolean compression() {
     return getBoolean(CONNECTION_COMPRESSION_CONFIG);
+  }
+
+  public boolean shouldLogSensitiveData() {
+    return getBoolean(LOG_SENSITIVE_DATA_CONFIG);
   }
 
   public int connectionTimeoutMs() {
