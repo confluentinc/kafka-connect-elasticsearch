@@ -338,6 +338,9 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   private static final String CLUSTER_MAPPER_FIELD_DOC =
           "The field path in the value which is taken as cluster";
 
+  private static final String CLUSTER_MAPPER_FIELD_DEFAULT =
+          "";
+
 
   private IndexMapper indexMapper;
   private ClusterMapper clusterMapper;
@@ -349,6 +352,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
     addProxyConfigs(configDef);
     addSecurityConfigs(configDef);
     addIndexMappingConfigs(configDef);
+    addClusterMappingConfigs(configDef);
     return configDef;
   }
 
@@ -732,6 +736,32 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
           ++order,
           ConfigDef.Width.LONG,
           INDEX_MAPPER_FIELD_DISPLAY
+    );
+  }
+
+  private static void addClusterMappingConfigs(ConfigDef configDef) {
+    int order = 0;
+    configDef
+        .define(
+          CLUSTER_MAPPER_TYPE,
+          ConfigDef.Type.STRING,
+          CLUSTER_MAPPER_TYPE_DEFAULT,
+          ConfigDef.Importance.HIGH,
+          CLUSTER_MAPPER_TYPE_DOC,
+          DATA_CONVERSION_GROUP,
+          ++order,
+          ConfigDef.Width.LONG,
+          CLUSTER_MAPPER_TYPE_DISPLAY
+        ).define(
+          CLUSTER_MAPPER_FIELD,
+          ConfigDef.Type.STRING,
+          CLUSTER_MAPPER_FIELD_DEFAULT,
+          ConfigDef.Importance.HIGH,
+          CLUSTER_MAPPER_FIELD_DOC,
+          DATA_CONVERSION_GROUP,
+          ++order,
+          ConfigDef.Width.LONG,
+          CLUSTER_MAPPER_FIELD_DISPLAY
     );
   }
 

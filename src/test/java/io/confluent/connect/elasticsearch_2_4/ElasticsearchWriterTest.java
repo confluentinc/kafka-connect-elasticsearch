@@ -16,7 +16,8 @@
 package io.confluent.connect.elasticsearch_2_4;
 
 import com.carrotsearch.randomizedtesting.annotations.ThreadLeakScope;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import io.confluent.connect.elasticsearch_2_4.cluster.mapping.ClusterMapper;
+import io.confluent.connect.elasticsearch_2_4.cluster.mapping.DefaultClusterMapper;
 import io.confluent.connect.elasticsearch_2_4.index.mapping.DefaultIndexMapper;
 import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Schema;
@@ -40,7 +41,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 import static io.confluent.connect.elasticsearch_2_4.DataConverter.BehaviorOnNullValues;
 import static org.hamcrest.Matchers.containsString;
@@ -473,6 +473,9 @@ public class ElasticsearchWriterTest extends ElasticsearchSinkTestBase {
     inputRecords.add(validRecord);
 
     final ElasticsearchWriter nonStrictWriter = initWriter(client, true);
+
+    nonStrictWriter.write(inputRecords);
+
     // stop the bulk processor
     nonStrictWriter.stop();
 
@@ -526,7 +529,11 @@ public class ElasticsearchWriterTest extends ElasticsearchSinkTestBase {
       boolean dropInvalidMessage,
       BehaviorOnNullValues behavior
   ) {
-    ElasticsearchWriter writer = new ElasticsearchWriter.Builder(client)
+
+    ClusterMapper mapper = new DefaultClusterMapper();
+    mapper.configure(new ElasticsearchSinkConnectorConfig(props));
+
+    return new ElasticsearchWriter.Builder(props)
         .setType(TYPE)
         .setIgnoreKey(ignoreKey, ignoreKeyTopics)
         .setIgnoreSchema(ignoreSchema, ignoreSchemaTopics)
@@ -541,9 +548,8 @@ public class ElasticsearchWriterTest extends ElasticsearchSinkTestBase {
         .setDropInvalidMessage(dropInvalidMessage)
         .setBehaviorOnNullValues(behavior)
         .setIndexMapper(new DefaultIndexMapper())
+        .setClusterMapper(mapper)
         .build();
-    writer.start();
-    return writer;
   }
 
   private void writeDataAndRefresh(ElasticsearchWriter writer, Collection<SinkRecord> records)

@@ -67,7 +67,8 @@ public class ValueClusterMapper implements ClusterMapper {
       log.error(err);
       throw new Exception(err);
     }
-    if(cluster == null) {
+
+    if (cluster == null) {
       String err = String.format(
               "Unable to determine cluster name for path %s for value %s",
               String.join(".", path),

@@ -55,7 +55,7 @@ public class ElasticsearchConnectorSecureIT extends ElasticsearchConnectorBaseIT
     props.put(CONNECTION_URL_CONFIG, address);
     addSslProps();
 
-    client = new JestElasticsearchClient(props);
+    client = new JestElasticsearchClient(props, null);
 
     // Start connector
     runSimpleTest(props);
@@ -74,7 +74,7 @@ public class ElasticsearchConnectorSecureIT extends ElasticsearchConnectorBaseIT
     // disable hostname verification
     props.put(SSL_CONFIG_PREFIX + SslConfigs.SSL_ENDPOINT_IDENTIFICATION_ALGORITHM_CONFIG, "");
 
-    client = new JestElasticsearchClient(props);
+    client = new JestElasticsearchClient(props, null);
 
     // Start connector
     runSimpleTest(props);

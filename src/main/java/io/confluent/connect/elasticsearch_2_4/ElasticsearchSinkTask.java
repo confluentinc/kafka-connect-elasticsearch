@@ -15,7 +15,6 @@
 
 package io.confluent.connect.elasticsearch_2_4;
 
-import io.confluent.connect.elasticsearch_2_4.jest.JestElasticsearchClient;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.config.ConfigException;
@@ -33,7 +32,6 @@ public class ElasticsearchSinkTask extends SinkTask {
 
   private static final Logger log = LoggerFactory.getLogger(ElasticsearchSinkTask.class);
   private volatile ElasticsearchWriter writer;
-  private ElasticsearchClient client;
 
   @Override
   public String version() {
@@ -42,12 +40,6 @@ public class ElasticsearchSinkTask extends SinkTask {
 
   @Override
   public void start(Map<String, String> props) {
-    start(props, null);
-  }
-
-  @SuppressWarnings("deprecation")
-  // public for testing
-  public void start(Map<String, String> props, ElasticsearchClient client) {
     try {
       log.info("Starting ElasticsearchSinkTask");
 
@@ -65,18 +57,11 @@ public class ElasticsearchSinkTask extends SinkTask {
             TimeUnit.MILLISECONDS.toHours(maxRetryBackoffMs));
       }
 
-      if (client != null) {
-        this.client = client;
-      } else {
-        this.client = new JestElasticsearchClient(props);
-      }
-
-      ElasticsearchWriter.Builder builder = new ElasticsearchWriter.Builder(this.client)
+      ElasticsearchWriter.Builder builder = new ElasticsearchWriter.Builder(props)
           .setType(config.type())
           .setIgnoreKey(config.ignoreKey(), config.ignoreKeyTopics())
           .setIgnoreSchema(config.ignoreSchema(), config.ignoreSchemaTopics())
           .setCompactMapEntries(config.useCompactMapEntries())
-          .setTopicToIndexMap(config.topicToIndexMap())
           .setFlushTimoutMs(config.flushTimeoutMs())
           .setMaxBufferedRecords(config.maxBufferedRecords())
           .setMaxInFlightRequests(config.maxInFlightRequests())
@@ -104,7 +89,6 @@ public class ElasticsearchSinkTask extends SinkTask {
       }
 
       writer = builder.build();
-      writer.start();
       log.info(
           "Started ElasticsearchSinkTask, will {} records with null values ('{}')",
           config.behaviorOnNullValues().name(),
@@ -149,9 +133,6 @@ public class ElasticsearchSinkTask extends SinkTask {
     if (writer != null) {
       writer.stop();
       writer = null;
-    }
-    if (client != null) {
-      client.close();
     }
   }
 }

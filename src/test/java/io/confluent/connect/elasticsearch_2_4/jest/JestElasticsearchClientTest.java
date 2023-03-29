@@ -119,7 +119,7 @@ public class JestElasticsearchClientTest {
     props.put(ElasticsearchSinkConnectorConfig.CONNECTION_USERNAME_CONFIG, "elastic");
     props.put(ElasticsearchSinkConnectorConfig.CONNECTION_PASSWORD_CONFIG, "elasticpw");
     props.put(ElasticsearchSinkConnectorConfig.TYPE_NAME_CONFIG, "kafka-connect");
-    JestElasticsearchClient client = new JestElasticsearchClient(props, jestClientFactory);
+    JestElasticsearchClient client = new JestElasticsearchClient(props, jestClientFactory, null);
 
     ArgumentCaptor<HttpClientConfig> captor = ArgumentCaptor.forClass(HttpClientConfig.class);
     verify(jestClientFactory).setHttpClientConfig(captor.capture());
@@ -142,7 +142,7 @@ public class JestElasticsearchClientTest {
     props.put(ElasticsearchSinkConnectorConfig.PROXY_PASSWORD_CONFIG, "password");
 
     props.put(ElasticsearchSinkConnectorConfig.TYPE_NAME_CONFIG, "kafka-connect");
-    JestElasticsearchClient client = new JestElasticsearchClient(props, jestClientFactory);
+    JestElasticsearchClient client = new JestElasticsearchClient(props, jestClientFactory, null);
 
     ArgumentCaptor<HttpClientConfig> captor = ArgumentCaptor.forClass(HttpClientConfig.class);
     verify(jestClientFactory).setHttpClientConfig(captor.capture());
@@ -175,7 +175,7 @@ public class JestElasticsearchClientTest {
     props.put(ElasticsearchSinkConnectorConfig.CONNECTION_PASSWORD_CONFIG, "elasticpw");
     props.put(ElasticsearchSinkConnectorConfig.TYPE_NAME_CONFIG, "kafka-connect");
     props.put(ElasticsearchSinkConnectorConfig.CONNECTION_COMPRESSION_CONFIG, "true");
-    JestElasticsearchClient client = new JestElasticsearchClient(props, jestClientFactory);
+    JestElasticsearchClient client = new JestElasticsearchClient(props, jestClientFactory, null);
 
     ArgumentCaptor<HttpClientConfig> captor = ArgumentCaptor.forClass(HttpClientConfig.class);
     verify(jestClientFactory).setHttpClientConfig(captor.capture());
@@ -190,7 +190,7 @@ public class JestElasticsearchClientTest {
     props.put(ElasticsearchSinkConnectorConfig.CONNECTION_USERNAME_CONFIG, "");
     props.put(ElasticsearchSinkConnectorConfig.CONNECTION_PASSWORD_CONFIG, "");
     props.put(ElasticsearchSinkConnectorConfig.TYPE_NAME_CONFIG, "kafka-connect");
-    JestElasticsearchClient client = new JestElasticsearchClient(props, jestClientFactory);
+    JestElasticsearchClient client = new JestElasticsearchClient(props, jestClientFactory, null);
 
     ArgumentCaptor<HttpClientConfig> captor = ArgumentCaptor.forClass(HttpClientConfig.class);
     verify(jestClientFactory).setHttpClientConfig(captor.capture());

@@ -149,15 +149,18 @@ public class JestElasticsearchClient implements ElasticsearchClient {
     }
   }
 
-  public JestElasticsearchClient(Map<String, String> props) {
-    this(props, new JestClientFactory());
+  public JestElasticsearchClient(Map<String, String> props, Set<String> overrideUrls) {
+    this(props, new JestClientFactory(), overrideUrls);
   }
 
   // visible for testing
-  protected JestElasticsearchClient(Map<String, String> props, JestClientFactory factory) {
+  protected JestElasticsearchClient(
+          Map<String, String> props,
+          JestClientFactory factory,
+          Set<String> overrideUrls) {
     try {
       ElasticsearchSinkConnectorConfig config = new ElasticsearchSinkConnectorConfig(props);
-      factory.setHttpClientConfig(getClientConfig(config));
+      factory.setHttpClientConfig(getClientConfig(config, overrideUrls));
       this.client = factory.getObject();
       this.version = getServerVersion();
       this.writeMethod = config.writeMethod();
@@ -179,9 +182,15 @@ public class JestElasticsearchClient implements ElasticsearchClient {
   }
 
   // Visible for Testing
-  public static HttpClientConfig getClientConfig(ElasticsearchSinkConnectorConfig config) {
-
-    Set<String> addresses = config.connectionUrls();
+  public static HttpClientConfig getClientConfig(
+          ElasticsearchSinkConnectorConfig config,
+          Set<String> overrideUrls) {
+    Set<String> addresses;
+    if (overrideUrls != null) {
+      addresses = overrideUrls;
+    } else {
+      addresses = config.connectionUrls();
+    }
     HttpClientConfig.Builder builder =
         new HttpClientConfig.Builder(addresses)
             .connTimeout(config.connectionTimeoutMs())
@@ -673,11 +682,11 @@ public class JestElasticsearchClient implements ElasticsearchClient {
   }
 
   public void close() {
+    log.debug("Closing Elasticsearch clients");
     try {
-      log.debug("Closing Elasticsearch client");
       client.close();
     } catch (IOException e) {
-      LOG.error("Exception while closing the JEST client", e);
+      LOG.error("Exception while closing a JEST client", e);
     }
   }
 

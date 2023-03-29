@@ -97,6 +97,12 @@ public class ElasticsearchSinkConnectorConfigTest {
   }
 
   @Test
+  public void testDefaultClusterMapperConfig() {
+    ElasticsearchSinkConnectorConfig config = new ElasticsearchSinkConnectorConfig(props);
+    assertEquals(config.getClusterMapper().getClass().getName(), "io.confluent.connect.elasticsearch_2_4.cluster.mapping.DefaultClusterMapper");
+  }
+
+  @Test
   public void testSecured() {
     props.put(CONNECTION_URL_CONFIG, "http://host:9999");
     assertFalse(new ElasticsearchSinkConnectorConfig(props).secured());

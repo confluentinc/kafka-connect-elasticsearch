@@ -8,7 +8,6 @@ import io.confluent.connect.elasticsearch_2_4.index.mapping.IndexMapper;
 import org.junit.Before;
 import org.junit.Test;
 
-import java.util.HashMap;
 import java.util.Map;
 
 import static io.confluent.connect.elasticsearch_2_4.ElasticsearchSinkConnectorConfig.INDEX_MAPPER_FIELD;

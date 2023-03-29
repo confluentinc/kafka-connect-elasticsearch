@@ -33,15 +33,16 @@ import org.junit.After;
 import org.junit.Before;
 
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.LinkedList;
 import java.util.Map;
 
 import static io.confluent.connect.elasticsearch_2_4.DataConverter.BehaviorOnNullValues;
-import static java.util.Collections.emptyList;
+import static io.confluent.connect.elasticsearch_2_4.ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG;
+import static io.confluent.connect.elasticsearch_2_4.ElasticsearchSinkConnectorConfig.IGNORE_KEY_CONFIG;
+import static io.confluent.connect.elasticsearch_2_4.ElasticsearchSinkConnectorConfig.TYPE_NAME_CONFIG;
 
 public class ElasticsearchSinkTestBase extends ESIntegTestCase {
 
@@ -56,13 +57,19 @@ public class ElasticsearchSinkTestBase extends ESIntegTestCase {
   protected static final TopicPartition TOPIC_PARTITION3 = new TopicPartition(TOPIC, PARTITION3);
 
   protected ElasticsearchClient client;
+  protected HashMap<String, String> props;
   private DataConverter converter;
 
   @Before
   public void setUp() throws Exception {
     super.setUp();
-    client = new JestElasticsearchClient("http://localhost:" + getPort());
     converter = new DataConverter(true, BehaviorOnNullValues.IGNORE);
+    props = new HashMap<>();
+    props.put(CONNECTION_URL_CONFIG, "http://localhost:" + getPort());
+    props.put(TYPE_NAME_CONFIG, ElasticsearchSinkTestBase.TYPE);
+    props.put(IGNORE_KEY_CONFIG, "true");
+
+    client = new JestElasticsearchClient(props, null);
   }
 
   @After

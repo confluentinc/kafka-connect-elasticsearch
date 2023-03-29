@@ -19,6 +19,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import io.confluent.connect.elasticsearch_2_4.bulk.BulkProcessor;
 import io.confluent.connect.elasticsearch_2_4.cluster.mapping.ClusterMapper;
 import io.confluent.connect.elasticsearch_2_4.index.mapping.IndexMapper;
+import io.confluent.connect.elasticsearch_2_4.jest.JestElasticsearchClient;
 import org.apache.kafka.common.utils.SystemTime;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.sink.ErrantRecordReporter;
@@ -27,6 +28,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Collection;
 import java.util.HashMap;
@@ -41,7 +43,7 @@ import static io.confluent.connect.elasticsearch_2_4.bulk.BulkProcessor.Behavior
 public class ElasticsearchWriter {
   private static final Logger log = LoggerFactory.getLogger(ElasticsearchWriter.class);
 
-  private final ElasticsearchClient client;
+  private final Map<String, ElasticsearchClient> clients;
   private final String type;
   private final boolean ignoreKey;
   private final Set<String> ignoreKeyTopics;
@@ -50,7 +52,7 @@ public class ElasticsearchWriter {
   @Deprecated
   private final Map<String, String> topicToIndexMap;
   private final long flushTimeoutMs;
-  private final BulkProcessor<IndexableRecord, ?> bulkProcessor;
+  private final Map<String, BulkProcessor<IndexableRecord, ?>> bulkProcessors;
   private final boolean dropInvalidMessage;
   private final BehaviorOnNullValues behaviorOnNullValues;
   private final DataConverter converter;
@@ -61,8 +63,18 @@ public class ElasticsearchWriter {
 
   private final ClusterMapper clusterMapper;
 
+  private final Map<String, String> configurations;
+  private final int maxBufferedRecords;
+  private final int maxInFlightRequests;
+  private final int batchSize;
+  private final long lingerMs;
+  private final int maxRetries;
+  private final long retryBackoffMs;
+  private final BehaviorOnMalformedDoc behaviorOnMalformedDoc;
+  private final ErrantRecordReporter reporter;
+
   ElasticsearchWriter(
-      ElasticsearchClient client,
+      Map<String, String> configurations,
       String type,
       boolean useCompactMapEntries,
       boolean ignoreKey,
@@ -83,7 +95,7 @@ public class ElasticsearchWriter {
       ErrantRecordReporter reporter,
       IndexMapper indexMapper,
       ClusterMapper clusterMapper) {
-    this.client = client;
+    this.configurations = configurations;
     this.type = type;
     this.ignoreKey = ignoreKey;
     this.ignoreKeyTopics = ignoreKeyTopics;
@@ -96,25 +108,22 @@ public class ElasticsearchWriter {
     this.converter = new DataConverter(useCompactMapEntries, behaviorOnNullValues);
     this.indexMapper = indexMapper;
     this.clusterMapper = clusterMapper;
-
-    bulkProcessor = new BulkProcessor<>(
-        new SystemTime(),
-        new BulkIndexingClient(client),
-        maxBufferedRecords,
-        maxInFlightRequests,
-        batchSize,
-        lingerMs,
-        maxRetries,
-        retryBackoffMs,
-        behaviorOnMalformedDoc,
-        reporter
-    );
+    this.maxBufferedRecords = maxBufferedRecords;
+    this.maxInFlightRequests = maxInFlightRequests;
+    this.batchSize = batchSize;
+    this.lingerMs = lingerMs;
+    this.maxRetries = maxRetries;
+    this.retryBackoffMs = retryBackoffMs;
+    this.behaviorOnMalformedDoc = behaviorOnMalformedDoc;
+    this.reporter = reporter;
+    this.clients = new HashMap<>();
+    this.bulkProcessors = new HashMap<>();
 
     existingMappings = new HashSet<>();
   }
 
   public static class Builder {
-    private final ElasticsearchClient client;
+    private Map<String, String> configurations;
     private String type;
     private boolean useCompactMapEntries = true;
     private boolean ignoreKey = false;
@@ -133,12 +142,11 @@ public class ElasticsearchWriter {
     private BehaviorOnNullValues behaviorOnNullValues = BehaviorOnNullValues.DEFAULT;
     private BehaviorOnMalformedDoc behaviorOnMalformedDoc;
     private ErrantRecordReporter reporter;
-
     private IndexMapper indexMapper;
     private ClusterMapper clusterMapper;
 
-    public Builder(ElasticsearchClient client) {
-      this.client = client;
+    public Builder(Map<String, String> configurations) {
+      this.configurations = configurations;
     }
 
     public Builder setType(String type) {
@@ -243,7 +251,7 @@ public class ElasticsearchWriter {
 
     public ElasticsearchWriter build() {
       return new ElasticsearchWriter(
-          client,
+          configurations,
           type,
           useCompactMapEntries,
           ignoreKey,
@@ -291,16 +299,22 @@ public class ElasticsearchWriter {
       } catch (Exception e) {
         throw new ConnectException(e.getMessage());
       }
+      String clusterKey = null;
+      try {
+        clusterKey = getClusterKey(sinkRecord.topic(), sinkRecord);
+      } catch (Exception e) {
+        throw new ConnectException(e.getMessage());
+      }
       final boolean ignoreKey = ignoreKeyTopics.contains(sinkRecord.topic()) || this.ignoreKey;
       final boolean ignoreSchema =
           ignoreSchemaTopics.contains(sinkRecord.topic()) || this.ignoreSchema;
 
-      client.createIndices(Collections.singleton(index));
+      getClient(clusterKey).createIndices(Collections.singleton(index));
 
       if (!ignoreSchema && !existingMappings.contains(index)) {
         try {
-          if (Mapping.getMapping(client, index, type) == null) {
-            Mapping.createMapping(client, index, type, sinkRecord.valueSchema());
+          if (Mapping.getMapping(getClient(clusterKey), index, type) == null) {
+            Mapping.createMapping(getClient(clusterKey), index, type, sinkRecord.valueSchema());
           }
         } catch (IOException e) {
           // FIXME: concurrent tasks could attempt to create the mapping and one of the requests may
@@ -311,8 +325,45 @@ public class ElasticsearchWriter {
         existingMappings.add(index);
       }
 
-      tryWriteRecord(sinkRecord, index, ignoreKey, ignoreSchema);
+      tryWriteRecord(sinkRecord, index, clusterKey, ignoreKey, ignoreSchema);
     }
+  }
+
+  private String getClusterKey(String topic, SinkRecord sinkRecord) throws Exception {
+    return String.join(",", getClusterName(topic, sinkRecord));
+  }
+
+  private ElasticsearchClient getClient(String clusterKey) {
+    if (!clients.containsKey(clusterKey)) {
+
+      ElasticsearchClient client =
+              new JestElasticsearchClient(
+                      configurations,
+                      new HashSet<>(Arrays.asList(clusterKey.split(",")))
+              );
+      clients.put(clusterKey, client);
+    }
+    return clients.get(clusterKey);
+  }
+
+  private BulkProcessor<IndexableRecord, ?> getBulkProcessor(String clusterKey) {
+    if (!bulkProcessors.containsKey(clusterKey)) {
+      BulkProcessor<IndexableRecord, ?> bp = new BulkProcessor<>(
+          new SystemTime(),
+          new BulkIndexingClient(getClient(clusterKey)),
+          maxBufferedRecords,
+          maxInFlightRequests,
+          batchSize,
+          lingerMs,
+          maxRetries,
+          retryBackoffMs,
+          behaviorOnMalformedDoc,
+          reporter
+      );
+      bp.start();
+      bulkProcessors.put(clusterKey, bp);
+    }
+    return bulkProcessors.get(clusterKey);
   }
 
   private boolean ignoreRecord(SinkRecord record) {
@@ -320,10 +371,11 @@ public class ElasticsearchWriter {
   }
 
   private void tryWriteRecord(
-      SinkRecord sinkRecord,
-      String index,
-      boolean ignoreKey,
-      boolean ignoreSchema) {
+          SinkRecord sinkRecord,
+          String index,
+          String clusterKey,
+          boolean ignoreKey,
+          boolean ignoreSchema) {
     IndexableRecord record = null;
     try {
       record = converter.convertRecord(
@@ -353,9 +405,11 @@ public class ElasticsearchWriter {
               sinkRecord.kafkaPartition(),
               sinkRecord.kafkaOffset()
       );
-      bulkProcessor.add(record, sinkRecord, flushTimeoutMs);
+      getBulkProcessor(clusterKey).add(record, sinkRecord, flushTimeoutMs);
     }
   }
+
+
 
   /**
    * Return the expected index name for a given topic, using the configured mapping or the topic
@@ -389,11 +443,7 @@ public class ElasticsearchWriter {
   }
 
   public void flush() {
-    bulkProcessor.flush(flushTimeoutMs);
-  }
-
-  public void start() {
-    bulkProcessor.start();
+    bulkProcessors.values().forEach(bp -> bp.flush(flushTimeoutMs));
   }
 
   public void stop() {
@@ -403,18 +453,21 @@ public class ElasticsearchWriter {
           flushTimeoutMs,
           ElasticsearchSinkConnectorConfig.FLUSH_TIMEOUT_MS_CONFIG
       );
-      bulkProcessor.flush(flushTimeoutMs);
+      bulkProcessors.values().forEach(bp -> bp.flush(flushTimeoutMs));
     } catch (Exception e) {
       log.warn("Failed to flush during stop", e);
     }
     log.debug("Stopping Elastisearch writer");
-    bulkProcessor.stop();
+    bulkProcessors.values().forEach(BulkProcessor::stop);
     log.debug(
         "Waiting for bulk processor to stop, up to {}ms ('{}')",
         flushTimeoutMs,
         ElasticsearchSinkConnectorConfig.FLUSH_TIMEOUT_MS_CONFIG
     );
-    bulkProcessor.awaitStop(flushTimeoutMs);
+    bulkProcessors.values().forEach(bp -> bp.awaitStop(flushTimeoutMs));
+
+    clients.values().forEach(ElasticsearchClient::close);
+
     log.debug("Stopped Elastisearch writer");
   }
 }

@@ -1,3 +1,7 @@
+/*
+ * Copyright [2018 - 2018] Confluent Inc.
+ */
+
 package io.confluent.connect.elasticsearch_2_4.cluster.mapping;
 
 import com.fasterxml.jackson.databind.JsonNode;
