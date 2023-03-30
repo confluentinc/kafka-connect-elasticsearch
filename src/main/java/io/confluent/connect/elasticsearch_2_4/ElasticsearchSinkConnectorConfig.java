@@ -341,6 +341,18 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   private static final String CLUSTER_MAPPER_FIELD_DEFAULT =
           "";
 
+  public static final String CLUSTER_MAP_CONFIG = "cluster.map.config";
+
+  private static final String CLUSTER_MAP_CONFIG_DISPLAY =
+          "cluster name to list of it's hosts configuration";
+  private static final String CLUSTER_MAP_CONFIG_DOC =
+          "cluster name to list of it's hosts configuration";
+
+  private static final String CLUSTER_MAP_CONFIG_DEFAULT =
+          "";
+
+
+
 
   private IndexMapper indexMapper;
   private ClusterMapper clusterMapper;
@@ -762,6 +774,16 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
           ++order,
           ConfigDef.Width.LONG,
           CLUSTER_MAPPER_FIELD_DISPLAY
+        ).define(
+          CLUSTER_MAP_CONFIG,
+          ConfigDef.Type.STRING,
+          CLUSTER_MAP_CONFIG_DEFAULT,
+          ConfigDef.Importance.HIGH,
+          CLUSTER_MAP_CONFIG_DOC,
+          DATA_CONVERSION_GROUP,
+          ++order,
+          ConfigDef.Width.LONG,
+          CLUSTER_MAP_CONFIG_DISPLAY
     );
   }
 
@@ -952,10 +974,10 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
     return clusterMapper;
   }
 
-  private Map<String, String> parseMapConfig(List<String> values) {
+  public static Map<String, String> parseMapConfig(List<String> values) {
     Map<String, String> map = new HashMap<>();
     for (String value : values) {
-      String[] parts = value.split(":");
+      String[] parts = value.split("->");
       String topic = parts[0];
       String type = parts[1];
       map.put(topic, type);

@@ -28,9 +28,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.util.Arrays;
-import java.util.Collections;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -116,7 +115,7 @@ public class ElasticsearchWriter {
     this.retryBackoffMs = retryBackoffMs;
     this.behaviorOnMalformedDoc = behaviorOnMalformedDoc;
     this.reporter = reporter;
-    this.clients = new HashMap<>();
+    this.clients = initClients();
     this.bulkProcessors = new HashMap<>();
 
     existingMappings = new HashSet<>();
@@ -276,6 +275,15 @@ public class ElasticsearchWriter {
     }
   }
 
+  private Map<String, ElasticsearchClient> initClients() {
+    Map<String, ElasticsearchClient> res = new HashMap<>();
+    clusterMapper.getAllClusters().forEach((k,v) ->
+        res.put(k, new JestElasticsearchClient(configurations, v)
+      )
+    );
+    return res;
+  }
+
   public void write(Collection<SinkRecord> records) {
     for (SinkRecord sinkRecord : records) {
       // Preemptively skip records with null values if they're going to be ignored anyways
@@ -299,9 +307,9 @@ public class ElasticsearchWriter {
       } catch (Exception e) {
         throw new ConnectException(e.getMessage());
       }
-      String clusterKey = null;
+      String clusterName;
       try {
-        clusterKey = getClusterKey(sinkRecord.topic(), sinkRecord);
+        clusterName = getClusterName(sinkRecord);
       } catch (Exception e) {
         throw new ConnectException(e.getMessage());
       }
@@ -309,12 +317,12 @@ public class ElasticsearchWriter {
       final boolean ignoreSchema =
           ignoreSchemaTopics.contains(sinkRecord.topic()) || this.ignoreSchema;
 
-      getClient(clusterKey).createIndices(Collections.singleton(index));
+      getClient(clusterName).createIndices(Collections.singleton(index));
 
       if (!ignoreSchema && !existingMappings.contains(index)) {
         try {
-          if (Mapping.getMapping(getClient(clusterKey), index, type) == null) {
-            Mapping.createMapping(getClient(clusterKey), index, type, sinkRecord.valueSchema());
+          if (Mapping.getMapping(getClient(clusterName), index, type) == null) {
+            Mapping.createMapping(getClient(clusterName), index, type, sinkRecord.valueSchema());
           }
         } catch (IOException e) {
           // FIXME: concurrent tasks could attempt to create the mapping and one of the requests may
@@ -325,24 +333,11 @@ public class ElasticsearchWriter {
         existingMappings.add(index);
       }
 
-      tryWriteRecord(sinkRecord, index, clusterKey, ignoreKey, ignoreSchema);
+      tryWriteRecord(sinkRecord, index, clusterName, ignoreKey, ignoreSchema);
     }
-  }
-
-  private String getClusterKey(String topic, SinkRecord sinkRecord) throws Exception {
-    return String.join(",", getClusterName(topic, sinkRecord));
   }
 
   private ElasticsearchClient getClient(String clusterKey) {
-    if (!clients.containsKey(clusterKey)) {
-
-      ElasticsearchClient client =
-              new JestElasticsearchClient(
-                      configurations,
-                      new HashSet<>(Arrays.asList(clusterKey.split(",")))
-              );
-      clients.put(clusterKey, client);
-    }
     return clients.get(clusterKey);
   }
 
@@ -373,7 +368,7 @@ public class ElasticsearchWriter {
   private void tryWriteRecord(
           SinkRecord sinkRecord,
           String index,
-          String clusterKey,
+          String clusterName,
           boolean ignoreKey,
           boolean ignoreSchema) {
     IndexableRecord record = null;
@@ -405,7 +400,7 @@ public class ElasticsearchWriter {
               sinkRecord.kafkaPartition(),
               sinkRecord.kafkaOffset()
       );
-      getBulkProcessor(clusterKey).add(record, sinkRecord, flushTimeoutMs);
+      getBulkProcessor(clusterName).add(record, sinkRecord, flushTimeoutMs);
     }
   }
 
@@ -432,12 +427,12 @@ public class ElasticsearchWriter {
    * name. Elasticsearch accepts only lowercase index names
    * (<a href="https://github.com/elastic/elasticsearch/issues/29420">ref</a>_.
    */
-  private Set<String> getClusterName(String topic, SinkRecord sinkRecord) throws Exception {
+  private String getClusterName(SinkRecord sinkRecord) throws Exception {
     JsonNode valueJson = null;
     if (sinkRecord.value() != null) {
       valueJson = converter.getValueAsJson(sinkRecord);
     }
-    final Set<String> cluster = clusterMapper.getCluster(topic, valueJson);;
+    final String cluster = clusterMapper.getName(valueJson);;
     log.trace("calculated cluster is '{}'", cluster);
     return cluster;
   }

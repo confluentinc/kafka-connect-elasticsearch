@@ -21,34 +21,42 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Arrays;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
 import static io.confluent.connect.elasticsearch_2_4.ElasticsearchSinkConnectorConfig.CLUSTER_MAPPER_FIELD;
+import static io.confluent.connect.elasticsearch_2_4.ElasticsearchSinkConnectorConfig.CLUSTER_MAP_CONFIG;
+import static io.confluent.connect.elasticsearch_2_4.ElasticsearchSinkConnectorConfig.parseMapConfig;
 
 public class ValueClusterMapper implements ClusterMapper {
   private static final Logger log = LoggerFactory.getLogger(ValueClusterMapper.class);
-  private Set<String> connectionUrls;
+
+  private Map<String, Set<String>> clusters;
   private String[] path;
 
   @Override
   public void configure(ElasticsearchSinkConnectorConfig configuration) {
-    connectionUrls = configuration.connectionUrls();
+    this.clusters = new HashMap<>();
+    log.info("using the next string to configure elasticsearch cluster map [{}]",
+            configuration.getString(CLUSTER_MAP_CONFIG));
+    Map<String, String> parsedMap = parseMapConfig(
+        Arrays.stream(
+          configuration.getString(CLUSTER_MAP_CONFIG).split(";"))
+        .collect(Collectors.toList()));
+    parsedMap.forEach((k,v) ->
+            this.clusters.put(k, Arrays.stream(v.split(",")).collect(Collectors.toSet())));
     this.path = configuration.getString(CLUSTER_MAPPER_FIELD).split("\\.");
   }
 
-  /**
-   * Returns the converted cluster name from a given field.
-   * accepts:
-   * <ul>
-   *   <li>all lowercase</li>
-   *   <li>less than 256 bytes</li>
-   *   <li>does not start with - or _</li>
-   *   <li>is not . or ..</li>
-   * </ul>
-   */
   @Override
-  public Set<String> getCluster(String topic, JsonNode jsonNode) throws Exception {
+  public Map<String, Set<String>> getAllClusters() {
+    return this.clusters;
+  }
+
+  @Override
+  public String getName(JsonNode jsonNode) throws Exception {
     String cluster = null;
     JsonNode current = jsonNode;
     try {
@@ -76,11 +84,17 @@ public class ValueClusterMapper implements ClusterMapper {
       log.error(err);
       throw new Exception(err);
     }
-    return Arrays.stream(cluster.split(",")).collect(Collectors.toSet());
+    if (!clusters.containsKey(cluster)) {
+      String err = String.format(
+              "Unable to translate cluster name to hosts, no configuration found for %s", cluster);
+      log.error(err);
+      throw new Exception(err);
+    }
+    return cluster;
   }
 
   @Override
-  public Set<String> getDefaultCluster() {
-    return connectionUrls;
+  public Set<String> getClusterUrl(String clusterName) throws Exception {
+    return this.clusters.get(clusterName);
   }
 }

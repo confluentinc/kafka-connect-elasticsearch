@@ -20,6 +20,8 @@ import io.confluent.connect.elasticsearch_2_4.ElasticsearchSinkConnectorConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Collections;
+import java.util.Map;
 import java.util.Set;
 
 public class DefaultClusterMapper implements ClusterMapper {
@@ -33,12 +35,17 @@ public class DefaultClusterMapper implements ClusterMapper {
   }
 
   @Override
-  public Set<String> getCluster(String topic, JsonNode jsonNode) {
-    return connectionUrls;
+  public Map<String, Set<String>> getAllClusters() {
+    return Collections.singletonMap("default", connectionUrls);
   }
 
   @Override
-  public Set<String> getDefaultCluster() {
+  public String getName(JsonNode jsonNode) {
+    return "default";
+  }
+
+  @Override
+  public Set<String> getClusterUrl(String clusterName) throws Exception {
     return connectionUrls;
   }
 }
