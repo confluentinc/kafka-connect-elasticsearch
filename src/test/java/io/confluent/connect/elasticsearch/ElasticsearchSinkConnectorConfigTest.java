@@ -1,17 +1,6 @@
 package io.confluent.connect.elasticsearch;
 
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_TIMEOUT_MS_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.DATA_STREAM_DATASET_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.DATA_STREAM_TYPE_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.KERBEROS_KEYTAB_PATH_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.PROXY_HOST_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.PROXY_PASSWORD_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.PROXY_PORT_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.PROXY_USERNAME_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.READ_TIMEOUT_MS_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.SECURITY_PROTOCOL_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.SSL_CONFIG_PREFIX;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.*;
 import static org.apache.kafka.common.config.SslConfigs.SSL_ENDPOINT_IDENTIFICATION_ALGORITHM_CONFIG;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -237,5 +226,18 @@ public class ElasticsearchSinkConnectorConfigTest {
     }
     props.put(ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG, "http://localhost:8080");
     return props;
+  }
+  @Test
+  public void testLogSensitiveData(){
+    ElasticsearchSinkConnectorConfig config = new ElasticsearchSinkConnectorConfig(props);
+    assertFalse(config.shouldLogSensitiveData());
+
+    props.put(LOG_SENSITIVE_DATA_CONFIG, "true");
+    config = new ElasticsearchSinkConnectorConfig(props);
+    assertTrue(config.shouldLogSensitiveData());
+
+    props.put(LOG_SENSITIVE_DATA_CONFIG, "false");
+    config = new ElasticsearchSinkConnectorConfig(props);
+    assertFalse(config.shouldLogSensitiveData());
   }
 }
