@@ -114,6 +114,7 @@ public class ElasticsearchSinkTask extends SinkTask {
         continue;
       }
       logTrace("Writing {} to Elasticsearch.", record);
+
       tryWriteRecord(record, offsetState);
     }
     partitionPauser.maybePausePartitions();
