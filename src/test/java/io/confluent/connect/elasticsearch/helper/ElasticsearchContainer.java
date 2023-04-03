@@ -37,6 +37,7 @@ import java.net.InetAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -67,7 +68,7 @@ public class ElasticsearchContainer
   /**
    * Default Elasticsearch version.
    */
-  public static final String DEFAULT_ES_VERSION = "7.9.3";
+  public static final String DEFAULT_ES_VERSION = "7.16.3";
 
   /**
    * Default Elasticsearch port.
@@ -344,6 +345,26 @@ public class ElasticsearchContainer
     setImage(image);
   }
 
+  private ArrayList<Integer> getImageVersion() {
+    ArrayList<Integer> versions = new ArrayList<>(3);
+    String[] tokens = imageName.split(":");
+    String versionString = tokens[tokens.length - 1];
+    String[] versionTokens = versionString.split("\\.");
+    for (String v : versionTokens) {
+      try {
+        versions.add(Integer.parseInt(v));
+      } catch (Exception e) {
+        // Maybe ends with garbage like -rc7894237
+        versions.add(Integer.parseInt(v.substring(0, v.indexOf('-'))));
+      }
+    }
+    // Pad with zeros to at least three positions
+    while (versions.size() < 3) {
+      versions.add(0);
+    }
+    return versions;
+  }
+
   private void buildImage(DockerfileBuilder builder) {
     builder
         .from(imageName)
@@ -351,12 +372,20 @@ public class ElasticsearchContainer
         .copy("elasticsearch.yml", CONFIG_PATH + "/elasticsearch.yml");
 
     if (isSslEnabled()) {
+      ArrayList<Integer> versionsInt = getImageVersion();
       log.info("Building Elasticsearch image with SSL configuration");
       builder
           .copy("instances.yml", CONFIG_SSL_PATH + "/instances.yml")
-          .copy("start-elasticsearch.sh", CONFIG_SSL_PATH + "/start-elasticsearch.sh")
-          // OpenSSL and Java's Keytool used to generate the certs, so install them
-          .run("yum -y install openssl")
+          .copy("start-elasticsearch.sh", CONFIG_SSL_PATH + "/start-elasticsearch.sh");
+      if (versionsInt.get(0) >= 7 && versionsInt.get(1) >= 15) {
+        // Install keytool from java 1.8 since our connector is built with
+        // java 1.8 and the cert algoritm's won;t be compatible when using the newer
+        // java version on the container
+        // Also note that 7.16.3 test container uses Ubuntu now instead of CentOS
+        builder.run("apt update");
+        builder.run("apt install -y openjdk-8-jre-headless");
+      }
+      builder
           .run("chmod +x " + CONFIG_SSL_PATH + "/start-elasticsearch.sh")
           .entryPoint(CONFIG_SSL_PATH + "/start-elasticsearch.sh");
     }
