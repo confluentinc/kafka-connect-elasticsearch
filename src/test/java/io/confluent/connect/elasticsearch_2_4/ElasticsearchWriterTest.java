@@ -19,6 +19,8 @@ import com.carrotsearch.randomizedtesting.annotations.ThreadLeakScope;
 import io.confluent.connect.elasticsearch_2_4.cluster.mapping.ClusterMapper;
 import io.confluent.connect.elasticsearch_2_4.cluster.mapping.DefaultClusterMapper;
 import io.confluent.connect.elasticsearch_2_4.index.mapping.DefaultIndexMapper;
+import io.confluent.connect.elasticsearch_2_4.type.mapping.DefaultTypeMapper;
+import io.confluent.connect.elasticsearch_2_4.type.mapping.TypeMapper;
 import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaBuilder;
@@ -530,11 +532,15 @@ public class ElasticsearchWriterTest extends ElasticsearchSinkTestBase {
       BehaviorOnNullValues behavior
   ) {
 
+    ElasticsearchSinkConnectorConfig config = new ElasticsearchSinkConnectorConfig(props);
+
     ClusterMapper mapper = new DefaultClusterMapper();
-    mapper.configure(new ElasticsearchSinkConnectorConfig(props));
+    mapper.configure(config);
+
+    TypeMapper typeMapper = new DefaultTypeMapper();
+    typeMapper.configure(config);
 
     return new ElasticsearchWriter.Builder(props)
-        .setType(TYPE)
         .setIgnoreKey(ignoreKey, ignoreKeyTopics)
         .setIgnoreSchema(ignoreSchema, ignoreSchemaTopics)
         .setTopicToIndexMap(topicToIndexMap)
@@ -549,6 +555,7 @@ public class ElasticsearchWriterTest extends ElasticsearchSinkTestBase {
         .setBehaviorOnNullValues(behavior)
         .setIndexMapper(new DefaultIndexMapper())
         .setClusterMapper(mapper)
+        .setTypeMapper(typeMapper)
         .build();
   }
 

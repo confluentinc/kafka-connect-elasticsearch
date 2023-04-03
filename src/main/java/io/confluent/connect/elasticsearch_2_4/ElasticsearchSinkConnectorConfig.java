@@ -27,6 +27,7 @@ import java.util.stream.Collectors;
 
 import io.confluent.connect.elasticsearch_2_4.cluster.mapping.ClusterMapper;
 import io.confluent.connect.elasticsearch_2_4.index.mapping.IndexMapper;
+import io.confluent.connect.elasticsearch_2_4.type.mapping.TypeMapper;
 import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.common.config.ConfigDef.CaseInsensitiveValidString;
@@ -351,11 +352,29 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   private static final String CLUSTER_MAP_CONFIG_DEFAULT =
           "";
 
+  public static final String TYPE_MAPPER_TYPE = "type.mapper.type";
+
+  private static final String TYPE_MAPPER_TYPE_DISPLAY = "The type mapper class";
+  private static final String TYPE_MAPPER_TYPE_DOC =
+          "The class that determines the type to write the sink data to. ";
+  private static final String TYPE_MAPPER_TYPE_DEFAULT =
+          "io.confluent.connect.elasticsearch_2_4.type.mapping.DefaultTypeMapper";
+
+  public static final String TYPE_MAPPER_FIELD = "type.mapper.field";
+
+  private static final String TYPE_MAPPER_FIELD_DISPLAY =
+          "The field path in the value which is taken as type";
+  private static final String TYPE_MAPPER_FIELD_DOC =
+          "The field path in the value which is taken as type";
+
+  private static final String TYPE_MAPPER_FIELD_DEFAULT =
+          "";
 
 
 
   private IndexMapper indexMapper;
   private ClusterMapper clusterMapper;
+  private TypeMapper typeMapper;
 
   protected static ConfigDef baseConfigDef() {
     final ConfigDef configDef = new ConfigDef();
@@ -365,6 +384,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
     addSecurityConfigs(configDef);
     addIndexMappingConfigs(configDef);
     addClusterMappingConfigs(configDef);
+    addTypeMappingConfigs(configDef);
     return configDef;
   }
 
@@ -787,6 +807,33 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
     );
   }
 
+  private static void addTypeMappingConfigs(ConfigDef configDef) {
+    int order = 0;
+    configDef
+        .define(
+        TYPE_MAPPER_TYPE,
+        ConfigDef.Type.STRING,
+        TYPE_MAPPER_TYPE_DEFAULT,
+        ConfigDef.Importance.HIGH,
+        TYPE_MAPPER_TYPE_DOC,
+        DATA_CONVERSION_GROUP,
+        ++order,
+        ConfigDef.Width.LONG,
+        TYPE_MAPPER_TYPE_DISPLAY
+        ).define(
+        TYPE_MAPPER_FIELD,
+        ConfigDef.Type.STRING,
+        TYPE_MAPPER_FIELD_DEFAULT,
+        ConfigDef.Importance.HIGH,
+        TYPE_MAPPER_FIELD_DOC,
+        DATA_CONVERSION_GROUP,
+        ++order,
+        ConfigDef.Width.LONG,
+        TYPE_MAPPER_FIELD_DISPLAY
+    );
+  }
+
+
   public static final ConfigDef CONFIG = baseConfigDef();
 
   public ElasticsearchSinkConnectorConfig(Map<String, String> props) {
@@ -972,6 +1019,17 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
       clusterMapper.configure(this);
     }
     return clusterMapper;
+  }
+
+  public TypeMapper getTypeMapper() {
+    if (typeMapper == null) {
+      typeMapper = createInstance(
+              TYPE_MAPPER_TYPE,
+              getString(TYPE_MAPPER_TYPE),
+              TypeMapper.class);
+      typeMapper.configure(this);
+    }
+    return typeMapper;
   }
 
   public static Map<String, String> parseMapConfig(List<String> values) {

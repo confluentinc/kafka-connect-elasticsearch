@@ -20,6 +20,7 @@ import io.confluent.connect.elasticsearch_2_4.bulk.BulkProcessor;
 import io.confluent.connect.elasticsearch_2_4.cluster.mapping.ClusterMapper;
 import io.confluent.connect.elasticsearch_2_4.index.mapping.IndexMapper;
 import io.confluent.connect.elasticsearch_2_4.jest.JestElasticsearchClient;
+import io.confluent.connect.elasticsearch_2_4.type.mapping.TypeMapper;
 import org.apache.kafka.common.utils.SystemTime;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.sink.ErrantRecordReporter;
@@ -43,7 +44,6 @@ public class ElasticsearchWriter {
   private static final Logger log = LoggerFactory.getLogger(ElasticsearchWriter.class);
 
   private final Map<String, ElasticsearchClient> clients;
-  private final String type;
   private final boolean ignoreKey;
   private final Set<String> ignoreKeyTopics;
   private final boolean ignoreSchema;
@@ -62,6 +62,8 @@ public class ElasticsearchWriter {
 
   private final ClusterMapper clusterMapper;
 
+  private final TypeMapper typeMapper;
+
   private final Map<String, String> configurations;
   private final int maxBufferedRecords;
   private final int maxInFlightRequests;
@@ -74,7 +76,6 @@ public class ElasticsearchWriter {
 
   ElasticsearchWriter(
       Map<String, String> configurations,
-      String type,
       boolean useCompactMapEntries,
       boolean ignoreKey,
       Set<String> ignoreKeyTopics,
@@ -93,9 +94,9 @@ public class ElasticsearchWriter {
       BehaviorOnMalformedDoc behaviorOnMalformedDoc,
       ErrantRecordReporter reporter,
       IndexMapper indexMapper,
-      ClusterMapper clusterMapper) {
+      ClusterMapper clusterMapper,
+      TypeMapper typeMapper) {
     this.configurations = configurations;
-    this.type = type;
     this.ignoreKey = ignoreKey;
     this.ignoreKeyTopics = ignoreKeyTopics;
     this.ignoreSchema = ignoreSchema;
@@ -107,6 +108,7 @@ public class ElasticsearchWriter {
     this.converter = new DataConverter(useCompactMapEntries, behaviorOnNullValues);
     this.indexMapper = indexMapper;
     this.clusterMapper = clusterMapper;
+    this.typeMapper = typeMapper;
     this.maxBufferedRecords = maxBufferedRecords;
     this.maxInFlightRequests = maxInFlightRequests;
     this.batchSize = batchSize;
@@ -117,13 +119,11 @@ public class ElasticsearchWriter {
     this.reporter = reporter;
     this.clients = initClients();
     this.bulkProcessors = new HashMap<>();
-
     existingMappings = new HashSet<>();
   }
 
   public static class Builder {
     private Map<String, String> configurations;
-    private String type;
     private boolean useCompactMapEntries = true;
     private boolean ignoreKey = false;
     private Set<String> ignoreKeyTopics = Collections.emptySet();
@@ -143,14 +143,10 @@ public class ElasticsearchWriter {
     private ErrantRecordReporter reporter;
     private IndexMapper indexMapper;
     private ClusterMapper clusterMapper;
+    private TypeMapper typeMapper;
 
     public Builder(Map<String, String> configurations) {
       this.configurations = configurations;
-    }
-
-    public Builder setType(String type) {
-      this.type = type;
-      return this;
     }
 
     public Builder setIgnoreKey(boolean ignoreKey, Set<String> ignoreKeyTopics) {
@@ -247,11 +243,15 @@ public class ElasticsearchWriter {
       return this;
     }
 
+    public Builder setTypeMapper(TypeMapper typeMapper) {
+      this.typeMapper = typeMapper;
+      return this;
+    }
+
 
     public ElasticsearchWriter build() {
       return new ElasticsearchWriter(
           configurations,
-          type,
           useCompactMapEntries,
           ignoreKey,
           ignoreKeyTopics,
@@ -270,7 +270,8 @@ public class ElasticsearchWriter {
           behaviorOnMalformedDoc,
           reporter,
           indexMapper,
-          clusterMapper
+          clusterMapper,
+          typeMapper
       );
     }
   }
@@ -313,6 +314,12 @@ public class ElasticsearchWriter {
       } catch (Exception e) {
         throw new ConnectException(e.getMessage());
       }
+      String typeName;
+      try {
+        typeName = getType(sinkRecord.topic(), sinkRecord);
+      } catch (Exception e) {
+        throw new ConnectException(e.getMessage());
+      }
       final boolean ignoreKey = ignoreKeyTopics.contains(sinkRecord.topic()) || this.ignoreKey;
       final boolean ignoreSchema =
           ignoreSchemaTopics.contains(sinkRecord.topic()) || this.ignoreSchema;
@@ -321,8 +328,12 @@ public class ElasticsearchWriter {
 
       if (!ignoreSchema && !existingMappings.contains(index)) {
         try {
-          if (Mapping.getMapping(getClient(clusterName), index, type) == null) {
-            Mapping.createMapping(getClient(clusterName), index, type, sinkRecord.valueSchema());
+          if (Mapping.getMapping(getClient(clusterName), index, typeName) == null) {
+            Mapping.createMapping(getClient(clusterName),
+                    index,
+                    typeName,
+                    sinkRecord.valueSchema()
+            );
           }
         } catch (IOException e) {
           // FIXME: concurrent tasks could attempt to create the mapping and one of the requests may
@@ -373,10 +384,14 @@ public class ElasticsearchWriter {
           boolean ignoreSchema) {
     IndexableRecord record = null;
     try {
+      JsonNode valueJson = null;
+      if (sinkRecord.value() != null) {
+        valueJson = converter.getValueAsJson(sinkRecord);
+      }
       record = converter.convertRecord(
               sinkRecord,
               index,
-              type,
+              typeMapper.getType(sinkRecord.topic(), valueJson),
               ignoreKey,
               ignoreSchema);
     } catch (ConnectException convertException) {
@@ -392,6 +407,8 @@ public class ElasticsearchWriter {
       } else {
         throw convertException;
       }
+    } catch (Exception e) {
+      throw new RuntimeException(e);
     }
     if (record != null) {
       log.trace(
@@ -434,6 +451,16 @@ public class ElasticsearchWriter {
     }
     final String cluster = clusterMapper.getName(valueJson);;
     log.trace("calculated cluster is '{}'", cluster);
+    return cluster;
+  }
+
+  private String getType(String topic, SinkRecord sinkRecord) throws Exception {
+    JsonNode valueJson = null;
+    if (sinkRecord.value() != null) {
+      valueJson = converter.getValueAsJson(sinkRecord);
+    }
+    final String cluster = typeMapper.getType(topic, valueJson);;
+    log.trace("calculated type is '{}'", cluster);
     return cluster;
   }
 

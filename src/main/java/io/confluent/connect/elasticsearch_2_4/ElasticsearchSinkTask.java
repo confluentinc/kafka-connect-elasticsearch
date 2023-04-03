@@ -58,7 +58,6 @@ public class ElasticsearchSinkTask extends SinkTask {
       }
 
       ElasticsearchWriter.Builder builder = new ElasticsearchWriter.Builder(props)
-          .setType(config.type())
           .setIgnoreKey(config.ignoreKey(), config.ignoreKeyTopics())
           .setIgnoreSchema(config.ignoreSchema(), config.ignoreSchemaTopics())
           .setCompactMapEntries(config.useCompactMapEntries())
@@ -73,7 +72,8 @@ public class ElasticsearchSinkTask extends SinkTask {
           .setBehaviorOnNullValues(config.behaviorOnNullValues())
           .setBehaviorOnMalformedDoc(config.behaviorOnMalformedDoc())
           .setIndexMapper(config.getIndexMapper())
-          .setClusterMapper(config.getClusterMapper());
+          .setClusterMapper(config.getClusterMapper())
+          .setTypeMapper(config.getTypeMapper());
 
 
       try {
