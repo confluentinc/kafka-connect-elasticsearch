@@ -4,7 +4,7 @@
 # This image can be used for local testing and exploration, but strictly speaking
 # is not used in the integration tests.
 
-FROM docker.elastic.co/elasticsearch/elasticsearch:7.0.0
+FROM elasticsearch:2.4.3
 
 # We require these to generate certs
 RUN yum -y install openssl

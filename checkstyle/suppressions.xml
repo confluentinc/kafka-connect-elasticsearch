@@ -34,4 +34,14 @@
       files="JestElasticsearchClient.java"
     />
 
+    <suppress
+      checks="PackageName"
+      files="io.confluent.connect.elasticsearch_2_4.*"
+    />
+
+    <suppress
+      checks="CyclomaticComplexity"
+      files="io.confluent.connect.elasticsearch_2_4.*"
+    />
+
 </suppressions>
