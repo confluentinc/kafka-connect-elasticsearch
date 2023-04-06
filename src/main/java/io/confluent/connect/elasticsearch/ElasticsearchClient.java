@@ -49,6 +49,7 @@ import org.elasticsearch.action.bulk.BulkProcessor;
 import org.elasticsearch.action.bulk.BulkProcessor.Listener;
 import org.elasticsearch.action.bulk.BulkRequest;
 import org.elasticsearch.action.bulk.BulkResponse;
+import org.elasticsearch.action.index.IndexRequest;
 import org.elasticsearch.client.RequestOptions;
 import org.elasticsearch.client.RestClient;
 import org.elasticsearch.client.RestHighLevelClient;
@@ -61,6 +62,7 @@ import org.elasticsearch.client.indices.GetMappingsRequest;
 import org.elasticsearch.client.indices.GetMappingsResponse;
 import org.elasticsearch.client.indices.PutMappingRequest;
 import org.elasticsearch.cluster.metadata.MappingMetadata;
+import org.elasticsearch.common.unit.ByteSizeValue;
 import org.elasticsearch.core.TimeValue;
 import org.elasticsearch.index.VersionType;
 import org.slf4j.Logger;
@@ -85,7 +87,7 @@ import static java.util.stream.Collectors.toList;
  * in failure of the task.
  */
 @SuppressWarnings("checkstyle:ClassDataAbstractionCoupling")
-public class ElasticsearchClient {
+public class ElasticsearchClient extends SearchClient{
 
   private static final Logger log = LoggerFactory.getLogger(ElasticsearchClient.class);
 
@@ -111,7 +113,7 @@ public class ElasticsearchClient {
   private final ConcurrentMap<Long, List<SinkRecordAndOffset>> inFlightRequests;
   private final ElasticsearchSinkConnectorConfig config;
   private final ErrantRecordReporter reporter;
-  private final RestHighLevelClient client;
+  protected final RestHighLevelClient client;
   private final ExecutorService bulkExecutorService;
   private final Time clock;
   private final Lock inFlightRequestLock = new ReentrantLock();
@@ -157,7 +159,7 @@ public class ElasticsearchClient {
     this.bulkProcessor = BulkProcessor
         .builder(buildConsumer(), buildListener(afterBulkCallback))
         .setBulkActions(config.batchSize())
-        .setBulkSize(config.bulkSize())
+        .setBulkSize((ByteSizeValue) config.bulkSize())
         .setConcurrentRequests(config.maxInFlightRequests() - 1) // 0 = no concurrent requests
         .setFlushInterval(TimeValue.timeValueMillis(config.lingerMs()))
         // Disabling bulk processor retries, because they only cover a small subset of errors
@@ -331,15 +333,16 @@ public class ElasticsearchClient {
    * @param offsetState record's offset state
    * @throws ConnectException if one of the requests failed
    */
-  public void index(SinkRecord record, DocWriteRequest<?> request, OffsetState offsetState) {
+  public void index(SinkRecord record, Object request, OffsetState offsetState) {
+    DocWriteRequest<?> docWriteRequest = (DocWriteRequest<?>) request;
     throwIfFailed();
 
     // TODO should we just pause partitions instead of blocking and failing the connector?
     verifyNumBufferedRecords();
 
-    requestToSinkRecord.put(request, new SinkRecordAndOffset(record, offsetState));
+    requestToSinkRecord.put(docWriteRequest, new SinkRecordAndOffset(record, offsetState));
     numBufferedRecords.incrementAndGet();
-    bulkProcessor.add(request);
+    bulkProcessor.add(docWriteRequest);
   }
 
   public void throwIfFailed() {

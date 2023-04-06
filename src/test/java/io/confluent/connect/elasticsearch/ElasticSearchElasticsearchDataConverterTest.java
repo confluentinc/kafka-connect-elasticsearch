@@ -34,18 +34,18 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 
-import static io.confluent.connect.elasticsearch.DataConverter.MAP_KEY;
-import static io.confluent.connect.elasticsearch.DataConverter.MAP_VALUE;
-import static io.confluent.connect.elasticsearch.DataConverter.TIMESTAMP_FIELD;
+import static io.confluent.connect.elasticsearch.ElasticsearchDataConverter.MAP_KEY;
+import static io.confluent.connect.elasticsearch.ElasticsearchDataConverter.MAP_VALUE;
+import static io.confluent.connect.elasticsearch.ElasticsearchDataConverter.TIMESTAMP_FIELD;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.fail;
 
-public class DataConverterTest {
+public class ElasticSearchElasticsearchDataConverterTest {
   
-  private DataConverter converter;
+  private ElasticsearchDataConverter converter;
   private Map<String, String> props;
 
   private String key;
@@ -62,7 +62,7 @@ public class DataConverterTest {
     props.put(ElasticsearchSinkConnectorConfig.IGNORE_KEY_CONFIG, "true");
     props.put(ElasticsearchSinkConnectorConfig.COMPACT_MAP_ENTRIES_CONFIG, "true");
 
-    converter = new DataConverter(new ElasticsearchSinkConnectorConfig(props));
+    converter = new ElasticsearchDataConverter(new ElasticsearchSinkConnectorConfig(props));
     key = "key";
     topic = "topic";
     partition = 0;
@@ -209,7 +209,7 @@ public class DataConverterTest {
 
     // Use the older non-compact format for map entries with string keys
     props.put(ElasticsearchSinkConnectorConfig.COMPACT_MAP_ENTRIES_CONFIG, "false");
-    converter = new DataConverter(new ElasticsearchSinkConnectorConfig(props));
+    converter = new ElasticsearchDataConverter(new ElasticsearchSinkConnectorConfig(props));
 
     Schema preProcessedSchema = converter.preProcessSchema(origSchema);
     assertEquals(
@@ -244,7 +244,7 @@ public class DataConverterTest {
 
     // Use the newer compact format for map entries with string keys
     props.put(ElasticsearchSinkConnectorConfig.COMPACT_MAP_ENTRIES_CONFIG, "true");
-    converter = new DataConverter(new ElasticsearchSinkConnectorConfig(props));
+    converter = new ElasticsearchDataConverter(new ElasticsearchSinkConnectorConfig(props));
     Schema preProcessedSchema = converter.preProcessSchema(origSchema);
     assertEquals(
         SchemaBuilder.map(Schema.STRING_SCHEMA, Schema.INT32_SCHEMA).build(),
@@ -289,7 +289,7 @@ public class DataConverterTest {
     testOptionalFieldWithoutDefault(SchemaBuilder.map(Schema.STRING_SCHEMA, Schema.BOOLEAN_SCHEMA));
     // Have to test maps with useCompactMapEntries set to true and set to false
     props.put(ElasticsearchSinkConnectorConfig.COMPACT_MAP_ENTRIES_CONFIG, "false");
-    converter = new DataConverter(new ElasticsearchSinkConnectorConfig(props));
+    converter = new ElasticsearchDataConverter(new ElasticsearchSinkConnectorConfig(props));
     testOptionalFieldWithoutDefault(SchemaBuilder.map(Schema.STRING_SCHEMA, Schema.BOOLEAN_SCHEMA));
   }
 
@@ -315,7 +315,7 @@ public class DataConverterTest {
     props.put(ElasticsearchSinkConnectorConfig.IGNORE_KEY_CONFIG, "false");
     props.put(ElasticsearchSinkConnectorConfig.IGNORE_SCHEMA_CONFIG, "false");
     props.put(ElasticsearchSinkConnectorConfig.BEHAVIOR_ON_NULL_VALUES_CONFIG, BehaviorOnNullValues.IGNORE.name());
-    converter = new DataConverter(new ElasticsearchSinkConnectorConfig(props));
+    converter = new ElasticsearchDataConverter(new ElasticsearchSinkConnectorConfig(props));
 
     SinkRecord sinkRecord = createSinkRecordWithValue(null);
     assertNull(converter.convertRecord(sinkRecord, index));
@@ -328,7 +328,7 @@ public class DataConverterTest {
     props.put(ElasticsearchSinkConnectorConfig.IGNORE_KEY_CONFIG, "false");
     props.put(ElasticsearchSinkConnectorConfig.IGNORE_SCHEMA_CONFIG, "false");
     props.put(ElasticsearchSinkConnectorConfig.BEHAVIOR_ON_NULL_VALUES_CONFIG, BehaviorOnNullValues.IGNORE.name());
-    converter = new DataConverter(new ElasticsearchSinkConnectorConfig(props));
+    converter = new ElasticsearchDataConverter(new ElasticsearchSinkConnectorConfig(props));
 
     Schema preProcessedSchema = converter.preProcessSchema(schema);
     Struct struct = new Struct(preProcessedSchema).put("string", "myValue");
@@ -348,7 +348,7 @@ public class DataConverterTest {
     props.put(ElasticsearchSinkConnectorConfig.IGNORE_KEY_CONFIG, "false");
     props.put(ElasticsearchSinkConnectorConfig.IGNORE_SCHEMA_CONFIG, "false");
     props.put(ElasticsearchSinkConnectorConfig.BEHAVIOR_ON_NULL_VALUES_CONFIG, BehaviorOnNullValues.DELETE.name());
-    converter = new DataConverter(new ElasticsearchSinkConnectorConfig(props));
+    converter = new ElasticsearchDataConverter(new ElasticsearchSinkConnectorConfig(props));
     SinkRecord sinkRecord = createSinkRecordWithValue(null);
     DeleteRequest actualRecord = (DeleteRequest) converter.convertRecord(sinkRecord, index);
 
@@ -362,7 +362,7 @@ public class DataConverterTest {
     props.put(ElasticsearchSinkConnectorConfig.IGNORE_KEY_CONFIG, "false");
     props.put(ElasticsearchSinkConnectorConfig.IGNORE_SCHEMA_CONFIG, "false");
     props.put(ElasticsearchSinkConnectorConfig.BEHAVIOR_ON_NULL_VALUES_CONFIG, BehaviorOnNullValues.DELETE.name());
-    converter = new DataConverter(new ElasticsearchSinkConnectorConfig(props));
+    converter = new ElasticsearchDataConverter(new ElasticsearchSinkConnectorConfig(props));
 
     key = null;
 
@@ -376,7 +376,7 @@ public class DataConverterTest {
     props.put(ElasticsearchSinkConnectorConfig.IGNORE_KEY_CONFIG, "false");
     props.put(ElasticsearchSinkConnectorConfig.IGNORE_SCHEMA_CONFIG, "false");
     props.put(ElasticsearchSinkConnectorConfig.BEHAVIOR_ON_NULL_VALUES_CONFIG, BehaviorOnNullValues.FAIL.name());
-    converter = new DataConverter(new ElasticsearchSinkConnectorConfig(props));
+    converter = new ElasticsearchDataConverter(new ElasticsearchSinkConnectorConfig(props));
 
     SinkRecord sinkRecord = createSinkRecordWithValue(null);
     try {
@@ -402,7 +402,7 @@ public class DataConverterTest {
 
   @Test
   public void testDoNotInjectPayloadTimestampIfNotDataStream() {
-    converter = new DataConverter(new ElasticsearchSinkConnectorConfig(props));
+    converter = new ElasticsearchDataConverter(new ElasticsearchSinkConnectorConfig(props));
     Schema preProcessedSchema = converter.preProcessSchema(schema);
     Struct struct = new Struct(preProcessedSchema).put("string", "myValue");
     SinkRecord sinkRecord = createSinkRecordWithValue(struct);
@@ -416,7 +416,7 @@ public class DataConverterTest {
   public void testDoNotInjectMissingPayloadTimestampIfDataStreamAndTimestampMapNotFound() {
     configureDataStream();
     props.put(ElasticsearchSinkConnectorConfig.DATA_STREAM_TIMESTAMP_CONFIG, "timestampFieldNotPresent");
-    converter = new DataConverter(new ElasticsearchSinkConnectorConfig(props));
+    converter = new ElasticsearchDataConverter(new ElasticsearchSinkConnectorConfig(props));
     Schema preProcessedSchema = converter.preProcessSchema(schema);
     Struct struct = new Struct(preProcessedSchema).put("string", "myValue");
     SinkRecord sinkRecord = createSinkRecordWithValue(struct);
@@ -428,7 +428,7 @@ public class DataConverterTest {
   @Test
   public void testInjectPayloadTimestampIfDataStreamAndNoTimestampMapSet() {
     configureDataStream();
-    converter = new DataConverter(new ElasticsearchSinkConnectorConfig(props));
+    converter = new ElasticsearchDataConverter(new ElasticsearchSinkConnectorConfig(props));
     Schema preProcessedSchema = converter.preProcessSchema(schema);
     Struct struct = new Struct(preProcessedSchema).put("string", "myValue");
     SinkRecord sinkRecord = createSinkRecordWithValue(struct);
@@ -441,7 +441,7 @@ public class DataConverterTest {
   @Test
   public void testInjectPayloadTimestampEvenIfAlreadyExistsAndTimestampMapNotSet() {
     configureDataStream();
-    converter = new DataConverter(new ElasticsearchSinkConnectorConfig(props));
+    converter = new ElasticsearchDataConverter(new ElasticsearchSinkConnectorConfig(props));
     schema = SchemaBuilder
         .struct()
         .name("struct")
@@ -462,7 +462,7 @@ public class DataConverterTest {
     String timestampFieldMap = "onefield";
     configureDataStream();
     props.put(ElasticsearchSinkConnectorConfig.DATA_STREAM_TIMESTAMP_CONFIG, timestampFieldMap);
-    converter = new DataConverter(new ElasticsearchSinkConnectorConfig(props));
+    converter = new ElasticsearchDataConverter(new ElasticsearchSinkConnectorConfig(props));
     schema = SchemaBuilder
         .struct()
         .name("struct")
@@ -483,7 +483,7 @@ public class DataConverterTest {
     String timestampFieldToUse = "two";
     configureDataStream();
     props.put(ElasticsearchSinkConnectorConfig.DATA_STREAM_TIMESTAMP_CONFIG, "one, two, field");
-    converter = new DataConverter(new ElasticsearchSinkConnectorConfig(props));
+    converter = new ElasticsearchDataConverter(new ElasticsearchSinkConnectorConfig(props));
     schema = SchemaBuilder
         .struct()
         .name("struct")
@@ -503,7 +503,7 @@ public class DataConverterTest {
   @Test(expected = DataException.class)
   public void testExceptionWhenNonObjectPayloadInDataStream() {
     configureDataStream();
-    converter = new DataConverter(new ElasticsearchSinkConnectorConfig(props));
+    converter = new ElasticsearchDataConverter(new ElasticsearchSinkConnectorConfig(props));
     SinkRecord record = new SinkRecord("t", 0, Schema.STRING_SCHEMA, key,
         SchemaBuilder.array(Schema.STRING_SCHEMA).build(), Arrays.asList("a", "b"), offset,
         recordTimestamp, TimestampType.CREATE_TIME);
@@ -514,7 +514,7 @@ public class DataConverterTest {
   public void testDoNotAddExternalVersioningIfDataStream() {
     configureDataStream();
     props.put(ElasticsearchSinkConnectorConfig.IGNORE_KEY_CONFIG, "false");
-    converter = new DataConverter(new ElasticsearchSinkConnectorConfig(props));
+    converter = new ElasticsearchDataConverter(new ElasticsearchSinkConnectorConfig(props));
     Schema preProcessedSchema = converter.preProcessSchema(schema);
     Struct struct = new Struct(preProcessedSchema).put("string", "myValue");
     SinkRecord sinkRecord = createSinkRecordWithValue(struct);

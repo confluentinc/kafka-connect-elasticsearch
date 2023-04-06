@@ -15,12 +15,15 @@
 
 package io.confluent.connect.elasticsearch;
 
+import io.confluent.connect.elasticsearch.opensearch.OpensearchValidator;
 import org.apache.kafka.common.config.Config;
 import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.connect.connector.Task;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.sink.SinkConnector;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -30,6 +33,7 @@ import java.util.Map;
 public class ElasticsearchSinkConnector extends SinkConnector {
 
   private Map<String, String> configProperties;
+  private static final Logger log = LoggerFactory.getLogger(ElasticsearchClient.class);
 
   @Override
   public String version() {
@@ -76,7 +80,14 @@ public class ElasticsearchSinkConnector extends SinkConnector {
 
   @Override
   public Config validate(Map<String, String> connectorConfigs) {
-    Validator validator = new Validator(connectorConfigs);
+    Validator validator;
+    ElasticsearchSinkConnectorConfig config = new ElasticsearchSinkConnectorConfig(connectorConfigs);
+    log.info(config.toString());
+    if(config.getServiceType().equals("Elasticsearch")){
+      validator = new ElasticsearchValidator(connectorConfigs);
+    } else {
+      validator = new OpensearchValidator(connectorConfigs);
+    }
     return validator.validate();
   }
 }

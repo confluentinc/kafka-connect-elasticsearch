@@ -15,7 +15,6 @@
 
 package io.confluent.connect.elasticsearch;
 
-import com.github.tomakehurst.wiremock.common.Json;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import java.io.ByteArrayOutputStream;
@@ -182,7 +181,7 @@ public class MappingTest {
       }
     }
 
-    DataConverter converter = new DataConverter(new ElasticsearchSinkConnectorConfig(ElasticsearchSinkConnectorConfigTest.addNecessaryProps(new HashMap<>())));
+    ElasticsearchDataConverter converter = new ElasticsearchDataConverter(new ElasticsearchSinkConnectorConfig(ElasticsearchSinkConnectorConfigTest.addNecessaryProps(new HashMap<>())));
     Schema.Type schemaType = schema.type();
     switch (schemaType) {
       case ARRAY:

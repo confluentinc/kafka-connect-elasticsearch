@@ -89,7 +89,7 @@ public class ElasticsearchClientTest {
 
   private static ElasticsearchContainer container;
 
-  private DataConverter converter;
+  private ElasticsearchDataConverter converter;
   private ElasticsearchHelperClient helperClient;
   private ElasticsearchSinkConnectorConfig config;
   private Map<String, String> props;
@@ -115,7 +115,7 @@ public class ElasticsearchClientTest {
     props.put(IGNORE_KEY_CONFIG, "true");
     props.put(LINGER_MS_CONFIG, "1000");
     config = new ElasticsearchSinkConnectorConfig(props);
-    converter = new DataConverter(config);
+    converter = new ElasticsearchDataConverter(config);
     helperClient = new ElasticsearchHelperClient(container.getConnectionUrl(), config,
         container.shouldStartClientInCompatibilityMode());
     helperClient.waitForConnection(30000);
@@ -337,7 +337,7 @@ public class ElasticsearchClientTest {
     props.put(BEHAVIOR_ON_NULL_VALUES_CONFIG, BehaviorOnNullValues.DELETE.name());
     props.put(IGNORE_KEY_CONFIG, "false");
     config = new ElasticsearchSinkConnectorConfig(props);
-    converter = new DataConverter(config);
+    converter = new ElasticsearchDataConverter(config);
     ElasticsearchClient client = new ElasticsearchClient(config, null, () -> offsetTracker.updateOffsets());
     client.createIndexOrDataStream(index);
 
@@ -360,7 +360,7 @@ public class ElasticsearchClientTest {
     props.put(WRITE_METHOD_CONFIG, WriteMethod.UPSERT.name());
     props.put(IGNORE_KEY_CONFIG, "false");
     config = new ElasticsearchSinkConnectorConfig(props);
-    converter = new DataConverter(config);
+    converter = new ElasticsearchDataConverter(config);
     ElasticsearchClient client = new ElasticsearchClient(config, null, () -> offsetTracker.updateOffsets());
     client.createIndexOrDataStream(index);
 
@@ -404,7 +404,7 @@ public class ElasticsearchClientTest {
   public void testIgnoreBadRecord() throws Exception {
     props.put(BEHAVIOR_ON_MALFORMED_DOCS_CONFIG, BehaviorOnMalformedDoc.IGNORE.name());
     config = new ElasticsearchSinkConnectorConfig(props);
-    converter = new DataConverter(config);
+    converter = new ElasticsearchDataConverter(config);
 
     ElasticsearchClient client = new ElasticsearchClient(config, null, () -> offsetTracker.updateOffsets());
     client.createIndexOrDataStream(index);
@@ -474,7 +474,7 @@ public class ElasticsearchClientTest {
     props.put(RETRY_BACKOFF_MS_CONFIG, "1000");
     props.put(MAX_IN_FLIGHT_REQUESTS_CONFIG, "1");
     config = new ElasticsearchSinkConnectorConfig(props);
-    converter = new DataConverter(config);
+    converter = new ElasticsearchDataConverter(config);
 
     // mock bulk processor to throw errors
     ElasticsearchClient client = new ElasticsearchClient(config, null, () -> offsetTracker.updateOffsets());
@@ -502,7 +502,7 @@ public class ElasticsearchClientTest {
     props.put(IGNORE_KEY_CONFIG, "false");
     props.put(BEHAVIOR_ON_MALFORMED_DOCS_CONFIG, BehaviorOnMalformedDoc.IGNORE.name());
     config = new ElasticsearchSinkConnectorConfig(props);
-    converter = new DataConverter(config);
+    converter = new ElasticsearchDataConverter(config);
 
     ErrantRecordReporter reporter = mock(ErrantRecordReporter.class);
     when(reporter.report(any(), any()))
@@ -609,7 +609,7 @@ public class ElasticsearchClientTest {
   public void testExternalVersionConflictReporterNotCalled() throws Exception {
     props.put(IGNORE_KEY_CONFIG, "false");
     config = new ElasticsearchSinkConnectorConfig(props);
-    converter = new DataConverter(config);
+    converter = new ElasticsearchDataConverter(config);
 
     ErrantRecordReporter reporter = mock(ErrantRecordReporter.class);
     ElasticsearchClient client = new ElasticsearchClient(config, reporter, () -> offsetTracker.updateOffsets());
@@ -636,7 +636,7 @@ public class ElasticsearchClientTest {
   public void testHandleResponseInternalVersionConflictReporterCalled() throws Exception {
     props.put(IGNORE_KEY_CONFIG, "false");
     config = new ElasticsearchSinkConnectorConfig(props);
-    converter = new DataConverter(config);
+    converter = new ElasticsearchDataConverter(config);
 
     ErrantRecordReporter reporter = mock(ErrantRecordReporter.class);
 
@@ -669,7 +669,7 @@ public class ElasticsearchClientTest {
     props.put(IGNORE_KEY_CONFIG, "false");
     props.put(WRITE_METHOD_CONFIG, WriteMethod.UPSERT.name());
     config = new ElasticsearchSinkConnectorConfig(props);
-    converter = new DataConverter(config);
+    converter = new ElasticsearchDataConverter(config);
 
     ErrantRecordReporter reporter = mock(ErrantRecordReporter.class);
     ErrantRecordReporter reporter2 = mock(ErrantRecordReporter.class);
@@ -710,7 +710,7 @@ public class ElasticsearchClientTest {
     props.put(SSL_CONFIG_PREFIX + SslConfigs.SSL_TRUSTSTORE_PASSWORD_CONFIG, container.getTruststorePassword());
     props.put(SSL_CONFIG_PREFIX + SslConfigs.SSL_KEY_PASSWORD_CONFIG, container.getKeyPassword());
     config = new ElasticsearchSinkConnectorConfig(props);
-    converter = new DataConverter(config);
+    converter = new ElasticsearchDataConverter(config);
 
     ElasticsearchClient client = new ElasticsearchClient(config, null, () -> offsetTracker.updateOffsets());
     helperClient = new ElasticsearchHelperClient(address, config,
@@ -735,7 +735,7 @@ public class ElasticsearchClientTest {
     props.put(DATA_STREAM_TYPE_CONFIG, DATA_STREAM_TYPE);
     props.put(DATA_STREAM_DATASET_CONFIG, DATA_STREAM_DATASET);
     config = new ElasticsearchSinkConnectorConfig(props);
-    converter = new DataConverter(config);
+    converter = new ElasticsearchDataConverter(config);
     ElasticsearchClient client = new ElasticsearchClient(config, null, () -> offsetTracker.updateOffsets());
     index = createIndexName(TOPIC);
 

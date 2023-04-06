@@ -52,9 +52,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-public class DataConverter {
+public class ElasticsearchDataConverter implements SearchDataConverter {
 
-  private static final Logger log = LoggerFactory.getLogger(DataConverter.class);
+  private static final Logger log = LoggerFactory.getLogger(ElasticsearchDataConverter.class);
 
   private static final Converter JSON_CONVERTER;
   protected static final String MAP_KEY = "key";
@@ -79,7 +79,7 @@ public class DataConverter {
    *
    * @param config connector config
    */
-  public DataConverter(ElasticsearchSinkConnectorConfig config) {
+  public ElasticsearchDataConverter(ElasticsearchSinkConnectorConfig config) {
     this.config = config;
     this.objectMapper = new ObjectMapper();
   }
@@ -116,7 +116,7 @@ public class DataConverter {
     }
   }
 
-  public DocWriteRequest<?> convertRecord(SinkRecord record, String index) {
+  public Object convertRecord(SinkRecord record, String index) {
     if (record.value() == null) {
       switch (config.behaviorOnNullValues()) {
         case IGNORE:
