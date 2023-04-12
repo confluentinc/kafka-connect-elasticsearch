@@ -173,6 +173,7 @@ public class DataConverter {
         return new UpdateRequest(index, id)
             .doc(payload, XContentType.JSON)
             .upsert(payload, XContentType.JSON)
+            .script(config.upsertScript())
             .retryOnConflict(Math.min(config.maxInFlightRequests(), 5));
       case INSERT:
         OpType opType = config.isDataStream() ? OpType.CREATE : OpType.INDEX;

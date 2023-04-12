@@ -18,10 +18,7 @@ package io.confluent.connect.elasticsearch;
 import java.io.File;
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Collectors;
 import java.util.concurrent.TimeUnit;
 import org.apache.kafka.common.config.AbstractConfig;
@@ -33,6 +30,8 @@ import org.apache.kafka.common.config.ConfigDef.Validator;
 import org.apache.kafka.common.config.ConfigDef.Width;
 import org.apache.kafka.common.config.types.Password;
 import org.elasticsearch.common.unit.ByteSizeValue;
+import org.elasticsearch.script.Script;
+import org.elasticsearch.script.ScriptType;
 
 import static org.apache.kafka.common.config.ConfigDef.Range.between;
 import static org.apache.kafka.common.config.SslConfigs.SSL_ENDPOINT_IDENTIFICATION_ALGORITHM_CONFIG;
@@ -376,6 +375,10 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   private static final String KERBEROS_GROUP = "Kerberos";
   private static final String DATA_STREAM_GROUP = "Data Stream";
 
+  public static final String UPSERT_SCRIPT_CONFIG = "upsert.script";
+  private static final String UPSERT_SCRIPT_DOC = "Script to use when write.method=upsert";
+  private static final String UPSERT_SCRIPT_DOC_DISPLAY = "Upsert script";
+
   public enum BehaviorOnMalformedDoc {
     IGNORE,
     WARN,
@@ -702,7 +705,16 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
             Width.SHORT,
             WRITE_METHOD_DISPLAY,
             new EnumRecommender<>(WriteMethod.class)
-    );
+        ).define(
+            UPSERT_SCRIPT_CONFIG,
+            Type.STRING,
+            Importance.HIGH,
+            UPSERT_SCRIPT_DOC,
+            DATA_CONVERSION_GROUP,
+            ++order,
+            Width.LONG,
+            UPSERT_SCRIPT_DOC_DISPLAY
+        );
   }
 
   private static void addProxyConfigs(ConfigDef configDef) {
@@ -1051,6 +1063,10 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
 
   public WriteMethod writeMethod() {
     return WriteMethod.valueOf(getString(WRITE_METHOD_CONFIG).toUpperCase());
+  }
+
+  public Script upsertScript() {
+    return new Script(ScriptType.INLINE, "painless", getString(UPSERT_SCRIPT_CONFIG), Collections.emptyMap());
   }
 
   private static class DataStreamDatasetValidator implements Validator {
