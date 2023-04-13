@@ -20,15 +20,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BehaviorOnNullValues;
-import org.apache.kafka.connect.data.ConnectSchema;
 import org.apache.kafka.connect.data.Date;
-import org.apache.kafka.connect.data.Decimal;
-import org.apache.kafka.connect.data.Field;
-import org.apache.kafka.connect.data.Schema;
-import org.apache.kafka.connect.data.SchemaBuilder;
-import org.apache.kafka.connect.data.Struct;
-import org.apache.kafka.connect.data.Time;
-import org.apache.kafka.connect.data.Timestamp;
+import org.apache.kafka.connect.data.*;
 import org.apache.kafka.connect.errors.DataException;
 import org.apache.kafka.connect.json.JsonConverter;
 import org.apache.kafka.connect.sink.SinkRecord;
@@ -39,18 +32,15 @@ import org.elasticsearch.action.delete.DeleteRequest;
 import org.elasticsearch.action.index.IndexRequest;
 import org.elasticsearch.action.update.UpdateRequest;
 import org.elasticsearch.index.VersionType;
+import org.elasticsearch.script.Script;
+import org.elasticsearch.script.ScriptType;
 import org.elasticsearch.xcontent.XContentType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 public class DataConverter {
 
@@ -165,15 +155,30 @@ public class DataConverter {
     }
 
     String payload = getPayload(record);
+    ObjectMapper objectMapper = new ObjectMapper();
     payload = maybeAddTimestamp(payload, record.timestamp());
+    Map<String, Object> params = null;
+    try {
+      params = (Map<String, Object>) objectMapper.readValue(payload, Map.class);
+    } catch (JsonProcessingException e) {
+      e.printStackTrace();
+    }
 
     // index
     switch (config.writeMethod()) {
+      case UPDATE:
+        return new UpdateRequest(index, id)
+                .upsert(payload, XContentType.JSON)
+                .script(new Script(
+                        ScriptType.INLINE,
+                        "painless",
+                        config.upsertScript(),
+                        params)
+                );
       case UPSERT:
         return new UpdateRequest(index, id)
             .doc(payload, XContentType.JSON)
             .upsert(payload, XContentType.JSON)
-            .script(config.upsertScript())
             .retryOnConflict(Math.min(config.maxInFlightRequests(), 5));
       case INSERT:
         OpType opType = config.isDataStream() ? OpType.CREATE : OpType.INDEX;

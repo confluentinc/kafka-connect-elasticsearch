@@ -258,6 +258,7 @@ public class ElasticsearchSinkTask extends SinkTask {
     try {
       docWriteRequest = converter.convertRecord(sinkRecord, indexName);
     } catch (DataException convertException) {
+      System.out.println(convertException.getMessage());
       reportBadRecord(sinkRecord, convertException);
 
       if (config.dropInvalidMessage()) {

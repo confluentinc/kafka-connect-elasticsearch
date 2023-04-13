@@ -404,7 +404,8 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
 
   public enum WriteMethod {
     INSERT,
-    UPSERT
+    UPSERT,
+    UPDATE
   }
 
   protected static ConfigDef baseConfigDef() {
@@ -1065,8 +1066,8 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
     return WriteMethod.valueOf(getString(WRITE_METHOD_CONFIG).toUpperCase());
   }
 
-  public Script upsertScript() {
-    return new Script(ScriptType.INLINE, "painless", getString(UPSERT_SCRIPT_CONFIG), Collections.emptyMap());
+  public String upsertScript() {
+    return  getString(UPSERT_SCRIPT_CONFIG);
   }
 
   private static class DataStreamDatasetValidator implements Validator {
