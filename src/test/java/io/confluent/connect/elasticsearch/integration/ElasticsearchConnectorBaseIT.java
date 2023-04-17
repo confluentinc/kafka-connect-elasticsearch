@@ -36,6 +36,7 @@ import org.elasticsearch.search.SearchHit;
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Before;
+import org.junit.BeforeClass;
 
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnector;
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig;
@@ -83,16 +84,21 @@ public class ElasticsearchConnectorBaseIT extends BaseConnectorIT {
   protected Map<String, String> props;
   protected String index;
 
+  @BeforeClass
+  public static void setupBeforeAll() throws Exception {
+    container = ElasticsearchContainer.fromSystemProperties();
+    container.start();
+  }
+
   @AfterClass
   public static void cleanupAfterAll() {
     container.close();
   }
 
   @Before
-  public void setup() {
+  public void setup() throws Exception {
     index = TOPIC;
     isDataStream = false;
-
     startConnect();
     connect.kafka().createTopic(TOPIC);
 
@@ -101,7 +107,7 @@ public class ElasticsearchConnectorBaseIT extends BaseConnectorIT {
   }
 
   @After
-  public void cleanup() throws IOException {
+  public void cleanup() throws Exception {
     stopConnect();
 
     if (container != null && container.isRunning()) {
@@ -126,7 +132,7 @@ public class ElasticsearchConnectorBaseIT extends BaseConnectorIT {
     Map<String, String> props = new HashMap<>();
 
     // generic configs
-    props.put(CONNECTOR_CLASS_CONFIG, ElasticsearchSinkConnector.class.getName());
+    props.put(CONNECTOR_CLASS_CONFIG, ElasticsearchSinkConnector.class.getSimpleName());
     props.put(TOPICS_CONFIG, TOPIC);
     props.put(TASKS_MAX_CONFIG, Integer.toString(TASKS_MAX));
     props.put(KEY_CONVERTER_CLASS_CONFIG, StringConverter.class.getName());
@@ -147,7 +153,6 @@ public class ElasticsearchConnectorBaseIT extends BaseConnectorIT {
 
     // wait for tasks to spin up
     waitForConnectorToStart(CONNECTOR_NAME, TASKS_MAX);
-
     writeRecords(NUM_RECORDS);
 
     verifySearchResults(NUM_RECORDS);
