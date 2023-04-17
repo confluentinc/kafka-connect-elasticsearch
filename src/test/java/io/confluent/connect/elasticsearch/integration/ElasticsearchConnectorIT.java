@@ -60,7 +60,7 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
   }
 
   @Override
-  public void setup() {
+  public void setup() throws Exception {
     if (!container.isRunning()) {
       setupBeforeAll();
     }
@@ -161,8 +161,8 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
     // wait for tasks to spin up
     waitForConnectorToStart(CONNECTOR_NAME, TASKS_MAX);
 
-    for (int i  = 0; i < NUM_RECORDS; i++) {
-      connect.kafka().produce(TOPIC, String.valueOf(i),  String.valueOf(i));
+    for (int i = 0; i < NUM_RECORDS; i++) {
+      connect.kafka().produce(TOPIC, String.valueOf(i), String.valueOf(i));
     }
 
     waitForRecords(0);

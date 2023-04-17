@@ -18,6 +18,7 @@ package io.confluent.connect.elasticsearch.integration;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
+import io.confluent.kafka.schemaregistry.RestApp;
 import org.apache.kafka.connect.runtime.AbstractStatus;
 import org.apache.kafka.connect.runtime.rest.entities.ConnectorStateInfo;
 import org.apache.kafka.connect.util.clusters.EmbeddedConnectCluster;
@@ -36,6 +37,7 @@ public abstract class BaseConnectorIT {
   protected static final long CONNECTOR_STARTUP_DURATION_MS = TimeUnit.MINUTES.toMillis(60);
 
   protected EmbeddedConnectCluster connect;
+  protected RestApp restApp;
 
   protected void startConnect() {
     connect = new EmbeddedConnectCluster.Builder()
