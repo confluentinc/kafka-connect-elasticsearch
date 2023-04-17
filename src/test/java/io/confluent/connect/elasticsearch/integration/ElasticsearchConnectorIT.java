@@ -65,7 +65,7 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
   }
 
   @Override
-  public void setup() {
+  public void setup() throws Exception {
     if (!container.isRunning()) {
       setupBeforeAll();
     }
