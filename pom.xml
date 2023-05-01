@@ -10,7 +10,7 @@
 
     <groupId>io.confluent</groupId>
     <artifactId>kafka-connect-elasticsearch</artifactId>
-    <version>10.0.5</version>
+    <version>10.0.6</version>
     <packaging>jar</packaging>
     <name>kafka-connect-elasticsearch</name>
     <organization>

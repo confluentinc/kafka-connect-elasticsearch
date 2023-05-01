@@ -44,4 +44,14 @@
       files="io.confluent.connect.elasticsearch_2_4.*"
     />
 
+    <suppress
+      checks="NPathComplexity"
+      files="io.confluent.connect.elasticsearch_2_4.ElasticsearchWriter"
+    />
+
+    <suppress
+      checks="ClassDataAbstractionCoupling"
+      files="io.confluent.connect.elasticsearch_2_4.ElasticsearchWriter"
+    />
+
 </suppressions>

@@ -23,6 +23,7 @@ import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Field;
 import org.apache.kafka.connect.data.Schema;
+import org.apache.kafka.connect.data.SchemaAndValue;
 import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.data.Time;
@@ -213,6 +214,28 @@ public class DataConverter {
 
     return jsonPayload;
   }
+
+  public SchemaAndValue getSchemaAndValueFromJson(String topic, String json) {
+    if (json == null) {
+      return null;
+    }
+    JsonNode jsonPayload;
+    try {
+      jsonPayload = objectMapper.readTree(json);
+    } catch (IOException e) {
+      // Should not happen if the payload was retrieved correctly.
+      return JSON_CONVERTER.toConnectData(
+              topic,
+              new byte[0]
+      );
+    }
+
+    return JSON_CONVERTER.toConnectData(
+            topic,
+            jsonPayload.toPrettyString().getBytes()
+    );
+  }
+
 
   private String getPayload(SinkRecord record, boolean ignoreSchema) {
     if (record.value() == null) {

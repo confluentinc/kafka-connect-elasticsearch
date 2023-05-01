@@ -22,6 +22,7 @@ import io.confluent.connect.elasticsearch_2_4.index.mapping.IndexMapper;
 import io.confluent.connect.elasticsearch_2_4.jest.JestElasticsearchClient;
 import io.confluent.connect.elasticsearch_2_4.type.mapping.TypeMapper;
 import org.apache.kafka.common.utils.SystemTime;
+import org.apache.kafka.connect.data.SchemaAndValue;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.sink.ErrantRecordReporter;
 import org.apache.kafka.connect.sink.SinkRecord;
@@ -344,7 +345,15 @@ public class ElasticsearchWriter {
         existingMappings.add(index);
       }
 
-      tryWriteRecord(sinkRecord, index, clusterName, ignoreKey, ignoreSchema);
+      SinkRecord r;
+
+      try {
+        r = getTransformedRecord(sinkRecord.topic(), sinkRecord);
+      } catch (Exception e) {
+        throw new ConnectException(e.getMessage());
+      }
+
+      tryWriteRecord(r, index, clusterName, typeName,ignoreKey, ignoreSchema);
     }
   }
 
@@ -380,18 +389,15 @@ public class ElasticsearchWriter {
           SinkRecord sinkRecord,
           String index,
           String clusterName,
+          String esType,
           boolean ignoreKey,
           boolean ignoreSchema) {
     IndexableRecord record = null;
     try {
-      JsonNode valueJson = null;
-      if (sinkRecord.value() != null) {
-        valueJson = converter.getValueAsJson(sinkRecord);
-      }
       record = converter.convertRecord(
               sinkRecord,
               index,
-              typeMapper.getType(sinkRecord.topic(), valueJson),
+              esType,
               ignoreKey,
               ignoreSchema);
     } catch (ConnectException convertException) {
@@ -439,6 +445,28 @@ public class ElasticsearchWriter {
     return index;
   }
 
+  private SinkRecord getTransformedRecord(String topic, SinkRecord sinkRecord) throws Exception {
+    String json = null;
+    Object transformedValue = sinkRecord.value();
+    if (transformedValue != null) {
+      JsonNode jsonNode = converter.getValueAsJson(sinkRecord);
+      json = jsonNode.get("metadata").toPrettyString();
+    }
+    SchemaAndValue schemaAndValue = converter.getSchemaAndValueFromJson(topic, json);
+    SinkRecord r = new SinkRecord(sinkRecord.topic(),
+            sinkRecord.kafkaPartition(),
+            sinkRecord.keySchema(),
+            sinkRecord.key(),
+            sinkRecord.valueSchema(),
+            schemaAndValue.value(),
+            sinkRecord.kafkaOffset(),
+            sinkRecord.timestamp(),
+            sinkRecord.timestampType(),
+            sinkRecord.headers());
+    log.error("transformed record value is '{}'", json);
+    return r;
+  }
+
   /**
    * Return the expected cluster name for a given topic, using the configured mapping or the topic
    * name. Elasticsearch accepts only lowercase index names
@@ -459,9 +487,9 @@ public class ElasticsearchWriter {
     if (sinkRecord.value() != null) {
       valueJson = converter.getValueAsJson(sinkRecord);
     }
-    final String cluster = typeMapper.getType(topic, valueJson);;
-    log.trace("calculated type is '{}'", cluster);
-    return cluster;
+    final String type = typeMapper.getType(topic, valueJson);;
+    log.trace("calculated type is '{}'", type);
+    return type;
   }
 
   public void flush() {
