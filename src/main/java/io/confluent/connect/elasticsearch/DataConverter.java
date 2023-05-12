@@ -272,6 +272,7 @@ public class DataConverter {
         case Decimal.LOGICAL_NAME:
           return copySchemaBasics(schema, SchemaBuilder.float64()).build();
         case Date.LOGICAL_NAME:
+          return copySchemaBasics(schema, SchemaBuilder.int64()).build();
         case Time.LOGICAL_NAME:
         case Timestamp.LOGICAL_NAME:
           return schema;
@@ -385,6 +386,7 @@ public class DataConverter {
       case Decimal.LOGICAL_NAME:
         return ((BigDecimal) value).doubleValue();
       case Date.LOGICAL_NAME:
+        return ((java.util.Date) value).getTime();
       case Time.LOGICAL_NAME:
       case Timestamp.LOGICAL_NAME:
         return value;
