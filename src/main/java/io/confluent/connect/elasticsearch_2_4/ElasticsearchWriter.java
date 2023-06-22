@@ -16,6 +16,7 @@
 package io.confluent.connect.elasticsearch_2_4;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.instana.sdk.annotation.Span;
 import io.confluent.connect.elasticsearch_2_4.bulk.BulkProcessor;
 import io.confluent.connect.elasticsearch_2_4.cluster.mapping.ClusterMapper;
 import io.confluent.connect.elasticsearch_2_4.index.mapping.IndexMapper;
@@ -286,6 +287,7 @@ public class ElasticsearchWriter {
     return res;
   }
 
+  @Span("ElasticsearchWriter - write")
   public void write(Collection<SinkRecord> records) {
     for (SinkRecord sinkRecord : records) {
       // Preemptively skip records with null values if they're going to be ignored anyways
@@ -434,6 +436,7 @@ public class ElasticsearchWriter {
    * name. Elasticsearch accepts only lowercase index names
    * (<a href="https://github.com/elastic/elasticsearch/issues/29420">ref</a>_.
    */
+  @Span("getIndexName")
   private String getIndexName(String topic, SinkRecord sinkRecord) throws Exception {
     JsonNode valueJson = null;
     if (sinkRecord.value() != null) {
@@ -445,6 +448,7 @@ public class ElasticsearchWriter {
     return index;
   }
 
+  @Span("getTransformedRecord")
   private SinkRecord getTransformedRecord(String topic, SinkRecord sinkRecord) throws Exception {
     String json = null;
     Object transformedValue = sinkRecord.value();
@@ -463,7 +467,7 @@ public class ElasticsearchWriter {
             sinkRecord.timestamp(),
             sinkRecord.timestampType(),
             sinkRecord.headers());
-    log.error("transformed record value is '{}'", json);
+    log.trace("transformed record value is '{}'", json);
     return r;
   }
 
@@ -472,6 +476,7 @@ public class ElasticsearchWriter {
    * name. Elasticsearch accepts only lowercase index names
    * (<a href="https://github.com/elastic/elasticsearch/issues/29420">ref</a>_.
    */
+  @Span("getClusterName")
   private String getClusterName(SinkRecord sinkRecord) throws Exception {
     JsonNode valueJson = null;
     if (sinkRecord.value() != null) {
@@ -482,6 +487,7 @@ public class ElasticsearchWriter {
     return cluster;
   }
 
+  @Span("GetType")
   private String getType(String topic, SinkRecord sinkRecord) throws Exception {
     JsonNode valueJson = null;
     if (sinkRecord.value() != null) {
