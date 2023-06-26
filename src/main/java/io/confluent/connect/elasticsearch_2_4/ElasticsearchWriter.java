@@ -17,6 +17,7 @@ package io.confluent.connect.elasticsearch_2_4;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.instana.sdk.annotation.Span;
+import com.instana.sdk.support.SpanSupport;
 import io.confluent.connect.elasticsearch_2_4.bulk.BulkProcessor;
 import io.confluent.connect.elasticsearch_2_4.cluster.mapping.ClusterMapper;
 import io.confluent.connect.elasticsearch_2_4.index.mapping.IndexMapper;
@@ -289,6 +290,7 @@ public class ElasticsearchWriter {
 
   @Span("ElasticsearchWriter - write")
   public void write(Collection<SinkRecord> records) {
+    SpanSupport.annotate("db.type", "elasticsearch");
     for (SinkRecord sinkRecord : records) {
       // Preemptively skip records with null values if they're going to be ignored anyways
       if (ignoreRecord(sinkRecord)) {
@@ -445,6 +447,7 @@ public class ElasticsearchWriter {
     final String indexOverride = indexMapper.getIndex(topic, valueJson);
     String index = indexOverride != null ? indexOverride : topic.toLowerCase();
     log.trace("calculated index is '{}'", index);
+    SpanSupport.annotate("db.instance", index);
     return index;
   }
 
@@ -484,6 +487,7 @@ public class ElasticsearchWriter {
     }
     final String cluster = clusterMapper.getName(valueJson);;
     log.trace("calculated cluster is '{}'", cluster);
+    SpanSupport.annotate("db.connection_string", cluster);
     return cluster;
   }
 
