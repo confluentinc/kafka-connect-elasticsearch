@@ -13,5 +13,4 @@ def upgradeConnectorTest(body) {
                         string(name: 'BRANCH_TO_TEST', value: env.CHANGE_BRANCH)
                     ], wait: true
 }
-
 upgradeConnectorTest{}
