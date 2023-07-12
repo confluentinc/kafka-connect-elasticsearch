@@ -313,18 +313,21 @@ public class ElasticsearchWriter {
       } catch (Exception e) {
         throw new ConnectException(e.getMessage());
       }
+      SpanSupport.annotate("db.instance", index);
       String clusterName;
       try {
         clusterName = getClusterName(sinkRecord);
       } catch (Exception e) {
         throw new ConnectException(e.getMessage());
       }
+      SpanSupport.annotate("db.connection_string", clusterName);
       String typeName;
       try {
         typeName = getType(sinkRecord.topic(), sinkRecord);
       } catch (Exception e) {
         throw new ConnectException(e.getMessage());
       }
+      SpanSupport.annotate("doc.type", typeName);
       final boolean ignoreKey = ignoreKeyTopics.contains(sinkRecord.topic()) || this.ignoreKey;
       final boolean ignoreSchema =
           ignoreSchemaTopics.contains(sinkRecord.topic()) || this.ignoreSchema;
@@ -438,7 +441,6 @@ public class ElasticsearchWriter {
    * name. Elasticsearch accepts only lowercase index names
    * (<a href="https://github.com/elastic/elasticsearch/issues/29420">ref</a>_.
    */
-  @Span("getIndexName")
   private String getIndexName(String topic, SinkRecord sinkRecord) throws Exception {
     JsonNode valueJson = null;
     if (sinkRecord.value() != null) {
@@ -447,11 +449,9 @@ public class ElasticsearchWriter {
     final String indexOverride = indexMapper.getIndex(topic, valueJson);
     String index = indexOverride != null ? indexOverride : topic.toLowerCase();
     log.trace("calculated index is '{}'", index);
-    SpanSupport.annotate("db.instance", index);
     return index;
   }
 
-  @Span("getTransformedRecord")
   private SinkRecord getTransformedRecord(String topic, SinkRecord sinkRecord) throws Exception {
     String json = null;
     Object transformedValue = sinkRecord.value();
@@ -479,7 +479,6 @@ public class ElasticsearchWriter {
    * name. Elasticsearch accepts only lowercase index names
    * (<a href="https://github.com/elastic/elasticsearch/issues/29420">ref</a>_.
    */
-  @Span("getClusterName")
   private String getClusterName(SinkRecord sinkRecord) throws Exception {
     JsonNode valueJson = null;
     if (sinkRecord.value() != null) {
@@ -487,11 +486,9 @@ public class ElasticsearchWriter {
     }
     final String cluster = clusterMapper.getName(valueJson);;
     log.trace("calculated cluster is '{}'", cluster);
-    SpanSupport.annotate("db.connection_string", cluster);
     return cluster;
   }
 
-  @Span("GetType")
   private String getType(String topic, SinkRecord sinkRecord) throws Exception {
     JsonNode valueJson = null;
     if (sinkRecord.value() != null) {
