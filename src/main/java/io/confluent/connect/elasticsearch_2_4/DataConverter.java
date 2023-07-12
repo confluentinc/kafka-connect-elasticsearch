@@ -251,7 +251,7 @@ public class DataConverter {
         : preProcessValue(record.value(), record.valueSchema(), schema);
 
     byte[] rawJsonPayload = JSON_CONVERTER.fromConnectData(record.topic(), schema, value);
-    return new String(rawJsonPayload, StandardCharsets.UTF_8);
+    return new String(rawJsonPayload, StandardCharsets.UTF_16);
   }
 
   // We need to pre process the Kafka Connect schema before converting to JSON as Elasticsearch
