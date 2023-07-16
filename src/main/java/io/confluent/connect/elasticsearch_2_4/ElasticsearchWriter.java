@@ -24,7 +24,6 @@ import io.confluent.connect.elasticsearch_2_4.index.mapping.IndexMapper;
 import io.confluent.connect.elasticsearch_2_4.jest.JestElasticsearchClient;
 import io.confluent.connect.elasticsearch_2_4.type.mapping.TypeMapper;
 import org.apache.kafka.common.utils.SystemTime;
-import org.apache.kafka.connect.data.SchemaAndValue;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.sink.ErrantRecordReporter;
 import org.apache.kafka.connect.sink.SinkRecord;
@@ -453,24 +452,29 @@ public class ElasticsearchWriter {
   }
 
   private SinkRecord getTransformedRecord(String topic, SinkRecord sinkRecord) throws Exception {
-    String json = null;
-    Object transformedValue = sinkRecord.value();
-    if (transformedValue != null) {
-      JsonNode jsonNode = converter.getValueAsJson(sinkRecord);
-      json = jsonNode.get("metadata").toPrettyString();
+    Object metadata = null;
+    Object value = sinkRecord.value();
+    if (value != null) {
+      Map<String, Object> map = (Map<String, Object>) value;
+      if (map.containsKey("metadata")) {
+        metadata = map.get("metadata");
+      } else {
+        log.error("metadata is not found in this record. {}", sinkRecord);
+      }
+    } else {
+      log.error("value is null. {}", sinkRecord);
     }
-    SchemaAndValue schemaAndValue = converter.getSchemaAndValueFromJson(topic, json);
     SinkRecord r = new SinkRecord(sinkRecord.topic(),
             sinkRecord.kafkaPartition(),
             sinkRecord.keySchema(),
             sinkRecord.key(),
             sinkRecord.valueSchema(),
-            schemaAndValue.value(),
+            metadata,
             sinkRecord.kafkaOffset(),
             sinkRecord.timestamp(),
             sinkRecord.timestampType(),
             sinkRecord.headers());
-    log.trace("transformed record value is '{}'", json);
+    log.trace("transformed record value is '{}'", metadata);
     return r;
   }
 
