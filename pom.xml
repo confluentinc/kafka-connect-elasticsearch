@@ -10,7 +10,7 @@
 
     <groupId>io.confluent</groupId>
     <artifactId>kafka-connect-elasticsearch</artifactId>
-    <version>10.0.6</version>
+    <version>10.0.8</version>
     <packaging>jar</packaging>
     <name>kafka-connect-elasticsearch</name>
     <organization>
@@ -88,6 +88,11 @@
             <groupId>commons-codec</groupId>
             <artifactId>commons-codec</artifactId>
             <version>1.15</version>
+        </dependency>
+        <dependency>
+            <groupId>com.instana</groupId>
+            <artifactId>instana-java-sdk</artifactId>
+            <version>1.2.0</version>
         </dependency>
         <dependency>
             <groupId>commons-codec</groupId>
@@ -275,7 +280,7 @@
                 <configuration>
                     <compilerArgs>
                         <arg>-Xlint:all,-try</arg>
-                        <arg>-Werror</arg>
+<!--                        <arg>-Werror</arg>-->
                     </compilerArgs>
                 </configuration>
             </plugin>

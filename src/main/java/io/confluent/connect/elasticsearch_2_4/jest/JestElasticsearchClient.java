@@ -19,6 +19,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.google.gson.JsonObject;
+import com.instana.sdk.annotation.Span;
 import io.confluent.connect.elasticsearch_2_4.ElasticsearchClient;
 import io.confluent.connect.elasticsearch_2_4.ElasticsearchSinkConnectorConfig;
 import io.confluent.connect.elasticsearch_2_4.IndexableRecord;
@@ -601,6 +602,7 @@ public class JestElasticsearchClient implements ElasticsearchClient {
         .build();
   }
 
+  @Span("execute bulk")
   public BulkResponse executeBulk(BulkRequest bulk) throws IOException {
     BulkResult result = client.execute(((JestBulkRequest) bulk).getBulk());
     if (result.isSucceeded()) {
