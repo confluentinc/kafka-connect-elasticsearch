@@ -46,14 +46,20 @@ public class DualWriteProducer<T extends ConnectRecord> {
 
   private ProducerRecord<Object, Object> convertSinkToProducerRecord(SinkRecord record) {
     Object value = null;
-    if (record.valueSchema().type() != Type.STRUCT) {
+
+    //Tombstone
+    if (record == null || record.valueSchema() == null) {
+      value = null;
+    } else if (record.valueSchema().type() != Type.STRUCT) {
       value = record.value();
     } else {
       value = avroData.fromConnectData(record.valueSchema(), record.value());
     }
 
     Object key = null;
-    if (record.keySchema().type() != Type.STRUCT) {
+    if (record == null || record.keySchema() == null) {
+      key = null;
+    } else if (record.keySchema().type() != Type.STRUCT) {
       key = record.key();
     } else {
       key = avroData.fromConnectData(record.keySchema(), record.key());
