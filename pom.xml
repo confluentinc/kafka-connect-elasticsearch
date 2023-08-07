@@ -48,8 +48,8 @@
         <hadoop.version>3.3.0</hadoop.version>
         <apacheds-jdbm1.version>2.0.0-M2</apacheds-jdbm1.version>
         <!-- TODO: Remove the version pin after releasing https://github.com/confluentinc/common/pull/494 -->
-        <jackson.databind.version>2.14.0</jackson.databind.version>
-        <jackson.version>2.14.0</jackson.version>
+        <jackson.databind.version>2.15.0</jackson.databind.version>
+        <jackson.version>2.15.0</jackson.version>
         <!-- temporary fix by pinning the version until we upgrade to a version of common that contains this or newer version.
             See https://github.com/confluentinc/common/pull/332 for details -->
         <dependency.check.version>6.1.6</dependency.check.version>
