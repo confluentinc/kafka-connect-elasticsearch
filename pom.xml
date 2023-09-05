@@ -321,7 +321,7 @@
                             <title>Kafka Connect Elasticsearch</title>
                             <documentationUrl>https://docs.confluent.io/kafka-connect-elasticsearch/current/index.html</documentationUrl>
                             <description>
-                                The Elasticsearch connector allows moving data from Kafka to Elasticsearch 2.x, 5.x, 6.x, 7.x and 8.x. It writes data from a topic in Kafka to an index in Elasticsearch and all data for a topic have the same type.
+                                The Elasticsearch connector allows moving data from Kafka to Elasticsearch. It writes data from a topic in Kafka to an index in Elasticsearch and all data for a topic have the same type. Please refer to the documentation for more details on supported versions of elasticsearch for each connector version.
 
                                 Elasticsearch is often used for text queries, analytics and as an key-value store (use cases). The connector covers both the analytics and key-value store use cases. For the analytics use case, each message is in Kafka is treated as an event and the connector uses topic+partition+offset as a unique identifier for events, which then converted to unique documents in Elasticsearch. For the key-value store use case, it supports using keys from Kafka messages as document ids in Elasticsearch and provides configurations ensuring that updates to a key are written to Elasticsearch in order. For both use cases, Elasticsearch’s idempotent write semantics guarantees exactly once delivery.
 
