@@ -252,6 +252,26 @@
                         <goals>
                             <goal>prepare-agent-integration</goal>
                         </goals>
+                        <phase>pre-integration-test</phase>
+                    </execution>
+                    <execution>
+                        <id>merge-coverage-reports</id>
+                        <phase>verify</phase>
+                        <goals>
+                            <goal>merge</goal>
+                        </goals>
+                        <configuration>
+                            <fileSets>
+                                <fileSet>
+                                    <directory>${project.basedir}</directory>
+                                    <includes>
+                                        <include>/target/jacoco.exec</include>
+                                        <include>/target/jacoco-it.exec</include>
+                                    </includes>
+                                </fileSet>
+                            </fileSets>
+                            <destFile>${project.basedir}/target/jacoco-aggregate.exec</destFile>
+                        </configuration>
                     </execution>
                     <execution>
                         <id>check</id>
@@ -266,7 +286,7 @@
                                         <limit>
                                             <counter>INSTRUCTION</counter>
                                             <value>COVEREDRATIO</value>
-                                            <minimum>0.70</minimum>
+                                            <minimum>0.85</minimum>
                                         </limit>
                                         <limit>
                                             <counter>BRANCH</counter>
@@ -296,6 +316,7 @@
                                     </limits>
                                 </rule>
                             </rules>
+                            <dataFile>${project.basedir}/target/jacoco-aggregate.exec</dataFile>
                         </configuration>
                     </execution>
                     <execution>
@@ -304,6 +325,9 @@
                         <goals>
                             <goal>report</goal>
                         </goals>
+                        <configuration>
+                            <dataFile>${project.basedir}/target/jacoco-aggregate.exec</dataFile>
+                        </configuration>
                     </execution>
                 </executions>
             </plugin>
