@@ -52,6 +52,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.WriteMethod.UPSERT;
+
 public class DataConverter {
 
   private static final Logger log = LoggerFactory.getLogger(DataConverter.class);
@@ -161,7 +163,11 @@ public class DataConverter {
 
     // delete
     if (record.value() == null) {
-      return maybeAddExternalVersioning(new DeleteRequest(index).id(id), record);
+      if (config.writeMethod().name().equals(UPSERT.name())) {
+        return new DeleteRequest(index).id(id);
+      } else {
+        return maybeAddExternalVersioning(new DeleteRequest(index).id(id), record);
+      }
     }
 
     String payload = getPayload(record);
