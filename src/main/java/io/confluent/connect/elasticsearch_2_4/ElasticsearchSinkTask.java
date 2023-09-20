@@ -73,7 +73,9 @@ public class ElasticsearchSinkTask extends SinkTask {
           .setBehaviorOnMalformedDoc(config.behaviorOnMalformedDoc())
           .setIndexMapper(config.getIndexMapper())
           .setClusterMapper(config.getClusterMapper())
-          .setTypeMapper(config.getTypeMapper());
+          .setTypeMapper(config.getTypeMapper())
+          .setRouteMapper(config.getRouteMapper())
+          .setParentMapper(config.getParentMapper());
 
 
       try {

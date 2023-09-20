@@ -54,4 +54,9 @@
       files="io.confluent.connect.elasticsearch_2_4.ElasticsearchWriter"
     />
 
+    <suppress
+      checks="LineLength"
+      files="io.confluent.connect.elasticsearch_2_4.ElasticsearchSinkConnectorConfig"
+    />
+
 </suppressions>

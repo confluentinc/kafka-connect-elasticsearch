@@ -22,6 +22,8 @@ import io.confluent.connect.elasticsearch_2_4.bulk.BulkProcessor;
 import io.confluent.connect.elasticsearch_2_4.cluster.mapping.ClusterMapper;
 import io.confluent.connect.elasticsearch_2_4.index.mapping.IndexMapper;
 import io.confluent.connect.elasticsearch_2_4.jest.JestElasticsearchClient;
+import io.confluent.connect.elasticsearch_2_4.parent.mapping.ParentMapper;
+import io.confluent.connect.elasticsearch_2_4.route.mapping.RouteMapper;
 import io.confluent.connect.elasticsearch_2_4.type.mapping.TypeMapper;
 import org.apache.kafka.common.utils.SystemTime;
 import org.apache.kafka.connect.errors.ConnectException;
@@ -65,6 +67,8 @@ public class ElasticsearchWriter {
   private final ClusterMapper clusterMapper;
 
   private final TypeMapper typeMapper;
+  private final RouteMapper routeMapper;
+  private final ParentMapper parentMapper;
 
   private final Map<String, String> configurations;
   private final int maxBufferedRecords;
@@ -97,7 +101,9 @@ public class ElasticsearchWriter {
       ErrantRecordReporter reporter,
       IndexMapper indexMapper,
       ClusterMapper clusterMapper,
-      TypeMapper typeMapper) {
+      TypeMapper typeMapper,
+      RouteMapper routeMapper,
+      ParentMapper parentMapper) {
     this.configurations = configurations;
     this.ignoreKey = ignoreKey;
     this.ignoreKeyTopics = ignoreKeyTopics;
@@ -111,6 +117,8 @@ public class ElasticsearchWriter {
     this.indexMapper = indexMapper;
     this.clusterMapper = clusterMapper;
     this.typeMapper = typeMapper;
+    this.routeMapper = routeMapper;
+    this.parentMapper = parentMapper;
     this.maxBufferedRecords = maxBufferedRecords;
     this.maxInFlightRequests = maxInFlightRequests;
     this.batchSize = batchSize;
@@ -146,6 +154,8 @@ public class ElasticsearchWriter {
     private IndexMapper indexMapper;
     private ClusterMapper clusterMapper;
     private TypeMapper typeMapper;
+    private RouteMapper routeMapper;
+    private ParentMapper parentMapper;
 
     public Builder(Map<String, String> configurations) {
       this.configurations = configurations;
@@ -250,6 +260,16 @@ public class ElasticsearchWriter {
       return this;
     }
 
+    public Builder setRouteMapper(RouteMapper routeMapper) {
+      this.routeMapper = routeMapper;
+      return this;
+    }
+
+    public Builder setParentMapper(ParentMapper parentMapper) {
+      this.parentMapper = parentMapper;
+      return this;
+    }
+
 
     public ElasticsearchWriter build() {
       return new ElasticsearchWriter(
@@ -273,7 +293,9 @@ public class ElasticsearchWriter {
           reporter,
           indexMapper,
           clusterMapper,
-          typeMapper
+          typeMapper,
+          routeMapper,
+          parentMapper
       );
     }
   }
@@ -327,6 +349,20 @@ public class ElasticsearchWriter {
         throw new ConnectException(e.getMessage());
       }
       SpanSupport.annotate("doc.type", typeName);
+      String route;
+      try {
+        route = getRoute(sinkRecord);
+      } catch (Exception e) {
+        throw new ConnectException(e.getMessage());
+      }
+      SpanSupport.annotate("route", route);
+      String parent;
+      try {
+        parent = getParent(sinkRecord);
+      } catch (Exception e) {
+        throw new ConnectException(e.getMessage());
+      }
+      SpanSupport.annotate("parent", parent);
       final boolean ignoreKey = ignoreKeyTopics.contains(sinkRecord.topic()) || this.ignoreKey;
       final boolean ignoreSchema =
           ignoreSchemaTopics.contains(sinkRecord.topic()) || this.ignoreSchema;
@@ -359,7 +395,7 @@ public class ElasticsearchWriter {
         throw new ConnectException(e.getMessage());
       }
 
-      tryWriteRecord(r, index, clusterName, typeName,ignoreKey, ignoreSchema);
+      tryWriteRecord(r, index, clusterName, typeName, route, parent, ignoreKey, ignoreSchema);
     }
   }
 
@@ -396,6 +432,8 @@ public class ElasticsearchWriter {
           String index,
           String clusterName,
           String esType,
+          String route,
+          String parent,
           boolean ignoreKey,
           boolean ignoreSchema) {
     IndexableRecord record = null;
@@ -404,6 +442,8 @@ public class ElasticsearchWriter {
               sinkRecord,
               index,
               esType,
+              route,
+              parent,
               ignoreKey,
               ignoreSchema);
     } catch (ConnectException convertException) {
@@ -488,7 +528,7 @@ public class ElasticsearchWriter {
     if (sinkRecord.value() != null) {
       valueJson = converter.getValueAsJson(sinkRecord);
     }
-    final String cluster = clusterMapper.getName(valueJson);;
+    final String cluster = clusterMapper.getName(valueJson);
     log.trace("calculated cluster is '{}'", cluster);
     return cluster;
   }
@@ -498,9 +538,29 @@ public class ElasticsearchWriter {
     if (sinkRecord.value() != null) {
       valueJson = converter.getValueAsJson(sinkRecord);
     }
-    final String type = typeMapper.getType(topic, valueJson);;
+    final String type = typeMapper.getType(topic, valueJson);
     log.trace("calculated type is '{}'", type);
     return type;
+  }
+
+  private String getRoute(SinkRecord sinkRecord) throws Exception {
+    JsonNode valueJson = null;
+    if (sinkRecord.value() != null) {
+      valueJson = converter.getValueAsJson(sinkRecord);
+    }
+    final String route = routeMapper.getRoute(valueJson);
+    log.trace("calculated route is '{}'", route);
+    return route;
+  }
+
+  private String getParent(SinkRecord sinkRecord) throws Exception {
+    JsonNode valueJson = null;
+    if (sinkRecord.value() != null) {
+      valueJson = converter.getValueAsJson(sinkRecord);
+    }
+    final String parent = parentMapper.getParent(valueJson);
+    log.trace("calculated parent is '{}'", parent);
+    return parent;
   }
 
   public void flush() {

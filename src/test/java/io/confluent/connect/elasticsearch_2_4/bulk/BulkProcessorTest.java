@@ -637,7 +637,7 @@ public class BulkProcessorTest {
   }
 
   private static IndexableRecord indexableRecord(int id) {
-    return new IndexableRecord(new Key(INDEX, TYPE, String.valueOf(id)), String.valueOf(id), null);
+    return new IndexableRecord(new Key(INDEX, TYPE, String.valueOf(id)), String.valueOf(id), null, "","");
   }
 
   private static SinkRecord sinkRecord() {

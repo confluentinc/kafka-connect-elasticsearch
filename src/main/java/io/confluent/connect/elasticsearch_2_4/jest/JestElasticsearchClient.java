@@ -56,6 +56,8 @@ import io.searchbox.indices.mapping.PutMapping;
 import java.util.HashMap;
 import java.util.Objects;
 import javax.net.ssl.HostnameVerifier;
+
+import io.searchbox.params.Parameters;
 import org.apache.http.HttpHost;
 import org.apache.http.auth.AuthScope;
 import org.apache.http.auth.UsernamePasswordCredentials;
@@ -576,6 +578,13 @@ public class JestElasticsearchClient implements ElasticsearchClient {
         .index(record.key.index)
         .type(record.key.type);
 
+    if (record.route != null) {
+      req.setParameter(Parameters.ROUTING, record.route);
+    }
+    if (record.parent != null) {
+      req.setParameter(Parameters.PARENT, record.parent);
+    }
+
     // TODO: Should version information be set here?
     return req.build();
   }
@@ -588,18 +597,33 @@ public class JestElasticsearchClient implements ElasticsearchClient {
     if (record.version != null) {
       req.setParameter("version_type", "external").setParameter("version", record.version);
     }
+    if (record.route != null) {
+      req.setParameter(Parameters.ROUTING, record.route);
+    }
+    if (record.parent != null) {
+      req.setParameter(Parameters.PARENT, record.parent);
+    }
     return req.build();
   }
 
   private Update toUpdateRequest(IndexableRecord record) {
     String payload = "{\"doc\":" + record.payload
         + ", \"doc_as_upsert\":true}";
-    return new Update.Builder(payload)
+    Update.Builder builder =  new Update.Builder(payload)
         .index(record.key.index)
         .type(record.key.type)
         .id(record.key.id)
-        .setParameter("retry_on_conflict", retryOnConflict)
-        .build();
+        .setParameter("retry_on_conflict", retryOnConflict);
+
+    if (record.route != null) {
+      builder.setParameter(Parameters.ROUTING, record.route);
+    }
+    if (record.parent != null) {
+      builder.setParameter(Parameters.PARENT, record.parent);
+    }
+
+    return builder.build();
+
   }
 
   @Span("execute bulk")
