@@ -435,6 +435,8 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
     addIndexMappingConfigs(configDef);
     addClusterMappingConfigs(configDef);
     addTypeMappingConfigs(configDef);
+    addRouteMappingConfigs(configDef);
+    addParentMappingConfigs(configDef);
     return configDef;
   }
 
@@ -616,6 +618,24 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
             ++order,
             Width.SHORT,
             TYPE_NAME_DISPLAY
+        ).define(
+            ROUTE_NAME_CONFIG,
+            Type.STRING,
+            Importance.HIGH,
+            ROUTE_NAME_DOC,
+            DATA_CONVERSION_GROUP,
+            ++order,
+            Width.SHORT,
+            ROUTE_NAME_DISPLAY
+        ).define(
+            PARENT_NAME_CONFIG,
+            Type.STRING,
+            Importance.HIGH,
+            PARENT_NAME_DOC,
+            DATA_CONVERSION_GROUP,
+            ++order,
+            Width.SHORT,
+            PARENT_NAME_DISPLAY
         ).define(
             IGNORE_KEY_CONFIG,
             Type.BOOLEAN,
@@ -880,6 +900,58 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
         ++order,
         ConfigDef.Width.LONG,
         TYPE_MAPPER_FIELD_DISPLAY
+    );
+  }
+
+  private static void addRouteMappingConfigs(ConfigDef configDef) {
+    int order = 0;
+    configDef
+        .define(
+        ROUTE_MAPPER_TYPE,
+        ConfigDef.Type.STRING,
+        ROUTE_MAPPER_TYPE_DEFAULT,
+        ConfigDef.Importance.HIGH,
+        ROUTE_MAPPER_TYPE_DOC,
+        DATA_CONVERSION_GROUP,
+        ++order,
+        ConfigDef.Width.LONG,
+        ROUTE_MAPPER_TYPE_DISPLAY
+        ).define(
+        ROUTE_MAPPER_FIELD,
+        ConfigDef.Type.STRING,
+        ROUTE_MAPPER_FIELD_DEFAULT,
+        ConfigDef.Importance.HIGH,
+        ROUTE_MAPPER_FIELD_DOC,
+        DATA_CONVERSION_GROUP,
+        ++order,
+        ConfigDef.Width.LONG,
+        ROUTE_MAPPER_FIELD_DISPLAY
+    );
+  }
+
+  private static void addParentMappingConfigs(ConfigDef configDef) {
+    int order = 0;
+    configDef
+        .define(
+        PARENT_MAPPER_TYPE,
+        ConfigDef.Type.STRING,
+        PARENT_MAPPER_TYPE_DEFAULT,
+        ConfigDef.Importance.HIGH,
+        PARENT_MAPPER_TYPE_DOC,
+        DATA_CONVERSION_GROUP,
+        ++order,
+        ConfigDef.Width.LONG,
+        PARENT_MAPPER_TYPE_DISPLAY
+        ).define(
+        PARENT_MAPPER_FIELD,
+        ConfigDef.Type.STRING,
+        PARENT_MAPPER_FIELD_DEFAULT,
+        ConfigDef.Importance.HIGH,
+        PARENT_MAPPER_FIELD_DOC,
+        DATA_CONVERSION_GROUP,
+        ++order,
+        ConfigDef.Width.LONG,
+        PARENT_MAPPER_FIELD_DISPLAY
     );
   }
 
