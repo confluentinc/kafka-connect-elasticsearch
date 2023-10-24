@@ -27,6 +27,8 @@ import java.util.stream.Collectors;
 
 import io.confluent.connect.elasticsearch_2_4.cluster.mapping.ClusterMapper;
 import io.confluent.connect.elasticsearch_2_4.index.mapping.IndexMapper;
+import io.confluent.connect.elasticsearch_2_4.parent.mapping.ParentMapper;
+import io.confluent.connect.elasticsearch_2_4.route.mapping.RouteMapper;
 import io.confluent.connect.elasticsearch_2_4.type.mapping.TypeMapper;
 import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.common.config.ConfigDef;
@@ -176,6 +178,14 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   public static final String TYPE_NAME_CONFIG = "type.name";
   private static final String TYPE_NAME_DOC = "The Elasticsearch type name to use when indexing.";
   private static final String TYPE_NAME_DISPLAY = "Type Name";
+
+  public static final String ROUTE_NAME_CONFIG = "route.name";
+  private static final String ROUTE_NAME_DOC = "The Elasticsearch route name to use when indexing.";
+  private static final String ROUTE_NAME_DISPLAY = "Route Name";
+
+  public static final String PARENT_NAME_CONFIG = "parent.name";
+  private static final String PARENT_NAME_DOC = "The Elasticsearch parent name to use when indexing.";
+  private static final String PARENT_NAME_DISPLAY = "Parent Name";
 
   public static final String IGNORE_KEY_TOPICS_CONFIG = "topic.key.ignore";
   public static final String IGNORE_SCHEMA_TOPICS_CONFIG = "topic.schema.ignore";
@@ -371,10 +381,50 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
           "";
 
 
+  public static final String ROUTE_MAPPER_TYPE = "route.mapper.type";
+
+  private static final String ROUTE_MAPPER_TYPE_DISPLAY = "The route mapper class";
+  private static final String ROUTE_MAPPER_TYPE_DOC =
+          "The class that determines the route of document write the sink data to. ";
+  private static final String ROUTE_MAPPER_TYPE_DEFAULT =
+          "io.confluent.connect.elasticsearch_2_4.route.mapping.DefaultRouteMapper";
+
+  public static final String ROUTE_MAPPER_FIELD = "route.mapper.field";
+
+  private static final String ROUTE_MAPPER_FIELD_DISPLAY =
+          "The field path in the value which is taken as route";
+  private static final String ROUTE_MAPPER_FIELD_DOC =
+          "The field path in the value which is taken as route";
+
+  private static final String ROUTE_MAPPER_FIELD_DEFAULT =
+          "null";
+
+
+  public static final String PARENT_MAPPER_TYPE = "parent.mapper.type";
+
+  private static final String PARENT_MAPPER_TYPE_DISPLAY = "The parent mapper class";
+  private static final String PARENT_MAPPER_TYPE_DOC =
+          "The class that determines the parent of document to write the sink data to. ";
+  private static final String PARENT_MAPPER_TYPE_DEFAULT =
+          "io.confluent.connect.elasticsearch_2_4.parent.mapping.DefaultParentMapper";
+
+  public static final String PARENT_MAPPER_FIELD = "parent.mapper.field";
+
+  private static final String PARENT_MAPPER_FIELD_DISPLAY =
+          "The field path in the value which is taken as parent";
+  private static final String PARENT_MAPPER_FIELD_DOC =
+          "The field path in the value which is taken as parent";
+
+  private static final String PARENT_MAPPER_FIELD_DEFAULT =
+          "null";
+
+
 
   private IndexMapper indexMapper;
   private ClusterMapper clusterMapper;
   private TypeMapper typeMapper;
+  private RouteMapper routeMapper;
+  private ParentMapper parentMapper;
 
   protected static ConfigDef baseConfigDef() {
     final ConfigDef configDef = new ConfigDef();
@@ -385,6 +435,8 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
     addIndexMappingConfigs(configDef);
     addClusterMappingConfigs(configDef);
     addTypeMappingConfigs(configDef);
+    addRouteMappingConfigs(configDef);
+    addParentMappingConfigs(configDef);
     return configDef;
   }
 
@@ -566,6 +618,24 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
             ++order,
             Width.SHORT,
             TYPE_NAME_DISPLAY
+        ).define(
+            ROUTE_NAME_CONFIG,
+            Type.STRING,
+            Importance.HIGH,
+            ROUTE_NAME_DOC,
+            DATA_CONVERSION_GROUP,
+            ++order,
+            Width.SHORT,
+            ROUTE_NAME_DISPLAY
+        ).define(
+            PARENT_NAME_CONFIG,
+            Type.STRING,
+            Importance.HIGH,
+            PARENT_NAME_DOC,
+            DATA_CONVERSION_GROUP,
+            ++order,
+            Width.SHORT,
+            PARENT_NAME_DISPLAY
         ).define(
             IGNORE_KEY_CONFIG,
             Type.BOOLEAN,
@@ -833,6 +903,58 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
     );
   }
 
+  private static void addRouteMappingConfigs(ConfigDef configDef) {
+    int order = 0;
+    configDef
+        .define(
+        ROUTE_MAPPER_TYPE,
+        ConfigDef.Type.STRING,
+        ROUTE_MAPPER_TYPE_DEFAULT,
+        ConfigDef.Importance.HIGH,
+        ROUTE_MAPPER_TYPE_DOC,
+        DATA_CONVERSION_GROUP,
+        ++order,
+        ConfigDef.Width.LONG,
+        ROUTE_MAPPER_TYPE_DISPLAY
+        ).define(
+        ROUTE_MAPPER_FIELD,
+        ConfigDef.Type.STRING,
+        ROUTE_MAPPER_FIELD_DEFAULT,
+        ConfigDef.Importance.HIGH,
+        ROUTE_MAPPER_FIELD_DOC,
+        DATA_CONVERSION_GROUP,
+        ++order,
+        ConfigDef.Width.LONG,
+        ROUTE_MAPPER_FIELD_DISPLAY
+    );
+  }
+
+  private static void addParentMappingConfigs(ConfigDef configDef) {
+    int order = 0;
+    configDef
+        .define(
+        PARENT_MAPPER_TYPE,
+        ConfigDef.Type.STRING,
+        PARENT_MAPPER_TYPE_DEFAULT,
+        ConfigDef.Importance.HIGH,
+        PARENT_MAPPER_TYPE_DOC,
+        DATA_CONVERSION_GROUP,
+        ++order,
+        ConfigDef.Width.LONG,
+        PARENT_MAPPER_TYPE_DISPLAY
+        ).define(
+        PARENT_MAPPER_FIELD,
+        ConfigDef.Type.STRING,
+        PARENT_MAPPER_FIELD_DEFAULT,
+        ConfigDef.Importance.HIGH,
+        PARENT_MAPPER_FIELD_DOC,
+        DATA_CONVERSION_GROUP,
+        ++order,
+        ConfigDef.Width.LONG,
+        PARENT_MAPPER_FIELD_DISPLAY
+    );
+  }
+
 
   public static final ConfigDef CONFIG = baseConfigDef();
 
@@ -1032,6 +1154,28 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
     return typeMapper;
   }
 
+  public RouteMapper getRouteMapper() {
+    if (routeMapper == null) {
+      routeMapper = createInstance(
+              ROUTE_MAPPER_TYPE,
+              getString(ROUTE_MAPPER_TYPE),
+              RouteMapper.class);
+      routeMapper.configure(this);
+    }
+    return routeMapper;
+  }
+
+  public ParentMapper getParentMapper() {
+    if (parentMapper == null) {
+      parentMapper = createInstance(
+              PARENT_MAPPER_TYPE,
+              getString(PARENT_MAPPER_TYPE),
+              ParentMapper.class);
+      parentMapper.configure(this);
+    }
+    return parentMapper;
+  }
+
   public static Map<String, String> parseMapConfig(List<String> values) {
     Map<String, String> map = new HashMap<>();
     for (String value : values) {
@@ -1042,6 +1186,22 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
     }
 
     return map;
+  }
+
+  public String route() {
+    String route = getString(ROUTE_NAME_CONFIG);
+    if (route.compareToIgnoreCase("null") == 0) {
+      return null;
+    }
+    return route;
+  }
+
+  public String parent() {
+    String parent = getString(PARENT_NAME_CONFIG);
+    if (parent.compareToIgnoreCase("null") == 0) {
+      return null;
+    }
+    return parent;
   }
 
   private static class UrlListValidator implements Validator {

@@ -119,6 +119,8 @@ public class DataConverter {
       SinkRecord record,
       String index,
       String type,
+      String route,
+      String parent,
       boolean ignoreKey,
       boolean ignoreSchema
   ) {
@@ -191,7 +193,7 @@ public class DataConverter {
 
     final String payload = getPayload(record, ignoreSchema);
     final Long version = ignoreKey ? null : record.kafkaOffset();
-    return new IndexableRecord(new Key(index, type, id), payload, version);
+    return new IndexableRecord(new Key(index, type, id), payload, version, route, parent);
   }
 
   public JsonNode getValueAsJson(SinkRecord record) {

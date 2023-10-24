@@ -138,7 +138,7 @@ public class ElasticsearchSinkTestBase extends ESIntegTestCase {
     for (Object record : records) {
       if (record instanceof SinkRecord) {
         String index = DefaultIndexMapper.convertTopicToIndexName(((SinkRecord) record).topic());
-        IndexableRecord indexableRecord = converter.convertRecord((SinkRecord) record, index, TYPE, ignoreKey, ignoreSchema);
+        IndexableRecord indexableRecord = converter.convertRecord((SinkRecord) record, index, TYPE, "", "", ignoreKey, ignoreSchema);
         assertEquals(indexableRecord.payload, hits.get(indexableRecord.key.id));
       } else {
         assertEquals(record, hits.get("key"));
