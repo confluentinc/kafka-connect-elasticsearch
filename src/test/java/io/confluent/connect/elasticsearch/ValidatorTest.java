@@ -53,7 +53,6 @@ import org.apache.kafka.common.config.ConfigValue;
 import org.apache.kafka.common.config.SslConfigs;
 import org.elasticsearch.ElasticsearchStatusException;
 import org.elasticsearch.client.RequestOptions;
-import org.elasticsearch.client.RestHighLevelClient;
 import org.elasticsearch.rest.RestStatus;
 import org.junit.Before;
 import org.junit.Test;
@@ -61,14 +60,18 @@ import org.junit.Test;
 public class ValidatorTest {
 
   private Map<String, String> props;
-  private RestHighLevelClient mockClient;
+
+  @SuppressWarnings("deprecation")
+  private org.elasticsearch.client.RestHighLevelClient mockClient;
+
   private Validator validator;
 
   @Before
+  @SuppressWarnings("deprecation")
   public void setup() throws IOException {
     props = ElasticsearchSinkConnectorConfigTest.addNecessaryProps(new HashMap<>());
 
-    mockClient = mock(RestHighLevelClient.class);
+    mockClient = mock(org.elasticsearch.client.RestHighLevelClient.class);
     when(mockClient.ping(any(RequestOptions.class))).thenReturn(true);
   }
 

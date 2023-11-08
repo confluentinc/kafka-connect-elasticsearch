@@ -26,7 +26,6 @@ import org.apache.kafka.connect.sink.SinkTask;
 import org.elasticsearch.action.DocWriteRequest;
 import org.elasticsearch.client.RequestOptions;
 import org.elasticsearch.client.RestClient;
-import org.elasticsearch.client.RestHighLevelClient;
 import org.elasticsearch.client.core.MainResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -132,9 +131,10 @@ public class ElasticsearchSinkTask extends SinkTask {
     }
   }
 
+  @SuppressWarnings("deprecation")
   private String getServerVersion() {
     ConfigCallbackHandler configCallbackHandler = new ConfigCallbackHandler(config);
-    RestHighLevelClient highLevelClient = new RestHighLevelClient(
+    org.elasticsearch.client.RestHighLevelClient highLevelClient = new org.elasticsearch.client.RestHighLevelClient(
         RestClient
             .builder(
                 config.connectionUrls()

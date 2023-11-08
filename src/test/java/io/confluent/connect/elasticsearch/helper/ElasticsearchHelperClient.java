@@ -20,7 +20,6 @@ import org.elasticsearch.action.admin.indices.delete.DeleteIndexRequest;
 import org.elasticsearch.action.search.SearchRequest;
 import org.elasticsearch.client.RequestOptions;
 import org.elasticsearch.client.RestClient;
-import org.elasticsearch.client.RestHighLevelClient;
 import org.elasticsearch.client.core.CountRequest;
 import org.elasticsearch.client.indices.GetIndexRequest;
 import org.elasticsearch.client.indices.GetMappingsRequest;
@@ -47,11 +46,13 @@ public class ElasticsearchHelperClient {
 
   private static final Logger log = LoggerFactory.getLogger(ElasticsearchHelperClient.class);
 
-  private RestHighLevelClient client;
+  @SuppressWarnings("deprecation")
+  private org.elasticsearch.client.RestHighLevelClient client;
 
+  @SuppressWarnings("deprecation")
   public ElasticsearchHelperClient(String url, ElasticsearchSinkConnectorConfig config) {
     ConfigCallbackHandler configCallbackHandler = new ConfigCallbackHandler(config);
-    this.client = new RestHighLevelClient(
+    this.client = new org.elasticsearch.client.RestHighLevelClient(
         RestClient
             .builder(HttpHost.create(url))
             .setHttpClientConfigCallback(configCallbackHandler)

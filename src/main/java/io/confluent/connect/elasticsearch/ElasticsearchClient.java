@@ -32,14 +32,13 @@ import org.elasticsearch.action.bulk.BulkRequest;
 import org.elasticsearch.action.bulk.BulkResponse;
 import org.elasticsearch.client.RequestOptions;
 import org.elasticsearch.client.RestClient;
-import org.elasticsearch.client.RestHighLevelClient;
 import org.elasticsearch.client.indices.CreateIndexRequest;
 import org.elasticsearch.client.indices.GetIndexRequest;
 import org.elasticsearch.client.indices.GetMappingsRequest;
 import org.elasticsearch.client.indices.GetMappingsResponse;
 import org.elasticsearch.client.indices.PutMappingRequest;
 import org.elasticsearch.cluster.metadata.MappingMetadata;
-import org.elasticsearch.common.unit.TimeValue;
+import org.elasticsearch.core.TimeValue;
 import org.elasticsearch.index.VersionType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -104,10 +103,14 @@ public class ElasticsearchClient {
   private final ConcurrentMap<Long, List<SinkRecord>> inFlightRequests;
   private final ElasticsearchSinkConnectorConfig config;
   private final ErrantRecordReporter reporter;
-  private final RestHighLevelClient client;
+
+  @SuppressWarnings("deprecation")
+  private final org.elasticsearch.client.RestHighLevelClient client;
+
   private final ExecutorService bulkExecutorService;
   private final Time clock;
 
+  @SuppressWarnings("deprecation")
   public ElasticsearchClient(
       ElasticsearchSinkConnectorConfig config,
       ErrantRecordReporter reporter
@@ -123,7 +126,7 @@ public class ElasticsearchClient {
     this.logSensitiveData = config.shouldLogSensitiveData();
 
     ConfigCallbackHandler configCallbackHandler = new ConfigCallbackHandler(config);
-    this.client = new RestHighLevelClient(
+    this.client = new org.elasticsearch.client.RestHighLevelClient(
         RestClient
             .builder(
                 config.connectionUrls()
@@ -171,12 +174,13 @@ public class ElasticsearchClient {
       });
   }
 
+  @SuppressWarnings("deprecation")
   /**
    * Returns the underlying Elasticsearch client.
    *
-   * @return the underlying RestHighLevelClient
+   * @return the underlying org.elasticsearch.client.RestHighLevelClient
    */
-  public RestHighLevelClient client() {
+  public org.elasticsearch.client.RestHighLevelClient client() {
     return client;
   }
 

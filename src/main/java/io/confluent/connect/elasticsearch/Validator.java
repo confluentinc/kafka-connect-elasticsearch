@@ -23,7 +23,6 @@ import org.apache.kafka.common.config.SslConfigs;
 import org.elasticsearch.ElasticsearchStatusException;
 import org.elasticsearch.client.RequestOptions;
 import org.elasticsearch.client.RestClient;
-import org.elasticsearch.client.RestHighLevelClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -82,13 +81,14 @@ public class Validator {
     values = validations.stream().collect(Collectors.toMap(ConfigValue::name, Function.identity()));
   }
 
+  @SuppressWarnings("deprecation")
   public Config validate() {
     if (config == null) {
       // individual configs are invalid, no point in validating combinations
       return new Config(validations);
     }
 
-    try (RestHighLevelClient client = clientFactory.client()) {
+    try (org.elasticsearch.client.RestHighLevelClient client = clientFactory.client()) {
       validateCredentials();
       validateIgnoreConfigs();
       validateKerberos();
@@ -266,7 +266,8 @@ public class Validator {
     }
   }
 
-  private void validateConnection(RestHighLevelClient client) {
+  @SuppressWarnings("deprecation")
+  private void validateConnection(org.elasticsearch.client.RestHighLevelClient client) {
     boolean successful;
     String exceptionMessage = "";
     try {
@@ -342,9 +343,10 @@ public class Validator {
     values.get(property).addErrorMessage(error);
   }
 
-  private RestHighLevelClient createClient() {
+  @SuppressWarnings("deprecation")
+  private org.elasticsearch.client.RestHighLevelClient createClient() {
     ConfigCallbackHandler configCallbackHandler = new ConfigCallbackHandler(config);
-    return new RestHighLevelClient(
+    return new org.elasticsearch.client.RestHighLevelClient(
         RestClient
             .builder(
                 config.connectionUrls()
@@ -367,7 +369,8 @@ public class Validator {
     return false;
   }
 
+  @SuppressWarnings("deprecation")
   interface ClientFactory {
-    RestHighLevelClient client();
+    org.elasticsearch.client.RestHighLevelClient client();
   }
 }
