@@ -102,12 +102,7 @@
             <groupId>com.fasterxml.jackson.dataformat</groupId>
             <artifactId>jackson-dataformat-cbor</artifactId>
         </dependency>
-        <!-- pin commons-codec for CVE -->
-        <dependency>
-            <groupId>commons-codec</groupId>
-            <artifactId>commons-codec</artifactId>
-            <version>1.15</version>
-        </dependency>
+
         <dependency>
             <groupId>org.apache.httpcomponents</groupId>
             <artifactId>httpclient</artifactId>
@@ -118,12 +113,6 @@
             <artifactId>gson</artifactId>
             <version>${gson.version}</version>
             <scope>test</scope>
-        </dependency>
-        <!-- Force commons-codec (httpclient transitive dependency) version to address CVE CCMSG-835 -->
-        <dependency>
-            <groupId>commons-codec</groupId>
-            <artifactId>commons-codec</artifactId>
-            <version>1.15</version>
         </dependency>
         <dependency>
             <groupId>commons-codec</groupId>
