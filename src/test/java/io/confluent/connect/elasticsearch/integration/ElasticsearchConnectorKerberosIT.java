@@ -14,6 +14,7 @@ import java.util.Properties;
 import org.apache.hadoop.minikdc.MiniKdc;
 import org.apache.kafka.connect.errors.ConnectException;
 import io.confluent.common.utils.IntegrationTest;
+import org.apache.kafka.test.TestUtils;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -49,6 +50,7 @@ public class ElasticsearchConnectorKerberosIT extends ElasticsearchConnectorBase
   public void testKerberos() throws Exception {
     addKerberosConfigs(props);
     helperClient = container.getHelperClient(props);
+    helperClient.waitForConnection(60000);
     runSimpleTest(props);
   }
 

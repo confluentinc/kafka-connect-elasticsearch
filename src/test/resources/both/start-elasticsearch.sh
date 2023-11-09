@@ -91,6 +91,12 @@ fi
 # of the system-installed java
 export PATH=/usr/share/elasticsearch/jdk/bin/:$SAVE_PATH
 
+echo "Elasticsearch Configuration"
+cat /usr/share/elasticsearch/config/elasticsearch.yml
+
 echo
 echo "Starting Elasticsearch with SSL and Kerberos enabled ..."
-/usr/local/bin/docker-entrypoint.sh
+su - elasticsearch<<EOF
+ /usr/local/bin/docker-entrypoint.sh
+EOF
+
