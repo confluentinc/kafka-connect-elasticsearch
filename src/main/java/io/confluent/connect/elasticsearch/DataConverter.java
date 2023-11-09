@@ -144,10 +144,9 @@ public class DataConverter {
         default:
           throw new DataException(
               String.format(
-                  "%s with key of %s and null value encountered (to ignore future records like"
+                  "%s has a null value (to ignore future records like"
                       + " this change the configuration property '%s' from '%s' to '%s')",
                   recordString(record),
-                  record.key(),
                   ElasticsearchSinkConnectorConfig.BEHAVIOR_ON_NULL_VALUES_CONFIG,
                   BehaviorOnNullValues.FAIL,
                   BehaviorOnNullValues.IGNORE
