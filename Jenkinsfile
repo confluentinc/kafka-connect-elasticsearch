@@ -4,4 +4,6 @@ common {
   upstreamProjects = 'confluentinc/common'
   pintMerge = true
   downStreamValidate = false
+  sonarqubeScannerEnable = true
+  sonarqubeQualityCheck = true
 }
