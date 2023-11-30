@@ -6,5 +6,4 @@ common {
   downStreamValidate = false
   nodeLabel = 'docker-oraclejdk8'
   sonarqubeScannerEnable = true
-  sonarqubeQualityCheck = true
 }
