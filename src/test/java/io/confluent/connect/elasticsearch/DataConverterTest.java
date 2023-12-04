@@ -325,6 +325,54 @@ public class DataConverterTest {
 
     assertEquals(key, actualRecord.id());
     assertEquals(index, actualRecord.index());
+    assertEquals(sinkRecord.kafkaOffset(), actualRecord.version());
+  }
+
+  @Test
+  public void externalVersionHeaderOnDelete() {
+    String externalVersionHeader = "version";
+    long expectedExternalVersion = 123l;
+
+    props.put(ElasticsearchSinkConnectorConfig.COMPACT_MAP_ENTRIES_CONFIG, "true");
+    props.put(ElasticsearchSinkConnectorConfig.IGNORE_KEY_CONFIG, "false");
+    props.put(ElasticsearchSinkConnectorConfig.IGNORE_SCHEMA_CONFIG, "false");
+    props.put(ElasticsearchSinkConnectorConfig.EXTERNAL_VERSION_HEADER_CONFIG, externalVersionHeader);
+    props.put(ElasticsearchSinkConnectorConfig.BEHAVIOR_ON_NULL_VALUES_CONFIG, BehaviorOnNullValues.DELETE.name());
+    converter = new DataConverter(new ElasticsearchSinkConnectorConfig(props));
+
+    SinkRecord sinkRecord = createSinkRecordWithValue(null);
+    sinkRecord.headers().addLong(externalVersionHeader, expectedExternalVersion);
+
+    DeleteRequest actualRecord = (DeleteRequest) converter.convertRecord(sinkRecord, index);
+
+    assertEquals(key, actualRecord.id());
+    assertEquals(index, actualRecord.index());
+    assertEquals(expectedExternalVersion, actualRecord.version());
+  }
+
+  @Test
+  public void externalVersionHeaderOnIndex() {
+    String externalVersionHeader = "version";
+    long expectedExternalVersion = 123l;
+
+    props.put(ElasticsearchSinkConnectorConfig.COMPACT_MAP_ENTRIES_CONFIG, "true");
+    props.put(ElasticsearchSinkConnectorConfig.IGNORE_KEY_CONFIG, "false");
+    props.put(ElasticsearchSinkConnectorConfig.IGNORE_SCHEMA_CONFIG, "false");
+    props.put(ElasticsearchSinkConnectorConfig.EXTERNAL_VERSION_HEADER_CONFIG, externalVersionHeader);
+    props.put(ElasticsearchSinkConnectorConfig.BEHAVIOR_ON_NULL_VALUES_CONFIG, BehaviorOnNullValues.DELETE.name());
+    converter = new DataConverter(new ElasticsearchSinkConnectorConfig(props));
+
+
+    Schema preProcessedSchema = converter.preProcessSchema(schema);
+    Struct struct = new Struct(preProcessedSchema).put("string", "myValue");
+    SinkRecord sinkRecord = createSinkRecordWithValue(struct);
+    sinkRecord.headers().addLong(externalVersionHeader, expectedExternalVersion);
+
+    IndexRequest actualRecord = (IndexRequest) converter.convertRecord(sinkRecord, index);
+
+    assertEquals(key, actualRecord.id());
+    assertEquals(index, actualRecord.index());
+    assertEquals(expectedExternalVersion, actualRecord.version());
   }
 
   @Test
