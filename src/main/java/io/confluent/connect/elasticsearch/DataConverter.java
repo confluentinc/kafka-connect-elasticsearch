@@ -29,10 +29,14 @@ import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
+import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.errors.DataException;
+import org.apache.kafka.connect.header.Header;
 import org.apache.kafka.connect.json.JsonConverter;
 import org.apache.kafka.connect.sink.SinkRecord;
 import org.apache.kafka.connect.storage.Converter;
+import org.apache.kafka.connect.storage.HeaderConverter;
+import org.apache.kafka.connect.storage.SimpleHeaderConverter;
 import org.elasticsearch.action.DocWriteRequest;
 import org.elasticsearch.action.DocWriteRequest.OpType;
 import org.elasticsearch.action.delete.DeleteRequest;
@@ -57,6 +61,7 @@ public class DataConverter {
   private static final Logger log = LoggerFactory.getLogger(DataConverter.class);
 
   private static final Converter JSON_CONVERTER;
+  private static final HeaderConverter HEADER_CONVERTER = new SimpleHeaderConverter();
   protected static final String MAP_KEY = "key";
   protected static final String MAP_VALUE = "value";
   protected static final String TIMESTAMP_FIELD = "@timestamp";
@@ -249,7 +254,24 @@ public class DataConverter {
   ) {
     if (!config.isDataStream() && !config.shouldIgnoreKey(record.topic())) {
       request.versionType(VersionType.EXTERNAL);
-      request.version(record.kafkaOffset());
+      if (config.hasExternalVersionHeader()) {
+        final Header versionHeader = record.headers().lastWithName(config.externalVersionHeader());
+        final byte[] versionValue = HEADER_CONVERTER.fromConnectHeader(
+                record.topic(),
+                versionHeader.key(),
+                versionHeader.schema(),
+                versionHeader.value()
+        );
+        try {
+          //fromConnectHeader byte output is UTF_8
+          request.version(Long.parseLong(new String(versionValue, StandardCharsets.UTF_8)));
+        } catch (NumberFormatException e) {
+          throw new ConnectException("Error converting to long: "
+                  + new String(versionValue, StandardCharsets.UTF_8), e);
+        }
+      } else {
+        request.version(record.kafkaOffset());
+      }
     }
 
     return request;
