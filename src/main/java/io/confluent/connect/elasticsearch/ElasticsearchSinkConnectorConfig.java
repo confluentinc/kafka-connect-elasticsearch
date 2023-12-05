@@ -698,15 +698,15 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
             BEHAVIOR_ON_MALFORMED_DOCS_DISPLAY,
             new EnumRecommender<>(BehaviorOnMalformedDoc.class)
         ).define(
-                    EXTERNAL_VERSION_HEADER_CONFIG,
+            EXTERNAL_VERSION_HEADER_CONFIG,
             Type.STRING,
-                    EXTERNAL_VERSION_HEADER_DEFAULT,
+            EXTERNAL_VERSION_HEADER_DEFAULT,
             Importance.LOW,
-                    EXTERNAL_VERSION_HEADER_DOC,
+            EXTERNAL_VERSION_HEADER_DOC,
             DATA_CONVERSION_GROUP,
             ++order,
             Width.SHORT,
-                    EXTERNAL_VERSION_HEADER_DISPLAY
+            EXTERNAL_VERSION_HEADER_DISPLAY
         ).define(
             WRITE_METHOD_CONFIG,
             Type.STRING,
