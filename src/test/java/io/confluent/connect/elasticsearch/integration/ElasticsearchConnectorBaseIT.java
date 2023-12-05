@@ -110,7 +110,7 @@ public class ElasticsearchConnectorBaseIT extends BaseConnectorIT {
   public void cleanup() throws Exception {
     stopConnect();
 
-    if (container.isRunning()) {
+    if (container != null && container.isRunning()) {
       if (helperClient != null) {
         try {
           helperClient.deleteIndex(index, isDataStream);
@@ -255,13 +255,14 @@ public class ElasticsearchConnectorBaseIT extends BaseConnectorIT {
         .indices("*")
         .privileges("create_index", "read", "write", "view_index_metadata")
         .build();
-    Builder builder = Role.builder();
-    builder = forDataStream ? builder.clusterPrivileges("monitor") : builder;
-    Role role = builder
+    // Historically (i.e. ES the previous test base version 7.9.3), ES_SINK_CONNECTOR_ROLE would not require the
+    // "monitor" cluster privilege.  However, this has changed for 7.16.3, although leaving the surrounding
+    // logic in place in the case that future ES versions or tests wish to diverge the permissions.
+    return Role.builder()
         .name(forDataStream ? ES_SINK_CONNECTOR_DS_ROLE : ES_SINK_CONNECTOR_ROLE)
         .indicesPrivileges(indicesPrivileges)
+        .clusterPrivileges("monitor")
         .build();
-    return role;
   }
 
   private static User getMinimalPrivilegesUser(boolean forDataStream) {
