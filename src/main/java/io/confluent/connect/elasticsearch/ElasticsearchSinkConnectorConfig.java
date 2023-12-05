@@ -226,6 +226,13 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   private static final BehaviorOnMalformedDoc BEHAVIOR_ON_MALFORMED_DOCS_DEFAULT =
       BehaviorOnMalformedDoc.FAIL;
 
+  public static final String EXTERNAL_VERSION_HEADER_CONFIG = "external.version.header";
+  private static final String EXTERNAL_VERSION_HEADER_DOC = "Header name to pull value for"
+          + " external versioning, defaults to using the kafka record offset.  Must have a numeric"
+          + " value.";
+  private static final String EXTERNAL_VERSION_HEADER_DISPLAY = "External Version Header Name";
+  private static final String EXTERNAL_VERSION_HEADER_DEFAULT = "";
+
   public static final String WRITE_METHOD_CONFIG = "write.method";
   private static final String WRITE_METHOD_DOC = String.format(
       "Method used for writing data to Elasticsearch, and one of %s or %s. The default method is"
@@ -593,6 +600,16 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
             BEHAVIOR_ON_MALFORMED_DOCS_DISPLAY,
             new EnumRecommender<>(BehaviorOnMalformedDoc.class)
         ).define(
+                    EXTERNAL_VERSION_HEADER_CONFIG,
+            Type.STRING,
+                    EXTERNAL_VERSION_HEADER_DEFAULT,
+            Importance.LOW,
+                    EXTERNAL_VERSION_HEADER_DOC,
+            DATA_CONVERSION_GROUP,
+            ++order,
+            Width.SHORT,
+                    EXTERNAL_VERSION_HEADER_DISPLAY
+        ).define(
             WRITE_METHOD_CONFIG,
             Type.STRING,
             WRITE_METHOD_DEFAULT,
@@ -872,6 +889,14 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
 
   public boolean useCompactMapEntries() {
     return getBoolean(COMPACT_MAP_ENTRIES_CONFIG);
+  }
+
+  public boolean hasExternalVersionHeader() {
+    return !getString(EXTERNAL_VERSION_HEADER_CONFIG).isEmpty();
+  }
+
+  public String externalVersionHeader() {
+    return getString(EXTERNAL_VERSION_HEADER_CONFIG);
   }
 
   public WriteMethod writeMethod() {
