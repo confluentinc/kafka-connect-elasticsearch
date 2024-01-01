@@ -520,7 +520,7 @@ public class ElasticsearchClient {
   /**
    * Creates a data stream. Will not recreate the data stream if it already exists.
    *
-   * @param dataStream the data stream to create given in the form {type}-{dataset}-{topic}
+   * @param dataStream the data stream to create given in the form {type}-{dataset}-{namespace}
    * @return true if the data stream was created, false if it already exists
    */
   private boolean createDataStream(String dataStream) {

@@ -52,6 +52,12 @@ public class ElasticsearchSinkConnectorConfigTest {
   }
 
   @Test
+  public void shouldAllowValidChractersDataStreamNamespace() {
+    props.put(DATA_STREAM_NAMESPACE_CONFIG, "a_valid.namespace123");
+    new ElasticsearchSinkConnectorConfig(props);
+  }
+
+  @Test
   public void shouldAllowValidChractersDataStreamDataset() {
     props.put(DATA_STREAM_DATASET_CONFIG, "a_valid.dataset123");
     new ElasticsearchSinkConnectorConfig(props);
@@ -70,8 +76,20 @@ public class ElasticsearchSinkConnectorConfigTest {
   }
 
   @Test(expected = ConfigException.class)
+  public void shouldNotAllowInvalidCaseDataStreamNamespace() {
+    props.put(DATA_STREAM_NAMESPACE_CONFIG, "AN_INVALID.namespace123");
+    new ElasticsearchSinkConnectorConfig(props);
+  }
+
+  @Test(expected = ConfigException.class)
   public void shouldNotAllowInvalidCaseDataStreamDataset() {
     props.put(DATA_STREAM_DATASET_CONFIG, "AN_INVALID.dataset123");
+    new ElasticsearchSinkConnectorConfig(props);
+  }
+
+  @Test(expected = ConfigException.class)
+  public void shouldNotAllowInvalidCharactersDataStreamNamespace() {
+    props.put(DATA_STREAM_NAMESPACE_CONFIG, "not-valid?");
     new ElasticsearchSinkConnectorConfig(props);
   }
 
@@ -84,6 +102,12 @@ public class ElasticsearchSinkConnectorConfigTest {
   @Test(expected = ConfigException.class)
   public void shouldNotAllowInvalidDataStreamType() {
     props.put(DATA_STREAM_TYPE_CONFIG, "notLogOrMetrics");
+    new ElasticsearchSinkConnectorConfig(props);
+  }
+
+  @Test(expected = ConfigException.class)
+  public void shouldNotAllowLongDataStreamNamespace() {
+    props.put(DATA_STREAM_NAMESPACE_CONFIG, String.format("%d%100d", 1, 1));
     new ElasticsearchSinkConnectorConfig(props);
   }
 

@@ -42,6 +42,7 @@ import io.confluent.connect.elasticsearch.AsyncOffsetTracker.AsyncOffsetState;
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BehaviorOnNullValues;
 
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BEHAVIOR_ON_NULL_VALUES_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.DATA_STREAM_NAMESPACE_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.DATA_STREAM_DATASET_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.DATA_STREAM_TYPE_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.DROP_INVALID_MESSAGE_CONFIG;
@@ -373,6 +374,24 @@ public class ElasticsearchSinkTaskTest {
     when(assignment.contains(eq(new TopicPartition(topic, 1)))).thenReturn(true);
     task.put(Collections.singletonList(record(topic, true, false, 0)));
     String indexName = dataStreamName(type, dataset, topic);
+    verify(client, times(1)).createIndexOrDataStream(eq(indexName));
+  }
+
+  @Test
+  public void testConvertTopicToDataStreamWithCustomNamespace() {
+    String type = "logs";
+    String dataset = "a_valid_dataset";
+    String namespaceTemplate = "a_valid_prefix_${topic}";
+    props.put(DATA_STREAM_TYPE_CONFIG, type);
+    props.put(DATA_STREAM_DATASET_CONFIG, dataset);
+    props.put(DATA_STREAM_NAMESPACE_CONFIG, namespaceTemplate);
+    setUpTask();
+
+    String topic = "a_valid_topic";
+    String namespace = namespaceTemplate.replace("${topic}", topic);
+    when(assignment.contains(eq(new TopicPartition(topic, 1)))).thenReturn(true);
+    task.put(Collections.singletonList(record(topic, true, false, 0)));
+    String indexName = dataStreamName(type, dataset, namespace);
     verify(client, times(1)).createIndexOrDataStream(eq(indexName));
   }
 
