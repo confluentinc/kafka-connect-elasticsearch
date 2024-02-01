@@ -1,29 +1,23 @@
 package io.confluent.connect.elasticsearch;
 
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_TIMEOUT_MS_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_KEY_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.PROXY_HOST_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.PROXY_PASSWORD_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.PROXY_PORT_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.PROXY_USERNAME_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.READ_TIMEOUT_MS_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.SECURITY_PROTOCOL_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.SSL_CONFIG_PREFIX;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.TYPE_NAME_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.*;
+import static org.apache.kafka.common.config.SslConfigs.SSL_ENDPOINT_IDENTIFICATION_ALGORITHM_CONFIG;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
+import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.SecurityProtocol;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.HashMap;
+import java.util.Map;
 import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.config.SslConfigs;
 import org.apache.kafka.common.config.types.Password;
 import org.junit.Before;
 import org.junit.Test;
-
-import java.util.HashMap;
-import java.util.Map;
 
 public class ElasticsearchSinkConnectorConfigTest {
 
@@ -31,10 +25,7 @@ public class ElasticsearchSinkConnectorConfigTest {
 
   @Before
   public void setup() {
-    props = new HashMap<>();
-    props.put(TYPE_NAME_CONFIG, ElasticsearchSinkTestBase.TYPE);
-    props.put(CONNECTION_URL_CONFIG, "localhost");
-    props.put(IGNORE_KEY_CONFIG, "true");
+    props = addNecessaryProps(new HashMap<>());
   }
 
   @Test
@@ -45,12 +36,61 @@ public class ElasticsearchSinkConnectorConfigTest {
   }
 
   @Test
+  public void testDefaultFlushSynchronously() {
+    ElasticsearchSinkConnectorConfig config = new ElasticsearchSinkConnectorConfig(props);
+    assertEquals(false, config.flushSynchronously());
+  }
+
+  @Test
   public void testSetHttpTimeoutsConfig() {
     props.put(READ_TIMEOUT_MS_CONFIG, "10000");
     props.put(CONNECTION_TIMEOUT_MS_CONFIG, "15000");
     ElasticsearchSinkConnectorConfig config = new ElasticsearchSinkConnectorConfig(props);
+
     assertEquals(config.readTimeoutMs(), 10000);
     assertEquals(config.connectionTimeoutMs(), 15000);
+  }
+
+  @Test
+  public void shouldAllowValidChractersDataStreamDataset() {
+    props.put(DATA_STREAM_DATASET_CONFIG, "a_valid.dataset123");
+    new ElasticsearchSinkConnectorConfig(props);
+  }
+
+  @Test
+  public void shouldAllowValidDataStreamType() {
+    props.put(DATA_STREAM_TYPE_CONFIG, "metrics");
+    new ElasticsearchSinkConnectorConfig(props);
+  }
+
+  @Test
+  public void shouldAllowValidDataStreamTypeCaseInsensitive() {
+    props.put(DATA_STREAM_TYPE_CONFIG, "mEtRICS");
+    new ElasticsearchSinkConnectorConfig(props);
+  }
+
+  @Test(expected = ConfigException.class)
+  public void shouldNotAllowInvalidCaseDataStreamDataset() {
+    props.put(DATA_STREAM_DATASET_CONFIG, "AN_INVALID.dataset123");
+    new ElasticsearchSinkConnectorConfig(props);
+  }
+
+  @Test(expected = ConfigException.class)
+  public void shouldNotAllowInvalidCharactersDataStreamDataset() {
+    props.put(DATA_STREAM_DATASET_CONFIG, "not-valid?");
+    new ElasticsearchSinkConnectorConfig(props);
+  }
+
+  @Test(expected = ConfigException.class)
+  public void shouldNotAllowInvalidDataStreamType() {
+    props.put(DATA_STREAM_TYPE_CONFIG, "notLogOrMetrics");
+    new ElasticsearchSinkConnectorConfig(props);
+  }
+
+  @Test(expected = ConfigException.class)
+  public void shouldNotAllowLongDataStreamDataset() {
+    props.put(DATA_STREAM_DATASET_CONFIG, String.format("%d%100d", 1, 1));
+    new ElasticsearchSinkConnectorConfig(props);
   }
 
   @Test(expected = ConfigException.class)
@@ -66,6 +106,7 @@ public class ElasticsearchSinkConnectorConfigTest {
     props.put(SSL_CONFIG_PREFIX + SslConfigs.SSL_TRUSTSTORE_LOCATION_CONFIG, "/path2");
     props.put(SSL_CONFIG_PREFIX + SslConfigs.SSL_TRUSTSTORE_PASSWORD_CONFIG, "opensesame2");
     ElasticsearchSinkConnectorConfig config = new ElasticsearchSinkConnectorConfig(props);
+
     Map<String, Object> sslConfigs = config.sslConfigs();
     assertTrue(sslConfigs.size() > 0);
     assertEquals(
@@ -83,30 +124,31 @@ public class ElasticsearchSinkConnectorConfigTest {
   @Test
   public void testSecured() {
     props.put(CONNECTION_URL_CONFIG, "http://host:9999");
-    assertFalse(new ElasticsearchSinkConnectorConfig(props).secured());
+    assertFalse(new ElasticsearchSinkConnectorConfig(props).isSslEnabled());
 
     props.put(CONNECTION_URL_CONFIG, "https://host:9999");
-    assertFalse(new ElasticsearchSinkConnectorConfig(props).secured());
+    assertFalse(new ElasticsearchSinkConnectorConfig(props).isSslEnabled());
 
     props.put(CONNECTION_URL_CONFIG, "http://host1:9992,https://host:9999");
-    assertFalse(new ElasticsearchSinkConnectorConfig(props).secured());
+    assertFalse(new ElasticsearchSinkConnectorConfig(props).isSslEnabled());
 
     // Default behavior should be backwards compat
     props.put(CONNECTION_URL_CONFIG, "host1:9992");
-    assertFalse(new ElasticsearchSinkConnectorConfig(props).secured());
+    assertFalse(new ElasticsearchSinkConnectorConfig(props).isSslEnabled());
 
     props.put(SECURITY_PROTOCOL_CONFIG, SecurityProtocol.SSL.name());
-    assertTrue(new ElasticsearchSinkConnectorConfig(props).secured());
+    assertTrue(new ElasticsearchSinkConnectorConfig(props).isSslEnabled());
 
     props.put(SECURITY_PROTOCOL_CONFIG, SecurityProtocol.PLAINTEXT.name());
     props.put(CONNECTION_URL_CONFIG, "https://host:9999");
-    assertFalse(new ElasticsearchSinkConnectorConfig(props).secured());
+    assertFalse(new ElasticsearchSinkConnectorConfig(props).isSslEnabled());
   }
 
   @Test
   public void shouldAcceptValidBasicProxy() {
     props.put(PROXY_HOST_CONFIG, "proxy host");
     ElasticsearchSinkConnectorConfig config = new ElasticsearchSinkConnectorConfig(props);
+
     assertNotNull(config);
     assertTrue(config.isBasicProxyConfigured());
     assertFalse(config.isProxyWithAuthenticationConfigured());
@@ -115,17 +157,93 @@ public class ElasticsearchSinkConnectorConfigTest {
   @Test
   public void shouldAcceptValidProxyWithAuthentication() {
     props.put(PROXY_HOST_CONFIG, "proxy host");
+    props.put(PROXY_PORT_CONFIG, "1010");
     props.put(PROXY_USERNAME_CONFIG, "username");
     props.put(PROXY_PASSWORD_CONFIG, "password");
     ElasticsearchSinkConnectorConfig config = new ElasticsearchSinkConnectorConfig(props);
+
     assertNotNull(config);
     assertTrue(config.isBasicProxyConfigured());
     assertTrue(config.isProxyWithAuthenticationConfigured());
+    assertEquals("proxy host", config.proxyHost());
+    assertEquals(1010, config.proxyPort());
+    assertEquals("username", config.proxyUsername());
+    assertEquals("password", config.proxyPassword().value());
   }
 
   @Test(expected = ConfigException.class)
   public void shouldNotAllowInvalidProxyPort() {
     props.put(PROXY_PORT_CONFIG, "-666");
     new ElasticsearchSinkConnectorConfig(props);
+  }
+
+  @Test(expected = ConfigException.class)
+  public void shouldNotAllowInvalidUrl() {
+    props.put(CONNECTION_URL_CONFIG, ".com:/bbb/dfs,http://valid.com");
+    new ElasticsearchSinkConnectorConfig(props);
+  }
+
+  @Test(expected = ConfigException.class)
+  public void shouldNotAllowInvalidSecurityProtocol() {
+    props.put(SECURITY_PROTOCOL_CONFIG, "unsecure");
+    new ElasticsearchSinkConnectorConfig(props);
+  }
+
+  @Test
+  public void shouldDisableHostnameVerification() {
+    props.put(SSL_CONFIG_PREFIX + SSL_ENDPOINT_IDENTIFICATION_ALGORITHM_CONFIG, "https");
+    ElasticsearchSinkConnectorConfig config = new ElasticsearchSinkConnectorConfig(props);
+    assertFalse(config.shouldDisableHostnameVerification());
+
+    props.put(SSL_CONFIG_PREFIX + SSL_ENDPOINT_IDENTIFICATION_ALGORITHM_CONFIG, "");
+    config = new ElasticsearchSinkConnectorConfig(props);
+    assertTrue(config.shouldDisableHostnameVerification());
+
+    props.put(SSL_CONFIG_PREFIX + SSL_ENDPOINT_IDENTIFICATION_ALGORITHM_CONFIG, null);
+    config = new ElasticsearchSinkConnectorConfig(props);
+    assertFalse(config.shouldDisableHostnameVerification());
+  }
+
+  @Test(expected = ConfigException.class)
+  public void shouldNotAllowInvalidExtensionKeytab() {
+    props.put(KERBEROS_KEYTAB_PATH_CONFIG, "keytab.wrongextension");
+    new ElasticsearchSinkConnectorConfig(props);
+  }
+
+  @Test(expected = ConfigException.class)
+  public void shouldNotAllowNonExistingKeytab() {
+    props.put(KERBEROS_KEYTAB_PATH_CONFIG, "idontexist.keytab");
+    new ElasticsearchSinkConnectorConfig(props);
+  }
+
+  @Test
+  public void shouldAllowValidKeytab() throws IOException {
+    Path keytab = Files.createTempFile("iexist", ".keytab");
+    props.put(KERBEROS_KEYTAB_PATH_CONFIG, keytab.toString());
+
+    new ElasticsearchSinkConnectorConfig(props);
+
+    keytab.toFile().delete();
+  }
+
+  public static Map<String, String> addNecessaryProps(Map<String, String> props) {
+    if (props == null) {
+      props = new HashMap<>();
+    }
+    props.put(ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG, "http://localhost:8080");
+    return props;
+  }
+  @Test
+  public void testLogSensitiveData(){
+    ElasticsearchSinkConnectorConfig config = new ElasticsearchSinkConnectorConfig(props);
+    assertFalse(config.shouldLogSensitiveData());
+
+    props.put(LOG_SENSITIVE_DATA_CONFIG, "true");
+    config = new ElasticsearchSinkConnectorConfig(props);
+    assertTrue(config.shouldLogSensitiveData());
+
+    props.put(LOG_SENSITIVE_DATA_CONFIG, "false");
+    config = new ElasticsearchSinkConnectorConfig(props);
+    assertFalse(config.shouldLogSensitiveData());
   }
 }

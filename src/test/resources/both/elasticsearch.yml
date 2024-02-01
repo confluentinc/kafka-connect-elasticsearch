@@ -20,3 +20,16 @@ xpack.security.transport.ssl.enabled: true
 xpack.security.transport.ssl.key:  ssl/elasticsearch.key
 xpack.security.transport.ssl.certificate: ssl/elasticsearch.crt
 xpack.security.transport.ssl.certificate_authorities: [ "ssl/ca/ca.crt" ]
+
+# enable anonymous connections since setting passwords requires running a command
+xpack.security.authc:
+  anonymous:
+    username: connect_user
+    roles: superuser
+    authz_exception: true
+
+# Kerberos realm
+xpack.security.authc.realms.kerberos.kerb1:
+  order: 3
+  keytab.path: es.keytab
+  remove_realm_name: false

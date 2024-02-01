@@ -8,30 +8,18 @@
 
     <!-- switch statements on types exceed maximum complexity -->
     <suppress
-            checks="(CyclomaticComplexity)"
-            files="(JestElasticsearchClient|Mapping|BulkProcessor).java"
-    />
-
-    <!-- TODO: Undecided if this is too much -->
-    <suppress
-            checks="(ClassDataAbstractionCoupling)"
-            files="(BulkProcessor|JestElasticsearchClient).java"
-    />
-
-    <!-- TODO: Pass some parameters in common config object? -->
-    <suppress
-            checks="(ParameterNumber)"
-            files="(ElasticsearchWriter).java"
+      checks="(CyclomaticComplexity)"
+      files="(Mapping|DataConverter).java"
     />
 
     <suppress
-            checks="MethodLengthCheck"
-            files="ElasticsearchSinkConnectorConfig.java"
+      checks="(ClassDataAbstractionCoupling)"
+      files="(ElasticsearchClient|ConfigCallbackHandler).java"
     />
 
     <suppress
-      checks="NPathComplexity"
-      files="JestElasticsearchClient.java"
+      checks="(MethodLength)"
+      files="ElasticsearchSinkConnectorConfig.java"
     />
 
 </suppressions>

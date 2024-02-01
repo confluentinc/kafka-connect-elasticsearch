@@ -15,36 +15,153 @@
 
 package io.confluent.connect.elasticsearch.integration;
 
+import java.text.SimpleDateFormat;
+import java.time.Duration;
+import java.util.Date;
+import java.util.List;
+import java.util.Map;
+
+import org.apache.kafka.clients.admin.ListConsumerGroupOffsetsResult;
+import org.apache.kafka.clients.consumer.OffsetAndMetadata;
+import org.apache.kafka.common.TopicPartition;
+import org.apache.kafka.connect.storage.StringConverter;
+import org.apache.kafka.test.TestUtils;
+import org.elasticsearch.client.security.user.User;
+import org.elasticsearch.client.security.user.privileges.Role;
+import org.elasticsearch.search.SearchHit;
+import org.junit.BeforeClass;
+import org.junit.Test;
+import org.junit.experimental.categories.Category;
+
+import io.confluent.common.utils.IntegrationTest;
+import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig;
+import io.confluent.connect.elasticsearch.helper.ElasticsearchContainer;
+
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BATCH_SIZE_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BEHAVIOR_ON_NULL_VALUES_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BULK_SIZE_BYTES_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_PASSWORD_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_USERNAME_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.FLUSH_SYNCHRONOUSLY_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_KEY_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.LINGER_MS_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.WRITE_METHOD_CONFIG;
 import static org.apache.kafka.connect.runtime.ConnectorConfig.VALUE_CONVERTER_CLASS_CONFIG;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertTrue;
-
-import com.google.gson.JsonArray;
-import com.google.gson.JsonObject;
-import io.confluent.connect.elasticsearch.DataConverter.BehaviorOnNullValues;
-import io.confluent.connect.elasticsearch.Mapping;
-import io.confluent.connect.elasticsearch.TestUtils;
-import io.confluent.connect.elasticsearch.jest.JestElasticsearchClient.WriteMethod;
-
-import java.util.Collections;
-
-import org.apache.kafka.connect.data.Schema;
-import org.apache.kafka.connect.storage.StringConverter;
-import org.apache.kafka.test.IntegrationTest;
-import org.junit.Test;
-import org.junit.experimental.categories.Category;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
+import static org.junit.Assert.assertEquals;
 
 @Category(IntegrationTest.class)
 public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
 
-  private static Logger log = LoggerFactory.getLogger(ElasticsearchConnectorIT.class);
+  // TODO: test compatibility
+
+  @BeforeClass
+  public static void setupBeforeAll() {
+    Map<User, String> users = getUsers();
+    List<Role> roles = getRoles();
+    container = ElasticsearchContainer.fromSystemProperties().withBasicAuth(users, roles);
+    container.start();
+  }
+
+  @Override
+  public void setup() throws Exception {
+    if (!container.isRunning()) {
+      setupBeforeAll();
+    }
+    super.setup();
+  }
+
+  @Override
+  protected Map<String, String> createProps() {
+    props = super.createProps();
+    props.put(CONNECTION_USERNAME_CONFIG, ELASTIC_MINIMAL_PRIVILEGES_NAME);
+    props.put(CONNECTION_PASSWORD_CONFIG, ELASTIC_MINIMAL_PRIVILEGES_PASSWORD);
+    return props;
+  }
+
+  /**
+   * Verify that mapping errors when an index has strict mapping is handled correctly
+   */
+  @Test
+  public void testStrictMappings() throws Exception {
+    helperClient.createIndex(TOPIC, "{ \"dynamic\" : \"strict\", " +
+        " \"properties\": { \"longProp\": { \"type\": \"long\" } } } }");
+
+    props.put(ElasticsearchSinkConnectorConfig.BATCH_SIZE_CONFIG, "1");
+    props.put(ElasticsearchSinkConnectorConfig.MAX_RETRIES_CONFIG, "1");
+    props.put(ElasticsearchSinkConnectorConfig.RETRY_BACKOFF_MS_CONFIG, "10");
+    props.put(ElasticsearchSinkConnectorConfig.MAX_IN_FLIGHT_REQUESTS_CONFIG, "2");
+    connect.configureConnector(CONNECTOR_NAME, props);
+    waitForConnectorToStart(CONNECTOR_NAME, TASKS_MAX);
+
+    connect.kafka().produce(TOPIC, "key1", "{\"longProp\":1}");
+    connect.kafka().produce(TOPIC, "key2", "{\"any-prop\":1}");
+    connect.kafka().produce(TOPIC, "key3", "{\"any-prop\":1}");
+    connect.kafka().produce(TOPIC, "key4", "{\"any-prop\":1}");
+
+    await().atMost(Duration.ofMinutes(1)).untilAsserted(() ->
+        assertThat(connect.connectorStatus(CONNECTOR_NAME).tasks().get(0).state())
+            .isEqualTo("FAILED"));
+
+    // The framework commits offsets right before failing the task, verify the failed record's
+    // offset is not included
+    assertThat(getConnectorOffset(CONNECTOR_NAME, TOPIC, 0)).isLessThanOrEqualTo(1);
+  }
+
+  private long getConnectorOffset(String connectorName, String topic, int partition)
+      throws Exception {
+    String cGroupName = "connect-" + connectorName;
+    ListConsumerGroupOffsetsResult offsetsResult = connect.kafka().createAdminClient()
+        .listConsumerGroupOffsets(cGroupName);
+    OffsetAndMetadata offsetAndMetadata = offsetsResult.partitionsToOffsetAndMetadata().get()
+        .get(new TopicPartition(topic, partition));
+    return offsetAndMetadata == null ? 0 : offsetAndMetadata.offset();
+  }
+
+  @Test
+  public void testBatchByByteSize() throws Exception {
+    // Based on the size of the topic, key, and value strings in JSON format.
+    int approximateRecordByteSize = 60;
+    props.put(BULK_SIZE_BYTES_CONFIG, Integer.toString(approximateRecordByteSize * 2));
+    props.put(LINGER_MS_CONFIG, "180000");
+
+    connect.configureConnector(CONNECTOR_NAME, props);
+    waitForConnectorToStart(CONNECTOR_NAME, TASKS_MAX);
+
+    writeRecords(3);
+    // Only 2 records fit in 1 batch. The other record is sent once another record is written.
+    verifySearchResults(2);
+
+    writeRecords(1);
+    verifySearchResults(4);
+  }
+
+  @Test
+  public void testStopESContainer() throws Exception {
+    props.put(ElasticsearchSinkConnectorConfig.MAX_RETRIES_CONFIG, "2");
+    props.put(ElasticsearchSinkConnectorConfig.RETRY_BACKOFF_MS_CONFIG, "10");
+    props.put(ElasticsearchSinkConnectorConfig.BATCH_SIZE_CONFIG, "1");
+    props.put(ElasticsearchSinkConnectorConfig.MAX_IN_FLIGHT_REQUESTS_CONFIG,
+        Integer.toString(NUM_RECORDS - 1));
+
+    // run connector and write
+    runSimpleTest(props);
+
+    // stop ES, for all following requests to fail with "connection refused"
+    container.stop();
+
+    // try to write some more
+    writeRecords(NUM_RECORDS);
+
+    // Connector should fail since the server is down
+    await().atMost(Duration.ofMinutes(1)).untilAsserted(() ->
+        assertThat(connect.connectorStatus(CONNECTOR_NAME).tasks().get(0).state())
+            .isEqualTo("FAILED"));
+
+    assertThat(connect.connectorStatus(CONNECTOR_NAME).tasks().get(0).trace())
+        .contains("'java.net.ConnectException: Connection refused' after 3 attempt(s)");
+  }
 
   @Test
   public void testChangeConfigsAndRestart() throws Exception {
@@ -63,7 +180,7 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
 
   @Test
   public void testDelete() throws Exception {
-    props.put(BEHAVIOR_ON_NULL_VALUES_CONFIG, BehaviorOnNullValues.DELETE.name());
+    props.put(BEHAVIOR_ON_NULL_VALUES_CONFIG, ElasticsearchSinkConnectorConfig.BehaviorOnNullValues.DELETE.name());
     props.put(IGNORE_KEY_CONFIG, "false");
     runSimpleTest(props);
 
@@ -82,15 +199,16 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
   }
 
   @Test
-  @SuppressWarnings("unchecked")
-  public void testMapping() throws Exception {
-    client.createIndices(Collections.singleton(TOPIC));
-    Schema schema = TestUtils.createSchema();
-    Mapping.createMapping(client, TOPIC, TYPE, schema);
+  public void testHappyPathDataStream() throws Exception {
+    setDataStream();
 
-    JsonObject mapping = Mapping.getMapping(client, TOPIC, TYPE);
-    assertNotNull(mapping);
-    TestUtils.verifyMapping(client, schema, mapping);
+    runSimpleTest(props);
+
+    if (container.esMajorVersion() == 8) {
+      assertEquals(index, helperClient.getDataStreamWithJavaAPIClient(index).name());
+    } else {
+      assertEquals(index, helperClient.getDataStream(index).getName());
+    }
   }
 
   @Test
@@ -127,7 +245,7 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
 
   @Test
   public void testUpsert() throws Exception {
-    props.put(WRITE_METHOD_CONFIG, WriteMethod.UPSERT.toString());
+    props.put(WRITE_METHOD_CONFIG, ElasticsearchSinkConnectorConfig.WriteMethod.UPSERT.toString());
     props.put(IGNORE_KEY_CONFIG, "false");
     runSimpleTest(props);
 
@@ -135,22 +253,96 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
     // try updating last one
     int lastRecord = NUM_RECORDS - 1;
     connect.kafka().produce(TOPIC, String.valueOf(lastRecord), String.format("{\"doc_num\":%d}", 0));
-    writeRecordsFromIndex(NUM_RECORDS, NUM_RECORDS);
+    writeRecordsFromStartIndex(NUM_RECORDS, NUM_RECORDS);
 
     // should have double number of records
     verifySearchResults(NUM_RECORDS * 2);
 
-    JsonObject result = client.search("", TOPIC, null);
-    JsonArray rawHits = result.getAsJsonObject("hits").getAsJsonArray("hits");
-
-    for (int i = 0; i < rawHits.size(); ++i) {
-      JsonObject hitData = rawHits.get(i).getAsJsonObject();
-      JsonObject source = hitData.get("_source").getAsJsonObject();
-      assertTrue(source.has("doc_num"));
-      if (Integer.valueOf(hitData.get("_id").getAsString()) == lastRecord) {
+    for (SearchHit hit : helperClient.search(TOPIC)) {
+      if (Integer.parseInt(hit.getId()) == lastRecord) {
         // last record should be updated
-        assertTrue(source.get("doc_num").getAsInt() == 0);
+        int docNum = (Integer) hit.getSourceAsMap().get("doc_num");
+        assertEquals(0, docNum);
       }
     }
+  }
+
+  private void testBackwardsCompatibilityDataStreamVersionHelper(
+      String version
+  ) throws Exception {
+    // since we require older ES container we close the current one and set it back up
+    container.close();
+    container = ElasticsearchContainer.withESVersion(version);
+    container.start();
+    setupFromContainer();
+
+    runSimpleTest(props);
+
+    helperClient = null;
+    container.close();
+    setupBeforeAll();
+  }
+
+  @Test
+  public void testBackwardsCompatibilityDataStream() throws Exception {
+    testBackwardsCompatibilityDataStreamVersionHelper("7.0.1");
+  }
+
+  @Test
+  public void testBackwardsCompatibilityDataStream2() throws Exception {
+    testBackwardsCompatibilityDataStreamVersionHelper("7.9.3");
+  }
+
+  @Test
+  public void testBackwardsCompatibility() throws Exception {
+    testBackwardsCompatibilityDataStreamVersionHelper("7.16.3");
+  }
+
+  @Test
+  public void testRoutingSmtSynchronousMode() throws Exception {
+    index = addRoutingSmt("YYYYMM", "route-it-to-here-${topic}-at-${timestamp}");
+    props.put(FLUSH_SYNCHRONOUSLY_CONFIG, "true");
+    runSimpleTest(props);
+    waitForCommittedOffsets(CONNECTOR_NAME, TOPIC, 0, NUM_RECORDS);
+  }
+
+  @Test
+  public void testRoutingSmtAsynchronousMode() throws Exception {
+    index = addRoutingSmt("YYYYMM", "route-it-to-here-${topic}-at-${timestamp}");
+    props.put(FLUSH_SYNCHRONOUSLY_CONFIG, "false");
+    assertConnectorFailsOnWriteRecords(props, "Connector doesn't support topic mutating SMTs");
+  }
+
+  @Test
+  public void testReconfigureToUseRoutingSMT() throws Exception {
+    props.put(FLUSH_SYNCHRONOUSLY_CONFIG, "false");
+    // run a connector without a routing SMT in asynchronous mode
+    runSimpleTest(props);
+    // reconfigure connector to use a routing SMT in synchronous mode
+    props.put(FLUSH_SYNCHRONOUSLY_CONFIG, "true");
+    index = addRoutingSmt("YYYYMM", "route-it-to-here-${topic}-at-${timestamp}");
+    runSimpleTest(props);
+    waitForCommittedOffsets(CONNECTOR_NAME, TOPIC, 0, NUM_RECORDS * 2);
+    // reconfigure connector to use a routing SMT in asynchronous mode
+    props.put(FLUSH_SYNCHRONOUSLY_CONFIG, "false");
+    assertConnectorFailsOnWriteRecords(props, "Connector doesn't support topic mutating SMTs");
+  }
+
+  public void waitForCommittedOffsets(String connectorName, String topicName, int partition, int expectedOffset) throws InterruptedException {
+    TestUtils.waitForCondition(
+        () -> expectedOffset == getConnectorOffset(connectorName, topicName, partition),
+        CONNECTOR_COMMIT_DURATION_MS,
+        "Connector tasks did not commit offsets in time."
+    );
+  }
+
+  private String addRoutingSmt(String timestampFormat, String topicFormat) {
+    SimpleDateFormat formatter = new SimpleDateFormat(timestampFormat);
+    Date date = new Date(System.currentTimeMillis());
+    props.put("transforms", "TimestampRouter");
+    props.put("transforms.TimestampRouter.type", "org.apache.kafka.connect.transforms.TimestampRouter");
+    props.put("transforms.TimestampRouter.topic.format", topicFormat);
+    props.put("transforms.TimestampRouter.timestamp.format", timestampFormat);
+    return topicFormat.replace("${topic}", TOPIC).replace("${timestamp}", formatter.format(date));
   }
 }

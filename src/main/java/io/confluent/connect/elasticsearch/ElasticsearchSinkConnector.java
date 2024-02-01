@@ -67,9 +67,7 @@ public class ElasticsearchSinkConnector extends SinkConnector {
   }
 
   @Override
-  public void stop() throws ConnectException {
-
-  }
+  public void stop() throws ConnectException { }
 
   @Override
   public ConfigDef config() {

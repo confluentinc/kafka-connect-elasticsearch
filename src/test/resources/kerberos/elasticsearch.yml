@@ -1,0 +1,24 @@
+## Used by Docker images in our integration test
+http.host: 0.0.0.0
+network.host: 0.0.0.0
+transport.host: 0.0.0.0
+
+node.store.allow_mmap: false
+cluster.routing.allocation.disk.threshold_enabled: false
+
+xpack.license.self_generated.type: trial
+xpack.security.enabled: true
+xpack.security.http.ssl.enabled: false
+
+# Kerberos realm
+xpack.security.authc.realms.kerberos.kerb1:
+  order: 3
+  keytab.path: es.keytab
+  remove_realm_name: false
+
+# enable anonymous connections since setting passwords requires running a command
+xpack.security.authc:
+  anonymous:
+    username: connect_user
+    roles: superuser
+    authz_exception: true
