@@ -4,6 +4,6 @@ common {
   upstreamProjects = 'confluentinc/common'
   pintMerge = true
   downStreamValidate = false
-  nodeLabel = 'docker-debian-jdk8'
-  mvnSkipDeploy = true
+  nodeLabel = 'docker-oraclejdk8'
+  sonarqubeScannerEnable = true
 }
