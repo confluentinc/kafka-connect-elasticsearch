@@ -353,14 +353,14 @@ public class ElasticsearchWriter {
       try {
         route = getRoute(sinkRecord);
       } catch (Exception e) {
-        throw new ConnectException(e.getMessage());
+        continue; // throw new ConnectException(e.getMessage());
       }
       SpanSupport.annotate("route", route);
       String parent;
       try {
         parent = getParent(sinkRecord);
       } catch (Exception e) {
-        throw new ConnectException(e.getMessage());
+        continue; // throw new ConnectException(e.getMessage());
       }
       SpanSupport.annotate("parent", parent);
       final boolean ignoreKey = ignoreKeyTopics.contains(sinkRecord.topic()) || this.ignoreKey;
