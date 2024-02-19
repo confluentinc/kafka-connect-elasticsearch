@@ -99,8 +99,8 @@ public class ElasticsearchSinkConnectorConfigTest {
     new ElasticsearchSinkConnectorConfig(props);
   }
 
-  @Test(expected = ConfigException.class)
-  public void shouldNotAllowInvalidDataStreamType() {
+  @Test
+  public void shouldAllowCustomDataStreamType() {
     props.put(DATA_STREAM_TYPE_CONFIG, "notLogOrMetrics");
     new ElasticsearchSinkConnectorConfig(props);
   }
