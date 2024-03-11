@@ -39,6 +39,7 @@ import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfi
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.SECURITY_PROTOCOL_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.SSL_CONFIG_PREFIX;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.KERBEROS_PRINCIPAL_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.UPSERT_SCRIPT_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.WRITE_METHOD_CONFIG;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -51,8 +52,10 @@ import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.Secur
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.stream.Collectors;
 import org.apache.kafka.common.config.Config;
 import org.apache.kafka.common.config.ConfigValue;
 import org.apache.kafka.common.config.SslConfigs;
@@ -104,6 +107,40 @@ public class ValidatorTest {
     validator = new Validator(props, () -> mockClient);
     Config result = validator.validate();
     assertNoErrors(result);
+  }
+
+  @Test
+  public void testValidScriptedUpsert() {
+    props.put(BEHAVIOR_ON_NULL_VALUES_CONFIG, "delete");
+    props.put(ElasticsearchSinkConnectorConfig.COMPACT_MAP_ENTRIES_CONFIG, "true");
+    props.put(ElasticsearchSinkConnectorConfig.IGNORE_KEY_CONFIG, "false");
+    props.put(ElasticsearchSinkConnectorConfig.IGNORE_SCHEMA_CONFIG, "false");
+    props.put(ElasticsearchSinkConnectorConfig.WRITE_METHOD_CONFIG, ElasticsearchSinkConnectorConfig.WriteMethod.SCRIPTED_UPSERT.name());
+    props.put(
+            UPSERT_SCRIPT_CONFIG,
+            "{\"lang\":\"painless\",\"source\":\"if ( ctx.op == 'create' ) ctx._source.counter = params.count} else {ctx._source.counter += params.count}\",\"params\":{\"count\":4}}");
+    validator = new Validator(props, () -> mockClient);
+    Config result = validator.validate();
+
+    Map<String, ConfigValue> map = result.configValues().stream().collect(Collectors.toMap(x -> x.name(), x -> x));
+
+    assertNoErrors(result);
+    assertTrue(map.get(UPSERT_SCRIPT_CONFIG).visible());
+  }
+
+  @Test
+  public void testInvalidScriptedUpsert() {
+    props.put(BEHAVIOR_ON_NULL_VALUES_CONFIG, "delete");
+    props.put(WRITE_METHOD_CONFIG, "upsert");
+    props.put(
+            UPSERT_SCRIPT_CONFIG,
+            "{\"lang\":\"painless\",\"source\":\"if ( ctx.op == 'create' ) ctx._source.counter = params.count} else {ctx._source.counter += params.count}\",\"params\":{\"count\":4}}");
+    validator = new Validator(props, () -> mockClient);
+    Config result = validator.validate();
+    Map<String, ConfigValue> map = result.configValues().stream().collect(Collectors.toMap(x -> x.name(), x -> x));
+
+    assertNoErrors(result);
+    assertFalse(map.get(UPSERT_SCRIPT_CONFIG).visible());
   }
 
   @Test

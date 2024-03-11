@@ -24,6 +24,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.concurrent.TimeUnit;
+
+import io.confluent.connect.elasticsearch.validator.ScriptValidator;
 import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.common.config.ConfigException;
@@ -277,6 +279,16 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   );
   private static final String WRITE_METHOD_DISPLAY = "Write Method";
   private static final String WRITE_METHOD_DEFAULT = WriteMethod.INSERT.name();
+
+  public static final String UPSERT_SCRIPT_CONFIG = "upsert.script";
+
+  private static final String UPSERT_SCRIPT_DOC = "Script used for"
+          + " upserting data to Elasticsearch. This script allows for"
+          + " customizable behavior upon upserting a document. Please refer to"
+          + " Elasticsearch scripted upsert documentation";
+
+  private static final String UPSERT_SCRIPT_DISPLAY = "Upsert Script";
+  private static final String UPSERT_SCRIPT_DEFAULT = "";
   public static final String LOG_SENSITIVE_DATA_CONFIG = "log.sensitive.data";
   private static final String LOG_SENSITIVE_DATA_DISPLAY = "Log Sensitive data";
   private static final String LOG_SENSITIVE_DATA_DOC = "If true, logs sensitive data "
@@ -408,7 +420,8 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
 
   public enum WriteMethod {
     INSERT,
-    UPSERT
+    UPSERT,
+    SCRIPTED_UPSERT
   }
 
   protected static ConfigDef baseConfigDef() {
@@ -622,8 +635,8 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
             DATA_CONVERSION_GROUP,
             ++order,
             Width.SHORT,
-            IGNORE_KEY_DISPLAY
-        ).define(
+            IGNORE_KEY_DISPLAY)
+        .define(
             IGNORE_SCHEMA_CONFIG,
             Type.BOOLEAN,
             IGNORE_SCHEMA_DEFAULT,
@@ -632,8 +645,8 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
             DATA_CONVERSION_GROUP,
             ++order,
             Width.SHORT,
-            IGNORE_SCHEMA_DISPLAY
-        ).define(
+            IGNORE_SCHEMA_DISPLAY)
+        .define(
             COMPACT_MAP_ENTRIES_CONFIG,
             Type.BOOLEAN,
             COMPACT_MAP_ENTRIES_DEFAULT,
@@ -642,8 +655,8 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
             DATA_CONVERSION_GROUP,
             ++order,
             Width.SHORT,
-            COMPACT_MAP_ENTRIES_DISPLAY
-        ).define(
+            COMPACT_MAP_ENTRIES_DISPLAY)
+        .define(
             IGNORE_KEY_TOPICS_CONFIG,
             Type.LIST,
             IGNORE_KEY_TOPICS_DEFAULT,
@@ -652,8 +665,8 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
             DATA_CONVERSION_GROUP,
             ++order,
             Width.LONG,
-            IGNORE_KEY_TOPICS_DISPLAY
-        ).define(
+            IGNORE_KEY_TOPICS_DISPLAY)
+        .define(
             IGNORE_SCHEMA_TOPICS_CONFIG,
             Type.LIST,
             IGNORE_SCHEMA_TOPICS_DEFAULT,
@@ -662,8 +675,8 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
             DATA_CONVERSION_GROUP,
             ++order,
             Width.LONG,
-            IGNORE_SCHEMA_TOPICS_DISPLAY
-        ).define(
+            IGNORE_SCHEMA_TOPICS_DISPLAY)
+        .define(
             DROP_INVALID_MESSAGE_CONFIG,
             Type.BOOLEAN,
             DROP_INVALID_MESSAGE_DEFAULT,
@@ -672,8 +685,8 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
             DATA_CONVERSION_GROUP,
             ++order,
             Width.LONG,
-            DROP_INVALID_MESSAGE_DISPLAY
-        ).define(
+            DROP_INVALID_MESSAGE_DISPLAY)
+        .define(
             BEHAVIOR_ON_NULL_VALUES_CONFIG,
             Type.STRING,
             BEHAVIOR_ON_NULL_VALUES_DEFAULT.name(),
@@ -684,8 +697,8 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
             ++order,
             Width.SHORT,
             BEHAVIOR_ON_NULL_VALUES_DISPLAY,
-            new EnumRecommender<>(BehaviorOnNullValues.class)
-        ).define(
+            new EnumRecommender<>(BehaviorOnNullValues.class))
+        .define(
             BEHAVIOR_ON_MALFORMED_DOCS_CONFIG,
             Type.STRING,
             BEHAVIOR_ON_MALFORMED_DOCS_DEFAULT.name(),
@@ -696,8 +709,8 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
             ++order,
             Width.SHORT,
             BEHAVIOR_ON_MALFORMED_DOCS_DISPLAY,
-            new EnumRecommender<>(BehaviorOnMalformedDoc.class)
-        ).define(
+            new EnumRecommender<>(BehaviorOnMalformedDoc.class))
+        .define(
             EXTERNAL_VERSION_HEADER_CONFIG,
             Type.STRING,
             EXTERNAL_VERSION_HEADER_DEFAULT,
@@ -706,8 +719,8 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
             DATA_CONVERSION_GROUP,
             ++order,
             Width.SHORT,
-            EXTERNAL_VERSION_HEADER_DISPLAY
-        ).define(
+            EXTERNAL_VERSION_HEADER_DISPLAY)
+        .define(
             WRITE_METHOD_CONFIG,
             Type.STRING,
             WRITE_METHOD_DEFAULT,
@@ -718,8 +731,20 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
             ++order,
             Width.SHORT,
             WRITE_METHOD_DISPLAY,
-            new EnumRecommender<>(WriteMethod.class)
-    );
+            new EnumRecommender<>(WriteMethod.class))
+        .define(
+            UPSERT_SCRIPT_CONFIG,
+            Type.STRING,
+            null,
+            new ScriptValidator(),
+            Importance.LOW,
+            UPSERT_SCRIPT_DOC,
+            DATA_CONVERSION_GROUP,
+            ++order,
+            Width.SHORT,
+            UPSERT_SCRIPT_DISPLAY,
+            new ScriptValidator());
+    ;
   }
 
   private static void addProxyConfigs(ConfigDef configDef) {
@@ -1076,6 +1101,10 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
 
   public WriteMethod writeMethod() {
     return WriteMethod.valueOf(getString(WRITE_METHOD_CONFIG).toUpperCase());
+  }
+
+  public String getScript() {
+    return getString(UPSERT_SCRIPT_CONFIG);
   }
 
   private static class DataStreamDatasetValidator implements Validator {
