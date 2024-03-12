@@ -288,7 +288,13 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
           + " Elasticsearch scripted upsert documentation";
 
   private static final String UPSERT_SCRIPT_DISPLAY = "Upsert Script";
-  private static final String UPSERT_SCRIPT_DEFAULT = "";
+
+  public static final String PAYLOAD_AS_PARAMS_CONFIG = "payload.as.params";
+
+  private static final String PAYLOAD_AS_PARAMS_DOC = "Defines Payload to be injected"
+         + " into upsert.script script component as params object";
+
+  private static final String PAYLOAD_AS_PARAMS_DISPLAY = "Payload as Params";
   public static final String LOG_SENSITIVE_DATA_CONFIG = "log.sensitive.data";
   private static final String LOG_SENSITIVE_DATA_DISPLAY = "Log Sensitive data";
   private static final String LOG_SENSITIVE_DATA_DOC = "If true, logs sensitive data "
@@ -743,8 +749,17 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
             ++order,
             Width.SHORT,
             UPSERT_SCRIPT_DISPLAY,
-            new ScriptValidator());
-    ;
+            new ScriptValidator())
+        .define(
+            PAYLOAD_AS_PARAMS_CONFIG,
+            Type.BOOLEAN,
+            null,
+            Importance.LOW,
+            PAYLOAD_AS_PARAMS_DOC,
+            DATA_CONVERSION_GROUP,
+            ++order,
+            Width.SHORT,
+            PAYLOAD_AS_PARAMS_DISPLAY);
   }
 
   private static void addProxyConfigs(ConfigDef configDef) {
@@ -1105,6 +1120,10 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
 
   public String getScript() {
     return getString(UPSERT_SCRIPT_CONFIG);
+  }
+
+  public Boolean getIsPayloadAsParams() {
+    return getBoolean(PAYLOAD_AS_PARAMS_CONFIG);
   }
 
   private static class DataStreamDatasetValidator implements Validator {

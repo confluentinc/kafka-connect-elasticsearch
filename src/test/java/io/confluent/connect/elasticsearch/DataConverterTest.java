@@ -600,6 +600,47 @@ public class DataConverterTest {
     assertNotNull(actualRecord.doc());
   }
 
+  @Test
+  public void upsertScriptWithParamPayload(){
+
+    props.put(ElasticsearchSinkConnectorConfig.COMPACT_MAP_ENTRIES_CONFIG, "true");
+    props.put(ElasticsearchSinkConnectorConfig.IGNORE_KEY_CONFIG, "false");
+    props.put(ElasticsearchSinkConnectorConfig.IGNORE_SCHEMA_CONFIG, "false");
+    props.put(ElasticsearchSinkConnectorConfig.WRITE_METHOD_CONFIG, ElasticsearchSinkConnectorConfig.WriteMethod.SCRIPTED_UPSERT.name());
+    props.put(ElasticsearchSinkConnectorConfig.PAYLOAD_AS_PARAMS_CONFIG, "true");
+    props.put(
+        ElasticsearchSinkConnectorConfig.UPSERT_SCRIPT_CONFIG,
+        "{\"lang\":\"painless\",\"source\":\"def paramAnswerList = params['answers']; def paramAnswerMap = new HashMap(); for (int i = 0; i < paramAnswerList.length; i++) { def answer = paramAnswerList[i]; paramAnswerMap[answer.questionId] = answer;} if (ctx._source.answers == null) { ctx._source.answers = [];} for (int i = 0; i < ctx._source.answers.length; i++) { if (paramAnswerMap.get(ctx._source.answers[i].questionId) != null) { ctx._source.answers[i].putAll(paramAnswerMap.get(ctx._source.answers[i].questionId)); } }\"}");
+    props.put(ElasticsearchSinkConnectorConfig.BEHAVIOR_ON_NULL_VALUES_CONFIG, BehaviorOnNullValues.FAIL.name());
+    props.put(ElasticsearchSinkConnectorConfig.IGNORE_SCHEMA_CONFIG, "true");
+    converter = new DataConverter(new ElasticsearchSinkConnectorConfig(props));
+
+    String params =
+        "{\"name\":\"John Doe\",\"age\":30,\"isAdmin\":false,\"scores\":[95,88,76,94],"
+                + "\"address\":{\"street\":\"123 Main St\",\"city\":\"Anytown\",\"zipcode\":12345}}";
+
+    SinkRecord sinkRecord = new SinkRecord(
+            "topic", // The Kafka topic
+            1, // The Kafka partition
+            Schema.STRING_SCHEMA, // The key schema
+            "key", // The key
+            Schema.STRING_SCHEMA, // The value schema
+            params, // The value
+            0 // The Kafka offset
+    );
+
+    UpdateRequest actualRecord = (UpdateRequest) converter.convertRecord(sinkRecord, index);
+
+    Map<String, Object> recordParams = actualRecord.script().getParams();
+
+    assertEquals("John Doe", recordParams.get("name"));
+    assertEquals(30, recordParams.get("age"));
+    assertEquals(false, recordParams.get("isAdmin"));
+    assertEquals(4, ((List)recordParams.get("scores")).size());
+    assertEquals(3, ((Map)recordParams.get("address")).size());
+
+  }
+
   private void configureDataStream() {
     props.put(ElasticsearchSinkConnectorConfig.DATA_STREAM_TYPE_CONFIG, "logs");
     props.put(ElasticsearchSinkConnectorConfig.DATA_STREAM_DATASET_CONFIG, "dataset");

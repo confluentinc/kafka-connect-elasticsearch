@@ -24,6 +24,8 @@ import java.util.Map;
 
 public class ScriptParser {
 
+  private static final ObjectMapper objectMapper = new ObjectMapper();
+
   public static Script parseScript(String scriptJson) throws JsonProcessingException {
 
     Map<String, Object> map = ScriptParser.parseSchemaStringAsJson(scriptJson);
@@ -42,5 +44,18 @@ public class ScriptParser {
             scriptJson, new TypeReference<Map<String, Object>>(){});
 
     return scriptConverted;
+  }
+
+  public static Script parseScriptWithParams(String scriptJson, String jsonPayload)
+          throws JsonProcessingException {
+
+    Map<String, Object> map = ScriptParser.parseSchemaStringAsJson(scriptJson);
+
+    Map<String, Object> fields = objectMapper.readValue(jsonPayload,
+            new TypeReference<Map<String, Object>>() {});
+
+    map.put("params", fields);
+
+    return Script.parse(map);
   }
 }

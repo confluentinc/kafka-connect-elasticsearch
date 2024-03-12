@@ -56,6 +56,8 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.stream.Collectors;
+
+import io.confluent.connect.elasticsearch.validator.ScriptValidator;
 import org.apache.kafka.common.config.Config;
 import org.apache.kafka.common.config.ConfigValue;
 import org.apache.kafka.common.config.SslConfigs;
@@ -117,10 +119,14 @@ public class ValidatorTest {
     props.put(ElasticsearchSinkConnectorConfig.IGNORE_SCHEMA_CONFIG, "false");
     props.put(ElasticsearchSinkConnectorConfig.WRITE_METHOD_CONFIG, ElasticsearchSinkConnectorConfig.WriteMethod.SCRIPTED_UPSERT.name());
     props.put(
-            UPSERT_SCRIPT_CONFIG,
-            "{\"lang\":\"painless\",\"source\":\"if ( ctx.op == 'create' ) ctx._source.counter = params.count} else {ctx._source.counter += params.count}\",\"params\":{\"count\":4}}");
+        UPSERT_SCRIPT_CONFIG,
+        "{\"lang\":\"painless\",\"source\":\"def paramAnswerList = params['answers']; def paramAnswerMap = new HashMap(); for (int i = 0; i < paramAnswerList.length; i++) { def answer = paramAnswerList[i]; paramAnswerMap[answer.questionId] = answer;} if (ctx._source.answers == null) { ctx._source.answers = [];} for (int i = 0; i < ctx._source.answers.length; i++) { if (paramAnswerMap.get(ctx._source.answers[i].questionId) != null) { ctx._source.answers[i].putAll(paramAnswerMap.get(ctx._source.answers[i].questionId)); } }\"}");
     validator = new Validator(props, () -> mockClient);
     Config result = validator.validate();
+
+    ScriptValidator scriptValidator = new ScriptValidator();
+
+    scriptValidator.ensureValid("script", props.get(UPSERT_SCRIPT_CONFIG));
 
     Map<String, ConfigValue> map = result.configValues().stream().collect(Collectors.toMap(x -> x.name(), x -> x));
 

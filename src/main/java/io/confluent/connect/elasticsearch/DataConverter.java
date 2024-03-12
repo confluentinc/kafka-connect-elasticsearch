@@ -173,6 +173,7 @@ public class DataConverter {
     }
 
     String payload = getPayload(record);
+
     payload = maybeAddTimestamp(payload, record.timestamp());
 
     // index
@@ -186,26 +187,44 @@ public class DataConverter {
         OpType opType = config.isDataStream() ? OpType.CREATE : OpType.INDEX;
         return maybeAddExternalVersioning(
             new IndexRequest(index).id(id).source(payload, XContentType.JSON).opType(opType),
-            record
-        );
+            record);
       case SCRIPTED_UPSERT:
-        Script script = null;
-
         try {
-          script = ScriptParser.parseScript(config.getScript());
+
+          if (config.getIsPayloadAsParams()) {
+            return buildUpdateRequestWithParams(index, payload, id);
+          }
+
+          Script script = ScriptParser.parseScript(config.getScript());
+
+          return new UpdateRequest(index, id)
+              .doc(payload, XContentType.JSON)
+              .upsert(payload, XContentType.JSON)
+              .retryOnConflict(Math.min(config.maxInFlightRequests(), 5))
+              .script(script)
+              .scriptedUpsert(true);
+
         } catch (JsonProcessingException jsonProcessingException) {
           throw new RuntimeException(jsonProcessingException);
         }
-
-        return new UpdateRequest(index, id)
-                .doc(payload, XContentType.JSON)
-                .upsert(payload, XContentType.JSON)
-                .retryOnConflict(Math.min(config.maxInFlightRequests(), 5))
-                .script(script)
-                .scriptedUpsert(true);
       default:
         return null; // shouldn't happen
     }
+  }
+
+  private UpdateRequest buildUpdateRequestWithParams(
+      String index, String payload, String id) throws JsonProcessingException {
+
+    Script script = ScriptParser.parseScriptWithParams(config.getScript(), payload);
+
+    UpdateRequest updateRequest =
+        new UpdateRequest(index, id)
+            .retryOnConflict(Math.min(config.maxInFlightRequests(), 5))
+            .script(script)
+            .scriptedUpsert(true);
+
+
+    return updateRequest;
   }
 
   private String getPayload(SinkRecord record) {
@@ -219,6 +238,10 @@ public class DataConverter {
     Object value = config.shouldIgnoreSchema(record.topic())
         ? record.value()
         : preProcessValue(record.value(), record.valueSchema(), schema);
+
+    /*if (config.getIsPayloadAsParams()) {
+      return (String) value;
+    }*/
 
     byte[] rawJsonPayload = JSON_CONVERTER.fromConnectData(record.topic(), schema, value);
     return new String(rawJsonPayload, StandardCharsets.UTF_8);
