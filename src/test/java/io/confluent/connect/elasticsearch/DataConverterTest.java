@@ -22,6 +22,7 @@ import org.apache.kafka.connect.errors.DataException;
 import org.apache.kafka.connect.sink.SinkRecord;
 import org.elasticsearch.action.delete.DeleteRequest;
 import org.elasticsearch.action.index.IndexRequest;
+import org.elasticsearch.action.update.UpdateRequest;
 import org.elasticsearch.index.VersionType;
 import org.junit.Before;
 import org.junit.Test;
@@ -39,7 +40,9 @@ import static io.confluent.connect.elasticsearch.DataConverter.MAP_VALUE;
 import static io.confluent.connect.elasticsearch.DataConverter.TIMESTAMP_FIELD;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 public class DataConverterTest {
@@ -490,6 +493,59 @@ public class DataConverterTest {
     IndexRequest actualRecord = (IndexRequest) converter.convertRecord(sinkRecord, index);
 
     assertEquals(VersionType.INTERNAL, actualRecord.versionType());
+  }
+
+  @Test
+  public void upsertScript() {
+    props.put(ElasticsearchSinkConnectorConfig.COMPACT_MAP_ENTRIES_CONFIG, "true");
+    props.put(ElasticsearchSinkConnectorConfig.IGNORE_KEY_CONFIG, "false");
+    props.put(ElasticsearchSinkConnectorConfig.IGNORE_SCHEMA_CONFIG, "false");
+    props.put(ElasticsearchSinkConnectorConfig.WRITE_METHOD_CONFIG, ElasticsearchSinkConnectorConfig.WriteMethod.SCRIPTED_UPSERT.name());
+    props.put(
+            ElasticsearchSinkConnectorConfig.UPSERT_SCRIPT_CONFIG,
+            "{\"lang\":\"painless\",\"source\":\"if ( ctx.op == 'create' ) ctx._source.counter = params.count} else {ctx._source.counter += params.count}\",\"params\":{\"count\":4}}");
+    props.put(ElasticsearchSinkConnectorConfig.BEHAVIOR_ON_NULL_VALUES_CONFIG, BehaviorOnNullValues.FAIL.name());
+    converter = new DataConverter(new ElasticsearchSinkConnectorConfig(props));
+    Schema preProcessedSchema = converter.preProcessSchema(schema);
+    Struct struct = new Struct(preProcessedSchema).put("string", "myValue");
+    SinkRecord sinkRecord = createSinkRecordWithValue(struct);
+
+    UpdateRequest actualRecord = (UpdateRequest) converter.convertRecord(sinkRecord, index);
+
+    assertNotNull(actualRecord.script());
+    assertEquals("if ( ctx.op == 'create' ) ctx._source.counter = params.count} else {ctx._source.counter += params.count}", actualRecord.script().getIdOrCode());
+    assertEquals("painless", actualRecord.script().getLang());
+    assertEquals(4, actualRecord.script().getParams().getOrDefault("count", 0));
+    assertTrue(actualRecord.scriptedUpsert());
+    assertNotNull(actualRecord.doc());
+  }
+
+  @Test
+  public void upsertScriptWithParamPayload(){
+
+    props.put(ElasticsearchSinkConnectorConfig.COMPACT_MAP_ENTRIES_CONFIG, "true");
+    props.put(ElasticsearchSinkConnectorConfig.IGNORE_KEY_CONFIG, "false");
+    props.put(ElasticsearchSinkConnectorConfig.IGNORE_SCHEMA_CONFIG, "false");
+    props.put(ElasticsearchSinkConnectorConfig.WRITE_METHOD_CONFIG, ElasticsearchSinkConnectorConfig.WriteMethod.SCRIPTED_UPSERT.name());
+    props.put(ElasticsearchSinkConnectorConfig.PAYLOAD_AS_PARAMS_CONFIG, "true");
+    props.put(
+            ElasticsearchSinkConnectorConfig.UPSERT_SCRIPT_CONFIG,
+            "{\"lang\":\"painless\",\"source\":\"def paramAnswerList = params['answers']; def paramAnswerMap = new HashMap(); for (int i = 0; i < paramAnswerList.length; i++) { def answer = paramAnswerList[i]; paramAnswerMap[answer.questionId] = answer;} if (ctx._source.answers == null) { ctx._source.answers = [];} for (int i = 0; i < ctx._source.answers.length; i++) { if (paramAnswerMap.get(ctx._source.answers[i].questionId) != null) { ctx._source.answers[i].putAll(paramAnswerMap.get(ctx._source.answers[i].questionId)); } }\"}");
+    props.put(ElasticsearchSinkConnectorConfig.BEHAVIOR_ON_NULL_VALUES_CONFIG, BehaviorOnNullValues.FAIL.name());
+    props.put(ElasticsearchSinkConnectorConfig.IGNORE_SCHEMA_CONFIG, "true");
+    converter = new DataConverter(new ElasticsearchSinkConnectorConfig(props));
+
+    Schema preProcessedSchema = converter.preProcessSchema(schema);
+    Struct struct = new Struct(preProcessedSchema).put("string", "myValue");
+    SinkRecord sinkRecord = createSinkRecordWithValue(struct);
+
+
+    UpdateRequest actualRecord = (UpdateRequest) converter.convertRecord(sinkRecord, index);
+
+    Map<String, Object> recordParams = actualRecord.script().getParams();
+
+    assertEquals("myValue", recordParams.get("string"));
+
   }
 
   private void configureDataStream() {
