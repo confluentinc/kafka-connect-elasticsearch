@@ -39,6 +39,7 @@ import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfi
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.SECURITY_PROTOCOL_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.SSL_CONFIG_PREFIX;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.KERBEROS_PRINCIPAL_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.UPSERT_SCRIPT_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.WRITE_METHOD_CONFIG;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -53,6 +54,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.stream.Collectors;
+
+import io.confluent.connect.elasticsearch.validator.ScriptValidator;
 import org.apache.kafka.common.config.Config;
 import org.apache.kafka.common.config.ConfigValue;
 import org.apache.kafka.common.config.SslConfigs;
@@ -146,6 +150,44 @@ public class ValidatorTest {
 
     result = validator.validate();
     assertNoErrors(result);
+  }
+
+  @Test
+  public void testValidScriptedUpsert() {
+    props.put(BEHAVIOR_ON_NULL_VALUES_CONFIG, "delete");
+    props.put(ElasticsearchSinkConnectorConfig.COMPACT_MAP_ENTRIES_CONFIG, "true");
+    props.put(ElasticsearchSinkConnectorConfig.IGNORE_KEY_CONFIG, "false");
+    props.put(ElasticsearchSinkConnectorConfig.IGNORE_SCHEMA_CONFIG, "false");
+    props.put(ElasticsearchSinkConnectorConfig.WRITE_METHOD_CONFIG, ElasticsearchSinkConnectorConfig.WriteMethod.SCRIPTED_UPSERT.name());
+    props.put(
+            UPSERT_SCRIPT_CONFIG,
+            "{\"lang\":\"painless\",\"source\":\"def paramAnswerList = params['answers']; def paramAnswerMap = new HashMap(); for (int i = 0; i < paramAnswerList.length; i++) { def answer = paramAnswerList[i]; paramAnswerMap[answer.questionId] = answer;} if (ctx._source.answers == null) { ctx._source.answers = [];} for (int i = 0; i < ctx._source.answers.length; i++) { if (paramAnswerMap.get(ctx._source.answers[i].questionId) != null) { ctx._source.answers[i].putAll(paramAnswerMap.get(ctx._source.answers[i].questionId)); } }\"}");
+    validator = new Validator(props, () -> mockClient);
+    Config result = validator.validate();
+
+    ScriptValidator scriptValidator = new ScriptValidator();
+
+    scriptValidator.ensureValid("script", props.get(UPSERT_SCRIPT_CONFIG));
+
+    Map<String, ConfigValue> map = result.configValues().stream().collect(Collectors.toMap(x -> x.name(), x -> x));
+
+    assertNoErrors(result);
+    assertTrue(map.get(UPSERT_SCRIPT_CONFIG).visible());
+  }
+
+  @Test
+  public void testInvalidScriptedUpsert() {
+    props.put(BEHAVIOR_ON_NULL_VALUES_CONFIG, "delete");
+    props.put(WRITE_METHOD_CONFIG, "upsert");
+    props.put(
+            UPSERT_SCRIPT_CONFIG,
+            "{\"lang\":\"painless\",\"source\":\"if ( ctx.op == 'create' ) ctx._source.counter = params.count} else {ctx._source.counter += params.count}\",\"params\":{\"count\":4}}");
+    validator = new Validator(props, () -> mockClient);
+    Config result = validator.validate();
+    Map<String, ConfigValue> map = result.configValues().stream().collect(Collectors.toMap(x -> x.name(), x -> x));
+
+    assertNoErrors(result);
+    assertFalse(map.get(UPSERT_SCRIPT_CONFIG).visible());
   }
 
   @Test
