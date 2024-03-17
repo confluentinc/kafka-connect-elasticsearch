@@ -1,0 +1,18 @@
+instances:
+  - name: elasticsearch
+    dns:
+      - elasticsearch
+    ip:
+      - ipAddress
+  - name: kibana
+    dns:
+      - kibana
+      - localhost
+    ip:
+      - ipAddress
+  - name: logstash
+    dns:
+      - logstash
+      - localhost
+    ip:
+      - ipAddress

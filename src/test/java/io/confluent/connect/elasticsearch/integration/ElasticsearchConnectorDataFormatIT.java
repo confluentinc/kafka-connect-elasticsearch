@@ -76,21 +76,14 @@ public class ElasticsearchConnectorDataFormatIT extends ElasticsearchConnectorBa
 
   @Override
   public void setup() throws Exception {
-    startConnect();
+    super.setup();
     startSchemaRegistry();
-    connect.kafka().createTopic(TOPIC);
-
-    props = createProps();
-    client = createClient();
   }
 
   @Override
   public void cleanup() throws Exception {
-    stopConnect();
-    stopSchemaRegistry();
-    client.deleteAll();
-    client.close();
-  }
+    super.cleanup();
+    stopSchemaRegistry();}
 
   @Parameters
   public static List<Class<? extends Converter>> data() {

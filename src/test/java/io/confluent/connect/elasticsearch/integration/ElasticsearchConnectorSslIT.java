@@ -16,28 +16,38 @@
 package io.confluent.connect.elasticsearch.integration;
 
 import io.confluent.common.utils.IntegrationTest;
-import io.confluent.connect.elasticsearch.ElasticsearchClient;
-import io.confluent.connect.elasticsearch.SecurityProtocol;
-import io.confluent.connect.elasticsearch.jest.JestElasticsearchClient;
+import io.confluent.connect.elasticsearch.helper.ElasticsearchContainer;
+
 import org.apache.kafka.common.config.SslConfigs;
+import org.elasticsearch.client.security.user.User;
+import org.elasticsearch.client.security.user.privileges.Role;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_PASSWORD_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.SECURITY_PROTOCOL_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_USERNAME_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.SSL_CONFIG_PREFIX;
 
-@Category(IntegrationTest.class)
-public class ElasticsearchConnectorSecureIT extends ElasticsearchConnectorBaseIT {
 
-  private static final Logger log = LoggerFactory.getLogger(ElasticsearchConnectorSecureIT.class);
+@Category(IntegrationTest.class)
+public class ElasticsearchConnectorSslIT extends ElasticsearchConnectorBaseIT {
+
+  private static final Logger log = LoggerFactory.getLogger(ElasticsearchConnectorSslIT.class);
 
   @BeforeClass
   public static void setupBeforeAll() {
-    container = ElasticsearchContainer.fromSystemProperties().withSslEnabled(true);
+    Map<User, String> users = Collections
+        .singletonMap(getMinimalPrivilegesUser(), getMinimalPrivilegesPassword());
+    List<Role> roles = Collections.singletonList(getMinimalPrivilegesRole());
+    container = ElasticsearchContainer.fromSystemProperties().withSslEnabled(true).withBasicAuth(users, roles);
     container.start();
   }
 
@@ -47,18 +57,25 @@ public class ElasticsearchConnectorSecureIT extends ElasticsearchConnectorBaseIT
    */
   @Test
   public void testSecureConnectionVerifiedHostname() throws Throwable {
-    // Use IP address here because that's what the certificates allow
-    String address = container.getConnectionUrl();
-    address = address.replace(container.getContainerIpAddress(), container.hostMachineIpAddress());
+    // Use container IP address here because that's what the certificates allow
+    String address = container.getConnectionUrl(false);
     log.info("Creating connector for {}.", address);
 
     props.put(CONNECTION_URL_CONFIG, address);
-    addSslProps();
+    container.addSslProps(props);
 
-    client = new JestElasticsearchClient(props);
+    helperClient = container.getHelperClient(props);
 
     // Start connector
     runSimpleTest(props);
+  }
+
+  @Override
+  protected Map<String, String> createProps() {
+    props = super.createProps();
+    props.put(CONNECTION_USERNAME_CONFIG, ELASTIC_MINIMAL_PRIVILEGES_NAME);
+    props.put(CONNECTION_PASSWORD_CONFIG, ELASTIC_MINIMAL_PRIVILEGES_PASSWORD);
+    return props;
   }
 
   @Test
@@ -69,29 +86,14 @@ public class ElasticsearchConnectorSecureIT extends ElasticsearchConnectorBaseIT
     log.info("Creating connector for {}", address);
 
     props.put(CONNECTION_URL_CONFIG, address);
-    addSslProps();
+    container.addSslProps(props);
 
     // disable hostname verification
     props.put(SSL_CONFIG_PREFIX + SslConfigs.SSL_ENDPOINT_IDENTIFICATION_ALGORITHM_CONFIG, "");
 
-    client = new JestElasticsearchClient(props);
+    helperClient = container.getHelperClient(props);
 
     // Start connector
     runSimpleTest(props);
-  }
-
-  @Override
-  protected ElasticsearchClient createClient() {
-    // will be created in the test with the proper SSL configs
-    return null;
-  }
-
-  private void addSslProps() {
-    props.put(SECURITY_PROTOCOL_CONFIG, SecurityProtocol.SSL.name());
-    props.put(SSL_CONFIG_PREFIX + SslConfigs.SSL_KEYSTORE_LOCATION_CONFIG, container.getKeystorePath());
-    props.put(SSL_CONFIG_PREFIX + SslConfigs.SSL_KEYSTORE_PASSWORD_CONFIG, container.getKeystorePassword());
-    props.put(SSL_CONFIG_PREFIX + SslConfigs.SSL_TRUSTSTORE_LOCATION_CONFIG, container.getTruststorePath());
-    props.put(SSL_CONFIG_PREFIX + SslConfigs.SSL_TRUSTSTORE_PASSWORD_CONFIG, container.getTruststorePassword());
-    props.put(SSL_CONFIG_PREFIX + SslConfigs.SSL_KEY_PASSWORD_CONFIG, container.getKeyPassword());
   }
 }
