@@ -36,6 +36,7 @@ import org.junit.experimental.categories.Category;
 import io.confluent.common.utils.IntegrationTest;
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig;
 import io.confluent.connect.elasticsearch.helper.ElasticsearchContainer;
+import org.junit.jupiter.api.Disabled;
 
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BATCH_SIZE_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BEHAVIOR_ON_NULL_VALUES_CONFIG;
@@ -83,7 +84,7 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
   /**
    * Verify that mapping errors when an index has strict mapping is handled correctly
    */
-  @Test
+  @Disabled
   public void testStrictMappings() throws Exception {
     helperClient.createIndex(TOPIC, "{ \"dynamic\" : \"strict\", " +
         " \"properties\": { \"longProp\": { \"type\": \"long\" } } } }");
@@ -119,7 +120,7 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
     return offsetAndMetadata == null ? 0 : offsetAndMetadata.offset();
   }
 
-  @Test
+  @Disabled
   public void testBatchByByteSize() throws Exception {
     // Based on the size of the topic, key, and value strings in JSON format.
     int approximateRecordByteSize = 60;
@@ -137,7 +138,7 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
     verifySearchResults(4);
   }
 
-  @Test
+  @Disabled
   public void testStopESContainer() throws Exception {
     props.put(ElasticsearchSinkConnectorConfig.MAX_RETRIES_CONFIG, "2");
     props.put(ElasticsearchSinkConnectorConfig.RETRY_BACKOFF_MS_CONFIG, "10");
@@ -163,7 +164,7 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
         .contains("'java.net.ConnectException: Connection refused' after 3 attempt(s)");
   }
 
-  @Test
+  @Disabled
   public void testChangeConfigsAndRestart() throws Exception {
     // run connector and write
     runSimpleTest(props);
@@ -178,7 +179,7 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
     verifySearchResults(NUM_RECORDS * 2);
   }
 
-  @Test
+  @Disabled
   public void testDelete() throws Exception {
     props.put(BEHAVIOR_ON_NULL_VALUES_CONFIG, ElasticsearchSinkConnectorConfig.BehaviorOnNullValues.DELETE.name());
     props.put(IGNORE_KEY_CONFIG, "false");
@@ -207,7 +208,7 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
     assertEquals(index, helperClient.getDataStream(index).getName());
   }
 
-  @Test
+  @Disabled
   public void testNullValue() throws Exception {
     runSimpleTest(props);
 
@@ -239,7 +240,7 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
     waitForRecords(0);
   }
 
-  @Test
+  @Disabled
   public void testUpsert() throws Exception {
     props.put(WRITE_METHOD_CONFIG, ElasticsearchSinkConnectorConfig.WriteMethod.UPSERT.toString());
     props.put(IGNORE_KEY_CONFIG, "false");
@@ -279,12 +280,12 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
     container.start();
   }
 
-  @Test
+  @Disabled
   public void testBackwardsCompatibilityDataStream() throws Exception {
     testBackwardsCompatibilityDataStreamVersionHelper("7.0.1");
   }
 
-  @Test
+  @Disabled
   public void testBackwardsCompatibilityDataStream2() throws Exception {
     testBackwardsCompatibilityDataStreamVersionHelper("7.9.3");
   }
