@@ -153,7 +153,7 @@ public class ElasticsearchConnectorNetworkIT extends BaseConnectorIT {
     await().untilAsserted(() -> assertThat(blockingTransformer.requestCount()).isEqualTo(10));
   }
 
-  @Disabled
+  @Test
   public void testReadTimeout() throws Exception {
     wireMockRule.stubFor(post(urlPathEqualTo("/_bulk"))
         .willReturn(
@@ -394,13 +394,7 @@ public class ElasticsearchConnectorNetworkIT extends BaseConnectorIT {
       itemsArray
               .addObject()
               .putObject("index")
-              .put("_index", "test")
-              .put("_type", "_doc")
-              .put("_id", Integer.toString(i+1))
-              .put("_version", "1")
-              .put("result", "created")
-              .put("status", 201)
-              .put("_seq_no", 0);
+              .put("_index", "test");
     }
     return MAPPER.writerWithDefaultPrettyPrinter().writeValueAsString(response);
   }
@@ -416,11 +410,7 @@ public class ElasticsearchConnectorNetworkIT extends BaseConnectorIT {
       ObjectNode arrayObject = itemsArray
               .addObject()
               .putObject("index")
-                .put("_index", "test")
-                .put("_type", "_doc")
-                .put("_id", Integer.toString(i + 1))
-                .put("_version", "1")
-                .put("_seq_no", 0);
+                .put("_index", "test");
       if (errorIndexes.contains(i)) {
         arrayObject
                 .put("status", 400)
