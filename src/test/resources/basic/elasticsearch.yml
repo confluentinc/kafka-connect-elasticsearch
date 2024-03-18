@@ -3,3 +3,6 @@ network.host: 0.0.0.0
 
 xpack.license.self_generated.type: trial
 xpack.security.enabled: true
+indices.breaker.request.limit: "50%"
+indices.breaker.fielddata.limit: "50%"
+indices.breaker.total.use_real_memory: "true"
