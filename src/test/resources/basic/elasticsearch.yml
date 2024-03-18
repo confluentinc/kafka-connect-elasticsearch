@@ -3,3 +3,8 @@ network.host: 0.0.0.0
 
 xpack.license.self_generated.type: trial
 xpack.security.enabled: true
+indices.breaker.total.use_real_memory: "true"
+indices.breaker.total.limit: "5GB"
+index.max_result_window: 5000
+search.allow_expensive_queries: false
+search.max_buckets: 20000
