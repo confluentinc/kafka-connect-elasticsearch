@@ -168,6 +168,7 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
     // run connector and write
     runSimpleTest(props);
 
+    Thread.sleep(100000000);
     // restart
     props.put(BATCH_SIZE_CONFIG, "10");
     props.put(LINGER_MS_CONFIG, "1000");
