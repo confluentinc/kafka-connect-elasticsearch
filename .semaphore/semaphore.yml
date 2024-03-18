@@ -23,6 +23,7 @@ queue:
 global_job_config:
   prologue:
     commands:
+      - unset DOCKER_HOST
       - checkout
       - sem-version java 8
       - . cache-maven restore
