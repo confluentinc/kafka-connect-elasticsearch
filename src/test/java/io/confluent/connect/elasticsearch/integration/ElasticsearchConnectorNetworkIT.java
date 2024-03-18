@@ -14,6 +14,7 @@ import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
+import org.junit.jupiter.api.Disabled;
 
 import java.time.Duration;
 import java.util.HashMap;
@@ -393,13 +394,7 @@ public class ElasticsearchConnectorNetworkIT extends BaseConnectorIT {
       itemsArray
               .addObject()
               .putObject("index")
-              .put("_index", "test")
-              .put("_type", "_doc")
-              .put("_id", Integer.toString(i+1))
-              .put("_version", "1")
-              .put("result", "created")
-              .put("status", 201)
-              .put("_seq_no", 0);
+              .put("_index", "test");
     }
     return MAPPER.writerWithDefaultPrettyPrinter().writeValueAsString(response);
   }
@@ -415,11 +410,7 @@ public class ElasticsearchConnectorNetworkIT extends BaseConnectorIT {
       ObjectNode arrayObject = itemsArray
               .addObject()
               .putObject("index")
-                .put("_index", "test")
-                .put("_type", "_doc")
-                .put("_id", Integer.toString(i + 1))
-                .put("_version", "1")
-                .put("_seq_no", 0);
+                .put("_index", "test");
       if (errorIndexes.contains(i)) {
         arrayObject
                 .put("status", 400)
