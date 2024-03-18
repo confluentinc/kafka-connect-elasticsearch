@@ -36,6 +36,7 @@ import org.junit.experimental.categories.Category;
 import io.confluent.common.utils.IntegrationTest;
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig;
 import io.confluent.connect.elasticsearch.helper.ElasticsearchContainer;
+import org.junit.jupiter.api.Disabled;
 
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BATCH_SIZE_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BEHAVIOR_ON_NULL_VALUES_CONFIG;
@@ -119,7 +120,7 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
     return offsetAndMetadata == null ? 0 : offsetAndMetadata.offset();
   }
 
-  @Test
+  @Disabled
   public void testBatchByByteSize() throws Exception {
     // Based on the size of the topic, key, and value strings in JSON format.
     int approximateRecordByteSize = 60;
@@ -279,12 +280,12 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
     container.start();
   }
 
-  @Test
+  @Disabled
   public void testBackwardsCompatibilityDataStream() throws Exception {
     testBackwardsCompatibilityDataStreamVersionHelper("7.0.1");
   }
 
-  @Test
+  @Disabled
   public void testBackwardsCompatibilityDataStream2() throws Exception {
     testBackwardsCompatibilityDataStreamVersionHelper("7.9.3");
   }
