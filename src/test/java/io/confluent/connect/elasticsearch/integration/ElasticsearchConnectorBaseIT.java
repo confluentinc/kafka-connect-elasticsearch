@@ -262,6 +262,8 @@ public class ElasticsearchConnectorBaseIT extends BaseConnectorIT {
         .name(forDataStream ? ES_SINK_CONNECTOR_DS_ROLE : ES_SINK_CONNECTOR_ROLE)
         .indicesPrivileges(indicesPrivileges)
         .clusterPrivileges("monitor")
+        .clusterPrivileges("main")
+        .clusterPrivileges("all")
         .build();
   }
 
