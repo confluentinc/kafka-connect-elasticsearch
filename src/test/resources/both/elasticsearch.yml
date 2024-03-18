@@ -19,6 +19,8 @@ xpack.security.transport.ssl.enabled: true
 xpack.security.transport.ssl.key:  ssl/elasticsearch.key
 xpack.security.transport.ssl.certificate: ssl/elasticsearch.crt
 xpack.security.transport.ssl.certificate_authorities: [ "ssl/ca/ca.crt" ]
+indices.breaker.total.use_real_memory: true
+indices.breaker.total.limit: "90%"
 
 # enable anonymous connections since setting passwords requires running a command
 xpack.security.authc:

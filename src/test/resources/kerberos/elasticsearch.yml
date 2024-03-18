@@ -7,6 +7,8 @@ node.store.allow_mmap: false
 cluster.routing.allocation.disk.threshold_enabled: false
 
 xpack.license.self_generated.type: trial
+indices.breaker.total.use_real_memory: true
+indices.breaker.total.limit: "90%"
 
 # Kerberos realm
 xpack.security.authc.realms.kerberos.kerb1:
