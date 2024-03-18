@@ -23,6 +23,7 @@ queue:
 global_job_config:
   prologue:
     commands:
+      - export JAVA_OPTS="-Xms4096m -Xmx4096m"
       - checkout
       - sem-version java 8
       - . cache-maven restore
