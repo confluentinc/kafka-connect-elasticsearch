@@ -153,7 +153,7 @@ public class ElasticsearchConnectorNetworkIT extends BaseConnectorIT {
     await().untilAsserted(() -> assertThat(blockingTransformer.requestCount()).isEqualTo(10));
   }
 
-  @Disabled
+  @Test
   public void testReadTimeout() throws Exception {
     wireMockRule.stubFor(post(urlPathEqualTo("/_bulk"))
         .willReturn(
