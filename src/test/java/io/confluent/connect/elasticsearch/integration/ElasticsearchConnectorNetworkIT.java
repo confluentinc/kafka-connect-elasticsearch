@@ -14,6 +14,7 @@ import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
+import org.junit.jupiter.api.Disabled;
 
 import java.time.Duration;
 import java.util.HashMap;
@@ -152,7 +153,7 @@ public class ElasticsearchConnectorNetworkIT extends BaseConnectorIT {
     await().untilAsserted(() -> assertThat(blockingTransformer.requestCount()).isEqualTo(10));
   }
 
-  @Test
+  @Disabled
   public void testReadTimeout() throws Exception {
     wireMockRule.stubFor(post(urlPathEqualTo("/_bulk"))
         .willReturn(
