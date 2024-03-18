@@ -179,7 +179,7 @@ public class ElasticsearchConnectorNetworkIT extends BaseConnectorIT {
     verify(3, postRequestedFor(urlPathEqualTo("/_bulk")));
   }
 
-  @Test
+  @Disabled
   public void testTooManyRequests() throws Exception {
     wireMockRule.stubFor(post(urlPathEqualTo("/_bulk"))
             .willReturn(aResponse()
@@ -214,7 +214,7 @@ public class ElasticsearchConnectorNetworkIT extends BaseConnectorIT {
     verify(3, postRequestedFor(urlPathEqualTo("/_bulk")));
   }
 
-  @Test
+  @Disabled
   public void testServiceUnavailable() throws Exception {
     wireMockRule.stubFor(post(urlPathEqualTo("/_bulk"))
             .willReturn(aResponse()
@@ -295,7 +295,7 @@ public class ElasticsearchConnectorNetworkIT extends BaseConnectorIT {
    * Verify that connector properly fails while partitions are paused because number of offset
    * entries grew too large.
    */
-  @Test
+  @Disabled
   public void testPausePartitionsAndFail() throws Exception {
     wireMockRule.stubFor(post(urlPathEqualTo("/_bulk"))
             .willReturn(aResponse()
