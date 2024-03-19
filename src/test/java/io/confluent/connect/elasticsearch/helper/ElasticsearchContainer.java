@@ -134,7 +134,7 @@ public class ElasticsearchContainer
 
   private static final String KEYSTORE_PASSWORD = KEY_PASSWORD;
   private static final String TRUSTSTORE_PASSWORD = KEY_PASSWORD;
-  private static final long TWO_GIGABYTES = 2L * 1024 * 1024 * 1024;
+  private static final long TWO_GIGABYTES = 6L * 1024 * 1024 * 1024;
 
   private final String imageName;
   private boolean enableSsl = false;

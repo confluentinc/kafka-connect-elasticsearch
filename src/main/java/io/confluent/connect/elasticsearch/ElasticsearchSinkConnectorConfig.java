@@ -75,7 +75,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   private static final String BATCH_SIZE_DOC =
       "The number of records to process as a batch when writing to Elasticsearch.";
   private static final String BATCH_SIZE_DISPLAY = "Batch Size";
-  private static final int BATCH_SIZE_DEFAULT = 2000;
+  private static final int BATCH_SIZE_DEFAULT = 20;
 
   public static final String BULK_SIZE_BYTES_CONFIG = "bulk.size.bytes";
   private static final String BULK_SIZE_BYTES_DOC =
