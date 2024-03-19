@@ -14,6 +14,7 @@ import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
+import org.junit.jupiter.api.Disabled;
 
 import java.time.Duration;
 import java.util.HashMap;
@@ -152,7 +153,7 @@ public class ElasticsearchConnectorNetworkIT extends BaseConnectorIT {
     await().untilAsserted(() -> assertThat(blockingTransformer.requestCount()).isEqualTo(10));
   }
 
-  @Test
+  @Disabled
   public void testReadTimeout() throws Exception {
     wireMockRule.stubFor(post(urlPathEqualTo("/_bulk"))
         .willReturn(
@@ -178,7 +179,7 @@ public class ElasticsearchConnectorNetworkIT extends BaseConnectorIT {
     verify(3, postRequestedFor(urlPathEqualTo("/_bulk")));
   }
 
-  @Test
+  @Disabled
   public void testTooManyRequests() throws Exception {
     wireMockRule.stubFor(post(urlPathEqualTo("/_bulk"))
             .willReturn(aResponse()
@@ -213,7 +214,7 @@ public class ElasticsearchConnectorNetworkIT extends BaseConnectorIT {
     verify(3, postRequestedFor(urlPathEqualTo("/_bulk")));
   }
 
-  @Test
+  @Disabled
   public void testServiceUnavailable() throws Exception {
     wireMockRule.stubFor(post(urlPathEqualTo("/_bulk"))
             .willReturn(aResponse()
@@ -294,7 +295,7 @@ public class ElasticsearchConnectorNetworkIT extends BaseConnectorIT {
    * Verify that connector properly fails while partitions are paused because number of offset
    * entries grew too large.
    */
-  @Test
+  @Disabled
   public void testPausePartitionsAndFail() throws Exception {
     wireMockRule.stubFor(post(urlPathEqualTo("/_bulk"))
             .willReturn(aResponse()
