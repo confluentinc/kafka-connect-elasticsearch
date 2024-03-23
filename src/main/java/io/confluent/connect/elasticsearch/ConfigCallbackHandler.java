@@ -38,6 +38,7 @@ import org.apache.http.auth.UsernamePasswordCredentials;
 import org.apache.http.client.CredentialsProvider;
 import org.apache.http.client.config.AuthSchemes;
 import org.apache.http.client.config.RequestConfig;
+import org.apache.http.client.protocol.RequestAcceptEncoding;
 import org.apache.http.config.Lookup;
 import org.apache.http.config.Registry;
 import org.apache.http.config.RegistryBuilder;
@@ -94,6 +95,8 @@ public class ConfigCallbackHandler implements HttpClientConfigCallback {
 
     builder.setConnectionManager(createConnectionManager())
             .setDefaultRequestConfig(requestConfig);
+
+    builder.addInterceptorLast(new RequestAcceptEncoding());
 
     configureAuthentication(builder);
 
