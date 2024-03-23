@@ -182,8 +182,9 @@ public class ElasticsearchSinkTask extends SinkTask {
   }
 
   /**
-   * Returns the converted index name from a given topic name in the form {type}-{dataset}-{topic}.
-   * For the <code>topic</code>, Elasticsearch accepts:
+   * Returns the converted datastream name from a given topic name in the form:
+   * {type}-{dataset}-{namespace}
+   * For the <code>namespace</code> (that can contain topic), Elasticsearch accepts:
    * <ul>
    *   <li>all lowercase</li>
    *   <li>no longer than 100 bytes</li>
@@ -191,22 +192,23 @@ public class ElasticsearchSinkTask extends SinkTask {
    * (<a href="https://github.com/elastic/ecs/blob/master/rfcs/text/0009-data_stream-fields.md#restrictions-on-values">ref</a>_.)
    */
   private String convertTopicToDataStreamName(String topic) {
-    topic = topic.toLowerCase();
-    if (topic.length() > 100) {
-      topic = topic.substring(0, 100);
+    String namespace = config.dataStreamNamespace();
+    namespace = namespace.replace("${topic}", topic.toLowerCase());
+    if (namespace.length() > 100) {
+      namespace = namespace.substring(0, 100);
     }
     String dataStream = String.format(
         "%s-%s-%s",
         config.dataStreamType().name().toLowerCase(),
         config.dataStreamDataset(),
-        topic
+        namespace
     );
     return dataStream;
   }
 
   /**
    * Returns the converted index name from a given topic name. If writing to a data stream,
-   * returns the index name in the form {type}-{dataset}-{topic}. For both cases, Elasticsearch
+   * returns the index name in the form {type}-{dataset}-{namespace}. For both cases, Elasticsearch
    * accepts:
    * <ul>
    *   <li>all lowercase</li>
