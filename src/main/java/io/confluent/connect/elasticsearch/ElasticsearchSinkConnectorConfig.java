@@ -33,7 +33,10 @@ import org.apache.kafka.common.config.ConfigDef.Validator;
 import org.apache.kafka.common.config.ConfigDef.Width;
 import org.apache.kafka.common.config.types.Password;
 import org.elasticsearch.common.unit.ByteSizeValue;
+import io.confluent.connect.elasticsearch.index.mapping.IndexMapper;
 
+
+import static io.confluent.connect.elasticsearch.util.ClassHelper.createInstance;
 import static org.apache.kafka.common.config.ConfigDef.Range.between;
 import static org.apache.kafka.common.config.SslConfigs.SSL_ENDPOINT_IDENTIFICATION_ALGORITHM_CONFIG;
 import static org.apache.kafka.common.config.SslConfigs.SSL_KEYSTORE_LOCATION_CONFIG;
@@ -383,6 +386,15 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   private static final String KERBEROS_GROUP = "Kerberos";
   private static final String DATA_STREAM_GROUP = "Data Stream";
 
+  public static final String INDEX_MAPPER_CONFIG = "index.mapper";
+  private static final String INDEX_MAPPER_DISPLAY = "The topic mapper class";
+  private static final String INDEX_MAPPER_DOC =
+      "The class that determines the index to write the sink data to. ";
+  private static final String INDEX_MAPPER_DEFAULT =
+          "io.confluent.connect.elasticsearch.index.mapping.DefaultIndexMapper";
+  private IndexMapper indexMapper;
+
+
   public enum BehaviorOnMalformedDoc {
     IGNORE,
     WARN,
@@ -419,6 +431,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
     addSslConfigs(configDef);
     addKerberosConfigs(configDef);
     addDataStreamConfigs(configDef);
+    addIndexMappingConfigs(configDef);
     return configDef;
   }
 
@@ -607,6 +620,22 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
             ++order,
             Width.SHORT,
             LOG_SENSITIVE_DATA_DISPLAY
+    );
+  }
+
+  private static void addIndexMappingConfigs(ConfigDef configDef) {
+    int order = 0;
+    configDef
+        .define(
+            INDEX_MAPPER_CONFIG,
+        ConfigDef.Type.STRING,
+            INDEX_MAPPER_DEFAULT,
+        ConfigDef.Importance.HIGH,
+            INDEX_MAPPER_DOC,
+        DATA_CONVERSION_GROUP,
+        ++order,
+        ConfigDef.Width.LONG,
+            INDEX_MAPPER_DISPLAY
     );
   }
 
@@ -1076,6 +1105,15 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
 
   public WriteMethod writeMethod() {
     return WriteMethod.valueOf(getString(WRITE_METHOD_CONFIG).toUpperCase());
+  }
+
+  public IndexMapper getIndexMapper() {
+    if (indexMapper == null) {
+      indexMapper = createInstance(
+          INDEX_MAPPER_CONFIG, getString(INDEX_MAPPER_CONFIG), IndexMapper.class);
+      indexMapper.configure(this);
+    }
+    return indexMapper;
   }
 
   private static class DataStreamDatasetValidator implements Validator {
