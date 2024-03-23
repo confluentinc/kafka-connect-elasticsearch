@@ -17,7 +17,6 @@ package io.confluent.connect.elasticsearch;
 
 import java.util.concurrent.Callable;
 import java.util.concurrent.ThreadLocalRandom;
-import java.util.concurrent.TimeUnit;
 
 import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.connect.errors.ConnectException;
@@ -40,11 +39,6 @@ public class RetryUtil {
   private static final Logger log = LoggerFactory.getLogger(RetryUtil.class);
 
   /**
-   * An arbitrary absolute maximum practical retry time.
-   */
-  public static final long MAX_RETRY_TIME_MS = TimeUnit.HOURS.toMillis(24);
-
-  /**
    * Compute the time to sleep using exponential backoff with jitter. This method computes the
    * normal exponential backoff as {@code initialRetryBackoffMs << retryAttempt}, and then
    * chooses a random value between 0 and that value.
@@ -52,34 +46,38 @@ public class RetryUtil {
    * @param retryAttempts         the number of previous retry attempts; must be non-negative
    * @param initialRetryBackoffMs the initial time to wait before retrying; assumed to
    *                              be 0 if value is negative
+   * @param maxRetryDurationMs    The maximum value of the retry duration.
    * @return the non-negative time in milliseconds to wait before the next retry attempt,
    *         or 0 if {@code initialRetryBackoffMs} is negative
    */
   public static long computeRandomRetryWaitTimeInMillis(int retryAttempts,
-                                                        long initialRetryBackoffMs) {
+                                                        long initialRetryBackoffMs,
+                                                        long maxRetryDurationMs) {
     if (initialRetryBackoffMs < 0) {
       return 0;
     }
     if (retryAttempts < 0) {
       return initialRetryBackoffMs;
     }
-    long maxRetryTime = computeRetryWaitTimeInMillis(retryAttempts, initialRetryBackoffMs);
+    long maxRetryTime = computeRetryWaitTimeInMillis(retryAttempts, initialRetryBackoffMs, maxRetryDurationMs);
     return ThreadLocalRandom.current().nextLong(0, maxRetryTime);
   }
 
   /**
    * Compute the time to sleep using exponential backoff. This method computes the normal
    * exponential backoff as {@code initialRetryBackoffMs << retryAttempt}, bounded to always
-   * be less than {@link #MAX_RETRY_TIME_MS}.
+   * be less than value provided in maxRetryDurationMs.
    *
    * @param retryAttempts         the number of previous retry attempts; must be non-negative
    * @param initialRetryBackoffMs the initial time to wait before retrying; assumed to be 0
    *                              if value is negative
+   * @param maxRetryDurationMs    The maximum value of the retry duration.
    * @return the non-negative time in milliseconds to wait before the next retry attempt,
    *         or 0 if {@code initialRetryBackoffMs} is negative
    */
   public static long computeRetryWaitTimeInMillis(int retryAttempts,
-                                                  long initialRetryBackoffMs) {
+                                                  long initialRetryBackoffMs,
+                                                  long maxRetryDurationMs) {
     if (initialRetryBackoffMs < 0) {
       return 0;
     }
@@ -88,10 +86,10 @@ public class RetryUtil {
     }
     if (retryAttempts > 32) {
       // This would overflow the exponential algorithm ...
-      return MAX_RETRY_TIME_MS;
+      return maxRetryDurationMs;
     }
     long result = initialRetryBackoffMs << retryAttempts;
-    return result < 0L ? MAX_RETRY_TIME_MS : Math.min(MAX_RETRY_TIME_MS, result);
+    return result < 0L ? maxRetryDurationMs : Math.min(maxRetryDurationMs, result);
   }
 
   /**
@@ -106,6 +104,7 @@ public class RetryUtil {
    * @param function         the function to call; may not be null
    * @param maxTotalAttempts maximum number of total attempts, including the first call
    * @param initialBackoff   the initial backoff in ms before retrying
+   * @param maxRetryDurationMs The maximum duration for retrying a request
    * @param <T>              the return type of the function to retry
    * @return the function's return value
    * @throws ConnectException        if the function failed after retries
@@ -114,9 +113,10 @@ public class RetryUtil {
       String description,
       Callable<T> function,
       int maxTotalAttempts,
-      long initialBackoff
+      long initialBackoff,
+      long maxRetryDurationMs
   ) {
-    return callWithRetries(description, function, maxTotalAttempts, initialBackoff, Time.SYSTEM);
+    return callWithRetries(description, function, maxTotalAttempts, initialBackoff, maxRetryDurationMs, Time.SYSTEM);
   }
 
   /**
@@ -131,6 +131,7 @@ public class RetryUtil {
    * @param function         the function to call; may not be null
    * @param maxTotalAttempts maximum number of attempts
    * @param initialBackoff   the initial backoff in ms before retrying
+   * @param maxRetryDurationMs The maximum duration for retrying a request
    * @param clock            the clock to use for waiting
    * @param <T>              the return type of the function to retry
    * @return the function's return value
@@ -141,6 +142,7 @@ public class RetryUtil {
       Callable<T> function,
       int maxTotalAttempts,
       long initialBackoff,
+      long maxRetryDurationMs,
       Time clock
   ) {
     assert description != null;
@@ -166,7 +168,7 @@ public class RetryUtil {
         }
 
         // Otherwise it is retriable and we should retry
-        long backoff = computeRandomRetryWaitTimeInMillis(attempt, initialBackoff);
+        long backoff = computeRandomRetryWaitTimeInMillis(attempt, initialBackoff, maxRetryDurationMs);
 
         log.warn("Failed to {} due to {}. Retrying attempt ({}/{}) after backoff of {} ms",
             description, e.getCause(), attempt, maxTotalAttempts, backoff);

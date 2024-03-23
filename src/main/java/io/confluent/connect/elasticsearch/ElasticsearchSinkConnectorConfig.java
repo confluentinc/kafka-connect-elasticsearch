@@ -33,6 +33,8 @@ import org.apache.kafka.common.config.ConfigDef.Validator;
 import org.apache.kafka.common.config.ConfigDef.Width;
 import org.apache.kafka.common.config.types.Password;
 import org.elasticsearch.common.unit.ByteSizeValue;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import static org.apache.kafka.common.config.ConfigDef.Range.between;
 import static org.apache.kafka.common.config.SslConfigs.SSL_ENDPOINT_IDENTIFICATION_ALGORITHM_CONFIG;
@@ -46,6 +48,13 @@ import static org.apache.kafka.common.config.SslConfigs.SSL_TRUSTSTORE_TYPE_CONF
 import static org.apache.kafka.common.config.SslConfigs.addClientSslSupport;
 
 public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
+  private static final Logger log = LoggerFactory.getLogger(ElasticsearchSinkConnectorConfig.class);
+
+  /**
+   * Default value for maximum retry time
+   */
+  static final long MAX_RETRY_TIME_MS = TimeUnit.HOURS.toMillis(24);
+
   // Connector group
   public static final String CONNECTION_URL_CONFIG = "connection.url";
   private static final String CONNECTION_URL_DOC =
@@ -136,6 +145,13 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
       + "attempts are exhausted the task will fail.";
   private static final String MAX_RETRIES_DISPLAY = "Max Retries";
   private static final int MAX_RETRIES_DEFAULT = 5;
+
+  public static final String MAX_RETRY_DURATION_MS_CONFIG = "max.retry.duration.ms";
+  private static final String MAX_RETRY_DURATION_MS_DOC =
+          "The maximum duration of retry time in ms. Default value is 24 hours. " +
+                  "Once this value is reached, the provided duration will be used for all consequent retries.";
+  private static final String MAX_RETRY_DURATION_MS_DISPLAY = "Retry Backoff Max (ms)";
+  private static final long MAX_RETRY_DURATION_MS_DEFAULT = MAX_RETRY_TIME_MS;
 
   public static final String RETRY_BACKOFF_MS_CONFIG = "retry.backoff.ms";
   private static final String RETRY_BACKOFF_MS_DOC =
@@ -554,6 +570,17 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
             ++order,
             Width.SHORT,
             RETRY_BACKOFF_MS_DISPLAY
+        ).define(
+            MAX_RETRY_DURATION_MS_CONFIG,
+            Type.LONG,
+            MAX_RETRY_DURATION_MS_DEFAULT,
+            between(0, TimeUnit.DAYS.toMillis(1)),
+            Importance.LOW,
+            MAX_RETRY_DURATION_MS_DOC,
+            CONNECTOR_GROUP,
+            ++order,
+            Width.SHORT,
+            MAX_RETRY_DURATION_MS_DISPLAY
         ).define(
             CONNECTION_COMPRESSION_CONFIG,
             Type.BOOLEAN,
@@ -1032,6 +1059,18 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
 
   public long retryBackoffMs() {
     return getLong(RETRY_BACKOFF_MS_CONFIG);
+  }
+
+  public long maxRetryDurationMs() {
+      long maxRetryDurationMs = getLong(MAX_RETRY_DURATION_MS_CONFIG);
+
+      if (maxRetryDurationMs <= retryBackoffMs()) {
+        log.warn("Value at \"max.retry.duration.ms\" should be greater than value at \"retry.backoff.ms\". " +
+                "Using default value of " + MAX_RETRY_DURATION_MS_DEFAULT + " ms for \"max.retry.duration.ms\"");
+        maxRetryDurationMs = MAX_RETRY_DURATION_MS_DEFAULT;
+      }
+
+      return maxRetryDurationMs;
   }
 
   private SecurityProtocol securityProtocol() {
