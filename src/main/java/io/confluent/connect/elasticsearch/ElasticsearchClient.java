@@ -99,7 +99,8 @@ public class ElasticsearchClient {
           "strict_dynamic_mapping_exception",
           "mapper_parsing_exception",
           "illegal_argument_exception",
-          "action_request_validation_exception"
+          "action_request_validation_exception",
+          "document_parsing_exception"
       )
   );
   private static final String UNKNOWN_VERSION_TAG = "Unknown";
