@@ -350,7 +350,8 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
           + "The default is %s which indicates the connector will write "
           + "to regular indices instead. If set, this configuration will "
           + "be used alongside %s to construct the data stream name in the form of "
-          + "{``%s``}-{``%s``}-{topic}.",
+          + "{``%s``}-{``%s``}-{topic}. Custom index templates defined in the destination "
+          + "cluster are supported.",
       DataStreamType.NONE.name(),
       DATA_STREAM_DATASET_CONFIG,
       DATA_STREAM_TYPE_CONFIG,
@@ -834,7 +835,6 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
             DATA_STREAM_TYPE_CONFIG,
             Type.STRING,
             DATA_STREAM_TYPE_DEFAULT.name(),
-            new EnumRecommender<>(DataStreamType.class),
             Importance.LOW,
             DATA_STREAM_TYPE_DOC,
             DATA_STREAM_GROUP,
@@ -870,7 +870,8 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   }
 
   public boolean isDataStream() {
-    return dataStreamType() != DataStreamType.NONE && !dataStreamDataset().isEmpty();
+    return !dataStreamType().toUpperCase().equals(DataStreamType.NONE.name())
+            && !dataStreamDataset().isEmpty();
   }
 
   public boolean isProxyWithAuthenticationConfigured() {
@@ -946,8 +947,8 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
     return getString(DATA_STREAM_DATASET_CONFIG);
   }
 
-  public DataStreamType dataStreamType() {
-    return DataStreamType.valueOf(getString(DATA_STREAM_TYPE_CONFIG).toUpperCase());
+  public String dataStreamType() {
+    return getString(DATA_STREAM_TYPE_CONFIG);
   }
 
   public List<String> dataStreamTimestampField() {
