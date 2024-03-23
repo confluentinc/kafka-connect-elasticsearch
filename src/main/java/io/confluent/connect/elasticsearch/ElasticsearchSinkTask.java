@@ -15,12 +15,7 @@
 
 package io.confluent.connect.elasticsearch;
 
-import java.util.Collection;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Set;
-import java.util.function.BooleanSupplier;
-
+import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BehaviorOnNullValues;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.connect.errors.ConnectException;
@@ -33,7 +28,11 @@ import org.elasticsearch.action.DocWriteRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BehaviorOnNullValues;
+import java.util.Collection;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
+import java.util.function.BooleanSupplier;
 
 @SuppressWarnings("checkstyle:ClassDataAbstractionCoupling")
 public class ElasticsearchSinkTask extends SinkTask {
@@ -217,6 +216,12 @@ public class ElasticsearchSinkTask extends SinkTask {
    * (<a href="https://www.elastic.co/guide/en/elasticsearch/reference/current/indices-create-index.html#indices-create-api-path-params">ref</a>_.)
    */
   private String createIndexName(String topic) {
+    String indexName = config.indexName();
+
+    if (indexName != null && !indexName.isEmpty()) {
+      return indexName;
+    }
+
     return config.isDataStream()
         ? convertTopicToDataStreamName(topic)
         : convertTopicToIndexName(topic);
