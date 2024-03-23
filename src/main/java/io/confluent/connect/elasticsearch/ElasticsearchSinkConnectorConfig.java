@@ -285,6 +285,14 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
           + "is acceptable and is necessary for troubleshooting.";
   private static final Boolean LOG_SENSITIVE_DATA_DEFAULT = Boolean.FALSE;
 
+  public static final String ROUTING_FIELD_NAME_CONFIG = "routing.field.name";
+  private static final String ROUTING_FIELD_NAME_DOC =
+       "Specify which field should be used for routing, "
+       + "supports nested fields through dot notion (`this.is.my.nested.path`). "
+       + "If configured, the field is mandatory and must always resolve to a non-blank String.";
+  private static final String ROUTING_FIELD_NAME_DISPLAY = "Routing field name";
+  private static final String ROUTING_FIELD_NAME_DEFAULT = "";
+
   // Proxy group
   public static final String PROXY_HOST_CONFIG = "proxy.host";
   private static final String PROXY_HOST_DISPLAY = "Proxy Host";
@@ -719,6 +727,16 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
             Width.SHORT,
             WRITE_METHOD_DISPLAY,
             new EnumRecommender<>(WriteMethod.class)
+        ).define(
+            ROUTING_FIELD_NAME_CONFIG,
+            Type.STRING,
+            ROUTING_FIELD_NAME_DEFAULT,
+            Importance.LOW,
+            ROUTING_FIELD_NAME_DOC,
+            DATA_CONVERSION_GROUP,
+            ++order,
+            Width.SHORT,
+            ROUTING_FIELD_NAME_DISPLAY
     );
   }
 
@@ -1076,6 +1094,10 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
 
   public WriteMethod writeMethod() {
     return WriteMethod.valueOf(getString(WRITE_METHOD_CONFIG).toUpperCase());
+  }
+
+  public String routingFieldName() {
+    return getString(ROUTING_FIELD_NAME_CONFIG);
   }
 
   private static class DataStreamDatasetValidator implements Validator {
