@@ -20,6 +20,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BehaviorOnNullValues;
+import io.confluent.connect.elasticsearch.util.ScriptParser;
 import org.apache.kafka.connect.data.ConnectSchema;
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
@@ -43,6 +44,7 @@ import org.elasticsearch.action.delete.DeleteRequest;
 import org.elasticsearch.action.index.IndexRequest;
 import org.elasticsearch.action.update.UpdateRequest;
 import org.elasticsearch.index.VersionType;
+import org.elasticsearch.script.Script;
 import org.elasticsearch.xcontent.XContentType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -185,9 +187,42 @@ public class DataConverter {
             new IndexRequest(index).id(id).source(payload, XContentType.JSON).opType(opType),
             record
         );
+      case SCRIPTED_UPSERT:
+        try {
+
+          if (config.getIsPayloadAsParams()) {
+            return buildUpdateRequestWithParams(index, payload, id);
+          }
+
+          Script script = ScriptParser.parseScript(config.getScript());
+
+          return new UpdateRequest(index, id)
+              .doc(payload, XContentType.JSON)
+              .upsert(payload, XContentType.JSON)
+              .retryOnConflict(Math.min(config.maxInFlightRequests(), 5))
+              .script(script)
+              .scriptedUpsert(true);
+
+        } catch (JsonProcessingException jsonProcessingException) {
+          throw new RuntimeException(jsonProcessingException);
+        }
       default:
         return null; // shouldn't happen
     }
+  }
+
+  private UpdateRequest buildUpdateRequestWithParams(String index, String payload, String id)
+      throws JsonProcessingException {
+
+    Script script = ScriptParser.parseScriptWithParams(config.getScript(), payload);
+
+    UpdateRequest updateRequest =
+        new UpdateRequest(index, id)
+            .retryOnConflict(Math.min(config.maxInFlightRequests(), 5))
+            .script(script)
+            .scriptedUpsert(true);
+
+    return updateRequest;
   }
 
   private String getPayload(SinkRecord record) {
