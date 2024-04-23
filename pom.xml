@@ -5,7 +5,7 @@
     <parent>
         <groupId>io.confluent</groupId>
         <artifactId>common</artifactId>
-        <version>6.0.0</version>
+        <version>6.1.16-32</version>
     </parent>
 
     <groupId>io.confluent</groupId>
@@ -52,13 +52,14 @@
         <confluent.maven.repo>http://packages.confluent.io/maven/</confluent.maven.repo>
         <commons.codec.version>1.15</commons.codec.version>
         <snakeyaml.version>1.28</snakeyaml.version>
+        <confluent.version>6.1.15</confluent.version>
     </properties>
 
     <repositories>
         <repository>
             <id>confluent</id>
             <name>Confluent</name>
-            <url>http://packages.confluent.io/maven/</url>
+            <url>https://packages.confluent.io/maven/</url>
         </repository>
     </repositories>
 
@@ -154,12 +155,6 @@
             <version>${kafka.version}</version>
             <classifier>test</classifier>
             <type>test-jar</type>
-            <scope>test</scope>
-        </dependency>
-        <!-- Use a repackaged version of log4j with security patches. Default log4j v1.2 is a transitive dependency of connect-runtime, but it is excluded in common/pom.xml -->
-        <dependency>
-            <groupId>io.confluent</groupId>
-            <artifactId>confluent-log4j</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>
