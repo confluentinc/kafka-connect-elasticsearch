@@ -1,8 +1,33 @@
 /*
- * Copyright [2018 - 2018] Confluent Inc.
+ * Copyright 2018 Confluent Inc.
+ *
+ * Licensed under the Confluent Community License (the "License"); you may not use
+ * this file except in compliance with the License.  You may obtain a copy of the
+ * License at
+ *
+ * http://www.confluent.io/confluent-community-license
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OF ANY KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations under the License.
  */
 
-package io.confluent.connect.elasticsearch.integration;
+package io.confluent.connect.elasticsearch.helper;
+
+import org.apache.kafka.common.config.SslConfigs;
+import org.elasticsearch.client.security.user.User;
+import org.elasticsearch.client.security.user.privileges.Role;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.testcontainers.containers.ContainerLaunchException;
+import org.testcontainers.containers.output.OutputFrame;
+import org.testcontainers.containers.wait.strategy.Wait;
+import org.testcontainers.images.RemoteDockerImage;
+import org.testcontainers.images.builder.ImageFromDockerfile;
+import org.testcontainers.images.builder.dockerfile.DockerfileBuilder;
+import org.testcontainers.shaded.org.apache.commons.io.IOUtils;
+import org.testcontainers.utility.DockerImageName;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -12,20 +37,18 @@ import java.net.InetAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.time.Duration;
-import java.util.concurrent.Future;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.testcontainers.containers.output.OutputFrame;
-import org.testcontainers.containers.wait.strategy.Wait;
-import org.testcontainers.images.RemoteDockerImage;
-import org.testcontainers.images.builder.ImageFromDockerfile;
-import org.testcontainers.images.builder.dockerfile.DockerfileBuilder;
-import org.testcontainers.shaded.org.apache.commons.io.IOUtils;
-import org.testcontainers.utility.DockerImageName;
+import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig;
+import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.SecurityProtocol;
 
-import static java.net.HttpURLConnection.HTTP_OK;
-import static java.net.HttpURLConnection.HTTP_UNAUTHORIZED;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_PASSWORD_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_USERNAME_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.SECURITY_PROTOCOL_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.SSL_CONFIG_PREFIX;
 
 /**
  * A specialized TestContainer container for testing Elasticsearch, optionally with SSL support.
@@ -44,7 +67,7 @@ public class ElasticsearchContainer
   /**
    * Default Elasticsearch version.
    */
-  public static final String DEFAULT_ES_VERSION = "7.0.0";
+  public static final String DEFAULT_ES_VERSION = "7.0.1";
 
   /**
    * Default Elasticsearch port.
@@ -95,13 +118,19 @@ public class ElasticsearchContainer
   }
 
   private static final String KEY_PASSWORD = "asdfasdf";
-  private static final String ELASTIC_PASSWORD = "elastic";
+  // Super user that has superuser role. Should not be used by connector
+  private static final String ELASTIC_SUPERUSER_NAME = "elastic";
+  private static final String ELASTIC_SUPERUSER_PASSWORD = "elastic";
+
   private static final String KEYSTORE_PASSWORD = KEY_PASSWORD;
   private static final String TRUSTSTORE_PASSWORD = KEY_PASSWORD;
   private static final long TWO_GIGABYTES = 2L * 1024 * 1024 * 1024;
 
   private final String imageName;
   private boolean enableSsl = false;
+  private String keytabPath;
+  private List<Role> rolesToCreate;
+  private Map<User, String> usersToCreate;
   private String localKeystorePath;
   private String localTruststorePath;
 
@@ -117,8 +146,60 @@ public class ElasticsearchContainer
     withLogConsumer(this::containerLog);
   }
 
+  @Override
+  public void start() {
+    super.start();
+    String address;
+    if (isBasicAuthEnabled()) {
+      Map<String, String> props = new HashMap<>();
+      props.put(CONNECTION_USERNAME_CONFIG, ELASTIC_SUPERUSER_NAME);
+      props.put(CONNECTION_PASSWORD_CONFIG, ELASTIC_SUPERUSER_PASSWORD);
+      if (isSslEnabled()) {
+        addSslProps(props);
+        address = this.getConnectionUrl(false);
+      } else {
+        address = this.getConnectionUrl();
+      }
+      props.put(CONNECTION_URL_CONFIG, address);
+      ElasticsearchHelperClient helperClient = getHelperClient(props);
+      createUsersAndRoles(helperClient);
+    }
+  }
+
+  public void addSslProps(Map<String, String> props) {
+    props.put(SECURITY_PROTOCOL_CONFIG, SecurityProtocol.SSL.name());
+    props.put(SSL_CONFIG_PREFIX + SslConfigs.SSL_KEYSTORE_LOCATION_CONFIG, this.getKeystorePath());
+    props.put(SSL_CONFIG_PREFIX + SslConfigs.SSL_KEYSTORE_PASSWORD_CONFIG, this.getKeystorePassword());
+    props.put(SSL_CONFIG_PREFIX + SslConfigs.SSL_TRUSTSTORE_LOCATION_CONFIG, this.getTruststorePath());
+    props.put(SSL_CONFIG_PREFIX + SslConfigs.SSL_TRUSTSTORE_PASSWORD_CONFIG, this.getTruststorePassword());
+    props.put(SSL_CONFIG_PREFIX + SslConfigs.SSL_KEY_PASSWORD_CONFIG, this.getKeyPassword());
+  }
+
+  private void createUsersAndRoles(ElasticsearchHelperClient helperClient ) {
+    try {
+      for (Role role: this.rolesToCreate) {
+        helperClient.createRole(role);
+      }
+      for (Map.Entry<User,String> userToPassword: this.usersToCreate.entrySet()) {
+        helperClient.createUser(userToPassword);
+      }
+    } catch (IOException e) {
+      throw new ContainerLaunchException("Container startup failed", e);
+    }
+  }
+
   public ElasticsearchContainer withSslEnabled(boolean enable) {
-    setSslEnabled(enable);
+    enableSsl(enable);
+    return this;
+  }
+
+  public ElasticsearchContainer withKerberosEnabled(String keytab) {
+    enableKerberos(keytab);
+    return this;
+  }
+
+  public ElasticsearchContainer withBasicAuth(Map<User, String> users, List<Role> roles) {
+    enableBasicAuth(users, roles);
     return this;
   }
 
@@ -129,10 +210,10 @@ public class ElasticsearchContainer
    *
    * @param enable true if SSL is to be enabled, or false otherwise
    */
-  public void setSslEnabled(boolean enable) {
+  public void enableSsl(boolean enable) {
     if (isCreated()) {
       throw new IllegalStateException(
-          "setSslEnabled can only be used before the Container is created."
+          "enableSsl can only be used before the Container is created."
       );
     }
     enableSsl = enable;
@@ -147,70 +228,140 @@ public class ElasticsearchContainer
     return enableSsl;
   }
 
+  /**
+   * Set whether the Elasticsearch instance should use Kerberos.
+   *
+   * <p>This can only be called <em>before</em> the container is started.
+   *
+   * @param keytab non-null keytab path if Kerberos is enabled
+   */
+  public void enableKerberos(String keytab) {
+    if (isCreated()) {
+      throw new IllegalStateException(
+          "enableKerberos can only be used before the container is created."
+      );
+    }
+    if (isBasicAuthEnabled()) {
+      throw new IllegalStateException(
+          "basic auth and Kerberos are mutually exclusive."
+      );
+    }
+    keytabPath = keytab;
+  }
+
+  /**
+   * Get whether the Elasticsearch instance is configured to use Kerberos.
+   *
+   * @return true if Kerberos is enabled, or false otherwise
+   */
+  public boolean isKerberosEnabled() {
+    return keytabPath != null;
+  }
+
+  private void enableBasicAuth(Map<User, String> users, List<Role> roles) {
+    if (isCreated()) {
+      throw new IllegalStateException(
+          "enableBasicAuth can only be used before the container is created."
+      );
+    }
+    if (isKerberosEnabled()) {
+      throw new IllegalStateException(
+          "basic auth and Kerberos are mutually exclusive."
+      );
+    }
+    this.usersToCreate = users;
+    this.rolesToCreate = roles;
+  }
+
+  public boolean isBasicAuthEnabled() {
+    return usersToCreate != null && !this.usersToCreate.isEmpty();
+  }
+
+  private String getFullResourcePath(String resourceName) {
+    if (isSslEnabled() && isKerberosEnabled()) {
+      return "/both/" + resourceName;
+    } else if (isSslEnabled()) {
+      return "/ssl/" + resourceName;
+    } else if (isKerberosEnabled()) {
+      return "/kerberos/" + resourceName;
+    } else if (isBasicAuthEnabled()) {
+      return "/basic/" + resourceName;
+    } else {
+      return resourceName;
+    }
+  }
+
   @Override
   protected void configure() {
     super.configure();
-    Future<String> image;
+
+    waitingFor(
+        Wait.forLogMessage(".*(Security is enabled|license .* valid).*", 1)
+            .withStartupTimeout(Duration.ofMinutes(5))
+    );
+
+    if (!isSslEnabled() && !isKerberosEnabled() && !isBasicAuthEnabled()) {
+      setImage(new RemoteDockerImage(DockerImageName.parse(imageName)));
+      return;
+    }
+
+    ImageFromDockerfile image = new ImageFromDockerfile()
+        // Copy the Elasticsearch config file
+        .withFileFromClasspath("elasticsearch.yml", getFullResourcePath("elasticsearch.yml"))
+        // Copy the network definitions
+        .withFileFromClasspath("instances.yml", getFullResourcePath("instances.yml"))
+        .withDockerfileFromBuilder(this::buildImage);
+
+    // Kerberos and basic auth are mutually exclusive authentication options
+    if (isBasicAuthEnabled()) {
+      log.info("Setting up basic authentication in a Docker image");
+      withEnv("ELASTICSEARCH_USERNAME", ELASTIC_SUPERUSER_NAME);
+      withEnv("ELASTIC_PASSWORD", ELASTIC_SUPERUSER_PASSWORD);
+    } else if (isKerberosEnabled()) {
+      log.info("Creating Kerberized Elasticsearch image.");
+      image.withFileFromFile("es.keytab", new File(keytabPath));
+    }
     if (isSslEnabled()) {
-      withEnv("ELASTIC_PASSWORD", ELASTIC_PASSWORD);
+      log.info("Extending Docker image to generate certs and enable SSL");
+      withEnv("ELASTIC_PASSWORD", ELASTIC_SUPERUSER_PASSWORD);
       withEnv("STORE_PASSWORD", KEY_PASSWORD);
       withEnv("IP_ADDRESS", hostMachineIpAddress());
-      log.info("Extending Docker image to generate certs and enable SSL");
-      log.info("Wait for 'license .* valid' in log file, signaling Elasticsearch has started");
-      // Because this is an secured Elasticsearch instance, we can't use HTTPS checks
-      // because of the untrusted cert
-      waitingFor(
-          Wait.forLogMessage(".*(Security is enabled|license .* valid).*", 1)
-              .withStartupTimeout(Duration.ofMinutes(5))
-      );
-      image = new ImageFromDockerfile()
-          // Copy the Elasticsearch config file for SSL
-          .withFileFromClasspath(
-              "elasticsearch.yml",
-              "/ssl/elasticsearch.yml"
-          )
-          // Copy the network definitions
-          .withFileFromClasspath(
-              "instances.yml",
-              "/ssl/instances.yml"
-          )
+
+      image
           // Copy the script to generate the certs and start Elasticsearch
-          .withFileFromClasspath(
-              "start-elasticsearch.sh",
-              "/ssl/start-elasticsearch.sh"
-          )
-          .withDockerfileFromBuilder(this::build);
-    } else {
-      log.info("Will use HTTP check to wait for Elasticsearch image");
-      // Because this is an unsecured Elasticsearch instance, we can use HTTP checks
-      waitingFor(
-          Wait.forHttp("/")
-              .forPort(ELASTICSEARCH_DEFAULT_PORT)
-              .forStatusCodeMatching(status -> status == HTTP_OK || status == HTTP_UNAUTHORIZED)
-              .withStartupTimeout(Duration.ofMinutes(2))
-      );
-      image = new RemoteDockerImage(DockerImageName.parse(imageName));
+          .withFileFromClasspath("start-elasticsearch.sh",
+              getFullResourcePath("start-elasticsearch.sh"));
     }
     setImage(image);
   }
 
-  protected void build(DockerfileBuilder builder) {
-    log.info("Building Elasticsearch image with SSL configuration");
-    builder.from(imageName)
-           // OpenSSL and Java's Keytool used to generate the certs, so install them
-           .run("yum -y install openssl")
-           // Copy the Elasticsearch configuration
-           .copy("elasticsearch.yml", CONFIG_PATH +"/elasticsearch.yml")
-           // Copy and run the script to generate the certs
-           .copy("instances.yml", CONFIG_SSL_PATH + "/instances.yml")
-           .copy("start-elasticsearch.sh", CONFIG_SSL_PATH + "/start-elasticsearch.sh")
-           .run("chmod +x " + CONFIG_SSL_PATH + "/start-elasticsearch.sh")
-           .entryPoint(
-               CONFIG_SSL_PATH + "/start-elasticsearch.sh"
-           );
+  private void buildImage(DockerfileBuilder builder) {
+    builder
+        .from(imageName)
+        // Copy the Elasticsearch configuration
+        .copy("elasticsearch.yml", CONFIG_PATH + "/elasticsearch.yml");
+
+    if (isSslEnabled()) {
+      log.info("Building Elasticsearch image with SSL configuration");
+      builder
+          .copy("instances.yml", CONFIG_SSL_PATH + "/instances.yml")
+          .copy("start-elasticsearch.sh", CONFIG_SSL_PATH + "/start-elasticsearch.sh")
+          // OpenSSL and Java's Keytool used to generate the certs, so install them
+          .run("yum -y install openssl")
+          .run("chmod +x " + CONFIG_SSL_PATH + "/start-elasticsearch.sh")
+          .entryPoint(CONFIG_SSL_PATH + "/start-elasticsearch.sh");
+    }
+
+    if (isKerberosEnabled()) {
+      log.info("Building Elasticsearch image with Kerberos configuration.");
+      builder.copy("es.keytab", CONFIG_PATH + "/es.keytab");
+      if (!isSslEnabled()) {
+        builder.copy("instances.yml", CONFIG_PATH + "/instances.yml");
+      }
+    }
   }
 
-  protected String hostMachineIpAddress() {
+  public String hostMachineIpAddress() {
     String dockerHost = System.getenv("DOCKER_HOST");
     if (dockerHost != null && !dockerHost.trim().isEmpty()) {
       try {
@@ -232,18 +383,27 @@ public class ElasticsearchContainer
   }
 
   /**
+   * @see ElasticsearchContainer#getConnectionUrl(boolean)
+   */
+  public String getConnectionUrl() {
+    return getConnectionUrl(true);
+  }
+
+  /**
    * Get the Elasticsearch connection URL.
    *
    * <p>This can only be called once the container is started.
    *
+   * @param useContainerIpAddress use container IP if true, host machine's IP otherwise
+   *
    * @return the connection URL; never null
    */
-  public String getConnectionUrl() {
+  public String getConnectionUrl(boolean useContainerIpAddress) {
     String protocol = isSslEnabled() ? "https" : "http";
     return String.format(
         "%s://%s:%d",
         protocol,
-        getContainerIpAddress(),
+        useContainerIpAddress ? getContainerIpAddress() : hostMachineIpAddress(),
         getMappedPort(ELASTICSEARCH_DEFAULT_PORT)
     );
   }
@@ -376,5 +536,15 @@ public class ElasticsearchContainer
       default:
         break;
     }
+  }
+
+  public ElasticsearchHelperClient getHelperClient(Map<String, String> props) {
+    // copy properties so that original properties are not affected
+    Map<String, String> superUserProps = new HashMap<>(props);
+    superUserProps.put(CONNECTION_USERNAME_CONFIG, ELASTIC_SUPERUSER_NAME);
+    superUserProps.put(CONNECTION_PASSWORD_CONFIG, ELASTIC_SUPERUSER_PASSWORD);
+    ElasticsearchSinkConnectorConfig config = new ElasticsearchSinkConnectorConfig(superUserProps);
+    ElasticsearchHelperClient client = new ElasticsearchHelperClient(props.get(CONNECTION_URL_CONFIG), config);
+    return client;
   }
 }

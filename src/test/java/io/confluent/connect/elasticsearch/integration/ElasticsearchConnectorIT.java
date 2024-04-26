@@ -17,34 +17,89 @@ package io.confluent.connect.elasticsearch.integration;
 
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BATCH_SIZE_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BEHAVIOR_ON_NULL_VALUES_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_PASSWORD_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_USERNAME_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_KEY_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.LINGER_MS_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.WRITE_METHOD_CONFIG;
 import static org.apache.kafka.connect.runtime.ConnectorConfig.VALUE_CONVERTER_CLASS_CONFIG;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertTrue;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
+import static org.junit.Assert.assertEquals;
 
-import com.google.gson.JsonArray;
-import com.google.gson.JsonObject;
-import io.confluent.connect.elasticsearch.DataConverter.BehaviorOnNullValues;
-import io.confluent.connect.elasticsearch.Mapping;
-import io.confluent.connect.elasticsearch.TestUtils;
-import io.confluent.connect.elasticsearch.jest.JestElasticsearchClient.WriteMethod;
+import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig;
+import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BehaviorOnNullValues;
+import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.WriteMethod;
+import io.confluent.connect.elasticsearch.helper.ElasticsearchContainer;
 
-import java.util.Collections;
-
-import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.storage.StringConverter;
-import org.apache.kafka.test.IntegrationTest;
+import io.confluent.common.utils.IntegrationTest;
+import org.elasticsearch.client.security.user.User;
+import org.elasticsearch.client.security.user.privileges.Role;
+import org.elasticsearch.search.SearchHit;
+import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+
+import java.time.Duration;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
 
 @Category(IntegrationTest.class)
 public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
 
-  private static Logger log = LoggerFactory.getLogger(ElasticsearchConnectorIT.class);
+  // TODO: test compatibility
+
+  @BeforeClass
+  public static void setupBeforeAll() {
+    Map<User, String> users = Collections.singletonMap(getMinimalPrivilegesUser(), getMinimalPrivilegesPassword());
+    List<Role> roles = Collections.singletonList(getMinimalPrivilegesRole());
+    container = ElasticsearchContainer.fromSystemProperties().withBasicAuth(users, roles);
+    container.start();
+  }
+
+  @Override
+  public void setup() throws Exception {
+    if (!container.isRunning()) {
+      setupBeforeAll();
+    }
+    super.setup();
+  }
+
+  @Override
+  protected Map<String, String> createProps() {
+    props = super.createProps();
+    props.put(CONNECTION_USERNAME_CONFIG, ELASTIC_MINIMAL_PRIVILEGES_NAME);
+    props.put(CONNECTION_PASSWORD_CONFIG, ELASTIC_MINIMAL_PRIVILEGES_PASSWORD);
+    return props;
+  }
+
+  @Test
+  public void testStopESContainer() throws Exception {
+    props.put(ElasticsearchSinkConnectorConfig.MAX_RETRIES_CONFIG, "2");
+    props.put(ElasticsearchSinkConnectorConfig.RETRY_BACKOFF_MS_CONFIG, "10");
+    props.put(ElasticsearchSinkConnectorConfig.BATCH_SIZE_CONFIG, "1");
+    props.put(ElasticsearchSinkConnectorConfig.MAX_IN_FLIGHT_REQUESTS_CONFIG,
+            Integer.toString(NUM_RECORDS - 1));
+
+    // run connector and write
+    runSimpleTest(props);
+
+    // stop ES, for all following requests to fail with "connection refused"
+    container.stop();
+
+    // try to write some more
+    writeRecords(NUM_RECORDS);
+
+    // Connector should fail since the server is down
+    await().atMost(Duration.ofMinutes(1)).untilAsserted(() ->
+        assertThat(connect.connectorStatus(CONNECTOR_NAME).tasks().get(0).state())
+            .isEqualTo("FAILED"));
+
+    assertThat(connect.connectorStatus(CONNECTOR_NAME).tasks().get(0).trace())
+                    .contains("'java.net.ConnectException: Connection refused' after 3 attempt(s)");
+  }
 
   @Test
   public void testChangeConfigsAndRestart() throws Exception {
@@ -79,18 +134,6 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
   @Test
   public void testHappyPath() throws Exception {
     runSimpleTest(props);
-  }
-
-  @Test
-  @SuppressWarnings("unchecked")
-  public void testMapping() throws Exception {
-    client.createIndices(Collections.singleton(TOPIC));
-    Schema schema = TestUtils.createSchema();
-    Mapping.createMapping(client, TOPIC, TYPE, schema);
-
-    JsonObject mapping = Mapping.getMapping(client, TOPIC, TYPE);
-    assertNotNull(mapping);
-    TestUtils.verifyMapping(client, schema, mapping);
   }
 
   @Test
@@ -135,21 +178,16 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
     // try updating last one
     int lastRecord = NUM_RECORDS - 1;
     connect.kafka().produce(TOPIC, String.valueOf(lastRecord), String.format("{\"doc_num\":%d}", 0));
-    writeRecordsFromIndex(NUM_RECORDS, NUM_RECORDS);
+    writeRecordsFromStartIndex(NUM_RECORDS, NUM_RECORDS);
 
     // should have double number of records
     verifySearchResults(NUM_RECORDS * 2);
 
-    JsonObject result = client.search("", TOPIC, null);
-    JsonArray rawHits = result.getAsJsonObject("hits").getAsJsonArray("hits");
-
-    for (int i = 0; i < rawHits.size(); ++i) {
-      JsonObject hitData = rawHits.get(i).getAsJsonObject();
-      JsonObject source = hitData.get("_source").getAsJsonObject();
-      assertTrue(source.has("doc_num"));
-      if (Integer.valueOf(hitData.get("_id").getAsString()) == lastRecord) {
+    for (SearchHit hit : helperClient.search(TOPIC)) {
+      if (Integer.parseInt(hit.getId()) == lastRecord) {
         // last record should be updated
-        assertTrue(source.get("doc_num").getAsInt() == 0);
+        int docNum = (Integer) hit.getSourceAsMap().get("doc_num");
+        assertEquals(0, docNum);
       }
     }
   }
