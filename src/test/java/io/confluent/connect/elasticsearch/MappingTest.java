@@ -42,6 +42,7 @@ import static io.confluent.connect.elasticsearch.Mapping.VALUE_FIELD;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 
+@SuppressWarnings("deprecation")
 public class MappingTest {
 
   @Test(expected = DataException.class)
