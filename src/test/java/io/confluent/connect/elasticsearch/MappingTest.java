@@ -31,12 +31,6 @@ import org.apache.kafka.connect.errors.DataException;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.junit.Test;
 
-import static io.confluent.connect.elasticsearch.DataConverter.BehaviorOnNullValues;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConstants.KEYWORD_TYPE;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConstants.TEXT_TYPE;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
-
 import static io.confluent.connect.elasticsearch.Mapping.KEYWORD_TYPE;
 import static io.confluent.connect.elasticsearch.Mapping.KEY_FIELD;
 import static io.confluent.connect.elasticsearch.Mapping.TEXT_TYPE;
