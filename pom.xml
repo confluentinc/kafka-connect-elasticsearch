@@ -52,6 +52,7 @@
         <confluent.maven.repo>http://packages.confluent.io/maven/</confluent.maven.repo>
         <commons.codec.version>1.15</commons.codec.version>
         <snakeyaml.version>1.28</snakeyaml.version>
+        <jackson.version>2.16.0</jackson.version>
     </properties>
 
     <repositories>
@@ -232,6 +233,21 @@
             <artifactId>kafka-schema-registry</artifactId>
             <version>${confluent.version}</version>
             <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+            <version>${jackson.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-core</artifactId>
+            <version>${jackson.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-annotations</artifactId>
+            <version>${jackson.version}</version>
         </dependency>
     </dependencies>
 
