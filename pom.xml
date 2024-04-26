@@ -5,7 +5,7 @@
     <parent>
         <groupId>io.confluent</groupId>
         <artifactId>common</artifactId>
-        <version>6.1.16-32</version>
+        <version>6.0.0</version>
     </parent>
 
     <groupId>io.confluent</groupId>
@@ -52,14 +52,14 @@
         <confluent.maven.repo>http://packages.confluent.io/maven/</confluent.maven.repo>
         <commons.codec.version>1.15</commons.codec.version>
         <snakeyaml.version>1.28</snakeyaml.version>
-        <confluent.version>6.1.15</confluent.version>
+        <jackson.version>2.16.0</jackson.version>
     </properties>
 
     <repositories>
         <repository>
             <id>confluent</id>
             <name>Confluent</name>
-            <url>https://packages.confluent.io/maven/</url>
+            <url>http://packages.confluent.io/maven/</url>
         </repository>
     </repositories>
 
@@ -157,6 +157,12 @@
             <type>test-jar</type>
             <scope>test</scope>
         </dependency>
+        <!-- Use a repackaged version of log4j with security patches. Default log4j v1.2 is a transitive dependency of connect-runtime, but it is excluded in common/pom.xml -->
+        <dependency>
+            <groupId>io.confluent</groupId>
+            <artifactId>confluent-log4j</artifactId>
+            <scope>test</scope>
+        </dependency>
         <dependency>
             <groupId>org.apache.kafka</groupId>
             <artifactId>connect-runtime</artifactId>
@@ -227,6 +233,22 @@
             <artifactId>kafka-schema-registry</artifactId>
             <version>${confluent.version}</version>
             <scope>test</scope>
+        </dependency>
+        <!-- Bumping the common package version resulted in a few build issues which cannot be resolved until the next CP release. Hence pinning the Jackson packages. After the CP release, we can bump the common version and remove the Jackson packages from this pom.-->
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+            <version>${jackson.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-core</artifactId>
+            <version>${jackson.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-annotations</artifactId>
+            <version>${jackson.version}</version>
         </dependency>
     </dependencies>
 
