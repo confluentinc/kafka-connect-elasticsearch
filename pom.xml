@@ -55,6 +55,7 @@
         <confluent.maven.repo>http://packages.confluent.io/maven/</confluent.maven.repo>
         <commons.codec.version>1.15</commons.codec.version>
         <confluent.version>${io.confluent.common.version}</confluent.version>
+        <jackson.version>2.16.0</jackson.version>
     </properties>
 
     <repositories>
@@ -248,6 +249,22 @@
             <artifactId>kafka-schema-registry</artifactId>
             <version>${confluent.version}</version>
             <scope>test</scope>
+        </dependency>
+        <!-- Bumping the common package version resulted in a few build issues which cannot be resolved until the next CP release. Hence pinning the Jackson packages. After the CP release, we can bump the common version and remove the Jackson packages from this pom.-->
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+            <version>${jackson.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-core</artifactId>
+            <version>${jackson.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-annotations</artifactId>
+            <version>${jackson.version}</version>
         </dependency>
     </dependencies>
 
