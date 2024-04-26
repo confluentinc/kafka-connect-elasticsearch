@@ -58,6 +58,7 @@ public class BulkResponse {
    * @param retriable whether the error is retriable
    * @param errorInfo the error string
    * @param failedRecords map of failed records and their results. Never null.
+   * @return
    */
   public static BulkResponse failure(
       boolean retriable,
