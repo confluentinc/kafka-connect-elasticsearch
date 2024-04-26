@@ -263,10 +263,11 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
     }
   }
 
-  @Test
-  public void testBackwardsCompatibilityDataStream() throws Exception {
+  private void testBackwardsCompatibilityDataStreamVersionHelper(
+      String version
+  ) throws Exception {
     container.close();
-    container = ElasticsearchContainer.withESVersion("7.0.1");
+    container = ElasticsearchContainer.withESVersion(version);
     container.start();
     setupFromContainer();
 
@@ -276,6 +277,16 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
     container.close();
     container = ElasticsearchContainer.fromSystemProperties();
     container.start();
+  }
+
+  @Test
+  public void testBackwardsCompatibilityDataStream() throws Exception {
+    testBackwardsCompatibilityDataStreamVersionHelper("7.0.1");
+  }
+
+  @Test
+  public void testBackwardsCompatibilityDataStream2() throws Exception {
+    testBackwardsCompatibilityDataStreamVersionHelper("7.9.3");
   }
 
   @Test

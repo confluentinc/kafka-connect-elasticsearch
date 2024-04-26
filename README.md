@@ -39,6 +39,7 @@ curl -u elastic:elastic -X POST "localhost:9200/_security/user/es_sink_connector
 
 - Source Code: https://github.com/confluentinc/kafka-connect-elasticsearch
 - Issue Tracker: https://github.com/confluentinc/kafka-connect-elasticsearch/issues
+- Learn how to work with the connector's source code by reading our [Development and Contribution guidelines](CONTRIBUTING.md).
 
 
 # License

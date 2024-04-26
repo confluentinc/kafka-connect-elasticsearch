@@ -24,7 +24,6 @@ public class ElasticsearchConnectorKerberosIT extends ElasticsearchConnectorBase
 
   private static File baseDir;
   private static MiniKdc kdc;
-  private static String esPrincipal;
   protected static String esKeytab;
   private static String userPrincipal;
   private static String userKeytab;
@@ -67,7 +66,6 @@ public class ElasticsearchConnectorKerberosIT extends ElasticsearchConnectorBase
     File keytabFile = new File(baseDir, es + ".keytab");
     esKeytab = keytabFile.getAbsolutePath();
     kdc.createPrincipal(keytabFile, es + "/localhost", "HTTP/localhost");
-    esPrincipal = es + "/localhost@" + kdc.getRealm();
 
     String user = "connect-es";
     keytabFile = new File(baseDir, user + ".keytab");
