@@ -726,7 +726,7 @@ public class ElasticsearchClient {
     // RCCA-7507 : Don't push to DLQ if we receive Internal version conflict on data streams
     if (response.getFailureMessage().contains(VERSION_CONFLICT_EXCEPTION)
             && config.isDataStream()) {
-      log.info("Skipping DLQ insertion for DataStream type.");
+      log.debug("Skipping DLQ insertion for DataStream type.");
       return;
     }
     if (reporter != null) {
