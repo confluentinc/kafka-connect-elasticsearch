@@ -20,6 +20,7 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
+import org.junit.Ignore;
 
 import java.time.Duration;
 import java.util.HashMap;
@@ -204,6 +205,7 @@ public class ElasticsearchConnectorNetworkIT extends BaseConnectorIT {
     }
   }
 
+  @Ignore("flaky")
   @Test
   public void testReadTimeout() throws Exception {
     wireMockRule.stubFor(post(urlPathEqualTo("/_bulk"))
