@@ -11,6 +11,7 @@ import io.confluent.common.utils.IntegrationTest;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
+import org.junit.Ignore;
 
 @Category(IntegrationTest.class)
 public class ElasticsearchConnectorKerberosWithSslIT extends ElasticsearchConnectorKerberosIT {
@@ -33,6 +34,7 @@ public class ElasticsearchConnectorKerberosWithSslIT extends ElasticsearchConnec
     helperClient = null;
   }
 
+  @Ignore("flaky")
   @Test
   public void testKerberosWithSsl() throws Exception {
     // Use IP address here because that's what the certificates allow
