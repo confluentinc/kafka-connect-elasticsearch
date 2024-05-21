@@ -15,6 +15,10 @@
 
 package io.confluent.connect.elasticsearch;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BehaviorOnNullValues;
 import org.apache.kafka.connect.data.ConnectSchema;
 import org.apache.kafka.connect.data.Date;
@@ -34,6 +38,7 @@ import org.apache.kafka.connect.storage.Converter;
 import org.apache.kafka.connect.storage.HeaderConverter;
 import org.apache.kafka.connect.storage.SimpleHeaderConverter;
 import org.elasticsearch.action.DocWriteRequest;
+import org.elasticsearch.action.DocWriteRequest.OpType;
 import org.elasticsearch.action.delete.DeleteRequest;
 import org.elasticsearch.action.index.IndexRequest;
 import org.elasticsearch.action.update.UpdateRequest;
@@ -59,6 +64,9 @@ public class DataConverter {
   private static final HeaderConverter HEADER_CONVERTER = new SimpleHeaderConverter();
   protected static final String MAP_KEY = "key";
   protected static final String MAP_VALUE = "value";
+  protected static final String TIMESTAMP_FIELD = "@timestamp";
+
+  private ObjectMapper objectMapper;
 
   static {
     JSON_CONVERTER = new JsonConverter();
@@ -78,11 +86,15 @@ public class DataConverter {
    */
   public DataConverter(ElasticsearchSinkConnectorConfig config) {
     this.config = config;
+    this.objectMapper = new ObjectMapper();
   }
 
   private String convertKey(Schema keySchema, Object key) {
     if (key == null) {
       throw new DataException("Key is used as document id and can not be null.");
+    }
+    if (String.valueOf(key).isEmpty()) {
+      throw new DataException("Key is used as document id and can not be empty.");
     }
 
     final Schema.Type schemaType;
@@ -149,7 +161,6 @@ public class DataConverter {
       }
     }
 
-    final String payload = getPayload(record);
     final String id = config.shouldIgnoreKey(record.topic())
         ? String.format("%s+%d+%d", record.topic(), record.kafkaPartition(), record.kafkaOffset())
         : convertKey(record.keySchema(), record.key());
@@ -159,6 +170,9 @@ public class DataConverter {
       return maybeAddExternalVersioning(new DeleteRequest(index).id(id), record);
     }
 
+    String payload = getPayload(record);
+    payload = maybeAddTimestamp(payload, record.timestamp());
+
     // index
     switch (config.writeMethod()) {
       case UPSERT:
@@ -167,8 +181,9 @@ public class DataConverter {
             .upsert(payload, XContentType.JSON)
             .retryOnConflict(Math.min(config.maxInFlightRequests(), 5));
       case INSERT:
+        OpType opType = config.isDataStream() ? OpType.CREATE : OpType.INDEX;
         return maybeAddExternalVersioning(
-            new IndexRequest(index).id(id).source(payload, XContentType.JSON),
+            new IndexRequest(index).id(id).source(payload, XContentType.JSON).opType(opType),
             record
         );
       default:
@@ -192,6 +207,39 @@ public class DataConverter {
     return new String(rawJsonPayload, StandardCharsets.UTF_8);
   }
 
+  private String maybeAddTimestamp(String payload, Long timestamp) {
+    if (!config.isDataStream()) {
+      return payload;
+    }
+    try {
+      JsonNode jsonNode = objectMapper.readTree(payload);
+
+      if (!jsonNode.isObject()) {
+        throw new DataException("Top level payload contains data of Json type "
+            + jsonNode.getNodeType() + ". Required Json object.");
+      }
+
+      if (!config.dataStreamTimestampField().isEmpty()) {
+        for (String timestampField : config.dataStreamTimestampField()) {
+          if (jsonNode.has(timestampField)) {
+            ((ObjectNode) jsonNode).put(TIMESTAMP_FIELD, jsonNode.get(timestampField).asText());
+            return objectMapper.writeValueAsString(jsonNode);
+          } else {
+            log.debug("Timestamp field {} is not present in payload. This record may fail or "
+                    + "be skipped",
+                timestampField);
+          }
+        }
+      } else {
+        ((ObjectNode) jsonNode).put(TIMESTAMP_FIELD, timestamp);
+        return objectMapper.writeValueAsString(jsonNode);
+      }
+    } catch (JsonProcessingException e) {
+      // Should not happen if the payload was retrieved correctly.
+    }
+    return payload;
+  }
+
   /**
    * In many cases, we explicitly set the record version using the topic's offset.
    * This version will, in turn, be checked by Elasticsearch and will throw a versioning
@@ -205,7 +253,7 @@ public class DataConverter {
       DocWriteRequest<?> request,
       SinkRecord record
   ) {
-    if (!config.shouldIgnoreKey(record.topic())) {
+    if (!config.isDataStream() && !config.shouldIgnoreKey(record.topic())) {
       request.versionType(VersionType.EXTERNAL);
       if (config.hasExternalVersionHeader()) {
         final Header versionHeader = record.headers().lastWithName(config.externalVersionHeader());

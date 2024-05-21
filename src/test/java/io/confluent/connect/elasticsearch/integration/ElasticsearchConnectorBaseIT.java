@@ -15,9 +15,14 @@
 
 package io.confluent.connect.elasticsearch.integration;
 
-import io.confluent.connect.elasticsearch.ElasticsearchSinkConnector;
-import io.confluent.connect.elasticsearch.helper.ElasticsearchContainer;
-import io.confluent.connect.elasticsearch.helper.ElasticsearchHelperClient;
+import java.io.IOException;
+import java.net.ConnectException;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
 import org.apache.kafka.connect.json.JsonConverter;
 import org.apache.kafka.connect.storage.StringConverter;
 import org.apache.kafka.test.TestUtils;
@@ -26,18 +31,23 @@ import org.elasticsearch.client.security.user.User;
 import org.elasticsearch.client.security.user.privileges.IndicesPrivileges;
 import org.elasticsearch.client.security.user.privileges.Role;
 import org.elasticsearch.client.security.user.privileges.Role.Builder;
+import org.elasticsearch.rest.RestStatus;
 import org.elasticsearch.search.SearchHit;
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
 
-import java.net.ConnectException;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.Map;
+import io.confluent.connect.elasticsearch.ElasticsearchSinkConnector;
+import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig;
+import io.confluent.connect.elasticsearch.helper.ElasticsearchContainer;
+import io.confluent.connect.elasticsearch.helper.ElasticsearchHelperClient;
 
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_PASSWORD_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_USERNAME_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.DATA_STREAM_DATASET_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.DATA_STREAM_TYPE_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_KEY_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_SCHEMA_CONFIG;
 import static org.apache.kafka.connect.json.JsonConverterConfig.SCHEMAS_ENABLE_CONFIG;
@@ -61,12 +71,18 @@ public class ElasticsearchConnectorBaseIT extends BaseConnectorIT {
   public static final String ELASTIC_MINIMAL_PRIVILEGES_NAME = "frank";
   public static final String ELASTIC_MINIMAL_PRIVILEGES_PASSWORD = "WatermelonInEasterHay";
 
+  public static final String ELASTIC_DATA_STREAM_MINIMAL_PRIVILEGES_NAME = "bob";
+  public static final String ELASTIC_DS_MINIMAL_PRIVILEGES_PASSWORD = "PeachesInGeorgia";
+
   private static final String ES_SINK_CONNECTOR_ROLE = "es_sink_connector_role";
+  private static final String ES_SINK_CONNECTOR_DS_ROLE = "es_sink_connector_ds_role";
 
   protected static ElasticsearchContainer container;
 
+  protected boolean isDataStream;
   protected ElasticsearchHelperClient helperClient;
   protected Map<String, String> props;
+  protected String index;
 
   @BeforeClass
   public static void setupBeforeAll() throws Exception {
@@ -81,6 +97,8 @@ public class ElasticsearchConnectorBaseIT extends BaseConnectorIT {
 
   @Before
   public void setup() throws Exception {
+    index = TOPIC;
+    isDataStream = false;
     startConnect();
     connect.kafka().createTopic(TOPIC);
 
@@ -95,10 +113,16 @@ public class ElasticsearchConnectorBaseIT extends BaseConnectorIT {
     if (container.isRunning()) {
       if (helperClient != null) {
         try {
-          helperClient.deleteIndex(TOPIC);
+          helperClient.deleteIndex(index, isDataStream);
           helperClient.close();
         } catch (ConnectException e) {
           // Server is already down. No need to close
+        } catch (ElasticsearchStatusException e) {
+          if (RestStatus.NOT_FOUND.equals(e.status())) {
+            // index wasn't created, nothing to clean
+          } else {
+            throw e;
+          }
         }
       }
     }
@@ -134,15 +158,48 @@ public class ElasticsearchConnectorBaseIT extends BaseConnectorIT {
     verifySearchResults(NUM_RECORDS);
   }
 
+  protected void assertConnectorFailsOnWriteRecords(Map<String, String> props, String trace) throws Exception {
+    // start the connector
+    connect.configureConnector(CONNECTOR_NAME, props);
+
+    // wait for tasks to spin up
+    waitForConnectorToStart(CONNECTOR_NAME, TASKS_MAX);
+
+    writeRecords(NUM_RECORDS);
+    waitForConnectorToFail(CONNECTOR_NAME, 1, trace);
+  }
+
+  protected void setDataStream() {
+    isDataStream = true;
+    props.put(DATA_STREAM_TYPE_CONFIG, "logs");
+    props.put(DATA_STREAM_DATASET_CONFIG, "dataset");
+    index = "logs-dataset-" + TOPIC;
+    props.put(CONNECTION_USERNAME_CONFIG, ELASTIC_DATA_STREAM_MINIMAL_PRIVILEGES_NAME);
+    props.put(CONNECTION_PASSWORD_CONFIG, ELASTIC_DS_MINIMAL_PRIVILEGES_PASSWORD);
+  }
+
+  protected void setupFromContainer() {
+    String address = container.getConnectionUrl();
+    props.put(CONNECTION_URL_CONFIG, address);
+    helperClient = new ElasticsearchHelperClient(
+        props.get(CONNECTION_URL_CONFIG),
+        new ElasticsearchSinkConnectorConfig(props)
+    );
+  }
 
   protected void verifySearchResults(int numRecords) throws Exception {
     waitForRecords(numRecords);
 
-    for (SearchHit hit : helperClient.search(TOPIC)) {
+    for (SearchHit hit : helperClient.search(index)) {
       int id = (Integer) hit.getSourceAsMap().get("doc_num");
       assertNotNull(id);
       assertTrue(id < numRecords);
-      assertEquals(TOPIC, hit.getIndex());
+
+      if (isDataStream) {
+        assertTrue(hit.getIndex().contains(index));
+      } else {
+        assertEquals(index, hit.getIndex());
+      }
     }
   }
 
@@ -150,7 +207,7 @@ public class ElasticsearchConnectorBaseIT extends BaseConnectorIT {
     TestUtils.waitForCondition(
         () -> {
           try {
-            return helperClient.getDocCount(TOPIC) == numRecords;
+            return helperClient.getDocCount(index) == numRecords;
           } catch (ElasticsearchStatusException e) {
             if (e.getMessage().contains("index_not_found_exception")) {
               return false;
@@ -165,34 +222,54 @@ public class ElasticsearchConnectorBaseIT extends BaseConnectorIT {
   }
 
   protected void writeRecords(int numRecords) {
-    for (int i = 0; i < numRecords; i++) {
-      connect.kafka().produce(TOPIC, String.valueOf(i), String.format("{\"doc_num\":%d}", i));
-    }
+    writeRecordsFromStartIndex(0, numRecords);
   }
 
   protected void writeRecordsFromStartIndex(int start, int numRecords) {
-    for (int i  = start; i < start + numRecords; i++) {
-      connect.kafka().produce(TOPIC, String.valueOf(i), String.format("{\"doc_num\":%d}", i));
+    for (int i = start; i < start + numRecords; i++) {
+      connect.kafka().produce(
+          TOPIC,
+          String.valueOf(i),
+          String.format("{\"doc_num\":%d,\"@timestamp\":\"2021-04-28T11:11:22.%03dZ\"}", i, i)
+      );
     }
   }
 
-  protected static Role getMinimalPrivilegesRole() {
+  protected static List<Role> getRoles() {
+    List<Role> roles = new ArrayList<>();
+    roles.add(getMinimalPrivilegesRole(false));
+    roles.add(getMinimalPrivilegesRole(true));
+    return roles;
+  }
+
+  protected static Map<User, String> getUsers() {
+    Map<User, String> users = new HashMap<>();
+    users.put(getMinimalPrivilegesUser(true), getMinimalPrivilegesPassword(true));
+    users.put(getMinimalPrivilegesUser(false), getMinimalPrivilegesPassword(false));
+    return users;
+  }
+
+  private static Role getMinimalPrivilegesRole(boolean forDataStream) {
     IndicesPrivileges.Builder indicesPrivilegesBuilder = IndicesPrivileges.builder();
     IndicesPrivileges indicesPrivileges = indicesPrivilegesBuilder
         .indices("*")
         .privileges("create_index", "read", "write", "view_index_metadata")
         .build();
     Builder builder = Role.builder();
-    Role role = builder.name(ES_SINK_CONNECTOR_ROLE).indicesPrivileges(indicesPrivileges).build();
+    builder = forDataStream ? builder.clusterPrivileges("monitor") : builder;
+    Role role = builder
+        .name(forDataStream ? ES_SINK_CONNECTOR_DS_ROLE : ES_SINK_CONNECTOR_ROLE)
+        .indicesPrivileges(indicesPrivileges)
+        .build();
     return role;
   }
 
-  protected static User getMinimalPrivilegesUser() {
-        return new User(ELASTIC_MINIMAL_PRIVILEGES_NAME,
-            Collections.singletonList(ES_SINK_CONNECTOR_ROLE));
+  private static User getMinimalPrivilegesUser(boolean forDataStream) {
+    return new User(forDataStream ? ELASTIC_DATA_STREAM_MINIMAL_PRIVILEGES_NAME : ELASTIC_MINIMAL_PRIVILEGES_NAME,
+        Collections.singletonList(forDataStream ? ES_SINK_CONNECTOR_DS_ROLE : ES_SINK_CONNECTOR_ROLE));
   }
 
-  protected static String getMinimalPrivilegesPassword() {
-    return ELASTIC_MINIMAL_PRIVILEGES_PASSWORD;
+  private static String getMinimalPrivilegesPassword(boolean forDataStream) {
+    return forDataStream ? ELASTIC_DS_MINIMAL_PRIVILEGES_PASSWORD : ELASTIC_MINIMAL_PRIVILEGES_PASSWORD;
   }
 }

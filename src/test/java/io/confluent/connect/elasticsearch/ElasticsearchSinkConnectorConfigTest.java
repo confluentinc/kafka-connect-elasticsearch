@@ -45,6 +45,48 @@ public class ElasticsearchSinkConnectorConfigTest {
     assertEquals(config.connectionTimeoutMs(), 15000);
   }
 
+  @Test
+  public void shouldAllowValidChractersDataStreamDataset() {
+    props.put(DATA_STREAM_DATASET_CONFIG, "a_valid.dataset123");
+    new ElasticsearchSinkConnectorConfig(props);
+  }
+
+  @Test
+  public void shouldAllowValidDataStreamType() {
+    props.put(DATA_STREAM_TYPE_CONFIG, "metrics");
+    new ElasticsearchSinkConnectorConfig(props);
+  }
+
+  @Test
+  public void shouldAllowValidDataStreamTypeCaseInsensitive() {
+    props.put(DATA_STREAM_TYPE_CONFIG, "mEtRICS");
+    new ElasticsearchSinkConnectorConfig(props);
+  }
+
+  @Test(expected = ConfigException.class)
+  public void shouldNotAllowInvalidCaseDataStreamDataset() {
+    props.put(DATA_STREAM_DATASET_CONFIG, "AN_INVALID.dataset123");
+    new ElasticsearchSinkConnectorConfig(props);
+  }
+
+  @Test(expected = ConfigException.class)
+  public void shouldNotAllowInvalidCharactersDataStreamDataset() {
+    props.put(DATA_STREAM_DATASET_CONFIG, "not-valid?");
+    new ElasticsearchSinkConnectorConfig(props);
+  }
+
+  @Test(expected = ConfigException.class)
+  public void shouldNotAllowInvalidDataStreamType() {
+    props.put(DATA_STREAM_TYPE_CONFIG, "notLogOrMetrics");
+    new ElasticsearchSinkConnectorConfig(props);
+  }
+
+  @Test(expected = ConfigException.class)
+  public void shouldNotAllowLongDataStreamDataset() {
+    props.put(DATA_STREAM_DATASET_CONFIG, String.format("%d%100d", 1, 1));
+    new ElasticsearchSinkConnectorConfig(props);
+  }
+
   @Test(expected = ConfigException.class)
   public void shouldNotAllowNullUrlList(){
     props.put(CONNECTION_URL_CONFIG, null);
