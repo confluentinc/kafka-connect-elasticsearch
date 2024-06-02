@@ -21,6 +21,7 @@ import org.apache.kafka.common.config.ConfigDef.Importance;
 import org.apache.kafka.common.config.ConfigDef.Type;
 import org.apache.kafka.common.config.ConfigDef.Width;
 
+import java.util.Collections;
 import java.util.Map;
 
 import static io.confluent.connect.elasticsearch.jest.JestElasticsearchClient.WriteMethod;
@@ -185,6 +186,10 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
       "The security protocol to use when connecting to Elasticsearch. "
           + "Values can be `PLAINTEXT` or `SSL`. If `PLAINTEXT` is passed, "
           + "all configs prefixed by " + CONNECTION_SSL_CONFIG_PREFIX + " will be ignored.";
+
+  public static final String ELASTICSEARCH_INDEX_PARAM_PREFIX = "elasticsearch.index.param.";
+
+  public final Map<String, Object> indexParams;
 
   protected static ConfigDef baseConfigDef() {
     final ConfigDef configDef = new ConfigDef();
@@ -490,6 +495,8 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
 
   public ElasticsearchSinkConnectorConfig(Map<String, String> props) {
     super(CONFIG, props);
+    indexParams = Collections.unmodifiableMap(
+        originalsWithPrefix(ELASTICSEARCH_INDEX_PARAM_PREFIX));
   }
 
   public Map<String, Object> sslConfigs() {
