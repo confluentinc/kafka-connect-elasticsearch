@@ -15,6 +15,7 @@
 package io.confluent.connect.elasticsearch;
 
 import java.io.IOException;
+
 import org.apache.kafka.common.utils.MockTime;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.junit.Before;
@@ -38,33 +39,46 @@ public class RetryUtilTest {
 
   @Test
   public void computeRetryBackoffForNegativeAttempts() {
-    assertComputeRetryInRange(0, 10L);
-    assertEquals(10L, RetryUtil.computeRandomRetryWaitTimeInMillis(-1, 10L));
+    assertComputeRetryInRange(0, 10L, 10000L);
+    assertEquals(10L, RetryUtil.computeRandomRetryWaitTimeInMillis(-1, 10L, 10000L));
   }
 
   @Test
   public void computeRetryBackoffForValidRanges() {
-    assertComputeRetryInRange(10, 10L);
-    assertComputeRetryInRange(10, 100L);
-    assertComputeRetryInRange(10, 1000L);
-    assertComputeRetryInRange(100, 1000L);
+    assertComputeRetryInRange(10, 10L, 10000L);
+    assertComputeRetryInRange(10, 100L, 10000L);
+    assertComputeRetryInRange(10, 1000L, 10000L);
+    assertComputeRetryInRange(100, 1000L, 10000L);
   }
 
   @Test
   public void computeRetryBackoffForNegativeRetryTimes() {
-    assertComputeRetryInRange(1, -100L);
-    assertComputeRetryInRange(10, -100L);
-    assertComputeRetryInRange(100, -100L);
+    assertComputeRetryInRange(1, -100L, 10000L);
+    assertComputeRetryInRange(10, -100L, 10000L);
+    assertComputeRetryInRange(100, -100L, 10000L);
   }
 
   @Test
   public void computeNonRandomRetryTimes() {
-    assertEquals(100L, RetryUtil.computeRetryWaitTimeInMillis(0, 100L));
-    assertEquals(200L, RetryUtil.computeRetryWaitTimeInMillis(1, 100L));
-    assertEquals(400L, RetryUtil.computeRetryWaitTimeInMillis(2, 100L));
-    assertEquals(800L, RetryUtil.computeRetryWaitTimeInMillis(3, 100L));
-    assertEquals(1600L, RetryUtil.computeRetryWaitTimeInMillis(4, 100L));
-    assertEquals(3200L, RetryUtil.computeRetryWaitTimeInMillis(5, 100L));
+    assertEquals(100L, RetryUtil.computeRetryWaitTimeInMillis(0, 100L, 10000L));
+    assertEquals(200L, RetryUtil.computeRetryWaitTimeInMillis(1, 100L, 10000L));
+    assertEquals(400L, RetryUtil.computeRetryWaitTimeInMillis(2, 100L, 10000L));
+    assertEquals(800L, RetryUtil.computeRetryWaitTimeInMillis(3, 100L, 10000L));
+    assertEquals(1600L, RetryUtil.computeRetryWaitTimeInMillis(4, 100L, 10000L));
+    assertEquals(3200L, RetryUtil.computeRetryWaitTimeInMillis(5, 100L, 10000L));
+  }
+
+  @Test
+  public void computeNonRandomRetryTimes_ExhaustingMaxRetryTimesOf32() {
+    assertEquals(ElasticsearchSinkConnectorConfig.MAX_RETRY_TIME_MS, RetryUtil.computeRetryWaitTimeInMillis(33, 1L, ElasticsearchSinkConnectorConfig.MAX_RETRY_TIME_MS));
+  }
+
+  @Test
+  public void computeNonRandomRetryTimes_ExhaustingMaxBackoffTime() {
+    assertEquals(100L, RetryUtil.computeRetryWaitTimeInMillis(0, 100L, 300L));
+    assertEquals(200L, RetryUtil.computeRetryWaitTimeInMillis(1, 100L, 300L));
+    assertEquals(300L, RetryUtil.computeRetryWaitTimeInMillis(2, 100L, 300L));
+    assertEquals(300L, RetryUtil.computeRetryWaitTimeInMillis(4, 100L, 300L));
   }
 
   @Test
@@ -72,7 +86,7 @@ public class RetryUtilTest {
     MockTime mockClock = new MockTime();
     long expectedTime = mockClock.milliseconds();
 
-    assertTrue(RetryUtil.callWithRetries("test", () -> testFunction(0), 3, 100, mockClock));
+    assertTrue(RetryUtil.callWithRetries("test", () -> testFunction(0), 3, 100, 10000L, mockClock));
     assertEquals(expectedTime, mockClock.milliseconds());
   }
 
@@ -80,7 +94,7 @@ public class RetryUtilTest {
   public void testCallWithRetriesSomeRetries() throws Exception {
     MockTime mockClock = spy(new MockTime());
 
-    assertTrue(RetryUtil.callWithRetries("test", () -> testFunction(2), 3, 100, mockClock));
+    assertTrue(RetryUtil.callWithRetries("test", () -> testFunction(2), 3, 100, 10000L, mockClock));
     verify(mockClock, times(2)).sleep(anyLong());
   }
 
@@ -88,7 +102,7 @@ public class RetryUtilTest {
   public void testCallWithRetriesExhaustedRetries() throws Exception {
     MockTime mockClock = new MockTime();
 
-    assertTrue(RetryUtil.callWithRetries("test", () -> testFunction(4), 3, 100, mockClock));
+    assertTrue(RetryUtil.callWithRetries("test", () -> testFunction(4), 3, 100,10000L, mockClock));
     verify(mockClock, times(3)).sleep(anyLong());
   }
 
@@ -101,11 +115,11 @@ public class RetryUtilTest {
     return true;
   }
 
-  protected void assertComputeRetryInRange(int retryAttempts, long retryBackoffMs) {
-    for (int i = 0; i != 20; ++i) {
+  protected void assertComputeRetryInRange(int retryAttempts, long retryBackoffMs, long maxRetryDurationMs) {
+    for (int i = 0; i < 20; ++i) {
       for (int retries = 0; retries <= retryAttempts; ++retries) {
-        long maxResult = RetryUtil.computeRetryWaitTimeInMillis(retries, retryBackoffMs);
-        long result = RetryUtil.computeRandomRetryWaitTimeInMillis(retries, retryBackoffMs);
+        long maxResult = RetryUtil.computeRetryWaitTimeInMillis(retries, retryBackoffMs, maxRetryDurationMs);
+        long result = RetryUtil.computeRandomRetryWaitTimeInMillis(retries, retryBackoffMs, maxRetryDurationMs);
         if (retryBackoffMs < 0) {
           assertEquals(0, result);
         } else {

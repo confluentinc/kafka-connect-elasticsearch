@@ -226,6 +226,27 @@ public class ElasticsearchSinkConnectorConfigTest {
     keytab.toFile().delete();
   }
 
+  @Test
+  public void maxRetryDurationValueCheck() {
+    // Allowed
+    props.put(RETRY_BACKOFF_MS_CONFIG, "10");
+    props.put(MAX_RETRY_DURATION_MS_CONFIG, "100");
+    ElasticsearchSinkConnectorConfig config = new ElasticsearchSinkConnectorConfig(props);
+    assertEquals(100, config.maxRetryDurationMs());
+
+    // maxRetryDuration = initialBackoff. Not allowed. Takes default
+    props.put(RETRY_BACKOFF_MS_CONFIG, "100");
+    props.put(MAX_RETRY_DURATION_MS_CONFIG, "100");
+    config = new ElasticsearchSinkConnectorConfig(props);
+    assertEquals(MAX_RETRY_TIME_MS, config.maxRetryDurationMs());
+
+    // maxRetryDuration < initialBackoff. Not allowed. Takes default
+    props.put(RETRY_BACKOFF_MS_CONFIG, "100");
+    props.put(MAX_RETRY_DURATION_MS_CONFIG, "10");
+    config = new ElasticsearchSinkConnectorConfig(props);
+    assertEquals(MAX_RETRY_TIME_MS, config.maxRetryDurationMs());
+  }
+
   public static Map<String, String> addNecessaryProps(Map<String, String> props) {
     if (props == null) {
       props = new HashMap<>();
@@ -233,6 +254,7 @@ public class ElasticsearchSinkConnectorConfigTest {
     props.put(ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG, "http://localhost:8080");
     return props;
   }
+
   @Test
   public void testLogSensitiveData(){
     ElasticsearchSinkConnectorConfig config = new ElasticsearchSinkConnectorConfig(props);

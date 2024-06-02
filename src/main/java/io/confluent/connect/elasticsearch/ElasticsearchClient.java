@@ -492,7 +492,8 @@ public class ElasticsearchClient {
         description,
         function,
         config.maxRetries() + 1,
-        config.retryBackoffMs()
+        config.retryBackoffMs(),
+        config.maxRetryDurationMs()
     );
   }
 
