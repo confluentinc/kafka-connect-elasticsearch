@@ -34,6 +34,7 @@ import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.BiConsumer;
 
+import io.confluent.connect.reporter.Reporter;
 import org.apache.http.HttpHost;
 import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.connect.data.Schema;
@@ -113,6 +114,7 @@ public class ElasticsearchClient {
   private final ConcurrentMap<Long, List<SinkRecordAndOffset>> inFlightRequests;
   private final ElasticsearchSinkConnectorConfig config;
   private final ErrantRecordReporter reporter;
+  private final Reporter errorReporter;
   private final RestHighLevelClient client;
   private final ExecutorService bulkExecutorService;
   private final Time clock;
@@ -124,6 +126,7 @@ public class ElasticsearchClient {
   public ElasticsearchClient(
       ElasticsearchSinkConnectorConfig config,
       ErrantRecordReporter reporter,
+      Reporter errorReporter,
       Runnable afterBulkCallback
   ) {
     this.bulkExecutorService = Executors.newFixedThreadPool(config.maxInFlightRequests());
@@ -133,6 +136,7 @@ public class ElasticsearchClient {
     this.inFlightRequests = reporter != null ? new ConcurrentHashMap<>() : null;
     this.config = config;
     this.reporter = reporter;
+    this.errorReporter = errorReporter;
     this.clock = Time.SYSTEM;
     this.logSensitiveData = config.shouldLogSensitiveData();
 
@@ -469,7 +473,7 @@ public class ElasticsearchClient {
    */
   private String getErrorMessage(BulkItemResponse response, boolean logSensitiveData) {
     if (logSensitiveData) {
-      return response.getFailureMessage();
+      errorReporter.reportError(null, response.getFailure().getCause());
     }
     return String.format("Response status: '%s',\n"
             + "Index: '%s',\n Document Id: '%s'. \n",

@@ -30,6 +30,7 @@ import org.apache.kafka.connect.sink.SinkRecord;
 import org.apache.kafka.connect.sink.SinkTask;
 import org.apache.kafka.connect.sink.SinkTaskContext;
 import org.elasticsearch.action.DocWriteRequest;
+import io.confluent.connect.reporter.Reporter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -44,6 +45,7 @@ public class ElasticsearchSinkTask extends SinkTask {
   private ElasticsearchClient client;
   private ElasticsearchSinkConnectorConfig config;
   private ErrantRecordReporter reporter;
+  private Reporter errorReporter;
   private Set<String> existingMappings;
   private Set<String> indexCache;
   private OffsetTracker offsetTracker;
@@ -78,9 +80,11 @@ public class ElasticsearchSinkTask extends SinkTask {
       // Will occur in Connect runtimes earlier than 2.6
       log.warn("AK versions prior to 2.6 do not support the errant record reporter.");
     }
+    initializeErrorReporter();
+
     Runnable afterBulkCallback = () -> offsetTracker.updateOffsets();
     this.client = client != null ? client
-        : new ElasticsearchClient(config, reporter, afterBulkCallback);
+        : new ElasticsearchClient(config, reporter, errorReporter, afterBulkCallback);
 
     if (!config.flushSynchronously()) {
       this.offsetTracker = new AsyncOffsetTracker(context);
@@ -88,8 +92,14 @@ public class ElasticsearchSinkTask extends SinkTask {
       this.offsetTracker = new SyncOffsetTracker(this.client);
     }
 
+
     log.info("Started ElasticsearchSinkTask. Connecting to ES server version: {}",
         this.client.version());
+  }
+
+  public void initializeErrorReporter() {
+    this.errorReporter = new Reporter();
+    errorReporter.configure(config.reporterConfig());
   }
 
   @Override

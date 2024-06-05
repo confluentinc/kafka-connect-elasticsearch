@@ -56,6 +56,8 @@
         <commons.codec.version>1.15</commons.codec.version>
         <confluent.version>${io.confluent.common.version}</confluent.version>
         <jackson.version>2.16.0</jackson.version>
+        <connect.formatters.version>0.2.5</connect.formatters.version>
+        <connect-reporter.version>0.2.0</connect-reporter.version>
     </properties>
 
     <repositories>
@@ -271,6 +273,32 @@
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-annotations</artifactId>
             <version>${jackson.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>io.confluent</groupId>
+            <artifactId>connect-formatters-json</artifactId>
+            <version>${connect.formatters.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>io.confluent</groupId>
+            <artifactId>connect-formatters-string</artifactId>
+            <version>${connect.formatters.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.kafka</groupId>
+            <artifactId>kafka-clients</artifactId>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.confluent</groupId>
+            <artifactId>connect-reporter</artifactId>
+            <version>${connect-reporter.version}</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>io.confluent</groupId>
+                    <artifactId>connect-formatters-api</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
     </dependencies>
 
