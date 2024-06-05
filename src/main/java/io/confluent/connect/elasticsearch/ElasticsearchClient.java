@@ -34,6 +34,7 @@ import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.BiConsumer;
 
+import io.confluent.connect.reporter.Reporter;
 import org.apache.http.HttpHost;
 import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.connect.data.Schema;
@@ -113,6 +114,7 @@ public class ElasticsearchClient {
   private final ConcurrentMap<Long, List<SinkRecordAndOffset>> inFlightRequests;
   private final ElasticsearchSinkConnectorConfig config;
   private final ErrantRecordReporter reporter;
+  private final Reporter errorReporter;
   private final RestHighLevelClient client;
   private final ExecutorService bulkExecutorService;
   private final Time clock;
@@ -124,6 +126,7 @@ public class ElasticsearchClient {
   public ElasticsearchClient(
       ElasticsearchSinkConnectorConfig config,
       ErrantRecordReporter reporter,
+      Reporter errorReporter,
       Runnable afterBulkCallback
   ) {
     this.bulkExecutorService = Executors.newFixedThreadPool(config.maxInFlightRequests());
@@ -133,6 +136,7 @@ public class ElasticsearchClient {
     this.inFlightRequests = reporter != null ? new ConcurrentHashMap<>() : null;
     this.config = config;
     this.reporter = reporter;
+    this.errorReporter = errorReporter;
     this.clock = Time.SYSTEM;
     this.logSensitiveData = config.shouldLogSensitiveData();
 
@@ -467,9 +471,17 @@ public class ElasticsearchClient {
    *                         log exception traces for debugging
    * @return String Formatted error message
    */
-  private String getErrorMessage(BulkItemResponse response, boolean logSensitiveData) {
+  private String getErrorMessage(BulkItemResponse response,
+                                 boolean logSensitiveData, long executionId) {
     if (logSensitiveData) {
-      return response.getFailureMessage();
+      List<SinkRecordAndOffset> sinkRecords =
+              inFlightRequests.getOrDefault(executionId, new ArrayList<>());
+      SinkRecordAndOffset original = sinkRecords.size() > response.getItemId()
+              ? sinkRecords.get(response.getItemId())
+              : null;
+      if (original != null) {
+        errorReporter.reportError(original.sinkRecord, response.getFailure().getCause());
+      }
     }
     return String.format("Response status: '%s',\n"
             + "Index: '%s',\n Document Id: '%s'. \n",
@@ -582,7 +594,7 @@ public class ElasticsearchClient {
     if (response.isFailed()) {
       for (String error : MALFORMED_DOC_ERRORS) {
         if (response.getFailureMessage().contains(error)) {
-          boolean failed = handleMalformedDocResponse(response);
+          boolean failed = handleMalformedDocResponse(response, executionId);
           if (!failed) {
             reportBadRecord(response, executionId);
           }
@@ -637,7 +649,7 @@ public class ElasticsearchClient {
       error.compareAndSet(
           null,
           new ConnectException("Indexing record failed.",
-                  new Throwable(getErrorMessage(response, logSensitiveData)))
+                  new Throwable(getErrorMessage(response, logSensitiveData, executionId)))
       );
       return true;
     }
@@ -651,9 +663,11 @@ public class ElasticsearchClient {
    * @param response the failed response from ES
    * @return true if the record was not successfully processed, and we should not commit its offset
    */
-  private boolean handleMalformedDocResponse(BulkItemResponse response) {
+  private boolean handleMalformedDocResponse(BulkItemResponse response,
+                                             long executionId) {
     String errorMsg = String.format("Encountered an illegal document error '%s'."
-            + " Ignoring and will not index record." , getErrorMessage(response, logSensitiveData));
+            + " Ignoring and will not index record." ,
+            getErrorMessage(response, logSensitiveData, executionId));
     switch (config.behaviorOnMalformedDoc()) {
       case IGNORE:
         log.debug(errorMsg);
@@ -666,14 +680,15 @@ public class ElasticsearchClient {
         log.error(String.format("Encountered an illegal document error '%s'."
               + " To ignore future records like this,"
               + " change the configuration '%s' to '%s'.",
-              getErrorMessage(response, logSensitiveData),
+              getErrorMessage(response, logSensitiveData, executionId),
               ElasticsearchSinkConnectorConfig.BEHAVIOR_ON_MALFORMED_DOCS_CONFIG,
               BehaviorOnMalformedDoc.IGNORE)
         );
         error.compareAndSet(
             null,
             new ConnectException(
-                    "Indexing record failed -> " + getErrorMessage(response, logSensitiveData))
+                    "Indexing record failed -> "
+                            + getErrorMessage(response, logSensitiveData, executionId))
         );
         return true;
     }
@@ -738,7 +753,8 @@ public class ElasticsearchClient {
       if (original != null) {
         reporter.report(
             original.sinkRecord,
-            new ReportingException("Indexing failed: " + getErrorMessage(response,logSensitiveData))
+            new ReportingException("Indexing failed: "
+                    + getErrorMessage(response,logSensitiveData,executionId))
         );
       }
     }
