@@ -24,6 +24,9 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.concurrent.TimeUnit;
+
+import io.confluent.connect.reporter.Reporter;
+import io.confluent.connect.reporter.ReporterConfig;
 import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.common.config.ConfigException;
@@ -382,6 +385,11 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   private static final String SSL_GROUP = "Security";
   private static final String KERBEROS_GROUP = "Kerberos";
   private static final String DATA_STREAM_GROUP = "Data Stream";
+  public static final String REPORTER_PREFIX = "reporter.";
+  private final ReporterConfig reporterConfig;
+  public ReporterConfig reporterConfig() {
+    return this.reporterConfig;
+  }
 
   public enum BehaviorOnMalformedDoc {
     IGNORE,
@@ -859,6 +867,27 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
 
   public ElasticsearchSinkConnectorConfig(Map<String, String> props) {
     super(CONFIG, props);
+    this.reporterConfig = new ReporterConfig(
+            props.get("name"),
+            null,
+            null,
+            addDefaultReporterConfig(originalsWithPrefix(REPORTER_PREFIX))
+    );
+  }
+
+  /**
+   * Adds default formatter settings because ResponseConverter deserializes json as a string.
+   *
+   * @param originals - original reporter configs
+   * @return originals with default reporter settings
+   */
+  private static Map<String, Object> addDefaultReporterConfig(Map<String, Object> originals) {
+    originals.putIfAbsent(ReporterConfig.RESULT_KEY_FORMATTER_NAME, "string");
+    originals.putIfAbsent(ReporterConfig.RESULT_VALUE_FORMATTER_NAME, "string");
+    originals.putIfAbsent(ReporterConfig.ERROR_KEY_FORMATTER_NAME, "string");
+    originals.putIfAbsent(ReporterConfig.ERROR_VALUE_FORMATTER_NAME, "string");
+
+    return originals;
   }
 
   public boolean isAuthenticatedConnection() {
