@@ -14,7 +14,7 @@ import org.junit.experimental.categories.Category;
 import org.junit.Ignore;
 
 @Category(IntegrationTest.class)
-public class ElasticsearchConnectorKerberosWithSslIT extends ElasticsearchConnectorKerberosIT{
+public class ElasticsearchConnectorKerberosWithSslIT extends ElasticsearchConnectorKerberosIT {
 
   @BeforeClass
   public static void setupBeforeAll() throws Exception {

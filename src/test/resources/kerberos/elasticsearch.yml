@@ -7,6 +7,8 @@ node.store.allow_mmap: false
 cluster.routing.allocation.disk.threshold_enabled: false
 
 xpack.license.self_generated.type: trial
+xpack.security.enabled: true
+xpack.security.http.ssl.enabled: false
 
 # Kerberos realm
 xpack.security.authc.realms.kerberos.kerb1:

@@ -15,6 +15,7 @@
 
 package io.confluent.connect.elasticsearch;
 
+import java.math.BigDecimal;
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Field;
@@ -23,8 +24,8 @@ import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.errors.DataException;
-import org.elasticsearch.common.xcontent.XContentBuilder;
-import org.elasticsearch.common.xcontent.XContentFactory;
+import org.elasticsearch.xcontent.XContentBuilder;
+import org.elasticsearch.xcontent.XContentFactory;
 
 import java.io.IOException;
 
@@ -215,7 +216,9 @@ public class Mapping {
       case Timestamp.LOGICAL_NAME:
         return inferPrimitive(builder, DATE_TYPE, schema.defaultValue());
       case Decimal.LOGICAL_NAME:
-        return inferPrimitive(builder, DOUBLE_TYPE, schema.defaultValue());
+        Double defaultValue = schema.defaultValue() != null ? ((BigDecimal) schema.defaultValue())
+            .doubleValue() : null;
+        return inferPrimitive(builder, DOUBLE_TYPE, defaultValue);
       default:
         // User-defined type or unknown built-in
         return null;

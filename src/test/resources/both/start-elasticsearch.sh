@@ -7,7 +7,7 @@
 ES_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}"/ )" >/dev/null 2>&1 && pwd )"
 cd $ES_DIR/../..
 ES_DIR=$(pwd)
-export PATH=/usr/share/elasticsearch/jdk/bin/:$PATH
+SAVE_PATH="$PATH"
 
 if [[ -z "${IP_ADDRESS}" ]]; then
     IP_ADDRESS=$(hostname -I)
@@ -21,6 +21,10 @@ sed -i "s/ipAddress/${IP_ADDRESS}/g" ${ES_DIR}/config/ssl/instances.yml
 echo "Setting up Elasticsearch and generating certificates in ${ES_DIR}"
 
 if [[ -n "$ELASTIC_PASSWORD" ]]; then
+    # Use system java to generate the certificates since the connector tests
+    # are built with Java 1.8 and the certs built with the container's java
+    # won't be readable.
+    export PATH="$(dirname $(which java)):$PATH"
 
     echo "=== CREATE Keystore ==="
     echo "Elastic password is: $ELASTIC_PASSWORD"
@@ -83,6 +87,16 @@ if [[ -n "$ELASTIC_PASSWORD" ]]; then
     rm -f ${ES_DIR}/config/ssl/client.p12
 fi
 
+# Set path to find ElasticSearch's java, while reverting any initial injection
+# of the system-installed java
+export PATH=/usr/share/elasticsearch/jdk/bin/:$SAVE_PATH
+
+echo "Elasticsearch Configuration"
+cat /usr/share/elasticsearch/config/elasticsearch.yml
+
 echo
 echo "Starting Elasticsearch with SSL and Kerberos enabled ..."
-/usr/local/bin/docker-entrypoint.sh
+su - elasticsearch<<EOF
+ /usr/local/bin/docker-entrypoint.sh
+EOF
+

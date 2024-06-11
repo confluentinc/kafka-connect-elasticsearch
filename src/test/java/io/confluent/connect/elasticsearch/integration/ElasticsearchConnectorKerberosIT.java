@@ -14,6 +14,7 @@ import java.util.Properties;
 import org.apache.hadoop.minikdc.MiniKdc;
 import org.apache.kafka.connect.errors.ConnectException;
 import io.confluent.common.utils.IntegrationTest;
+import org.apache.kafka.test.TestUtils;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -24,7 +25,6 @@ public class ElasticsearchConnectorKerberosIT extends ElasticsearchConnectorBase
 
   private static File baseDir;
   private static MiniKdc kdc;
-  private static String esPrincipal;
   protected static String esKeytab;
   private static String userPrincipal;
   private static String userKeytab;
@@ -50,6 +50,7 @@ public class ElasticsearchConnectorKerberosIT extends ElasticsearchConnectorBase
   public void testKerberos() throws Exception {
     addKerberosConfigs(props);
     helperClient = container.getHelperClient(props);
+    helperClient.waitForConnection(60000);
     runSimpleTest(props);
   }
 
@@ -67,7 +68,6 @@ public class ElasticsearchConnectorKerberosIT extends ElasticsearchConnectorBase
     File keytabFile = new File(baseDir, es + ".keytab");
     esKeytab = keytabFile.getAbsolutePath();
     kdc.createPrincipal(keytabFile, es + "/localhost", "HTTP/localhost");
-    esPrincipal = es + "/localhost@" + kdc.getRealm();
 
     String user = "connect-es";
     keytabFile = new File(baseDir, user + ".keytab");

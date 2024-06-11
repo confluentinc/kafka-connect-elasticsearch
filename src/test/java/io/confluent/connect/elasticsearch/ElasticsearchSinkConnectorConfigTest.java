@@ -36,6 +36,12 @@ public class ElasticsearchSinkConnectorConfigTest {
   }
 
   @Test
+  public void testDefaultFlushSynchronously() {
+    ElasticsearchSinkConnectorConfig config = new ElasticsearchSinkConnectorConfig(props);
+    assertEquals(false, config.flushSynchronously());
+  }
+
+  @Test
   public void testSetHttpTimeoutsConfig() {
     props.put(READ_TIMEOUT_MS_CONFIG, "10000");
     props.put(CONNECTION_TIMEOUT_MS_CONFIG, "15000");
@@ -43,6 +49,48 @@ public class ElasticsearchSinkConnectorConfigTest {
 
     assertEquals(config.readTimeoutMs(), 10000);
     assertEquals(config.connectionTimeoutMs(), 15000);
+  }
+
+  @Test
+  public void shouldAllowValidChractersDataStreamDataset() {
+    props.put(DATA_STREAM_DATASET_CONFIG, "a_valid.dataset123");
+    new ElasticsearchSinkConnectorConfig(props);
+  }
+
+  @Test
+  public void shouldAllowValidDataStreamType() {
+    props.put(DATA_STREAM_TYPE_CONFIG, "metrics");
+    new ElasticsearchSinkConnectorConfig(props);
+  }
+
+  @Test
+  public void shouldAllowValidDataStreamTypeCaseInsensitive() {
+    props.put(DATA_STREAM_TYPE_CONFIG, "mEtRICS");
+    new ElasticsearchSinkConnectorConfig(props);
+  }
+
+  @Test(expected = ConfigException.class)
+  public void shouldNotAllowInvalidCaseDataStreamDataset() {
+    props.put(DATA_STREAM_DATASET_CONFIG, "AN_INVALID.dataset123");
+    new ElasticsearchSinkConnectorConfig(props);
+  }
+
+  @Test(expected = ConfigException.class)
+  public void shouldNotAllowInvalidCharactersDataStreamDataset() {
+    props.put(DATA_STREAM_DATASET_CONFIG, "not-valid?");
+    new ElasticsearchSinkConnectorConfig(props);
+  }
+
+  @Test(expected = ConfigException.class)
+  public void shouldNotAllowInvalidDataStreamType() {
+    props.put(DATA_STREAM_TYPE_CONFIG, "notLogOrMetrics");
+    new ElasticsearchSinkConnectorConfig(props);
+  }
+
+  @Test(expected = ConfigException.class)
+  public void shouldNotAllowLongDataStreamDataset() {
+    props.put(DATA_STREAM_DATASET_CONFIG, String.format("%d%100d", 1, 1));
+    new ElasticsearchSinkConnectorConfig(props);
   }
 
   @Test(expected = ConfigException.class)
@@ -184,18 +232,5 @@ public class ElasticsearchSinkConnectorConfigTest {
     }
     props.put(ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG, "http://localhost:8080");
     return props;
-  }
-  @Test
-  public void testLogSensitiveData(){
-    ElasticsearchSinkConnectorConfig config = new ElasticsearchSinkConnectorConfig(props);
-    assertFalse(config.shouldLogSensitiveData());
-
-    props.put(LOG_SENSITIVE_DATA_CONFIG, "true");
-    config = new ElasticsearchSinkConnectorConfig(props);
-    assertTrue(config.shouldLogSensitiveData());
-
-    props.put(LOG_SENSITIVE_DATA_CONFIG, "false");
-    config = new ElasticsearchSinkConnectorConfig(props);
-    assertFalse(config.shouldLogSensitiveData());
   }
 }
