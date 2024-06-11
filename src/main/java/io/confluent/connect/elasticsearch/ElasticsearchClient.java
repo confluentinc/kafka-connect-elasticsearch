@@ -460,25 +460,6 @@ public class ElasticsearchClient {
   }
 
   /**
-   * Returns the formatted error message based on customers need to
-   * log exception traces.
-   * @param response The BulkItemResponse returned from Elasticsearch
-   * @param logSensitiveData Boolean flag to identify if customer needs to
-   *                         log exception traces for debugging
-   * @return String Formatted error message
-   */
-  private String getErrorMessage(BulkItemResponse response, boolean logSensitiveData) {
-    if (logSensitiveData) {
-      return response.getFailureMessage();
-    }
-    return String.format("Response status: '%s',\n"
-            + "Index: '%s',\n Document Id: '%s'. \n",
-            response.getFailure().getStatus(),
-            response.getFailure().getIndex(),
-            response.getFailure().getId());
-  }
-
-  /**
    * Calls the specified function with retries and backoffs until the retries are exhausted or the
    * function succeeds.
    *
@@ -582,10 +563,8 @@ public class ElasticsearchClient {
     if (response.isFailed()) {
       for (String error : MALFORMED_DOC_ERRORS) {
         if (response.getFailureMessage().contains(error)) {
-          boolean failed = handleMalformedDocResponse(response);
-          if (!failed) {
-            reportBadRecord(response, executionId);
-          }
+          boolean failed = handleMalformedDocResponse();
+          reportBadRecordAndErrors(response, executionId);
           return failed;
         }
       }
@@ -615,7 +594,7 @@ public class ElasticsearchClient {
           );
           // Maybe this was a race condition?  Put it in the DLQ in case someone
           // wishes to investigate.
-          reportBadRecord(response, executionId);
+          reportBadRecordAndErrors(response, executionId);
         } else {
           // This is an out-of-order or (more likely) repeated topic offset.  Allow the
           // higher offset's value for this key to remain.
@@ -633,11 +612,11 @@ public class ElasticsearchClient {
         }
         return false;
       }
-
+      reportBadRecordAndErrors(response, executionId);
       error.compareAndSet(
           null,
-          new ConnectException("Indexing record failed.",
-                  new Throwable(getErrorMessage(response, logSensitiveData)))
+          new ConnectException("Indexing record failed. "
+                  + "Please check DLQ topic for errors.")
       );
       return true;
     }
@@ -648,12 +627,12 @@ public class ElasticsearchClient {
    * Handle a failed response as a result of a malformed document. Depending on the configuration,
    * ignore or fail.
    *
-   * @param response the failed response from ES
    * @return true if the record was not successfully processed, and we should not commit its offset
    */
-  private boolean handleMalformedDocResponse(BulkItemResponse response) {
-    String errorMsg = String.format("Encountered an illegal document error '%s'."
-            + " Ignoring and will not index record." , getErrorMessage(response, logSensitiveData));
+  private boolean handleMalformedDocResponse() {
+    String errorMsg = "Encountered an illegal document error."
+            + " Ignoring and will not index record. "
+            + "Please check DLQ topic for errors.";
     switch (config.behaviorOnMalformedDoc()) {
       case IGNORE:
         log.debug(errorMsg);
@@ -663,17 +642,17 @@ public class ElasticsearchClient {
         return false;
       case FAIL:
       default:
-        log.error(String.format("Encountered an illegal document error '%s'."
+        log.error(String.format("Encountered an illegal document error. "
+              + "Please check DLQ topic for errors."
               + " To ignore future records like this,"
               + " change the configuration '%s' to '%s'.",
-              getErrorMessage(response, logSensitiveData),
               ElasticsearchSinkConnectorConfig.BEHAVIOR_ON_MALFORMED_DOCS_CONFIG,
               BehaviorOnMalformedDoc.IGNORE)
         );
         error.compareAndSet(
             null,
             new ConnectException(
-                    "Indexing record failed -> " + getErrorMessage(response, logSensitiveData))
+                    "Indexing record failed. Please check DLQ topic for errors.")
         );
         return true;
     }
@@ -715,20 +694,12 @@ public class ElasticsearchClient {
   }
 
   /**
-   * Reports a bad record to the DLQ.
+   * Reports a bad record and errors to the DLQ.
    *
    * @param response    the failed response from ES
    * @param executionId the execution id of the request associated with the response
    */
-  private synchronized void reportBadRecord(BulkItemResponse response,
-                                            long executionId) {
-
-    // RCCA-7507 : Don't push to DLQ if we receive Internal version conflict on data streams
-    if (response.getFailureMessage().contains(VERSION_CONFLICT_EXCEPTION)
-            && config.isDataStream()) {
-      log.debug("Skipping DLQ insertion for DataStream type.");
-      return;
-    }
+  private synchronized void reportBadRecordAndErrors(BulkItemResponse response,long executionId) {
     if (reporter != null) {
       List<SinkRecordAndOffset> sinkRecords =
           inFlightRequests.getOrDefault(executionId, new ArrayList<>());
@@ -738,7 +709,7 @@ public class ElasticsearchClient {
       if (original != null) {
         reporter.report(
             original.sinkRecord,
-            new ReportingException("Indexing failed: " + getErrorMessage(response,logSensitiveData))
+            new ReportingException("Indexing failed: " + response.getFailureMessage())
         );
       }
     }
