@@ -696,6 +696,13 @@ public class ElasticsearchClient {
    * @param executionId the execution id of the request associated with the response
    */
   private synchronized void reportBadRecordAndError(BulkItemResponse response, long executionId) {
+
+    // RCCA-7507 : Don't push to DLQ if we receive Internal version conflict on data streams
+    if (response.getFailureMessage().contains(VERSION_CONFLICT_EXCEPTION)
+            && config.isDataStream()) {
+      log.debug("Skipping DLQ insertion for DataStream type.");
+      return;
+    }
     if (reporter != null) {
       List<SinkRecordAndOffset> sinkRecords =
           inFlightRequests.getOrDefault(executionId, new ArrayList<>());
