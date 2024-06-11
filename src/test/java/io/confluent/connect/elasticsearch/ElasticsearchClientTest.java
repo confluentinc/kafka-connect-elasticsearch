@@ -497,6 +497,13 @@ public class ElasticsearchClientTest {
     waitUntilRecordsInES(1);
   }
 
+  /**
+   * Test that verifies the following when behavior.on.malformed.docs is set to IGNORE:
+   * - The reporter is called which reports all the errors along with bad records to DLQ.
+   * - The connector doesn't fail and keeps processing other records.
+   *
+   * @throws Exception
+   */
   @Test
   public void testReporter() throws Exception {
     props.put(IGNORE_KEY_CONFIG, "false");
@@ -516,6 +523,53 @@ public class ElasticsearchClientTest {
         .name("record")
         .field("offset", SchemaBuilder.bool().defaultValue(false).build())
         .build();
+    Struct value = new Struct(schema).put("offset", false);
+    SinkRecord badRecord = sinkRecord("key0", schema, value, 1);
+
+    writeRecord(sinkRecord("key0", 0), client);
+    client.flush();
+    waitUntilRecordsInES(1);
+
+    writeRecord(badRecord, client);
+    client.flush();
+
+    // failed requests take a bit longer
+    for (int i = 2; i < 7; i++) {
+      writeRecord(sinkRecord("key" + i, i + 1), client);
+      client.flush();
+      waitUntilRecordsInES(i);
+    }
+
+    verify(reporter, times(1)).report(eq(badRecord), any(Throwable.class));
+    client.close();
+  }
+
+  /**
+   * Test that verifies the following when behavior.on.malformed.docs is set to FAIL:
+   * - The reporter is called which reports all the errors along with bad records to DLQ
+   * - The connector fails as expected and throws ConnectException.
+   *
+   * @throws Exception
+   */
+  @Test(expected = ConnectException.class)
+  public void testReporterWithFail() throws Exception {
+    props.put(IGNORE_KEY_CONFIG, "false");
+    props.put(BEHAVIOR_ON_MALFORMED_DOCS_CONFIG, BehaviorOnMalformedDoc.FAIL.name());
+    config = new ElasticsearchSinkConnectorConfig(props);
+    converter = new DataConverter(config);
+
+    ErrantRecordReporter reporter = mock(ErrantRecordReporter.class);
+    when(reporter.report(any(), any()))
+            .thenReturn(CompletableFuture.completedFuture(null));
+    ElasticsearchClient client = new ElasticsearchClient(config, reporter, () -> offsetTracker.updateOffsets());
+    client.createIndexOrDataStream(index);
+    client.createMapping(index, schema());
+
+    Schema schema = SchemaBuilder
+            .struct()
+            .name("record")
+            .field("offset", SchemaBuilder.bool().defaultValue(false).build())
+            .build();
     Struct value = new Struct(schema).put("offset", false);
     SinkRecord badRecord = sinkRecord("key0", schema, value, 1);
 
