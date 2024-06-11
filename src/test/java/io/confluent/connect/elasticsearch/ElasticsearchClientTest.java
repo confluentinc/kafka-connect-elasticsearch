@@ -491,6 +491,45 @@ public class ElasticsearchClientTest {
     client.close();
   }
 
+
+  @Test(expected = ConnectException.class)
+  public void testReporterWithFail() throws Exception {
+    props.put(IGNORE_KEY_CONFIG, "false");
+    props.put(BEHAVIOR_ON_MALFORMED_DOCS_CONFIG, BehaviorOnMalformedDoc.FAIL.name());
+    config = new ElasticsearchSinkConnectorConfig(props);
+    converter = new DataConverter(config);
+
+    ErrantRecordReporter reporter = mock(ErrantRecordReporter.class);
+    ElasticsearchClient client = new ElasticsearchClient(config, reporter);
+    client.createIndex(INDEX);
+    client.createMapping(INDEX, schema());
+
+    Schema schema = SchemaBuilder
+            .struct()
+            .name("record")
+            .field("offset", SchemaBuilder.bool().defaultValue(false).build())
+            .build();
+    Struct value = new Struct(schema).put("offset", false);
+    SinkRecord badRecord = new SinkRecord(INDEX, 0, Schema.STRING_SCHEMA, "key0", schema, value, 1);
+
+    writeRecord(sinkRecord("key0", 0), client);
+    client.flush();
+    waitUntilRecordsInES(1);
+
+    writeRecord(badRecord, client);
+    client.flush();
+
+    // failed requests take a bit longer
+    for (int i = 2; i < 7; i++) {
+      writeRecord(sinkRecord("key" + i, i + 1), client);
+      client.flush();
+      waitUntilRecordsInES(i);
+    }
+
+    verify(reporter, times(1)).report(eq(badRecord), any(Throwable.class));
+    client.close();
+  }
+
   @Test
   public void testReporterNotCalled() throws Exception {
     ErrantRecordReporter reporter = mock(ErrantRecordReporter.class);
