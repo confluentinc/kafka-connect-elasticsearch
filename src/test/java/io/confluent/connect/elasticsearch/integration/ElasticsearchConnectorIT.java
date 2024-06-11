@@ -191,4 +191,28 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
       }
     }
   }
+
+  @Test
+  public void testErrorReporting() throws Exception {
+    props.put(WRITE_METHOD_CONFIG, WriteMethod.UPSERT.toString());
+    props.put(IGNORE_KEY_CONFIG, "false");
+    runSimpleTest(props);
+
+    // should have 10 records at this point
+    // try updating last one
+    int lastRecord = NUM_RECORDS - 1;
+    connect.kafka().produce(TOPIC, String.valueOf(lastRecord), String.format("{\"doc_num\":%d}", 0));
+    writeRecordsFromStartIndex(NUM_RECORDS, NUM_RECORDS);
+
+    // should have double number of records
+    verifySearchResults(NUM_RECORDS * 2);
+
+    for (SearchHit hit : helperClient.search(TOPIC)) {
+      if (Integer.parseInt(hit.getId()) == lastRecord) {
+        // last record should be updated
+        int docNum = (Integer) hit.getSourceAsMap().get("doc_num");
+        assertEquals(0, docNum);
+      }
+    }
+  }
 }

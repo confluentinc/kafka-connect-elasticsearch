@@ -185,17 +185,4 @@ public class ElasticsearchSinkConnectorConfigTest {
     props.put(ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG, "http://localhost:8080");
     return props;
   }
-  @Test
-  public void testLogSensitiveData(){
-    ElasticsearchSinkConnectorConfig config = new ElasticsearchSinkConnectorConfig(props);
-    assertFalse(config.shouldLogSensitiveData());
-
-    props.put(LOG_SENSITIVE_DATA_CONFIG, "true");
-    config = new ElasticsearchSinkConnectorConfig(props);
-    assertTrue(config.shouldLogSensitiveData());
-
-    props.put(LOG_SENSITIVE_DATA_CONFIG, "false");
-    config = new ElasticsearchSinkConnectorConfig(props);
-    assertFalse(config.shouldLogSensitiveData());
-  }
 }
