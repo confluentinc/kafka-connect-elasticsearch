@@ -85,6 +85,7 @@ public class ElasticsearchSinkTask extends SinkTask {
   @Override
   public void put(Collection<SinkRecord> records) throws ConnectException {
     log.debug("Putting {} records to Elasticsearch.", records.size());
+    // Additional check to fail the connector if the ES client has errors
     client.throwIfFailed();
     for (SinkRecord record : records) {
       if (shouldSkipRecord(record)) {

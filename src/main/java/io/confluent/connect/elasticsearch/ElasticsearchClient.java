@@ -95,8 +95,6 @@ public class ElasticsearchClient {
           "action_request_validation_exception"
       )
   );
-
-  private final boolean logSensitiveData;
   protected final AtomicInteger numRecords;
   private final AtomicReference<ConnectException> error;
   protected final BulkProcessor bulkProcessor;
@@ -120,7 +118,6 @@ public class ElasticsearchClient {
     this.config = config;
     this.reporter = reporter;
     this.clock = Time.SYSTEM;
-    this.logSensitiveData = config.shouldLogSensitiveData();
 
     ConfigCallbackHandler configCallbackHandler = new ConfigCallbackHandler(config);
     this.client = new RestHighLevelClient(
@@ -431,7 +428,7 @@ public class ElasticsearchClient {
       for (String error : MALFORMED_DOC_ERRORS) {
         if (response.getFailureMessage().contains(error)) {
           handleMalformedDocResponse();
-          reportBadRecordAndErrors(response, executionId);
+          reportBadRecordAndError(response, executionId);
           return;
         }
       }
@@ -452,7 +449,7 @@ public class ElasticsearchClient {
           );
           // Maybe this was a race condition?  Put it in the DLQ in case someone
           // wishes to investigate.
-          reportBadRecordAndErrors(response, executionId);
+          reportBadRecordAndError(response, executionId);
         } else {
           // This is an out-of-order or (more likely) repeated topic offset.  Allow the
           // higher offset's value for this key to remain.
@@ -468,8 +465,9 @@ public class ElasticsearchClient {
                   response.getIndex()
           );
         }
+      } else {
+        reportBadRecordAndError(response, executionId);
       }
-      reportBadRecordAndErrors(response, executionId);
       error.compareAndSet(
           null,
           new ConnectException("Indexing record failed. "
@@ -552,7 +550,7 @@ public class ElasticsearchClient {
    * @param response    the failed response from ES
    * @param executionId the execution id of the request associated with the response
    */
-  private synchronized void reportBadRecordAndErrors(BulkItemResponse response, long executionId) {
+  private synchronized void reportBadRecordAndError(BulkItemResponse response, long executionId) {
     if (reporter != null) {
       List<SinkRecord> sinkRecords = inFlightRequests.getOrDefault(executionId, new ArrayList<>());
       SinkRecord original = sinkRecords.size() > response.getItemId()
