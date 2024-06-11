@@ -95,8 +95,6 @@ public class ElasticsearchClient {
           "action_request_validation_exception"
       )
   );
-
-  private final boolean logSensitiveData;
   protected final AtomicInteger numRecords;
   private final AtomicReference<ConnectException> error;
   protected final BulkProcessor bulkProcessor;
@@ -120,7 +118,6 @@ public class ElasticsearchClient {
     this.config = config;
     this.reporter = reporter;
     this.clock = Time.SYSTEM;
-    this.logSensitiveData = config.shouldLogSensitiveData();
 
     ConfigCallbackHandler configCallbackHandler = new ConfigCallbackHandler(config);
     this.client = new RestHighLevelClient(
@@ -468,8 +465,9 @@ public class ElasticsearchClient {
                   response.getIndex()
           );
         }
+      } else {
+        reportBadRecordAndErrors(response, executionId);
       }
-      reportBadRecordAndErrors(response, executionId);
       error.compareAndSet(
           null,
           new ConnectException("Indexing record failed. "
