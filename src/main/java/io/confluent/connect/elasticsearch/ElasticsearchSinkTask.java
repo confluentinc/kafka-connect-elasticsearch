@@ -95,7 +95,6 @@ public class ElasticsearchSinkTask extends SinkTask {
   @Override
   public void put(Collection<SinkRecord> records) throws ConnectException {
     log.debug("Putting {} records to Elasticsearch.", records.size());
-
     client.throwIfFailed();
     partitionPauser.maybeResumePartitions();
 
