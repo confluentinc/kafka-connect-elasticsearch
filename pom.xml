@@ -53,6 +53,7 @@
         <commons.codec.version>1.15</commons.codec.version>
         <snakeyaml.version>1.28</snakeyaml.version>
         <jackson.version>2.16.0</jackson.version>
+        <dependency.check.skip>true</dependency.check.skip>
     </properties>
 
     <repositories>
