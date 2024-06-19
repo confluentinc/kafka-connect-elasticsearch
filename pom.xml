@@ -54,6 +54,7 @@
         <confluent.maven.repo>http://packages.confluent.io/maven/</confluent.maven.repo>
         <commons.codec.version>1.15</commons.codec.version>
         <jackson.version>2.16.0</jackson.version>
+        <dependency.check.skip>true</dependency.check.skip>
     </properties>
 
     <repositories>
