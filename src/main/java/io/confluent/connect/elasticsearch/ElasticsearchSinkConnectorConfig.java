@@ -71,6 +71,11 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   private static final String CONNECTION_PASSWORD_DISPLAY = "Connection Password";
   private static final String CONNECTION_PASSWORD_DEFAULT = null;
 
+  public static final String INDEX_NAME_CONFIG = "index.name";
+  private static final String INDEX_NAME_DOC = "Target index name";
+  private static final String INDEX_NAME_DISPLAY = "Index name";
+
+
   public static final String BATCH_SIZE_CONFIG = "batch.size";
   private static final String BATCH_SIZE_DOC =
       "The number of records to process as a batch when writing to Elasticsearch.";
@@ -449,6 +454,16 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
             ++order,
             Width.SHORT,
             CONNECTION_PASSWORD_DISPLAY
+        ).define(
+            INDEX_NAME_CONFIG,
+            Type.STRING,
+            null,
+            Importance.HIGH,
+            INDEX_NAME_DOC,
+            CONNECTOR_GROUP,
+            ++order,
+            Width.SHORT,
+            INDEX_NAME_DISPLAY
         ).define(
             BATCH_SIZE_CONFIG,
             Type.INT,
@@ -987,6 +1002,10 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
 
   public Password password() {
     return getPassword(CONNECTION_PASSWORD_CONFIG);
+  }
+
+  public String indexName() {
+    return getString(INDEX_NAME_CONFIG);
   }
 
   public String proxyHost() {
