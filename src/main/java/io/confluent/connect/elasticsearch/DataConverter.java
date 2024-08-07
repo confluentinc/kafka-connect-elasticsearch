@@ -252,7 +252,9 @@ public class DataConverter {
       DocWriteRequest<?> request,
       SinkRecord record
   ) {
-    if (!config.isDataStream() && !config.shouldIgnoreKey(record.topic())) {
+    if (!config.shouldIgnoreVersion() 
+        && !config.isDataStream() 
+        && !config.shouldIgnoreKey(record.topic())) {
       request.versionType(VersionType.EXTERNAL);
       if (config.hasExternalVersionHeader()) {
         final Header versionHeader = record.headers().lastWithName(config.externalVersionHeader());
