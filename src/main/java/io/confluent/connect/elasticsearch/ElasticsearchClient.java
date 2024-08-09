@@ -530,13 +530,13 @@ public class ElasticsearchClient {
         // the version conflict is due to a repeated or out-of-order message offset
         // and thus can be ignored, since the newer value (higher offset) should
         // remain the key's value in any case.
-        if (request == null || request.versionType() != VersionType.EXTERNAL) {
+        if (request == null || (request.versionType() != VersionType.EXTERNAL) && (request.versionType() != VersionType.EXTERNAL_GTE)) {
           log.warn("{} version conflict for operation {} on document '{}' version {}"
                           + " in index '{}'.",
                   request != null ? request.versionType() : "UNKNOWN",
                   response.getOpType(),
                   response.getId(),
-                  response.getVersion(),
+                  request != null ? request.version() : response.getVersion(),
                   response.getIndex()
           );
           // Maybe this was a race condition?  Put it in the DLQ in case someone
