@@ -43,5 +43,4 @@ public class ElasticsearchConnectorApikeyIT extends ElasticsearchConnectorBaseIT
     String apikey = container.getAPIkeys().get(ELASTIC_MINIMAL_PRIVILEGES_NAME);
     props.put(CONNECTION_APIKEY_CONFIG, apikey);
   }
-
 }
