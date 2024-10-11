@@ -15,10 +15,8 @@
 
 package io.confluent.connect.elasticsearch.helper;
 
-import io.confluent.connect.elasticsearch.ElasticsearchClient;
-import io.confluent.connect.elasticsearch.RetryUtil;
+import co.elastic.clients.elasticsearch.security.GrantApiKeyResponse;
 import org.apache.kafka.common.config.SslConfigs;
-import org.apache.kafka.test.TestUtils;
 import org.elasticsearch.client.security.user.User;
 import org.elasticsearch.client.security.user.privileges.Role;
 import org.slf4j.Logger;
@@ -26,12 +24,9 @@ import org.slf4j.LoggerFactory;
 import org.testcontainers.containers.ContainerLaunchException;
 import org.testcontainers.containers.output.OutputFrame;
 import org.testcontainers.containers.wait.strategy.Wait;
-import org.testcontainers.containers.wait.strategy.WaitStrategyTarget;
-import org.testcontainers.images.RemoteDockerImage;
 import org.testcontainers.images.builder.ImageFromDockerfile;
 import org.testcontainers.images.builder.dockerfile.DockerfileBuilder;
 import org.testcontainers.shaded.org.apache.commons.io.IOUtils;
-import org.testcontainers.utility.DockerImageName;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -40,8 +35,10 @@ import java.io.InputStream;
 import java.net.InetAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -147,6 +144,7 @@ public class ElasticsearchContainer
   private Map<User, String> usersToCreate;
   private String localKeystorePath;
   private String localTruststorePath;
+  private Map<String, String> apiKeysToCreate;
 
   /**
    * Create an Elasticsearch container with the given image name with version qualifier.
@@ -179,6 +177,9 @@ public class ElasticsearchContainer
       ElasticsearchHelperClient helperClient = getHelperClient(props);
       helperClient.waitForConnection(30000);
       createUsersAndRoles(helperClient);
+      if (isApikeyEnabled()) {
+        createApikeys(helperClient);
+      }
     }
   }
 
@@ -204,6 +205,21 @@ public class ElasticsearchContainer
     }
   }
 
+  private void createApikeys(ElasticsearchHelperClient helperClient ) {
+    try {
+      for (Map.Entry<User,String> userToPassword: this.usersToCreate.entrySet()) {
+        GrantApiKeyResponse grantApiKeyResponse = helperClient.grantApiKey(userToPassword, this.rolesToCreate);
+        String apiKey =
+            Base64.getEncoder().encodeToString(
+                (grantApiKeyResponse.id() + ":" + grantApiKeyResponse.apiKey())
+                    .getBytes(StandardCharsets.UTF_8));
+        apiKeysToCreate.put(userToPassword.getKey().getUsername(), apiKey);
+      }
+    } catch (IOException e) {
+      throw new ContainerLaunchException("Container startup failed", e);
+    }
+  }
+
   public ElasticsearchContainer withSslEnabled(boolean enable) {
     enableSsl(enable);
     return this;
@@ -216,6 +232,12 @@ public class ElasticsearchContainer
 
   public ElasticsearchContainer withBasicAuth(Map<User, String> users, List<Role> roles) {
     enableBasicAuth(users, roles);
+    return this;
+  }
+
+  public ElasticsearchContainer withApikey(Map<User, String> users, List<Role> roles) {
+    enableBasicAuth(users, roles);
+    enableApikeys(users);
     return this;
   }
 
@@ -289,8 +311,22 @@ public class ElasticsearchContainer
     this.rolesToCreate = roles;
   }
 
+  private void enableApikeys(Map<User, String> users) {
+    if (isKerberosEnabled()) {
+      throw new IllegalStateException(
+          "Api Keys and Kerberos are mutually exclusive."
+      );
+    }
+    this.apiKeysToCreate = new HashMap<>();
+    users.keySet().stream().forEach(user -> this.apiKeysToCreate.put(user.getUsername(), null));
+  }
+
   public boolean isBasicAuthEnabled() {
     return usersToCreate != null && !this.usersToCreate.isEmpty();
+  }
+
+  public boolean isApikeyEnabled() {
+    return apiKeysToCreate != null && !this.apiKeysToCreate.isEmpty();
   }
 
   private String getFullResourcePath(String resourceName) {
@@ -600,5 +636,9 @@ public class ElasticsearchContainer
 
   public int esMajorVersion() {
     return getImageVersion().get(0);
+  }
+
+  public Map<String, String> getAPIkeys() {
+    return apiKeysToCreate;
   }
 }
