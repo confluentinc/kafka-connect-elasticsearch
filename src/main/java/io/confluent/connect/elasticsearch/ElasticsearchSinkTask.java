@@ -198,7 +198,7 @@ public class ElasticsearchSinkTask extends SinkTask {
     }
     String dataStream = String.format(
         "%s-%s-%s",
-        config.dataStreamType().name().toLowerCase(),
+        config.dataStreamType().toLowerCase(),
         config.dataStreamDataset(),
         namespace
     );
