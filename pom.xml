@@ -9,7 +9,7 @@
     </parent>
 
     <artifactId>kafka-connect-elasticsearch</artifactId>
-    <version>14.1.3-SNAPSHOT</version>
+    <version>14.1.2-SNAPSHOT</version>
     <packaging>jar</packaging>
     <name>kafka-connect-elasticsearch</name>
     <organization>
