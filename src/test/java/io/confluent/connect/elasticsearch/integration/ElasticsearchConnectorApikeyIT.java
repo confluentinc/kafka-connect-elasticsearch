@@ -2,15 +2,12 @@ package io.confluent.connect.elasticsearch.integration;
 
 import io.confluent.common.utils.IntegrationTest;
 import io.confluent.connect.elasticsearch.helper.ElasticsearchContainer;
-import org.apache.http.Header;
-import org.apache.http.message.BasicHeader;
 import org.elasticsearch.client.security.user.User;
 import org.elasticsearch.client.security.user.privileges.Role;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_APIKEY_CONFIG;
