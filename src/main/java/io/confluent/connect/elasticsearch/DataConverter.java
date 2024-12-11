@@ -175,10 +175,12 @@ public class DataConverter {
     // index
     switch (config.writeMethod()) {
       case UPSERT:
-        return new UpdateRequest(index, id)
+        UpdateRequest updateRequest = new UpdateRequest(index, id)
             .doc(payload, XContentType.JSON)
-            .upsert(payload, XContentType.JSON)
+            .docAsUpsert(true)
             .retryOnConflict(Math.min(config.maxInFlightRequests(), 5));
+        log.debug("updaterequest docasupsert: {}", updateRequest.docAsUpsert());
+        return updateRequest;
       case INSERT:
         OpType opType = config.isDataStream() ? OpType.CREATE : OpType.INDEX;
         IndexRequest req =
