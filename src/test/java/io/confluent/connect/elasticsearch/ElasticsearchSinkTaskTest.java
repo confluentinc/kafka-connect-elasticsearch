@@ -73,6 +73,7 @@ public class ElasticsearchSinkTaskTest {
   }
 
   protected static final String TOPIC = "topic";
+  private static final String ALIAS = "alias";
 
   protected ElasticsearchClient client;
   private ElasticsearchSinkTask task;
@@ -222,11 +223,13 @@ public class ElasticsearchSinkTaskTest {
 
   @Test
   public void testCheckMapping() {
+    when(client.resolveIndexIfAlias(TOPIC)).thenReturn(TOPIC);
     when(client.hasMapping(TOPIC)).thenReturn(true);
 
     SinkRecord record = record();
     when(assignment.contains(eq(new TopicPartition(TOPIC, 1)))).thenReturn(true);
     task.put(Collections.singletonList(record));
+    verify(client, times(1)).resolveIndexIfAlias(eq(TOPIC));
     verify(client, times(1)).hasMapping(eq(TOPIC));
     verify(client, never()).createMapping(eq(TOPIC), eq(record.valueSchema()));
   }
@@ -235,7 +238,9 @@ public class ElasticsearchSinkTaskTest {
   public void testAddMapping() {
     SinkRecord record = record();
     when(assignment.contains(eq(new TopicPartition(TOPIC, 1)))).thenReturn(true);
+    when(client.resolveIndexIfAlias(TOPIC)).thenReturn(TOPIC);
     task.put(Collections.singletonList(record));
+    verify(client, times(1)).resolveIndexIfAlias(eq(TOPIC));
     verify(client, times(1)).hasMapping(eq(TOPIC));
     verify(client, times(1)).createMapping(eq(TOPIC), eq(record.valueSchema()));
   }
@@ -244,11 +249,30 @@ public class ElasticsearchSinkTaskTest {
   public void testDoNotAddCachedMapping() {
     SinkRecord record = record();
     when(assignment.contains(eq(new TopicPartition(TOPIC, 1)))).thenReturn(true);
+    when(client.resolveIndexIfAlias(TOPIC)).thenReturn(TOPIC);
     task.put(Collections.singletonList(record));
+    verify(client, times(1)).resolveIndexIfAlias(eq(TOPIC));
     verify(client, times(1)).hasMapping(eq(TOPIC));
     verify(client, times(1)).createMapping(eq(TOPIC), eq(record.valueSchema()));
 
     task.put(Collections.singletonList(record));
+    verify(client, times(1)).resolveIndexIfAlias(eq(TOPIC));
+    verify(client, times(1)).hasMapping(eq(TOPIC));
+    verify(client, times(1)).createMapping(eq(TOPIC), eq(record.valueSchema()));
+  }
+
+  @Test
+  public void testDoNotAddCachedMappingForAlias() {
+    SinkRecord record = record(ALIAS, true, false, 0);
+    when(assignment.contains(eq(new TopicPartition(ALIAS, 1)))).thenReturn(true);
+    when(client.resolveIndexIfAlias(ALIAS)).thenReturn(TOPIC);
+    task.put(Collections.singletonList(record));
+    verify(client, times(1)).resolveIndexIfAlias(eq(ALIAS));
+    verify(client, times(1)).hasMapping(eq(TOPIC));
+    verify(client, times(1)).createMapping(eq(TOPIC), eq(record.valueSchema()));
+
+    task.put(Collections.singletonList(record));
+    verify(client, times(1)).resolveIndexIfAlias(eq(ALIAS));
     verify(client, times(1)).hasMapping(eq(TOPIC));
     verify(client, times(1)).createMapping(eq(TOPIC), eq(record.valueSchema()));
   }
