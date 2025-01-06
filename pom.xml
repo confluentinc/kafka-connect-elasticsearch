@@ -55,8 +55,6 @@
         <commons.codec.version>1.15</commons.codec.version>
         <confluent.version>7.9.0-400</confluent.version>
         <kafka.version>7.9.0-136-ce</kafka.version>
-        <jetty.version>9.4.53.v20231009</jetty.version>
-        <netty.version>4.1.100.Final</netty.version>
         <jackson.version>2.16.0</jackson.version>
         <dependency.check.skip>true</dependency.check.skip>
     </properties>
