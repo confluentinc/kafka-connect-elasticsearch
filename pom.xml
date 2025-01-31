@@ -107,11 +107,6 @@
         </dependency>
         <!-- pin commons-codec for CVE -->
         <dependency>
-            <groupId>commons-codec</groupId>
-            <artifactId>commons-codec</artifactId>
-            <version>1.15</version>
-        </dependency>
-        <dependency>
             <groupId>org.apache.httpcomponents</groupId>
             <artifactId>httpclient</artifactId>
             <version>4.5.13</version>
@@ -121,17 +116,6 @@
             <artifactId>gson</artifactId>
             <version>${gson.version}</version>
             <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.apache.httpcomponents</groupId>
-            <artifactId>httpclient</artifactId>
-            <version>4.5.13</version>
-        </dependency>
-        <!-- Force commons-codec (httpclient transitive dependency) version to address CVE CCMSG-835 -->
-        <dependency>
-            <groupId>commons-codec</groupId>
-            <artifactId>commons-codec</artifactId>
-            <version>1.15</version>
         </dependency>
         <dependency>
             <groupId>commons-codec</groupId>
@@ -168,12 +152,6 @@
             <version>${kafka.version}</version>
             <classifier>test</classifier>
             <type>test-jar</type>
-            <scope>test</scope>
-        </dependency>
-        <!-- Use a repackaged version of log4j with security patches. Default log4j v1.2 is a transitive dependency of connect-runtime, but it is excluded in common/pom.xml -->
-        <dependency>
-            <groupId>io.confluent</groupId>
-            <artifactId>confluent-log4j</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>
