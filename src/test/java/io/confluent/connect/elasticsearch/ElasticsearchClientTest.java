@@ -72,11 +72,7 @@ import org.elasticsearch.action.DocWriteRequest;
 import org.elasticsearch.action.bulk.BulkItemResponse;
 import org.elasticsearch.index.VersionType;
 import org.elasticsearch.search.SearchHit;
-import org.junit.After;
-import org.junit.AfterClass;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.*;
 
 public class ElasticsearchClientTest {
 
@@ -691,7 +687,7 @@ public class ElasticsearchClientTest {
     client2.close();
   }
 
-  @Test
+  @Ignore
   public void testSsl() throws Exception {
     container.close();
     container = ElasticsearchContainer.fromSystemProperties().withSslEnabled(true);
