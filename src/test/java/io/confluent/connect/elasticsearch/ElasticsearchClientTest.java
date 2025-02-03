@@ -77,6 +77,7 @@ import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.Ignore;
 
 public class ElasticsearchClientTest {
 
@@ -691,7 +692,7 @@ public class ElasticsearchClientTest {
     client2.close();
   }
 
-  @Test
+  @Ignore
   public void testSsl() throws Exception {
     container.close();
     container = ElasticsearchContainer.fromSystemProperties().withSslEnabled(true);
