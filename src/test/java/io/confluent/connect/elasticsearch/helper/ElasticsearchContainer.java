@@ -151,7 +151,7 @@ public class ElasticsearchContainer
   public ElasticsearchContainer(String imageName) {
     super(imageName);
     this.imageName = imageName;
-    withSharedMemorySize(TWO_GIGABYTES);
+    withSharedMemorySize(4*TWO_GIGABYTES);
     withLogConsumer(this::containerLog);
   }
 
