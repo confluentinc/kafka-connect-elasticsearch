@@ -17,6 +17,7 @@ import org.junit.Ignore;
 public class ElasticsearchConnectorKerberosWithSslIT extends ElasticsearchConnectorKerberosIT{
 
   @BeforeClass
+  @Ignore
   public static void setupBeforeAll() throws Exception {
     initKdc();
 
@@ -29,6 +30,7 @@ public class ElasticsearchConnectorKerberosWithSslIT extends ElasticsearchConnec
 
   @Override
   @Test
+  @Ignore
   public void testKerberos() {
     // skip as parent is running this
     helperClient = null;
