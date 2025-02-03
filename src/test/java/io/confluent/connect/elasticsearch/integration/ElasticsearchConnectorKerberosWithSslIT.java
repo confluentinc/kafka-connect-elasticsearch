@@ -29,6 +29,7 @@ public class ElasticsearchConnectorKerberosWithSslIT extends ElasticsearchConnec
 
   @Override
   @Test
+  @Ignore
   public void testKerberos() {
     // skip as parent is running this
     helperClient = null;
