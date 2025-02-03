@@ -6,6 +6,7 @@ Changelog for this connector can be found [here](https://docs.confluent.io/kafka
 kafka-connect-elasticsearch is a [Kafka Connector](http://kafka.apache.org/documentation.html#connect)
 for copying data between Kafka and Elasticsearch.
 
+
 # Development
 
 To build a development version you'll need a recent version of Kafka as well as a set of upstream Confluent projects, which you'll have to build from their appropriate snapshot branch. See the [FAQ](https://github.com/confluentinc/kafka-connect-elasticsearch/wiki/FAQ) for guidance on this process.
