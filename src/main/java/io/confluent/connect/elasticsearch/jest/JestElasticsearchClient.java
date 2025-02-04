@@ -193,7 +193,7 @@ public class JestElasticsearchClient implements ElasticsearchClient {
       builder.defaultCredentials(config.username(), config.password().value())
           .preemptiveAuthTargetHosts(
               addresses.stream().map(addr -> HttpHost.create(addr)).collect(Collectors.toSet())
-        );
+          );
     }
 
     configureProxy(config, builder);
