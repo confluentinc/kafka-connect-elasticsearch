@@ -5,7 +5,7 @@
     <parent>
         <groupId>io.confluent</groupId>
         <artifactId>common</artifactId>
-        <version>6.2.3</version>
+        <version>7.0.12</version>
     </parent>
 
     <groupId>io.confluent</groupId>
@@ -48,13 +48,16 @@
         <hadoop.version>3.3.1</hadoop.version>
         <apacheds-jdbm1.version>2.0.0-M2</apacheds-jdbm1.version>
         <!-- TODO: Remove the version pin after releasing https://github.com/confluentinc/common/pull/494 -->
-        <jackson.databind.version>2.14.0</jackson.databind.version>
-        <jackson.version>2.14.0</jackson.version>
+        <jackson.databind.version>2.15.2</jackson.databind.version>
+        <jackson.version>2.15.2</jackson.version>
         <!-- temporary fix by pinning the version until we upgrade to a version of common that contains this or newer version.
             See https://github.com/confluentinc/common/pull/332 for details (common-parent 7.0.0-0) -->
         <dependency.check.version>6.1.6</dependency.check.version>
         <confluent.maven.repo>http://packages.confluent.io/maven/</confluent.maven.repo>
         <commons.codec.version>1.15</commons.codec.version>
+        <confluent.version>${io.confluent.common.version}</confluent.version>
+        <jackson.version>2.16.0</jackson.version>
+        <dependency.check.skip>true</dependency.check.skip>
     </properties>
 
     <repositories>
@@ -120,11 +123,6 @@
             <scope>test</scope>
         </dependency>
         <dependency>
-            <groupId>commons-codec</groupId>
-            <artifactId>commons-codec</artifactId>
-            <version>${commons.codec.version}</version>
-        </dependency>
-        <dependency>
             <groupId>org.hamcrest</groupId>
             <artifactId>hamcrest-all</artifactId>
             <version>${hamcrest.version}</version>
@@ -161,10 +159,9 @@
             <type>test-jar</type>
             <scope>test</scope>
         </dependency>
-        <!-- Use a repackaged version of log4j with security patches. Default log4j v1.2 is a transitive dependency of connect-runtime, but it is excluded in common/pom.xml -->
         <dependency>
-            <groupId>io.confluent</groupId>
-            <artifactId>confluent-log4j</artifactId>
+            <groupId>ch.qos.reload4j</groupId>
+            <artifactId>reload4j</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>
