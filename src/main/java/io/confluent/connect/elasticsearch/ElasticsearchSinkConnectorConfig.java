@@ -320,7 +320,8 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   public static final String DATA_STREAM_DATASET_OVERRIDE_CONFIG = "data.stream.dataset.override";
   private static final String DATA_STREAM_DATASET_OVERRIDE_DOC =
           "Overrides data stream name if not empty";
-  private static final String DATA_STREAM_DATASET_OVERRIDE_DISPLAY = "Data Stream name override - fixed for all topics";
+  private static final String DATA_STREAM_DATASET_OVERRIDE_DISPLAY =
+          "Data Stream name override - fixed for all topics";
   private static final String DATA_STREAM_DATASET_OVERRIDE_DEFAULT = "";
 
   // Data stream configs
