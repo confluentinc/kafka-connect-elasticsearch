@@ -21,6 +21,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.function.BooleanSupplier;
 
+import jdk.internal.joptsimple.internal.Strings;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.connect.errors.ConnectException;
@@ -201,7 +202,11 @@ public class ElasticsearchSinkTask extends SinkTask {
         config.dataStreamDataset(),
         topic
     );
-    return dataStream;
+    if (Strings.isNullOrEmpty(config.dataStreamNameOverride())) {
+      return dataStream;
+    } else {
+      return config.dataStreamNameOverride();
+    }
   }
 
   /**
