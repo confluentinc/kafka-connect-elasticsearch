@@ -317,6 +317,13 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
       + " authentication with Kerberos.";
   private static final String KERBEROS_KEYTAB_PATH_DEFAULT = null;
 
+  public static final String DATA_STREAM_DATASET_OVERRIDE_CONFIG = "data.stream.dataset.override";
+  private static final String DATA_STREAM_DATASET_OVERRIDE_DOC =
+          "Overrides data stream name if not empty";
+  private static final String DATA_STREAM_DATASET_OVERRIDE_DISPLAY =
+          "Data Stream name override - fixed for all topics";
+  private static final String DATA_STREAM_DATASET_OVERRIDE_DEFAULT = "";
+
   // Data stream configs
   public static final String DATA_STREAM_DATASET_CONFIG = "data.stream.dataset";
   private static final String DATA_STREAM_DATASET_DOC =
@@ -907,6 +914,10 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
 
   public String dataStreamDataset() {
     return getString(DATA_STREAM_DATASET_CONFIG);
+  }
+
+  public String dataStreamNameOverride() {
+    return getString(DATA_STREAM_DATASET_OVERRIDE_CONFIG);
   }
 
   public DataStreamType dataStreamType() {

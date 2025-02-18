@@ -30,6 +30,7 @@ import org.apache.kafka.connect.sink.SinkRecord;
 import org.apache.kafka.connect.sink.SinkTask;
 import org.apache.kafka.connect.sink.SinkTaskContext;
 import org.opensearch.action.DocWriteRequest;
+import org.opensearch.core.common.Strings;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -201,7 +202,11 @@ public class ElasticsearchSinkTask extends SinkTask {
         config.dataStreamDataset(),
         topic
     );
-    return dataStream;
+    if (Strings.isNullOrEmpty(config.dataStreamNameOverride())) {
+      return dataStream;
+    } else {
+      return config.dataStreamNameOverride();
+    }
   }
 
   /**
