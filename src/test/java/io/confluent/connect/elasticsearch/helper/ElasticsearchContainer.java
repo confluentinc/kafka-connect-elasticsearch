@@ -19,8 +19,6 @@ import io.confluent.connect.elasticsearch.ElasticsearchClient;
 import io.confluent.connect.elasticsearch.RetryUtil;
 import org.apache.kafka.common.config.SslConfigs;
 import org.apache.kafka.test.TestUtils;
-import org.elasticsearch.client.security.user.User;
-import org.elasticsearch.client.security.user.privileges.Role;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.testcontainers.containers.ContainerLaunchException;
@@ -143,8 +141,6 @@ public class ElasticsearchContainer
   private final String imageName;
   private boolean enableSsl = false;
   private String keytabPath;
-  private List<Role> rolesToCreate;
-  private Map<User, String> usersToCreate;
   private String localKeystorePath;
   private String localTruststorePath;
 
@@ -165,21 +161,6 @@ public class ElasticsearchContainer
     super.start();
 
     String address;
-    if (isBasicAuthEnabled()) {
-      Map<String, String> props = new HashMap<>();
-      props.put(CONNECTION_USERNAME_CONFIG, ELASTIC_SUPERUSER_NAME);
-      props.put(CONNECTION_PASSWORD_CONFIG, ELASTIC_SUPERUSER_PASSWORD);
-      if (isSslEnabled()) {
-        addSslProps(props);
-        address = this.getConnectionUrl(false);
-      } else {
-        address = this.getConnectionUrl();
-      }
-      props.put(CONNECTION_URL_CONFIG, address);
-      ElasticsearchHelperClient helperClient = getHelperClient(props);
-      helperClient.waitForConnection(30000);
-      createUsersAndRoles(helperClient);
-    }
   }
 
   public void addSslProps(Map<String, String> props) {
@@ -191,18 +172,6 @@ public class ElasticsearchContainer
     props.put(SSL_CONFIG_PREFIX + SslConfigs.SSL_KEY_PASSWORD_CONFIG, this.getKeyPassword());
   }
 
-  private void createUsersAndRoles(ElasticsearchHelperClient helperClient ) {
-    try {
-      for (Role role: this.rolesToCreate) {
-        helperClient.createRole(role);
-      }
-      for (Map.Entry<User,String> userToPassword: this.usersToCreate.entrySet()) {
-        helperClient.createUser(userToPassword);
-      }
-    } catch (IOException e) {
-      throw new ContainerLaunchException("Container startup failed", e);
-    }
-  }
 
   public ElasticsearchContainer withSslEnabled(boolean enable) {
     enableSsl(enable);
@@ -211,11 +180,6 @@ public class ElasticsearchContainer
 
   public ElasticsearchContainer withKerberosEnabled(String keytab) {
     enableKerberos(keytab);
-    return this;
-  }
-
-  public ElasticsearchContainer withBasicAuth(Map<User, String> users, List<Role> roles) {
-    enableBasicAuth(users, roles);
     return this;
   }
 
@@ -257,11 +221,6 @@ public class ElasticsearchContainer
           "enableKerberos can only be used before the container is created."
       );
     }
-    if (isBasicAuthEnabled()) {
-      throw new IllegalStateException(
-          "basic auth and Kerberos are mutually exclusive."
-      );
-    }
     keytabPath = keytab;
   }
 
@@ -274,25 +233,6 @@ public class ElasticsearchContainer
     return keytabPath != null;
   }
 
-  private void enableBasicAuth(Map<User, String> users, List<Role> roles) {
-    if (isCreated()) {
-      throw new IllegalStateException(
-          "enableBasicAuth can only be used before the container is created."
-      );
-    }
-    if (isKerberosEnabled()) {
-      throw new IllegalStateException(
-          "basic auth and Kerberos are mutually exclusive."
-      );
-    }
-    this.usersToCreate = users;
-    this.rolesToCreate = roles;
-  }
-
-  public boolean isBasicAuthEnabled() {
-    return usersToCreate != null && !this.usersToCreate.isEmpty();
-  }
-
   private String getFullResourcePath(String resourceName) {
     if (isSslEnabled() && isKerberosEnabled()) {
       return "/both/" + resourceName;
@@ -300,8 +240,6 @@ public class ElasticsearchContainer
       return "/ssl/" + resourceName;
     } else if (isKerberosEnabled()) {
       return "/kerberos/" + resourceName;
-    } else if (isBasicAuthEnabled()) {
-      return "/basic/" + resourceName;
     } else {
       return "/none/" + resourceName;
     }
@@ -324,11 +262,7 @@ public class ElasticsearchContainer
         .withDockerfileFromBuilder(this::buildImage);
 
     // Kerberos and basic auth are mutually exclusive authentication options
-    if (isBasicAuthEnabled()) {
-      log.info("Setting up basic authentication in a Docker image");
-      withEnv("ELASTICSEARCH_USERNAME", ELASTIC_SUPERUSER_NAME);
-      withEnv("ELASTIC_PASSWORD", ELASTIC_SUPERUSER_PASSWORD);
-    } else if (isKerberosEnabled()) {
+    if (isKerberosEnabled()) {
       log.info("Creating Kerberized Elasticsearch image.");
       image.withFileFromFile("es.keytab", new File(keytabPath));
     }
@@ -576,17 +510,6 @@ public class ElasticsearchContainer
       default:
         break;
     }
-  }
-
-  public ElasticsearchHelperClient getHelperClient(Map<String, String> props) {
-    // copy properties so that original properties are not affected
-    Map<String, String> superUserProps = new HashMap<>(props);
-    superUserProps.put(CONNECTION_USERNAME_CONFIG, ELASTIC_SUPERUSER_NAME);
-    superUserProps.put(CONNECTION_PASSWORD_CONFIG, ELASTIC_SUPERUSER_PASSWORD);
-    ElasticsearchSinkConnectorConfig config = new ElasticsearchSinkConnectorConfig(superUserProps);
-    ElasticsearchHelperClient client = new ElasticsearchHelperClient(props.get(CONNECTION_URL_CONFIG), config,
-        shouldStartClientInCompatibilityMode());
-    return client;
   }
 
   /**

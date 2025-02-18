@@ -20,11 +20,11 @@ import org.apache.kafka.common.config.Config;
 import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.config.ConfigValue;
 import org.apache.kafka.common.config.SslConfigs;
-import org.elasticsearch.ElasticsearchStatusException;
-import org.elasticsearch.client.core.MainResponse;
-import org.elasticsearch.client.RequestOptions;
-import org.elasticsearch.client.RestClient;
-import org.elasticsearch.client.RestHighLevelClient;
+import org.opensearch.OpenSearchStatusException;
+import org.opensearch.client.core.MainResponse;
+import org.opensearch.client.RequestOptions;
+import org.opensearch.client.RestClient;
+import org.opensearch.client.RestHighLevelClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -333,7 +333,7 @@ public class Validator {
     MainResponse response;
     try {
       response = client.info(RequestOptions.DEFAULT);
-    } catch (IOException | ElasticsearchStatusException e) {
+    } catch (IOException | OpenSearchStatusException e) {
       // Same error messages as from validating the connection for IOException.
       // Insufficient privileges to validate the version number if caught
       // ElasticsearchStatusException.
@@ -394,7 +394,7 @@ public class Validator {
     String exceptionMessage = "";
     try {
       successful = client.ping(RequestOptions.DEFAULT);
-    } catch (ElasticsearchStatusException e) {
+    } catch (OpenSearchStatusException e) {
       switch (e.status()) {
         case FORBIDDEN:
           // ES is up, but user is not authorized to ping server

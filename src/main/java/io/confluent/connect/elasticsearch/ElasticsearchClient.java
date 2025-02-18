@@ -40,29 +40,29 @@ import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.sink.ErrantRecordReporter;
 import org.apache.kafka.connect.sink.SinkRecord;
-import org.elasticsearch.ElasticsearchStatusException;
-import org.elasticsearch.action.ActionListener;
-import org.elasticsearch.action.DocWriteRequest;
-import org.elasticsearch.action.bulk.BackoffPolicy;
-import org.elasticsearch.action.bulk.BulkItemResponse;
-import org.elasticsearch.action.bulk.BulkProcessor;
-import org.elasticsearch.action.bulk.BulkProcessor.Listener;
-import org.elasticsearch.action.bulk.BulkRequest;
-import org.elasticsearch.action.bulk.BulkResponse;
-import org.elasticsearch.client.RequestOptions;
-import org.elasticsearch.client.RestClient;
-import org.elasticsearch.client.RestHighLevelClient;
-import org.elasticsearch.client.RestHighLevelClientBuilder;
-import org.elasticsearch.client.core.MainResponse;
-import org.elasticsearch.client.indices.CreateDataStreamRequest;
-import org.elasticsearch.client.indices.CreateIndexRequest;
-import org.elasticsearch.client.indices.GetIndexRequest;
-import org.elasticsearch.client.indices.GetMappingsRequest;
-import org.elasticsearch.client.indices.GetMappingsResponse;
-import org.elasticsearch.client.indices.PutMappingRequest;
-import org.elasticsearch.cluster.metadata.MappingMetadata;
-import org.elasticsearch.core.TimeValue;
-import org.elasticsearch.index.VersionType;
+import org.opensearch.OpenSearchStatusException;
+import org.opensearch.action.DocWriteRequest;
+import org.opensearch.action.bulk.BackoffPolicy;
+import org.opensearch.action.bulk.BulkItemResponse;
+import org.opensearch.action.bulk.BulkProcessor;
+import org.opensearch.action.bulk.BulkProcessor.Listener;
+import org.opensearch.action.bulk.BulkRequest;
+import org.opensearch.action.bulk.BulkResponse;
+import org.opensearch.client.RequestOptions;
+import org.opensearch.client.RestClient;
+import org.opensearch.client.RestClientBuilder;
+import org.opensearch.client.RestHighLevelClient;
+import org.opensearch.client.core.MainResponse;
+import org.opensearch.client.indices.CreateDataStreamRequest;
+import org.opensearch.client.indices.CreateIndexRequest;
+import org.opensearch.client.indices.GetIndexRequest;
+import org.opensearch.client.indices.GetMappingsRequest;
+import org.opensearch.client.indices.GetMappingsResponse;
+import org.opensearch.client.indices.PutMappingRequest;
+import org.opensearch.cluster.metadata.MappingMetadata;
+import org.opensearch.common.unit.TimeValue;
+import org.opensearch.core.action.ActionListener;
+import org.opensearch.index.VersionType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -134,25 +134,18 @@ public class ElasticsearchClient {
     this.clock = Time.SYSTEM;
 
     ConfigCallbackHandler configCallbackHandler = new ConfigCallbackHandler(config);
-    RestClient client = RestClient
+    RestClientBuilder client = RestClient
         .builder(
             config.connectionUrls()
                 .stream()
                 .map(HttpHost::create)
                 .collect(toList())
                 .toArray(new HttpHost[config.connectionUrls().size()])
-        ).setHttpClientConfigCallback(configCallbackHandler).build();
+        ).setHttpClientConfigCallback(configCallbackHandler);
 
     esVersion = getServerVersion(client);
 
-    RestHighLevelClientBuilder clientBuilder = new RestHighLevelClientBuilder(client);
-
-    if (shouldSetCompatibilityToES8()) {
-      log.info("Staring client in ES 8 compatibility mode");
-      clientBuilder.setApiCompatibilityMode(true);
-    }
-
-    this.client = clientBuilder.build();
+    this.client = new RestHighLevelClient(client);
 
     this.bulkProcessor = BulkProcessor
         .builder(buildConsumer(), buildListener(afterBulkCallback))
@@ -177,13 +170,13 @@ public class ElasticsearchClient {
         && Integer.parseInt(version().split("\\.")[0]) >= 8;
   }
 
-  private String getServerVersion(RestClient client) {
-    RestHighLevelClient highLevelClient = new RestHighLevelClientBuilder(client).build();
-    MainResponse response;
+  private String getServerVersion(RestClientBuilder client) {
     String esVersionNumber = UNKNOWN_VERSION_TAG;
-    try {
+    try (RestHighLevelClient highLevelClient = new RestHighLevelClient(client)) {
+      MainResponse response;
       response = highLevelClient.info(RequestOptions.DEFAULT);
       esVersionNumber = response.getVersion().getNumber();
+
     } catch (Exception e) {
       // Same error messages as from validating the connection for IOException.
       // Insufficient privileges to validate the version number if caught
@@ -509,7 +502,7 @@ public class ElasticsearchClient {
         () -> {
           try {
             client.indices().createDataStream(request, RequestOptions.DEFAULT);
-          } catch (ElasticsearchStatusException | IOException e) {
+          } catch (OpenSearchStatusException | IOException e) {
             if (!e.getMessage().contains(RESOURCE_ALREADY_EXISTS_EXCEPTION)) {
               throw e;
             }
@@ -533,7 +526,7 @@ public class ElasticsearchClient {
         () -> {
           try {
             client.indices().create(request, RequestOptions.DEFAULT);
-          } catch (ElasticsearchStatusException | IOException e) {
+          } catch (OpenSearchStatusException | IOException e) {
             if (!e.getMessage().contains(RESOURCE_ALREADY_EXISTS_EXCEPTION)) {
               throw e;
             }
@@ -545,7 +538,7 @@ public class ElasticsearchClient {
   }
 
   /**
-   * Processes a response from a {@link org.elasticsearch.action.bulk.BulkItemRequest}.
+   * Processes a response from a {@link org.opensearch.action.bulk.BulkItemRequest}.
    * Successful responses are ignored. Failed responses are reported to the DLQ and handled
    * according to configuration (ignore or fail). Version conflicts are ignored.
    *

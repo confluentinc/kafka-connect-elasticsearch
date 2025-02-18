@@ -57,7 +57,7 @@ import org.apache.http.nio.reactor.IOReactorException;
 import org.apache.kafka.common.network.Mode;
 import org.apache.kafka.common.security.ssl.SslFactory;
 import org.apache.kafka.connect.errors.ConnectException;
-import org.elasticsearch.client.RestClientBuilder.HttpClientConfigCallback;
+import org.opensearch.client.RestClientBuilder.HttpClientConfigCallback;
 import org.ietf.jgss.GSSCredential;
 import org.ietf.jgss.GSSException;
 import org.ietf.jgss.GSSManager;
