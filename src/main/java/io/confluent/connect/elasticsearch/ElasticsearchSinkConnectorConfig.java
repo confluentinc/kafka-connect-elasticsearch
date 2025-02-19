@@ -825,6 +825,16 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
             ++order,
             Width.LONG,
             DATA_STREAM_TIMESTAMP_DISPLAY
+       ).define(
+            DATA_STREAM_DATASET_OVERRIDE_CONFIG,
+            Type.STRING,
+            DATA_STREAM_DATASET_OVERRIDE_DEFAULT,
+            Importance.LOW,
+            DATA_STREAM_DATASET_OVERRIDE_DOC,
+            DATA_STREAM_GROUP,
+            ++order,
+            Width.SHORT,
+            DATA_STREAM_DATASET_OVERRIDE_DISPLAY
     );
   }
 
