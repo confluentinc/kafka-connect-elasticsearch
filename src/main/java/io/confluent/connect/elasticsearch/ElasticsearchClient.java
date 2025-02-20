@@ -89,7 +89,8 @@ public class ElasticsearchClient {
       "resource_already_exists_exception";
   private static final String VERSION_CONFLICT_EXCEPTION = "version_conflict_engine_exception";
 
-  
+
+
   private static final Set<String> MALFORMED_DOC_ERRORS = new HashSet<>(
       Arrays.asList(
           "mapper_parsing_exception",
