@@ -7,7 +7,7 @@ version: v1.0
 name: build-test-release
 agent:
   machine:
-    type: s1-prod-ubuntu20-04-amd64-4
+    type: s1-prod-ubuntu24-04-amd64-1
 
 fail_fast:
   cancel:
@@ -38,7 +38,7 @@ blocks:
         - name: Test
           commands:
             - . sem-pint
-            - mvn -Dcloud -Pjenkins -U -Dmaven.wagon.http.retryHandler.count=10 -Ddependency.check.skip=true --batch-mode --no-transfer-progress clean verify install dependency:analyze validate
+            - mvn -Dcloud -Pjenkins -U -Dmaven.wagon.http.retryHandler.count=10 --batch-mode --no-transfer-progress clean verify install dependency:analyze validate
             - export TRIVY_DISABLE_VEX_NOTICE=true
             - trivy version
             - echo "Check go/connector-dev-vuln-remediation for fixing or suppressing vulnerabilities found by trivy"
@@ -62,7 +62,7 @@ blocks:
       jobs:
         - name: Release
           commands:
-            - mvn -Dcloud -Pjenkins -U -Dmaven.wagon.http.retryHandler.count=10 -Ddependency.check.skip=true --batch-mode -DaltDeploymentRepository=confluent-codeartifact-internal::default::https://confluent-519856050701.d.codeartifact.us-west-2.amazonaws.com/maven/maven-snapshots/
+            - mvn -Dcloud -Pjenkins -U -Dmaven.wagon.http.retryHandler.count=10 --batch-mode -DaltDeploymentRepository=confluent-codeartifact-internal::default::https://confluent-519856050701.d.codeartifact.us-west-2.amazonaws.com/maven/maven-snapshots/
               -DrepositoryId=confluent-codeartifact-internal deploy -DskipTests
   - name: Release Notes
     dependencies: []
@@ -79,7 +79,7 @@ after_pipeline:
   task:
     agent:
       machine:
-        type: s1-prod-ubuntu20-04-arm64-0
+        type: s1-prod-ubuntu24-04-arm64-0
     jobs:
       - name: Metrics
         commands:
