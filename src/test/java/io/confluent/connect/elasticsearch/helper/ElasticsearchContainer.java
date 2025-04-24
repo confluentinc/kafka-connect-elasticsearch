@@ -352,6 +352,15 @@ public class ElasticsearchContainer
 
     if (isSslEnabled()) {
       log.info("Building Elasticsearch image with SSL configuration");
+
+      // Yum is not working by default, so enable it
+      builder
+          .run("sed -i 's/mirrorlist/#mirrorlist/g' /etc/yum.repos.d/CentOS-*")
+          .run("sed -i 's|#baseurl=http://mirror.centos.org|baseurl=http://vault.centos.org|g' /etc/yum.repos.d/CentOS-*");
+      // SSL cert issues with the newer installed java using hmacPBESHA256, which isn't
+      // supported by java 1.8
+      builder.run("yum install -y java-1.8.0-openjdk-headless");
+
       builder
           .copy("instances.yml", CONFIG_SSL_PATH + "/instances.yml")
           .copy("start-elasticsearch.sh", CONFIG_SSL_PATH + "/start-elasticsearch.sh")
