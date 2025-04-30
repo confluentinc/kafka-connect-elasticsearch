@@ -9,7 +9,7 @@
     </parent>
 
     <artifactId>kafka-connect-elasticsearch</artifactId>
-    <version>15.0.1-SNAPSHOT</version>
+    <version>15.0.0-SNAPSHOT</version>
     <packaging>jar</packaging>
     <name>kafka-connect-elasticsearch</name>
     <organization>
@@ -318,6 +318,19 @@
             </dependency>
         </dependencies>
     </dependencyManagement>
+
+  <distributionManagement>
+    <repository>
+      <id>aws-release</id>
+      <name>AWS Release Repository</name>
+      <url>${confluent.release.repo}</url>
+    </repository>
+    <snapshotRepository>
+      <id>aws-snapshot</id>
+      <name>AWS Snapshot Repository</name>
+      <url>${confluent.snapshot.repo}</url>
+    </snapshotRepository>
+  </distributionManagement>
 
     <build>
         <plugins>
