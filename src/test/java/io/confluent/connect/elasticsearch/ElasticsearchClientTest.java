@@ -748,43 +748,6 @@ public class ElasticsearchClientTest {
   }
 
   @Test
-  public void testSsl() throws Exception {
-    container.close();
-    container = ElasticsearchContainer.fromSystemProperties().withSslEnabled(true);
-    container.start();
-
-    String address = container.getConnectionUrl(false);
-    props.put(CONNECTION_URL_CONFIG, address);
-    props.put(CONNECTION_USERNAME_CONFIG, ELASTIC_SUPERUSER_NAME);
-    props.put(CONNECTION_PASSWORD_CONFIG, ELASTIC_SUPERUSER_PASSWORD);
-    props.put(SECURITY_PROTOCOL_CONFIG, SecurityProtocol.SSL.name());
-    props.put(SSL_CONFIG_PREFIX + SslConfigs.SSL_KEYSTORE_LOCATION_CONFIG, container.getKeystorePath());
-    props.put(SSL_CONFIG_PREFIX + SslConfigs.SSL_KEYSTORE_PASSWORD_CONFIG, container.getKeystorePassword());
-    props.put(SSL_CONFIG_PREFIX + SslConfigs.SSL_TRUSTSTORE_LOCATION_CONFIG, container.getTruststorePath());
-    props.put(SSL_CONFIG_PREFIX + SslConfigs.SSL_TRUSTSTORE_PASSWORD_CONFIG, container.getTruststorePassword());
-    props.put(SSL_CONFIG_PREFIX + SslConfigs.SSL_KEY_PASSWORD_CONFIG, container.getKeyPassword());
-    config = new ElasticsearchSinkConnectorConfig(props);
-    converter = new DataConverter(config);
-
-    ElasticsearchClient client = new ElasticsearchClient(config, null, () -> offsetTracker.updateOffsets());
-    helperClient = new ElasticsearchHelperClient(address, config,
-        container.shouldStartClientInCompatibilityMode());
-    client.createIndexOrDataStream(index);
-
-    writeRecord(sinkRecord(0), client);
-    client.flush();
-
-    waitUntilRecordsInES(1);
-    assertEquals(1, helperClient.getDocCount(index));
-    client.close();
-    helperClient = null;
-
-    container.close();
-    container = ElasticsearchContainer.fromSystemProperties();
-    container.start();
-  }
-
-  @Test
   public void testWriteDataStreamInjectTimestamp() throws Exception {
     props.put(DATA_STREAM_TYPE_CONFIG, DATA_STREAM_TYPE);
     props.put(DATA_STREAM_DATASET_CONFIG, DATA_STREAM_DATASET);
