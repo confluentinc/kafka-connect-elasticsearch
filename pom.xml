@@ -319,6 +319,19 @@
         </dependencies>
     </dependencyManagement>
 
+  <distributionManagement>
+    <repository>
+      <id>aws-release</id>
+      <name>AWS Release Repository</name>
+      <url>${confluent.release.repo}</url>
+    </repository>
+    <snapshotRepository>
+      <id>aws-snapshot</id>
+      <name>AWS Snapshot Repository</name>
+      <url>${confluent.snapshot.repo}</url>
+    </snapshotRepository>
+  </distributionManagement>
+
     <build>
         <plugins>
             <plugin>
