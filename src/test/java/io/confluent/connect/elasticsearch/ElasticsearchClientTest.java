@@ -70,7 +70,6 @@ import org.junit.Test;
 
 public class ElasticsearchClientTest extends ElasticsearchClientTestBase {
 
-
   @BeforeClass
   public static void setupBeforeAll() {
     container = ElasticsearchContainer.fromSystemProperties();
@@ -735,6 +734,14 @@ public class ElasticsearchClientTest extends ElasticsearchClientTestBase {
 
     waitUntilRecordsInES(1);
     assertEquals(1, helperClient.getDocCount(index));
+    client.close();
+  }
+
+  @Test
+  public void testConnectionUrlExtraSlash() {
+    props.put(CONNECTION_URL_CONFIG, container.getConnectionUrl() + "/");
+    config = new ElasticsearchSinkConnectorConfig(props);
+    ElasticsearchClient client = new ElasticsearchClient(config, null, () -> offsetTracker.updateOffsets());
     client.close();
   }
 }
