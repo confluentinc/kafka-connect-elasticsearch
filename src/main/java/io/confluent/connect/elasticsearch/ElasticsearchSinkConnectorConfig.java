@@ -71,6 +71,12 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   private static final String CONNECTION_PASSWORD_DISPLAY = "Connection Password";
   private static final String CONNECTION_PASSWORD_DEFAULT = null;
 
+  public static final String CONNECTION_APIKEY_CONFIG = "connection.apikey";
+  private static final String CONNECTION_APIKEY_DOC =
+      "The API key id used to authenticate with Elasticsearch.";
+  private static final String CONNECTION_APIKEY_DISPLAY = "Connection API key ID";
+  private static final String CONNECTION_APIKEY_DEFAULT = null;
+
   public static final String BATCH_SIZE_CONFIG = "batch.size";
   private static final String BATCH_SIZE_DOC =
       "The number of records to process as a batch when writing to Elasticsearch.";
@@ -480,6 +486,16 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
             ++order,
             Width.SHORT,
             CONNECTION_PASSWORD_DISPLAY
+        ).define(
+            CONNECTION_APIKEY_CONFIG,
+            Type.STRING,
+            CONNECTION_APIKEY_DEFAULT,
+            Importance.MEDIUM,
+            CONNECTION_APIKEY_DOC,
+            CONNECTOR_GROUP,
+            ++order,
+            Width.LONG,
+            CONNECTION_APIKEY_DISPLAY
         ).define(
             BATCH_SIZE_CONFIG,
             Type.INT,
@@ -899,6 +915,10 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
     return username() != null && password() != null;
   }
 
+  public boolean isApikeyConfigured() {
+    return apikey() != null;
+  }
+
   public boolean isBasicProxyConfigured() {
     return !getString(PROXY_HOST_CONFIG).isEmpty();
   }
@@ -1048,6 +1068,10 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
 
   public Password password() {
     return getPassword(CONNECTION_PASSWORD_CONFIG);
+  }
+
+  public String apikey() {
+    return getString(CONNECTION_APIKEY_CONFIG);
   }
 
   public String proxyHost() {
