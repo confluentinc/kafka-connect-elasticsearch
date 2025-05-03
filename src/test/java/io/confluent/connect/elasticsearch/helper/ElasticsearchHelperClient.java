@@ -16,6 +16,7 @@
 package io.confluent.connect.elasticsearch.helper;
 
 import org.apache.http.HttpHost;
+import org.elasticsearch.action.admin.indices.alias.IndicesAliasesRequest;
 import org.elasticsearch.action.admin.indices.delete.DeleteIndexRequest;
 import org.elasticsearch.action.search.SearchRequest;
 import org.elasticsearch.client.RequestOptions;
@@ -101,6 +102,16 @@ public class ElasticsearchHelperClient {
   public void createIndex(String index, String jsonMappings) throws IOException {
     CreateIndexRequest createIndexRequest = new CreateIndexRequest(index).mapping(jsonMappings, XContentType.JSON);
     client.indices().create(createIndexRequest, RequestOptions.DEFAULT);
+  }
+
+  public void createAlias(String alias, String index) throws IOException {
+    IndicesAliasesRequest request = new IndicesAliasesRequest();
+    request.addAliasAction(
+            new IndicesAliasesRequest.AliasActions(IndicesAliasesRequest.AliasActions.Type.ADD)
+            .index(index)
+            .alias(alias)
+    );
+    client.indices().updateAliases(request, RequestOptions.DEFAULT);
   }
 
   public SearchHits search(String index) throws IOException {

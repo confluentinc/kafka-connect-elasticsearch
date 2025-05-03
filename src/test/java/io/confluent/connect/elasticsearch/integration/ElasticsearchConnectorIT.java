@@ -208,6 +208,13 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
   }
 
   @Test
+  public void testHappyPathAlias() throws Exception {
+    setAlias();
+
+    runSimpleTest(props);
+  }
+
+  @Test
   public void testNullValue() throws Exception {
     runSimpleTest(props);
 
