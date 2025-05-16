@@ -17,8 +17,13 @@ package io.confluent.connect.elasticsearch.helper;
 
 import co.elastic.clients.elasticsearch.ElasticsearchClient;
 import co.elastic.clients.elasticsearch.indices.GetDataStreamRequest.Builder;
+import co.elastic.clients.elasticsearch.security.GrantApiKeyRequest;
+import co.elastic.clients.elasticsearch.security.GrantApiKeyResponse;
+import co.elastic.clients.elasticsearch.security.grant_api_key.ApiKeyGrantType;
+import co.elastic.clients.elasticsearch.security.grant_api_key.GrantApiKey;
 import co.elastic.clients.json.jackson.JacksonJsonpMapper;
 import co.elastic.clients.transport.rest_client.RestClientTransport;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.http.HttpHost;
 import org.apache.kafka.test.TestUtils;
 import org.elasticsearch.action.admin.indices.delete.DeleteIndexRequest;
@@ -62,6 +67,7 @@ public class ElasticsearchHelperClient {
   private final String url;
   private final ElasticsearchSinkConnectorConfig config;
   private RestHighLevelClient client;
+  private ElasticsearchClient elasticsearchClient;
 
   public ElasticsearchHelperClient(String url, ElasticsearchSinkConnectorConfig config,
       boolean compatibilityMode) {
@@ -75,6 +81,11 @@ public class ElasticsearchHelperClient {
         .build()
         // compatibility mode should be true for 7.17 high level rest clients while talking to ES 8.
     ).setApiCompatibilityMode(compatibilityMode).build();
+
+    elasticsearchClient = new ElasticsearchClient(new RestClientTransport(
+        RestClient.builder(HttpHost.create(url)).setHttpClientConfigCallback(configCallbackHandler).build(),
+        new JacksonJsonpMapper()
+    ));
   }
 
   public ElasticsearchHelperClient(String url, ElasticsearchSinkConnectorConfig config) {
@@ -167,6 +178,23 @@ public class ElasticsearchHelperClient {
       throw new RuntimeException(String.format("Failed to create a user %s", userToPassword.getKey().getUsername()));
     }
   }
+  public GrantApiKeyResponse grantApiKey(Entry<User, String> userToPassword, List<Role> roles) throws IOException {
+    GrantApiKey grantApiKey =
+        new GrantApiKey.Builder().name("apikey_".concat(userToPassword.getKey().getUsername())).build();
+    GrantApiKeyRequest grantApiKeyRequest = new GrantApiKeyRequest.Builder()
+        .grantType(ApiKeyGrantType.Password)
+        .apiKey(grantApiKey)
+        .username(userToPassword.getKey().getUsername())
+        .password(userToPassword.getValue())
+        .build();
+
+    GrantApiKeyResponse grantApiKeyResponse = elasticsearchClient.security().grantApiKey(grantApiKeyRequest);
+    if (StringUtils.isEmpty(grantApiKeyResponse.apiKey())) {
+      throw new RuntimeException(String.format("Failed to create API key for user %s", userToPassword.getKey().getUsername()));
+    }
+        return grantApiKeyResponse;
+  }
+
 
   public void waitForConnection(long timeMs) {
     try {
