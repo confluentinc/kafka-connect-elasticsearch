@@ -295,10 +295,11 @@ public class DataConverter {
       switch (schemaName) {
         case Decimal.LOGICAL_NAME:
           return copySchemaBasics(schema, SchemaBuilder.float64()).build();
-        case Date.LOGICAL_NAME:
         case Time.LOGICAL_NAME:
         case Timestamp.LOGICAL_NAME:
           return schema;
+        case Date.LOGICAL_NAME:
+          return copySchemaBasics(schema, SchemaBuilder.int64()).build();
         default:
           // User type or unknown logical type
           break;
@@ -408,10 +409,11 @@ public class DataConverter {
     switch (schemaName) {
       case Decimal.LOGICAL_NAME:
         return ((BigDecimal) value).doubleValue();
-      case Date.LOGICAL_NAME:
       case Time.LOGICAL_NAME:
       case Timestamp.LOGICAL_NAME:
         return value;
+      case Date.LOGICAL_NAME:
+        return ((java.util.Date) value).getTime();
       default:
         // User-defined type or unknown built-in
         return null;
