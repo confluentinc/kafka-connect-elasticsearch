@@ -459,7 +459,8 @@ public class ValidatorTest {
 
     Config result = validator.validate();
 
-    assertHasErrorMessage(result, DATA_STREAM_TIMESTAMP_CONFIG, "only necessary for data streams");
+    assertExactErrorMessage(result, DATA_STREAM_TIMESTAMP_CONFIG, 
+        "Mapping a field to the '@timestamp' field is only necessary when working with data streams. data.stream.timestamp.field must not be set when not using data streams.");
   }
 
   @Test
