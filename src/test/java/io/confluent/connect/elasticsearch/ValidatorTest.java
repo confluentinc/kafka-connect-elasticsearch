@@ -40,6 +40,7 @@ import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfi
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.SSL_CONFIG_PREFIX;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.KERBEROS_PRINCIPAL_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.WRITE_METHOD_CONFIG;
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -170,8 +171,10 @@ public class ValidatorTest {
     validator = new Validator(props, () -> mockClient);
 
     result = validator.validate();
-    assertHasErrorMessage(result, BEHAVIOR_ON_NULL_VALUES_CONFIG, "must not be");
-    assertHasErrorMessage(result, WRITE_METHOD_CONFIG, "must not be");
+    assertExactErrorMessage(result, BEHAVIOR_ON_NULL_VALUES_CONFIG, 
+        "Deletes are not supported with data streams. behavior.on.null.values must not be DELETE when using data streams.");
+    assertExactErrorMessage(result, WRITE_METHOD_CONFIG, 
+        "Upserts are not supported with data streams. write.method must not be UPSERT when using data streams.");
   }
 
   @Test
@@ -515,6 +518,15 @@ public class ValidatorTest {
       if (configValue.name().equals(property)) {
         assertFalse(configValue.errorMessages().isEmpty());
         assertTrue(configValue.errorMessages().get(0).contains(msg));
+      }
+    }
+  }
+
+  private static void assertExactErrorMessage(Config config, String property, String expectedMessage) {
+    for (ConfigValue configValue : config.configValues()) {
+      if (configValue.name().equals(property)) {
+        assertFalse(configValue.errorMessages().isEmpty());
+        assertEquals(expectedMessage, configValue.errorMessages().get(0));
       }
     }
   }
