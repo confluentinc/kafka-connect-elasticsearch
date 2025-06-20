@@ -18,6 +18,7 @@ package io.confluent.connect.elasticsearch;
 import java.io.File;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -400,6 +401,37 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   private static final String DATA_STREAM_TIMESTAMP_DISPLAY = "Data Stream Timestamp Field";
   private static final String DATA_STREAM_TIMESTAMP_DEFAULT = "";
 
+  // Resource mapping configs
+  public static final String RESOURCE_TYPE_CONFIG = "resource.type";
+  private static final String RESOURCE_TYPE_DOC = String.format(
+      "The type of resource to write to. Valid options are %s, %s, %s, and %s. "
+          + "This determines whether the connector will write to regular indices, data streams, "
+          + "index aliases, or data stream aliases.",
+      ResourceType.INDEX,
+      ResourceType.DATASTREAM,
+      ResourceType.ALIAS_INDEX,
+      ResourceType.ALIAS_DATASTREAM
+  );
+  private static final String RESOURCE_TYPE_DISPLAY = "Resource Type";
+  private static final String RESOURCE_TYPE_DEFAULT = ResourceType.NONE.name();
+
+  public static final String TOPIC_TO_RESOURCE_MAPPING_CONFIG = "topic.to.resource.mapping";
+  private static final String TOPIC_TO_RESOURCE_MAPPING_DOC = String.format(
+          "A list of topic-to-resource mappings in the format 'topic:resource'. "
+          + "If specified, the connector will use the provided resource name "
+          + "(index, data stream, or alias) instead of the topic name for writing "
+          + "to Elasticsearch. The resource must exist in Elasticsearch before "
+          + "configuring the connector. The type of resource (index, data stream, "
+          + "or alias) is determined by the '%s' configuration. "
+          + "If not specified, the connector will create resources using the topic name "
+          + "or use data stream configurations if data streams are enabled.",
+      RESOURCE_TYPE_CONFIG
+  );
+  private static final String TOPIC_TO_RESOURCE_MAPPING_DISPLAY = "Topic to Resource Mapping";
+  private static final String TOPIC_TO_RESOURCE_MAPPING_DEFAULT = "";
+
+  private final String[] kafkaTopics;
+
   private static final String CONNECTOR_GROUP = "Connector";
   private static final String DATA_CONVERSION_GROUP = "Data Conversion";
   private static final String PROXY_GROUP = "Proxy";
@@ -422,6 +454,14 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   public enum DataStreamType {
     LOGS,
     METRICS,
+    NONE
+  }
+
+  public enum ResourceType {
+    INDEX,
+    DATASTREAM,
+    ALIAS_INDEX,
+    ALIAS_DATASTREAM,
     NONE
   }
 
@@ -460,6 +500,28 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
             ++order,
             Width.LONG,
             CONNECTION_URL_DISPLAY
+        ).define(
+            RESOURCE_TYPE_CONFIG,
+            Type.STRING,
+            RESOURCE_TYPE_DEFAULT,
+            new EnumRecommender<>(ResourceType.class),
+            Importance.HIGH,
+            RESOURCE_TYPE_DOC,
+            CONNECTOR_GROUP,
+            ++order,
+            Width.SHORT,
+            RESOURCE_TYPE_DISPLAY,
+            new EnumRecommender<>(ResourceType.class)
+        ).define(
+            TOPIC_TO_RESOURCE_MAPPING_CONFIG,
+            Type.LIST,
+            TOPIC_TO_RESOURCE_MAPPING_DEFAULT,
+            Importance.HIGH,
+            TOPIC_TO_RESOURCE_MAPPING_DOC,
+            CONNECTOR_GROUP,
+            ++order,
+            Width.LONG,
+            TOPIC_TO_RESOURCE_MAPPING_DISPLAY
         ).define(
             CONNECTION_USERNAME_CONFIG,
             Type.STRING,
@@ -893,6 +955,68 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
 
   public ElasticsearchSinkConnectorConfig(Map<String, String> props) {
     super(CONFIG, props);
+    this.kafkaTopics = toTopicArray(props);
+  }
+
+  private String[] toTopicArray(Map<?, ?> config) {
+    Object obj = config.get("topics");
+    return obj == null ? new String[0] : ((String) obj).trim().split("\\s*,\\s*");
+  }
+
+  /**
+   * Parses and validates topic-to-resource mappings.
+   * @param mappings List of mappings in format "topic:resource"
+   * @return Map of topic to resource names
+   * @throws ConfigException if any mapping is invalid or has duplicates
+   */
+  public Map<String, String> getTopicToResourceMap(List<String> mappings) {
+    Map<String, String> topicToResourceMap = new HashMap<>();
+    Set<String> seenResources = new HashSet<>();
+    for (String mapping : mappings) {
+      String[] parts = mapping.split(":");
+      if (parts.length != 2) {
+        throw new ConfigException(
+          TOPIC_TO_RESOURCE_MAPPING_CONFIG,
+          mapping,
+          "Invalid topic-to-resource mapping format. Expected format: topic:resource"
+        );
+      }
+
+      String topic = parts[0].trim();
+      String resource = parts[1].trim();
+
+      // Check for duplicate topic mappings
+      if (topicToResourceMap.containsKey(topic)) {
+        throw new ConfigException(
+          TOPIC_TO_RESOURCE_MAPPING_CONFIG,
+          mapping,
+          String.format(
+            "Topic '%s' is mapped to multiple resources: '%s' and '%s'. "
+                + "Each topic must be mapped to exactly one resource.",
+            topic,
+            topicToResourceMap.get(topic),
+            resource
+          )
+        );
+      }
+
+      // Check for duplicate resource mappings (enforce 1:1)
+      if (seenResources.contains(resource)) {
+        throw new ConfigException(
+          TOPIC_TO_RESOURCE_MAPPING_CONFIG,
+          mapping,
+          String.format(
+            "Resource '%s' is mapped from multiple topics. "
+            + "Each resource must be mapped from exactly one topic.",
+            resource
+          )
+        );
+      }
+
+      topicToResourceMap.put(topic, resource);
+      seenResources.add(resource);
+    }
+    return topicToResourceMap;
   }
 
   public boolean isAuthenticatedConnection() {
@@ -903,7 +1027,20 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
     return !getString(PROXY_HOST_CONFIG).isEmpty();
   }
 
+  /**
+   * Determines if data streams are being used.
+   * Checks the resource mapping approach first, then falls back to legacy data stream configs.
+   * 
+   * @return true if data streams are configured, false otherwise
+   */
   public boolean isDataStream() {
+    // Check if using new resource mapping approach
+    ResourceType type = resourceType();
+    if (type != ResourceType.NONE) {
+      return type == ResourceType.DATASTREAM || type == ResourceType.ALIAS_DATASTREAM;
+    }
+
+    // Legacy data stream check
     return !dataStreamType().toUpperCase().equals(DataStreamType.NONE.name())
             && !dataStreamDataset().isEmpty();
   }
@@ -1116,6 +1253,18 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
 
   public WriteMethod writeMethod() {
     return WriteMethod.valueOf(getString(WRITE_METHOD_CONFIG).toUpperCase());
+  }
+
+  public ResourceType resourceType() {
+    return ResourceType.valueOf(getString(RESOURCE_TYPE_CONFIG).toUpperCase());
+  }
+
+  public List<String> topicToResourceMapping() {
+    return getList(TOPIC_TO_RESOURCE_MAPPING_CONFIG);
+  }
+
+  public String[] getKafkaTopics() {
+    return this.kafkaTopics;
   }
 
   private static class DataStreamNamespaceValidator implements Validator {
