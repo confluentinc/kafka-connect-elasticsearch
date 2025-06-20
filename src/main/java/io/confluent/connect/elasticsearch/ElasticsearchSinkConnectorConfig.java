@@ -413,7 +413,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
       ResourceType.ALIAS_DATASTREAM
   );
   private static final String RESOURCE_TYPE_DISPLAY = "Resource Type";
-  private static final ResourceType RESOURCE_TYPE_DEFAULT = ResourceType.NONE;
+  private static final String RESOURCE_TYPE_DEFAULT = ResourceType.NONE.name();
 
   public static final String TOPIC_TO_RESOURCE_MAPPING_CONFIG = "topic.to.resource.mapping";
   private static final String TOPIC_TO_RESOURCE_MAPPING_DOC = String.format(
@@ -503,7 +503,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
         ).define(
             RESOURCE_TYPE_CONFIG,
             Type.STRING,
-            RESOURCE_TYPE_DEFAULT.name(),
+            RESOURCE_TYPE_DEFAULT,
             new EnumRecommender<>(ResourceType.class),
             Importance.HIGH,
             RESOURCE_TYPE_DOC,
