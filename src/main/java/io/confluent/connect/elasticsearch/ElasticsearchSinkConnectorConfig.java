@@ -413,7 +413,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
       ResourceType.ALIAS_DATASTREAM
   );
   private static final String RESOURCE_TYPE_DISPLAY = "Resource Type";
-  private static final ResourceType RESOURCE_TYPE_DEFAULT = ResourceType.INDEX;
+  private static final ResourceType RESOURCE_TYPE_DEFAULT = ResourceType.NONE;
 
   public static final String TOPIC_TO_RESOURCE_MAPPING_CONFIG = "topic.to.resource.mapping";
   private static final String TOPIC_TO_RESOURCE_MAPPING_DOC = String.format(
@@ -461,7 +461,8 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
     INDEX,
     DATASTREAM,
     ALIAS_INDEX,
-    ALIAS_DATASTREAM
+    ALIAS_DATASTREAM,
+    NONE
   }
 
   public enum SecurityProtocol {
@@ -1034,8 +1035,8 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
    */
   public boolean isDataStream() {
     // Check if using new resource mapping approach
-    if (!topicToResourceMapping().isEmpty()) {
-      ResourceType type = resourceType();
+    ResourceType type = resourceType();
+    if (type != ResourceType.NONE) {
       return type == ResourceType.DATASTREAM || type == ResourceType.ALIAS_DATASTREAM;
     }
 

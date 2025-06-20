@@ -70,6 +70,8 @@ import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfi
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.WRITE_METHOD_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.WriteMethod;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.TOPIC_TO_RESOURCE_MAPPING_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.RESOURCE_TYPE_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.ResourceType;
 
 public class Validator {
 
@@ -108,14 +110,8 @@ public class Validator {
     }
 
     validateCredentials();
-    
-    // Validate either resource mappings or data stream configs
-    List<String> mappings = config.topicToResourceMapping();
-    if (!mappings.isEmpty()) {
-      validateResourceConfigs(mappings);
-    } else {
-      validateDataStreamConfigs();
-    }
+    validateResourceConfigs();
+    validateDataStreamConfigs();
     validateDataStreamCompatibility();
     validateIgnoreConfigs();
     validateKerberos();
@@ -153,23 +149,52 @@ public class Validator {
     }
   }
 
-  private void validateResourceConfigs(List<String> mappings) {
-    // Resource mappings and data stream configs are mutually exclusive
+  /**
+   * Ensures proper configuration based on resource type:
+   * - When resourceType != NONE: topic mappings must be configured
+   * - When resourceType == NONE: topic mappings must be empty
+   */
+  private void validateResourceConfigs() {
+    boolean hasResourceType = !config.resourceType().equals(ResourceType.NONE);
+    boolean hasTopicToResourceMapping = !config.topicToResourceMapping().isEmpty();
+
+    // Validate that both are set together or both are empty
+    if (hasResourceType != hasTopicToResourceMapping) {
+      String errorMessage = String.format(
+              "Invalid configuration: %s and %s must be configured together. "
+              + "Either both must be set, or both must be empty.",
+              RESOURCE_TYPE_CONFIG,
+              TOPIC_TO_RESOURCE_MAPPING_CONFIG
+      );
+      addErrorMessage(RESOURCE_TYPE_CONFIG, errorMessage);
+      addErrorMessage(TOPIC_TO_RESOURCE_MAPPING_CONFIG, errorMessage);
+      return;
+    }
+
+    // Skip resource mapping validations where both are empty
+    if (!hasResourceType) {
+      return;
+    }
+
+    // Validate that data stream configs are NOT set (mutual exclusivity)
     if (!config.dataStreamType().toUpperCase().equals(DataStreamType.NONE.name())
             || !config.dataStreamDataset().isEmpty()) {
       String errorMessage = String.format(
-              "When using %s, data stream configs (%s, %s) must not be set.",
+              "Resource mapping mode and data stream configs are mutually exclusive. "
+                      + "When using %s, data stream configs (%s, %s) must not be set.",
               TOPIC_TO_RESOURCE_MAPPING_CONFIG,
               DATA_STREAM_TYPE_CONFIG,
               DATA_STREAM_DATASET_CONFIG
       );
       addErrorMessage(TOPIC_TO_RESOURCE_MAPPING_CONFIG, errorMessage);
+      addErrorMessage(DATA_STREAM_TYPE_CONFIG, errorMessage);
+      addErrorMessage(DATA_STREAM_DATASET_CONFIG, errorMessage);
       return;
     }
 
-    // Get valid mappings or throw error for invalid format
+    // Parse topic-to-resource mappings
     try {
-      topicToResourceMap = config.getTopicToResourceMap(mappings);
+      topicToResourceMap = config.getTopicToResourceMap(config.topicToResourceMapping());
     } catch (ConfigException e) {
       addErrorMessage(TOPIC_TO_RESOURCE_MAPPING_CONFIG, e.getMessage());
       return;
@@ -215,13 +240,18 @@ public class Validator {
     }
   }
 
+  /**
+   * Ensures data stream type and dataset are configured together:
+   * - Both must be set (for auto data stream creation)
+   * - Both must be empty (for auto index creation/resource mapping)
+   */
   private void validateDataStreamConfigs() {
-    if (config.dataStreamType().toUpperCase().equals(DataStreamType.NONE.name())
-            ^ config.dataStreamDataset().isEmpty()) {
+    if (!config.dataStreamType().toUpperCase().equals(DataStreamType.NONE.name())
+            ^ !config.dataStreamDataset().isEmpty()) {
       String errorMessage = String.format(
-          "Either both or neither '%s' and '%s' must be set.",
-          DATA_STREAM_DATASET_CONFIG,
-          DATA_STREAM_TYPE_CONFIG
+              "Either both or neither '%s' and '%s' must be set.",
+              DATA_STREAM_TYPE_CONFIG,
+              DATA_STREAM_DATASET_CONFIG
       );
       addErrorMessage(DATA_STREAM_TYPE_CONFIG, errorMessage);
       addErrorMessage(DATA_STREAM_DATASET_CONFIG, errorMessage);

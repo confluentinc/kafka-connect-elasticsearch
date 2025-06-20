@@ -36,6 +36,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BehaviorOnNullValues;
+import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.ResourceType;
 
 @SuppressWarnings("checkstyle:ClassDataAbstractionCoupling")
 public class ElasticsearchSinkTask extends SinkTask {
@@ -66,10 +67,10 @@ public class ElasticsearchSinkTask extends SinkTask {
     this.existingMappings = new HashSet<>();
     this.indexCache = new HashSet<>();
 
-    // Initialize topic to alias mapping cache
-    List<String> mappings = config.topicToResourceMapping();
-    if (!mappings.isEmpty()) {
+    // Initialize topic to resource mapping cache
+    if (!config.resourceType().equals(ResourceType.NONE)) {
       try {
+        List<String> mappings = config.topicToResourceMapping();
         this.topicToResourceMap = config.getTopicToResourceMap(mappings);
       } catch (ConfigException e) {
         throw new ConnectException("Failed to parse topic-to-resource mappings: "
@@ -266,7 +267,7 @@ public class ElasticsearchSinkTask extends SinkTask {
 
   private void tryWriteRecord(SinkRecord sinkRecord, OffsetState offsetState) {
     String indexName;
-    if (!config.topicToResourceMapping().isEmpty()) {
+    if (!config.resourceType().equals(ResourceType.NONE)) {
       if (topicToResourceMap.containsKey(sinkRecord.topic())) {
         indexName = topicToResourceMap.get(sinkRecord.topic());
       } else {

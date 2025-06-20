@@ -9,7 +9,7 @@
     <!-- switch statements on types exceed maximum complexity -->
     <suppress
       checks="(CyclomaticComplexity)"
-      files="(Mapping|DataConverter).java"
+      files="(Mapping|DataConverter|Validator).java"
     />
 
     <suppress
