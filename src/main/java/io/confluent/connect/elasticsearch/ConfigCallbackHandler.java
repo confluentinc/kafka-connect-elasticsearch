@@ -58,7 +58,7 @@ import org.apache.http.nio.conn.SchemeIOSessionStrategy;
 import org.apache.http.nio.conn.ssl.SSLIOSessionStrategy;
 import org.apache.http.nio.reactor.ConnectingIOReactor;
 import org.apache.http.nio.reactor.IOReactorException;
-import org.apache.kafka.common.network.Mode;
+import org.apache.kafka.common.network.ConnectionMode;
 import org.apache.kafka.common.security.ssl.SslFactory;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.elasticsearch.client.RestClientBuilder.HttpClientConfigCallback;
@@ -269,7 +269,7 @@ public class ConfigCallbackHandler implements HttpClientConfigCallback {
    * Gets the SslContext for the client.
    */
   private SSLContext sslContext() {
-    SslFactory sslFactory = new SslFactory(Mode.CLIENT, null, false);
+    SslFactory sslFactory = new SslFactory(ConnectionMode.CLIENT, null, false);
     sslFactory.configure(config.sslConfigs());
 
     try {
