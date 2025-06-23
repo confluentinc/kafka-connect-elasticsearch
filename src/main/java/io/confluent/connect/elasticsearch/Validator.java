@@ -192,9 +192,11 @@ public class Validator {
   }
 
   /**
-   * Ensures proper configuration based on resource type:
-   * - When resourceType != NONE: topic mappings must be configured
-   * - When resourceType == NONE: topic mappings must be empty
+   * Ensures proper configuration based on external resource usage:
+   * - When externalResourceUsage != DISABLED: topic-to-external-resource mappings must be configured
+   * - When externalResourceUsage == DISABLED: topic-to-external-resource mappings must be empty
+   * - Validates mutual exclusivity with legacy data stream configurations
+   * - Ensures all configured topics have corresponding resource mappings
    */
   private void validateResourceConfigs() {
     boolean hasExternalResourceUsage =
@@ -235,7 +237,7 @@ public class Validator {
       return;
     }
 
-    // Validate all topics are mapped
+    // Validate all topics are mapped and configured
     validateAllTopicsMapped(new HashSet<>(topicToExternalResourceMap.keySet()));
   }
 
@@ -273,12 +275,12 @@ public class Validator {
    * - Both must be empty (for auto index creation/resource mapping)
    */
   private void validateDataStreamConfigs() {
-    if (!config.dataStreamType().toUpperCase().equals(DataStreamType.NONE.name())
-            ^ !config.dataStreamDataset().isEmpty()) {
+    if (config.dataStreamType().toUpperCase().equals(DataStreamType.NONE.name())
+            ^ config.dataStreamDataset().isEmpty()) {
       String errorMessage = String.format(
-              "Either both or neither '%s' and '%s' must be set.",
-              DATA_STREAM_TYPE_CONFIG,
-              DATA_STREAM_DATASET_CONFIG
+          "Either both or neither '%s' and '%s' must be set.",
+          DATA_STREAM_TYPE_CONFIG,
+          DATA_STREAM_DATASET_CONFIG
       );
       addErrorMessage(DATA_STREAM_TYPE_CONFIG, errorMessage);
       addErrorMessage(DATA_STREAM_DATASET_CONFIG, errorMessage);
@@ -487,45 +489,36 @@ public class Validator {
   }
 
   /**
-   * Validates that all mapped resources exist in Elasticsearch.
-   * Checks resource existence based on the configured resource type (index, data stream, alias).
-   * Only validates when topic-to-resource mappings are configured.
+   * Validates that all mapped external resources exist in Elasticsearch.
+   * Checks resource existence based on the configured external resource type (index, data stream, alias).
+   * Only validates when external resource usage is enabled.
    */
   private void validateResourceExists(RestHighLevelClient client) {
-    if (topicToExternalResourceMap == null || topicToExternalResourceMap.isEmpty()) {
+    if (config.externalResourceUsage().equals(ExternalResourceUsage.DISABLED)) {
       return;
     }
 
     ExternalResourceExistenceStrategy existenceStrategy =
         ExternalResourceExistenceChecker.getExistenceStrategy(config.externalResourceUsage());
-    validateResourceExists(client, existenceStrategy);
-  }
-
-  /**
-   * Validates that all mapped resources exist in Elasticsearch using the provided strategy.
-   * Stops validation on first missing resource or error.
-   */
-  private void validateResourceExists(RestHighLevelClient client,
-                                      ExternalResourceExistenceStrategy existenceStrategy) {
     for (Map.Entry<String, String> entry : topicToExternalResourceMap.entrySet()) {
       String resource = entry.getValue();
       try {
         boolean exists = existenceStrategy.exists(client, resource);
         if (!exists) {
           String errorMessage = String.format(
-              RESOURCE_DOES_NOT_EXIST_ERROR_FORMAT,
-              config.externalResourceUsage().name().toLowerCase(),
-              resource
+                  RESOURCE_DOES_NOT_EXIST_ERROR_FORMAT,
+                  config.externalResourceUsage().name().toLowerCase(),
+                  resource
           );
           addErrorMessage(TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_CONFIG, errorMessage);
           return;
         }
       } catch (IOException | ElasticsearchStatusException e) {
         String errorMessage = String.format(
-            RESOURCE_EXISTENCE_CHECK_FAILED_ERROR_FORMAT,
-            config.externalResourceUsage().name().toLowerCase(),
-            resource,
-            e.getMessage()
+                RESOURCE_EXISTENCE_CHECK_FAILED_ERROR_FORMAT,
+                config.externalResourceUsage().name().toLowerCase(),
+                resource,
+                e.getMessage()
         );
         addErrorMessage(TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_CONFIG, errorMessage);
         return;

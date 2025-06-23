@@ -152,13 +152,13 @@ public class ElasticsearchSinkTask extends SinkTask {
     return Version.getVersion();
   }
 
-  private void checkMapping(String index, SinkRecord record) {
-    if (!config.shouldIgnoreSchema(record.topic()) && !existingMappings.contains(index)) {
-      if (!client.hasMapping(index)) {
-        client.createMapping(index, record.valueSchema());
+  private void checkMapping(String resourceName, SinkRecord record) {
+    if (!config.shouldIgnoreSchema(record.topic()) && !existingMappings.contains(resourceName)) {
+      if (!client.hasMapping(resourceName)) {
+        client.createMapping(resourceName, record.valueSchema());
       }
-      log.debug("Caching mapping for index '{}' locally.", index);
-      existingMappings.add(index);
+      log.debug("Caching mapping for index '{}' locally.", resourceName);
+      existingMappings.add(resourceName);
     }
   }
 
@@ -264,10 +264,10 @@ public class ElasticsearchSinkTask extends SinkTask {
   }
 
   private void tryWriteRecord(SinkRecord sinkRecord, OffsetState offsetState) {
-    String indexName;
+    String resourceName;
     if (!config.externalResourceUsage().equals(ExternalResourceUsage.DISABLED)) {
       if (topicToResourceMap.containsKey(sinkRecord.topic())) {
-        indexName = topicToResourceMap.get(sinkRecord.topic());
+        resourceName = topicToResourceMap.get(sinkRecord.topic());
       } else {
         throw new ConnectException(String.format(
             "Topic '%s' is not mapped to any resource. "
@@ -276,15 +276,15 @@ public class ElasticsearchSinkTask extends SinkTask {
         ));
       }
     } else {
-      indexName = createIndexName(sinkRecord.topic());
-      ensureIndexExists(indexName);
+      resourceName = createIndexName(sinkRecord.topic());
+      ensureIndexExists(resourceName);
     }
     
-    checkMapping(indexName, sinkRecord);
+    checkMapping(resourceName, sinkRecord);
 
     DocWriteRequest<?> docWriteRequest = null;
     try {
-      docWriteRequest = converter.convertRecord(sinkRecord, indexName);
+      docWriteRequest = converter.convertRecord(sinkRecord, resourceName);
     } catch (DataException convertException) {
       reportBadRecord(sinkRecord, convertException);
 

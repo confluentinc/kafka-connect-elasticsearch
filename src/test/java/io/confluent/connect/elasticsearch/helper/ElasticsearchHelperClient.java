@@ -167,42 +167,22 @@ public class ElasticsearchHelperClient {
     }
   }
 
-  public void createAlias(String index1, String index2, String alias) throws IOException {
+  public void updateAlias(String index1, String index2, String alias, String writeIndex) throws IOException {
     IndicesAliasesRequest request = new IndicesAliasesRequest();
-    // Add index1 with a filter (example: only documents with status="active")
+    
+    // Add index1 to alias
     IndicesAliasesRequest.AliasActions addIndex1 =
             IndicesAliasesRequest.AliasActions.add()
                     .index(index1)
                     .alias(alias)
-                    .writeIndex(true);
+                    .writeIndex(index1.equals(writeIndex));
 
-    // Add index2 without filter
+    // Add index2 to alias
     IndicesAliasesRequest.AliasActions addIndex2 =
             IndicesAliasesRequest.AliasActions.add()
                     .index(index2)
-                    .alias(alias);
-
-    request.addAliasAction(addIndex1);
-    request.addAliasAction(addIndex2);
-    client.indices().updateAliases(request, RequestOptions.DEFAULT);
-  }
-
-  public void switchWriteIndex(String currentWriteIndex, String newWriteIndex, String alias) throws IOException {
-    IndicesAliasesRequest request = new IndicesAliasesRequest();
-    // Add index1 with a filter (example: only documents with status="active")
-    IndicesAliasesRequest.AliasActions addIndex1 =
-            IndicesAliasesRequest.AliasActions.add()
-                    .index(currentWriteIndex)
                     .alias(alias)
-                    .writeIndex(false);
-
-
-    // Add index2 without filter
-    IndicesAliasesRequest.AliasActions addIndex2 =
-            IndicesAliasesRequest.AliasActions.add()
-                    .index(newWriteIndex)
-                    .alias(alias)
-                    .writeIndex(true);
+                    .writeIndex(index2.equals(writeIndex));
 
     request.addAliasAction(addIndex1);
     request.addAliasAction(addIndex2);

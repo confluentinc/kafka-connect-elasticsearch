@@ -400,8 +400,8 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
       assertThat(helperClient.search(index4)).hasSize(0);
     });
 
-    helperClient.switchWriteIndex(index1, index2, alias1);
-    helperClient.switchWriteIndex(index3, index4, alias2);
+    helperClient.updateAlias(index1, index2, alias1, index2);
+    helperClient.updateAlias(index3, index4, alias2, index4);
 
     // Write more records
     writeRecordsToTopic(topic1, "users", 2);
@@ -433,8 +433,8 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
     });
 
     // Perform rollover - switch write index to the second data stream
-    helperClient.switchWriteIndex(dataStream1, dataStream2, alias1);
-    helperClient.switchWriteIndex(dataStream3, dataStream4, alias2);
+    helperClient.updateAlias(dataStream1, dataStream2, alias1, dataStream2);
+    helperClient.updateAlias(dataStream3, dataStream4, alias2, dataStream4);
 
     // Write more records
     writeRecordsToTopic(topic1, "users", 2);
@@ -493,8 +493,8 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
             String.format("%s:%s,%s:%s", topic1, alias1, topic2, alias2));
         props.put(TOPICS_CONFIG, String.format("%s,%s", topic1, topic2));
         helperClient.createIndexesWithoutMapping(index1, index2, index3, index4);
-        helperClient.createAlias(index1, index2, alias1);
-        helperClient.createAlias(index3, index4, alias2);
+        helperClient.updateAlias(index1, index2, alias1, index1);
+        helperClient.updateAlias(index3, index4, alias2, index3);
         break;
       case ALIAS_DATASTREAM:
         props.put(EXTERNAL_RESOURCE_USAGE_CONFIG, ExternalResourceUsage.ALIAS_DATASTREAM.name());
@@ -502,8 +502,8 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
             String.format("%s:%s,%s:%s", topic1, alias1, topic2, alias2));
         props.put(TOPICS_CONFIG, String.format("%s,%s", topic1, topic2));
         helperClient.createDataStreams(dataStream1, dataStream2, dataStream3, dataStream4);
-        helperClient.createAlias(dataStream1, dataStream2, alias1);
-        helperClient.createAlias(dataStream3, dataStream4, alias2);
+        helperClient.updateAlias(dataStream1, dataStream2, alias1, dataStream1);
+        helperClient.updateAlias(dataStream3, dataStream4, alias2, dataStream3);
         break;
     }
     // Start the connector
