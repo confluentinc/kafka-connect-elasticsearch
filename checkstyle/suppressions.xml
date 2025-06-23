@@ -9,12 +9,12 @@
     <!-- switch statements on types exceed maximum complexity -->
     <suppress
       checks="(CyclomaticComplexity)"
-      files="(Mapping|DataConverter).java"
+      files="(Mapping|DataConverter|Validator).java"
     />
 
     <suppress
       checks="(ClassDataAbstractionCoupling)"
-      files="(ElasticsearchClient|ConfigCallbackHandler).java"
+      files="(ElasticsearchClient|ConfigCallbackHandler|Validator).java"
     />
 
     <suppress
