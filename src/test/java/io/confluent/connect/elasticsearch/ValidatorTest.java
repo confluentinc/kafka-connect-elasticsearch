@@ -47,7 +47,6 @@ import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfi
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.DUPLICATE_TOPIC_MAPPING_ERROR_FORMAT;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.DUPLICATE_RESOURCE_MAPPING_ERROR_FORMAT;
 import static io.confluent.connect.elasticsearch.Validator.*;
-import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -180,7 +179,22 @@ public class ValidatorTest {
   }
 
   @Test
-  public void testInvalidUpsertDeleteOnValidDataStreamConfigs() {
+  public void testInvalidUpsertOnValidDataStreamConfigs() {
+    props.put(DATA_STREAM_DATASET_CONFIG, "a_valid_dataset");
+    props.put(DATA_STREAM_TYPE_CONFIG, "logs");
+    validator = new Validator(props, () -> mockClient);
+    Config result = validator.validate();
+    assertNoErrors(result);
+
+    props.put(WRITE_METHOD_CONFIG, UPSERT_METHOD);
+    validator = new Validator(props, () -> mockClient);
+
+    result = validator.validate();
+    assertHasErrorMessage(result, WRITE_METHOD_CONFIG, UPSERT_NOT_ALLOWED_WITH_DATASTREAM_ERROR);
+  }
+
+  @Test
+  public void testInvalidDeleteOnValidDataStreamConfigs() {
     props.put(DATA_STREAM_DATASET_CONFIG, "a_valid_dataset");
     props.put(DATA_STREAM_TYPE_CONFIG, "logs");
     validator = new Validator(props, () -> mockClient);
@@ -188,12 +202,10 @@ public class ValidatorTest {
     assertNoErrors(result);
 
     props.put(BEHAVIOR_ON_NULL_VALUES_CONFIG, DELETE_BEHAVIOR);
-    props.put(WRITE_METHOD_CONFIG, UPSERT_METHOD);
     validator = new Validator(props, () -> mockClient);
 
     result = validator.validate();
     assertHasErrorMessage(result, BEHAVIOR_ON_NULL_VALUES_CONFIG, DELETE_NOT_ALLOWED_WITH_DATASTREAM_ERROR);
-    assertHasErrorMessage(result, WRITE_METHOD_CONFIG, UPSERT_NOT_ALLOWED_WITH_DATASTREAM_ERROR);
   }
 
   @Test

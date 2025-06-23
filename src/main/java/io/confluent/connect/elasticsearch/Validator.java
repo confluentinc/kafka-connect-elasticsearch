@@ -298,7 +298,7 @@ public class Validator {
 
     if (config.writeMethod() == WriteMethod.UPSERT) {
       addErrorMessage(WRITE_METHOD_CONFIG, UPSERT_NOT_ALLOWED_WITH_DATASTREAM_ERROR);
-      // TODO: Should we return early here?
+      return;
     }
 
     if (config.behaviorOnNullValues() == BehaviorOnNullValues.DELETE) {
