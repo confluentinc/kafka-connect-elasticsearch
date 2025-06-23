@@ -193,8 +193,8 @@ public class Validator {
 
   /**
    * Ensures proper configuration based on external resource usage:
-   * - When externalResourceUsage != DISABLED: topic-to-external-resource mappings must be configured
-   * - When externalResourceUsage == DISABLED: topic-to-external-resource mappings must be empty
+   * - When externalResourceUsage != DISABLED: topic mappings must be configured
+   * - When externalResourceUsage == DISABLED: topic mappings must be empty
    * - Validates mutual exclusivity with legacy data stream configurations
    * - Ensures all configured topics have corresponding resource mappings
    */
@@ -490,7 +490,7 @@ public class Validator {
 
   /**
    * Validates that all mapped external resources exist in Elasticsearch.
-   * Checks resource existence based on the configured external resource type (index, data stream, alias).
+   * Checks resource existence based on the configured external resource type.
    * Only validates when external resource usage is enabled.
    */
   private void validateResourceExists(RestHighLevelClient client) {

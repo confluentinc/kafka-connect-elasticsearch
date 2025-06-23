@@ -271,7 +271,8 @@ public class ElasticsearchClient {
    * @param schema the schema to map
    */
   public void createMapping(String resourceName, Schema schema) {
-    PutMappingRequest request = new PutMappingRequest(resourceName).source(Mapping.buildMapping(schema));
+    PutMappingRequest request = new PutMappingRequest(resourceName)
+            .source(Mapping.buildMapping(schema));
     callWithRetries(
         String.format("create mapping for index %s with schema %s", resourceName, schema),
         () -> client.indices().putMapping(request, RequestOptions.DEFAULT)
