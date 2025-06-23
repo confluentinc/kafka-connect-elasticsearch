@@ -25,8 +25,6 @@ import org.elasticsearch.client.core.MainResponse;
 import org.elasticsearch.client.RequestOptions;
 import org.elasticsearch.client.RestClient;
 import org.elasticsearch.client.RestHighLevelClient;
-import org.elasticsearch.client.indices.GetIndexRequest;
-import org.elasticsearch.action.admin.indices.alias.get.GetAliasesRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -69,9 +67,10 @@ import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfi
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.SSL_CONFIG_PREFIX;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.WRITE_METHOD_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.WriteMethod;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.TOPIC_TO_RESOURCE_MAPPING_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.RESOURCE_TYPE_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.ResourceType;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.EXTERNAL_RESOURCE_USAGE_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.ExternalResourceUsage;
+import static io.confluent.connect.elasticsearch.ExternalResourceExistenceChecker.ExternalResourceExistenceStrategy;
 
 public class Validator {
 
@@ -80,11 +79,54 @@ public class Validator {
   private static final String CONNECTOR_V11_COMPATIBLE_ES_VERSION = "7.0.0";
   private static final String DATA_STREAM_COMPATIBLE_ES_VERSION = "7.9.0";
 
+  public static final String EXTERNAL_RESOURCE_CONFIG_TOGETHER_ERROR =
+          String.format("Invalid configuration:"
+          + " %s and %s must be configured together."
+          + " Either both must be set, or both must be empty.",
+          EXTERNAL_RESOURCE_USAGE_CONFIG, TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_CONFIG);
+
+  public static final String EXTERNAL_RESOURCE_DATA_STREAM_MUTUAL_EXCLUSIVITY_ERROR =
+          String.format(
+          "Resource mapping mode and data stream configs are mutually exclusive. "
+          + "When using %s, data stream configs (%s, %s) must not be set.",
+          TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_CONFIG,
+          DATA_STREAM_TYPE_CONFIG,
+          DATA_STREAM_DATASET_CONFIG
+  );
+
+  public static final String UNMAPPED_TOPIC_ERROR_FORMAT = 
+      "Topic '%s' is not mapped to any resource. "
+      + "All configured topics must be mapped to a resource.";
+
+  public static final String UNCONFIGURED_TOPIC_ERROR_FORMAT = 
+      "Topic '%s' is mapped but not configured. "
+      + "All mapped topics must be configured topics.";
+
+  public static final String RESOURCE_DOES_NOT_EXIST_ERROR_FORMAT = 
+      "%s '%s' does not exist in Elasticsearch";
+
+  public static final String RESOURCE_EXISTENCE_CHECK_FAILED_ERROR_FORMAT = 
+      "Failed to check if %s '%s' exists: %s";
+
+  public static final String TIMESTAMP_FIELD_NOT_ALLOWED_ERROR = String.format(
+      "Mapping a field to the '@timestamp' field is only necessary when working with data streams. "
+      + "'%s' must not be set when not using data streams.", DATA_STREAM_TIMESTAMP_CONFIG);
+
+  public static final String UPSERT_NOT_ALLOWED_WITH_DATASTREAM_ERROR = String.format(
+          "Upserts are not supported with data streams. %s must not be %s when using data streams.",
+          WRITE_METHOD_CONFIG, WriteMethod.UPSERT
+  );
+
+  public static final String DELETE_NOT_ALLOWED_WITH_DATASTREAM_ERROR = String.format(
+          "Deletes are not supported with data streams. %s must not be %s when using data streams.",
+          BEHAVIOR_ON_NULL_VALUES_CONFIG, BehaviorOnNullValues.DELETE
+  );
+
   private ElasticsearchSinkConnectorConfig config;
   private Map<String, ConfigValue> values;
   private List<ConfigValue> validations;
   private ClientFactory clientFactory;
-  private Map<String, String> topicToResourceMap;
+  private Map<String, String> topicToExternalResourceMap;
 
   public Validator(Map<String, String> props) {
     this(props, null);
@@ -155,53 +197,46 @@ public class Validator {
    * - When resourceType == NONE: topic mappings must be empty
    */
   private void validateResourceConfigs() {
-    boolean hasResourceType = !config.resourceType().equals(ResourceType.NONE);
-    boolean hasTopicToResourceMapping = !config.topicToResourceMapping().isEmpty();
+    boolean hasExternalResourceUsage =
+            !config.externalResourceUsage().equals(ExternalResourceUsage.DISABLED);
+    boolean hasTopicToExternalResourceMapping =
+            !config.topicToExternalResourceMapping().isEmpty();
 
     // Validate that both are set together or both are empty
-    if (hasResourceType != hasTopicToResourceMapping) {
-      String errorMessage = String.format(
-              "Invalid configuration: %s and %s must be configured together. "
-              + "Either both must be set, or both must be empty.",
-              RESOURCE_TYPE_CONFIG,
-              TOPIC_TO_RESOURCE_MAPPING_CONFIG
-      );
-      addErrorMessage(RESOURCE_TYPE_CONFIG, errorMessage);
-      addErrorMessage(TOPIC_TO_RESOURCE_MAPPING_CONFIG, errorMessage);
+    if (hasExternalResourceUsage != hasTopicToExternalResourceMapping) {
+      addErrorMessage(EXTERNAL_RESOURCE_USAGE_CONFIG, EXTERNAL_RESOURCE_CONFIG_TOGETHER_ERROR);
+      addErrorMessage(TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_CONFIG,
+              EXTERNAL_RESOURCE_CONFIG_TOGETHER_ERROR);
       return;
     }
 
-    // Skip resource mapping validations where both are empty
-    if (!hasResourceType) {
+    // Skip resource mapping validations when both are empty
+    if (!hasExternalResourceUsage) {
       return;
     }
 
-    // Validate that data stream configs are NOT set (mutual exclusivity)
+    // Validate that data stream configs are not set (mutual exclusivity)
     if (!config.dataStreamType().toUpperCase().equals(DataStreamType.NONE.name())
             || !config.dataStreamDataset().isEmpty()) {
-      String errorMessage = String.format(
-              "Resource mapping mode and data stream configs are mutually exclusive. "
-                      + "When using %s, data stream configs (%s, %s) must not be set.",
-              TOPIC_TO_RESOURCE_MAPPING_CONFIG,
-              DATA_STREAM_TYPE_CONFIG,
-              DATA_STREAM_DATASET_CONFIG
-      );
-      addErrorMessage(TOPIC_TO_RESOURCE_MAPPING_CONFIG, errorMessage);
-      addErrorMessage(DATA_STREAM_TYPE_CONFIG, errorMessage);
-      addErrorMessage(DATA_STREAM_DATASET_CONFIG, errorMessage);
+      addErrorMessage(TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_CONFIG,
+              EXTERNAL_RESOURCE_DATA_STREAM_MUTUAL_EXCLUSIVITY_ERROR);
+      addErrorMessage(DATA_STREAM_TYPE_CONFIG,
+              EXTERNAL_RESOURCE_DATA_STREAM_MUTUAL_EXCLUSIVITY_ERROR);
+      addErrorMessage(DATA_STREAM_DATASET_CONFIG,
+              EXTERNAL_RESOURCE_DATA_STREAM_MUTUAL_EXCLUSIVITY_ERROR);
       return;
     }
 
     // Parse topic-to-resource mappings
     try {
-      topicToResourceMap = config.getTopicToResourceMap(config.topicToResourceMapping());
+      topicToExternalResourceMap = config.getTopicToExternalResourceMap();
     } catch (ConfigException e) {
-      addErrorMessage(TOPIC_TO_RESOURCE_MAPPING_CONFIG, e.getMessage());
+      addErrorMessage(TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_CONFIG, e.getMessage());
       return;
     }
 
     // Validate all topics are mapped
-    validateAllTopicsMapped(new HashSet<>(topicToResourceMap.keySet()));
+    validateAllTopicsMapped(new HashSet<>(topicToExternalResourceMap.keySet()));
   }
 
   /**
@@ -216,12 +251,8 @@ public class Validator {
     // Check for missing mappings (configured topics not in mapped topics)
     for (String topic : configuredTopicSet) {
       if (!mappedTopics.contains(topic)) {
-        String errorMessage = String.format(
-                "Topic '%s' is not mapped to any resource. "
-                + "All configured topics must be mapped to a resource.",
-                topic
-        );
-        addErrorMessage(TOPIC_TO_RESOURCE_MAPPING_CONFIG, errorMessage);
+        String errorMessage = String.format(UNMAPPED_TOPIC_ERROR_FORMAT, topic);
+        addErrorMessage(TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_CONFIG, errorMessage);
         return;
       }
     }
@@ -229,12 +260,8 @@ public class Validator {
     // Check for unconfigured mappings (mapped topics not in configured topics)
     for (String topic : mappedTopics) {
       if (!configuredTopicSet.contains(topic)) {
-        String errorMessage = String.format(
-                "Topic '%s' is mapped but not configured. "
-                        + "All mapped topics must be configured topics.",
-                topic
-        );
-        addErrorMessage(TOPIC_TO_RESOURCE_MAPPING_CONFIG, errorMessage);
+        String errorMessage = String.format(UNCONFIGURED_TOPIC_ERROR_FORMAT, topic);
+        addErrorMessage(TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_CONFIG, errorMessage);
         return;
       }
     }
@@ -262,35 +289,18 @@ public class Validator {
     if (!config.isDataStream()) {
       // Validate timestamp field is not set for non-data stream configurations
       if (!config.dataStreamTimestampField().isEmpty()) {
-        String errorMessage = String.format(
-                "Mapping a field to the '@timestamp' field is only necessary when "
-                + "working with data streams. %s must not be set when not using data streams.",
-                DATA_STREAM_TIMESTAMP_CONFIG
-        );
-        addErrorMessage(DATA_STREAM_TIMESTAMP_CONFIG, errorMessage);
+        addErrorMessage(DATA_STREAM_TIMESTAMP_CONFIG, TIMESTAMP_FIELD_NOT_ALLOWED_ERROR);
       }
       return;
     }
 
     if (config.writeMethod() == WriteMethod.UPSERT) {
-      String errorMessage = String.format(
-              "Upserts are not supported with data streams. "
-                      + "%s must not be %s when using data streams.",
-              WRITE_METHOD_CONFIG,
-              WriteMethod.UPSERT
-      );
-      addErrorMessage(WRITE_METHOD_CONFIG, errorMessage);
+      addErrorMessage(WRITE_METHOD_CONFIG, UPSERT_NOT_ALLOWED_WITH_DATASTREAM_ERROR);
       // TODO: Should we return early here?
     }
 
     if (config.behaviorOnNullValues() == BehaviorOnNullValues.DELETE) {
-      String errorMessage = String.format(
-              "Deletes are not supported with data streams. "
-              + "%s must not be %s when using data streams.",
-              BEHAVIOR_ON_NULL_VALUES_CONFIG,
-              BehaviorOnNullValues.DELETE
-      );
-      addErrorMessage(BEHAVIOR_ON_NULL_VALUES_CONFIG, errorMessage);
+      addErrorMessage(BEHAVIOR_ON_NULL_VALUES_CONFIG, DELETE_NOT_ALLOWED_WITH_DATASTREAM_ERROR);
     }
   }
 
@@ -482,90 +492,42 @@ public class Validator {
    * Only validates when topic-to-resource mappings are configured.
    */
   private void validateResourceExists(RestHighLevelClient client) {
-    if (topicToResourceMap == null || topicToResourceMap.isEmpty()) {
+    if (topicToExternalResourceMap == null || topicToExternalResourceMap.isEmpty()) {
       return;
     }
 
-    // Validate resource existence based on type
-    switch (config.resourceType()) {
-      case INDEX:
-      case DATASTREAM:
-        // TODO: Validate data stream existence using GetDataStreamRequest in ES 8.x
-        validateIndexOrDataStreamExists(client);
-        break;
-      case ALIAS_INDEX:
-      case ALIAS_DATASTREAM:
-        validateAliasExists(client);
-        break;
-      default:
-        // Unsupported resource type, no validation needed
-        break;
-    }
+    ExternalResourceExistenceStrategy existenceStrategy =
+        ExternalResourceExistenceChecker.getExistenceStrategy(config.externalResourceUsage());
+    validateResourceExists(client, existenceStrategy);
   }
 
   /**
-   * Validates that all mapped index/data stream resources exist in Elasticsearch.
-   * Checks each resource using the indices().exists() API call.
+   * Validates that all mapped resources exist in Elasticsearch using the provided strategy.
    * Stops validation on first missing resource or error.
    */
-  private void validateIndexOrDataStreamExists(RestHighLevelClient client) {
-    for (Map.Entry<String, String> entry : topicToResourceMap.entrySet()) {
+  private void validateResourceExists(RestHighLevelClient client,
+                                      ExternalResourceExistenceStrategy existenceStrategy) {
+    for (Map.Entry<String, String> entry : topicToExternalResourceMap.entrySet()) {
       String resource = entry.getValue();
       try {
-        boolean exists = client.indices().exists(
-                new GetIndexRequest(resource),
-                RequestOptions.DEFAULT
-        );
+        boolean exists = existenceStrategy.exists(client, resource);
         if (!exists) {
           String errorMessage = String.format(
-                  "%s '%s' does not exist in Elasticsearch",
-                  config.resourceType().name().toLowerCase(),
-                  resource
+              RESOURCE_DOES_NOT_EXIST_ERROR_FORMAT,
+              config.externalResourceUsage().name().toLowerCase(),
+              resource
           );
-          addErrorMessage(TOPIC_TO_RESOURCE_MAPPING_CONFIG, errorMessage);
+          addErrorMessage(TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_CONFIG, errorMessage);
           return;
         }
       } catch (IOException | ElasticsearchStatusException e) {
         String errorMessage = String.format(
-                "Failed to check if %s '%s' exists: %s",
-                config.resourceType().name().toLowerCase(),
-                resource,
-                e.getMessage()
+            RESOURCE_EXISTENCE_CHECK_FAILED_ERROR_FORMAT,
+            config.externalResourceUsage().name().toLowerCase(),
+            resource,
+            e.getMessage()
         );
-        addErrorMessage(TOPIC_TO_RESOURCE_MAPPING_CONFIG, errorMessage);
-        return;
-      }
-    }
-  }
-
-  /**
-   * Validates that all mapped alias resources exist in Elasticsearch.
-   * Checks each alias using the indices().existsAlias() API call.
-   * Stops validation on first missing alias or error.
-   */
-  private void validateAliasExists(RestHighLevelClient client) {
-    for (Map.Entry<String, String> entry : topicToResourceMap.entrySet()) {
-      String resource = entry.getValue();
-      try {
-        boolean exists = client.indices().existsAlias(
-                new GetAliasesRequest(resource),
-                RequestOptions.DEFAULT
-        );
-        if (!exists) {
-          String errorMessage = String.format(
-                  "Alias '%s' does not exist in Elasticsearch",
-                  resource
-          );
-          addErrorMessage(TOPIC_TO_RESOURCE_MAPPING_CONFIG, errorMessage);
-          return;
-        }
-      } catch (IOException | ElasticsearchStatusException e) {
-        String errorMessage = String.format(
-                "Failed to check if alias '%s' exists: %s",
-                resource,
-                e.getMessage()
-        );
-        addErrorMessage(TOPIC_TO_RESOURCE_MAPPING_CONFIG, errorMessage);
+        addErrorMessage(TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_CONFIG, errorMessage);
         return;
       }
     }

@@ -402,33 +402,49 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   private static final String DATA_STREAM_TIMESTAMP_DEFAULT = "";
 
   // Resource mapping configs
-  public static final String RESOURCE_TYPE_CONFIG = "resource.type";
-  private static final String RESOURCE_TYPE_DOC = String.format(
-      "The type of resource to write to. Valid options are %s, %s, %s, and %s. "
-          + "This determines whether the connector will write to regular indices, data streams, "
-          + "index aliases, or data stream aliases.",
-      ResourceType.INDEX,
-      ResourceType.DATASTREAM,
-      ResourceType.ALIAS_INDEX,
-      ResourceType.ALIAS_DATASTREAM
+  public static final String EXTERNAL_RESOURCE_USAGE_CONFIG = "external.resource.usage";
+  private static final String EXTERNAL_RESOURCE_USAGE_DOC = String.format(
+      "The type of resource to write to. Valid options are %s, %s, %s, %s, and %s. "
+      + "This determines whether the connector will write to regular indices, data streams, "
+      + "index aliases, or data stream aliases. When set to %s, the connector will "
+      + "auto-create indices or data streams based on the topic name and datastream configurations",
+      ExternalResourceUsage.INDEX,
+      ExternalResourceUsage.DATASTREAM,
+      ExternalResourceUsage.ALIAS_INDEX,
+      ExternalResourceUsage.ALIAS_DATASTREAM,
+      ExternalResourceUsage.DISABLED,
+      ExternalResourceUsage.DISABLED
   );
-  private static final String RESOURCE_TYPE_DISPLAY = "Resource Type";
-  private static final String RESOURCE_TYPE_DEFAULT = ResourceType.NONE.name();
+  private static final String EXTERNAL_RESOURCE_USAGE_DISPLAY = "External Resource Usage";
+  private static final String EXTERNAL_RESOURCE_USAGE_DEFAULT =
+          ExternalResourceUsage.DISABLED.name();
 
-  public static final String TOPIC_TO_RESOURCE_MAPPING_CONFIG = "topic.to.resource.mapping";
-  private static final String TOPIC_TO_RESOURCE_MAPPING_DOC = String.format(
+  public static final String TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_CONFIG =
+          "topic.to.external.resource.mapping";
+  private static final String TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_DOC = String.format(
           "A list of topic-to-resource mappings in the format 'topic:resource'. "
           + "If specified, the connector will use the provided resource name "
           + "(index, data stream, or alias) instead of the topic name for writing "
           + "to Elasticsearch. The resource must exist in Elasticsearch before "
           + "configuring the connector. The type of resource (index, data stream, "
-          + "or alias) is determined by the '%s' configuration. "
-          + "If not specified, the connector will create resources using the topic name "
-          + "or use data stream configurations if data streams are enabled.",
-      RESOURCE_TYPE_CONFIG
+          + "or alias) is determined by the '%s' configuration.",
+      EXTERNAL_RESOURCE_USAGE_CONFIG
   );
-  private static final String TOPIC_TO_RESOURCE_MAPPING_DISPLAY = "Topic to Resource Mapping";
-  private static final String TOPIC_TO_RESOURCE_MAPPING_DEFAULT = "";
+  private static final String TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_DISPLAY =
+          "Topic to External Resource Mapping";
+  private static final String TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_DEFAULT = "";
+
+  // Error message constants for topic-to-resource mapping validation
+  public static final String INVALID_MAPPING_FORMAT_ERROR = 
+      "Invalid topic-to-resource mapping format. Expected format: topic:resource";
+  
+  public static final String DUPLICATE_TOPIC_MAPPING_ERROR_FORMAT =
+          "Topic '%s' is mapped to multiple resources. "
+          + "Each topic must be mapped to exactly one resource.";
+  
+  public static final String DUPLICATE_RESOURCE_MAPPING_ERROR_FORMAT = 
+      "Resource '%s' is mapped from multiple topics. "
+      + "Each resource must be mapped to exactly one topic.";
 
   private final String[] kafkaTopics;
 
@@ -457,12 +473,12 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
     NONE
   }
 
-  public enum ResourceType {
+  public enum ExternalResourceUsage {
     INDEX,
     DATASTREAM,
     ALIAS_INDEX,
     ALIAS_DATASTREAM,
-    NONE
+    DISABLED
   }
 
   public enum SecurityProtocol {
@@ -501,27 +517,27 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
             Width.LONG,
             CONNECTION_URL_DISPLAY
         ).define(
-            RESOURCE_TYPE_CONFIG,
+            EXTERNAL_RESOURCE_USAGE_CONFIG,
             Type.STRING,
-            RESOURCE_TYPE_DEFAULT,
-            new EnumRecommender<>(ResourceType.class),
+            EXTERNAL_RESOURCE_USAGE_DEFAULT,
+            new EnumRecommender<>(ExternalResourceUsage.class),
             Importance.HIGH,
-            RESOURCE_TYPE_DOC,
+            EXTERNAL_RESOURCE_USAGE_DOC,
             CONNECTOR_GROUP,
             ++order,
             Width.SHORT,
-            RESOURCE_TYPE_DISPLAY,
-            new EnumRecommender<>(ResourceType.class)
+            EXTERNAL_RESOURCE_USAGE_DISPLAY,
+            new EnumRecommender<>(ExternalResourceUsage.class)
         ).define(
-            TOPIC_TO_RESOURCE_MAPPING_CONFIG,
+            TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_CONFIG,
             Type.LIST,
-            TOPIC_TO_RESOURCE_MAPPING_DEFAULT,
+            TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_DEFAULT,
             Importance.HIGH,
-            TOPIC_TO_RESOURCE_MAPPING_DOC,
+            TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_DOC,
             CONNECTOR_GROUP,
             ++order,
             Width.LONG,
-            TOPIC_TO_RESOURCE_MAPPING_DISPLAY
+            TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_DISPLAY
         ).define(
             CONNECTION_USERNAME_CONFIG,
             Type.STRING,
@@ -965,20 +981,20 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
 
   /**
    * Parses and validates topic-to-resource mappings.
-   * @param mappings List of mappings in format "topic:resource"
+   *
    * @return Map of topic to resource names
    * @throws ConfigException if any mapping is invalid or has duplicates
    */
-  public Map<String, String> getTopicToResourceMap(List<String> mappings) {
-    Map<String, String> topicToResourceMap = new HashMap<>();
+  public Map<String, String> getTopicToExternalResourceMap() {
+    Map<String, String> topicToExternalResourceMap = new HashMap<>();
     Set<String> seenResources = new HashSet<>();
-    for (String mapping : mappings) {
+    for (String mapping : topicToExternalResourceMapping()) {
       String[] parts = mapping.split(":");
       if (parts.length != 2) {
         throw new ConfigException(
-          TOPIC_TO_RESOURCE_MAPPING_CONFIG,
+          TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_CONFIG,
           mapping,
-          "Invalid topic-to-resource mapping format. Expected format: topic:resource"
+          INVALID_MAPPING_FORMAT_ERROR
         );
       }
 
@@ -986,37 +1002,27 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
       String resource = parts[1].trim();
 
       // Check for duplicate topic mappings
-      if (topicToResourceMap.containsKey(topic)) {
+      if (topicToExternalResourceMap.containsKey(topic)) {
         throw new ConfigException(
-          TOPIC_TO_RESOURCE_MAPPING_CONFIG,
+          TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_CONFIG,
           mapping,
-          String.format(
-            "Topic '%s' is mapped to multiple resources: '%s' and '%s'. "
-                + "Each topic must be mapped to exactly one resource.",
-            topic,
-            topicToResourceMap.get(topic),
-            resource
-          )
+          String.format(DUPLICATE_TOPIC_MAPPING_ERROR_FORMAT, topic)
         );
       }
 
       // Check for duplicate resource mappings (enforce 1:1)
       if (seenResources.contains(resource)) {
         throw new ConfigException(
-          TOPIC_TO_RESOURCE_MAPPING_CONFIG,
+          TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_CONFIG,
           mapping,
-          String.format(
-            "Resource '%s' is mapped from multiple topics. "
-            + "Each resource must be mapped from exactly one topic.",
-            resource
-          )
+          String.format(DUPLICATE_RESOURCE_MAPPING_ERROR_FORMAT, resource)
         );
       }
 
-      topicToResourceMap.put(topic, resource);
+      topicToExternalResourceMap.put(topic, resource);
       seenResources.add(resource);
     }
-    return topicToResourceMap;
+    return topicToExternalResourceMap;
   }
 
   public boolean isAuthenticatedConnection() {
@@ -1028,16 +1034,17 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   }
 
   /**
-   * Determines if data streams are being used.
-   * Checks the resource mapping approach first, then falls back to legacy data stream configs.
+   * Determines if data streams are being used. Checks the external
+   * resource usage approach first, then falls back to legacy data stream configs.
    * 
    * @return true if data streams are configured, false otherwise
    */
   public boolean isDataStream() {
-    // Check if using new resource mapping approach
-    ResourceType type = resourceType();
-    if (type != ResourceType.NONE) {
-      return type == ResourceType.DATASTREAM || type == ResourceType.ALIAS_DATASTREAM;
+    // Check if using new external resource usage approach
+    ExternalResourceUsage usage = externalResourceUsage();
+    if (usage != ExternalResourceUsage.DISABLED) {
+      return usage == ExternalResourceUsage.DATASTREAM
+              || usage == ExternalResourceUsage.ALIAS_DATASTREAM;
     }
 
     // Legacy data stream check
@@ -1255,12 +1262,12 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
     return WriteMethod.valueOf(getString(WRITE_METHOD_CONFIG).toUpperCase());
   }
 
-  public ResourceType resourceType() {
-    return ResourceType.valueOf(getString(RESOURCE_TYPE_CONFIG).toUpperCase());
+  public ExternalResourceUsage externalResourceUsage() {
+    return ExternalResourceUsage.valueOf(getString(EXTERNAL_RESOURCE_USAGE_CONFIG).toUpperCase());
   }
 
-  public List<String> topicToResourceMapping() {
-    return getList(TOPIC_TO_RESOURCE_MAPPING_CONFIG);
+  public List<String> topicToExternalResourceMapping() {
+    return getList(TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_CONFIG);
   }
 
   public String[] getKafkaTopics() {

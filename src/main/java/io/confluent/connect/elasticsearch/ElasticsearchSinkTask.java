@@ -17,7 +17,6 @@ package io.confluent.connect.elasticsearch;
 
 import java.util.Collection;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.BooleanSupplier;
@@ -36,7 +35,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BehaviorOnNullValues;
-import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.ResourceType;
+import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.ExternalResourceUsage;
 
 @SuppressWarnings("checkstyle:ClassDataAbstractionCoupling")
 public class ElasticsearchSinkTask extends SinkTask {
@@ -68,10 +67,9 @@ public class ElasticsearchSinkTask extends SinkTask {
     this.indexCache = new HashSet<>();
 
     // Initialize topic to resource mapping cache
-    if (!config.resourceType().equals(ResourceType.NONE)) {
+    if (!config.externalResourceUsage().equals(ExternalResourceUsage.DISABLED)) {
       try {
-        List<String> mappings = config.topicToResourceMapping();
-        this.topicToResourceMap = config.getTopicToResourceMap(mappings);
+        this.topicToResourceMap = config.getTopicToExternalResourceMap();
       } catch (ConfigException e) {
         throw new ConnectException("Failed to parse topic-to-resource mappings: "
                 + e.getMessage(), e);
@@ -267,7 +265,7 @@ public class ElasticsearchSinkTask extends SinkTask {
 
   private void tryWriteRecord(SinkRecord sinkRecord, OffsetState offsetState) {
     String indexName;
-    if (!config.resourceType().equals(ResourceType.NONE)) {
+    if (!config.externalResourceUsage().equals(ExternalResourceUsage.DISABLED)) {
       if (topicToResourceMap.containsKey(sinkRecord.topic())) {
         indexName = topicToResourceMap.get(sinkRecord.topic());
       } else {
