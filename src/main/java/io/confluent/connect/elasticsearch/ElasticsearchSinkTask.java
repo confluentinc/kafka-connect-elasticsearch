@@ -157,7 +157,7 @@ public class ElasticsearchSinkTask extends SinkTask {
       if (!client.hasMapping(resourceName)) {
         client.createMapping(resourceName, record.valueSchema());
       }
-      log.debug("Caching mapping for index '{}' locally.", resourceName);
+      log.debug("Caching mapping for resource '{}' locally.", resourceName);
       existingMappings.add(resourceName);
     }
   }

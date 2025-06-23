@@ -279,8 +279,8 @@ public class Validator {
             ^ config.dataStreamDataset().isEmpty()) {
       String errorMessage = String.format(
           "Either both or neither '%s' and '%s' must be set.",
-          DATA_STREAM_TYPE_CONFIG,
-          DATA_STREAM_DATASET_CONFIG
+          DATA_STREAM_DATASET_CONFIG,
+          DATA_STREAM_TYPE_CONFIG
       );
       addErrorMessage(DATA_STREAM_TYPE_CONFIG, errorMessage);
       addErrorMessage(DATA_STREAM_DATASET_CONFIG, errorMessage);

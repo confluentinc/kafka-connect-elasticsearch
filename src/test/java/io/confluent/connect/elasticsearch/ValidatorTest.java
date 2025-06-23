@@ -96,8 +96,7 @@ public class ValidatorTest {
 
   @Before
   public void setup() throws IOException {
-    props = new HashMap<>();
-    props.put(CONNECTION_URL_CONFIG, "http://localhost:8080");
+    props = ElasticsearchSinkConnectorConfigTest.addNecessaryProps(new HashMap<>());
 
     mockClient = mock(RestHighLevelClient.class, Mockito.RETURNS_DEEP_STUBS);
     when(mockClient.ping(any(RequestOptions.class))).thenReturn(true);
@@ -193,8 +192,8 @@ public class ValidatorTest {
     validator = new Validator(props, () -> mockClient);
 
     result = validator.validate();
-    assertExactErrorMessage(result, BEHAVIOR_ON_NULL_VALUES_CONFIG, DELETE_NOT_ALLOWED_WITH_DATASTREAM_ERROR);
-    assertExactErrorMessage(result, WRITE_METHOD_CONFIG, UPSERT_NOT_ALLOWED_WITH_DATASTREAM_ERROR);
+    assertHasErrorMessage(result, BEHAVIOR_ON_NULL_VALUES_CONFIG, DELETE_NOT_ALLOWED_WITH_DATASTREAM_ERROR);
+    assertHasErrorMessage(result, WRITE_METHOD_CONFIG, UPSERT_NOT_ALLOWED_WITH_DATASTREAM_ERROR);
   }
 
   @Test
@@ -479,7 +478,7 @@ public class ValidatorTest {
 
     Config result = validator.validate();
 
-    assertExactErrorMessage(result, DATA_STREAM_TIMESTAMP_CONFIG, TIMESTAMP_FIELD_NOT_ALLOWED_ERROR);
+    assertHasErrorMessage(result, DATA_STREAM_TIMESTAMP_CONFIG, TIMESTAMP_FIELD_NOT_ALLOWED_ERROR);
   }
 
   @Test
@@ -552,8 +551,8 @@ public class ValidatorTest {
     validator = new Validator(props, () -> mockClient);
 
     Config result = validator.validate();
-    assertExactErrorMessage(result, EXTERNAL_RESOURCE_USAGE_CONFIG, EXTERNAL_RESOURCE_CONFIG_TOGETHER_ERROR);
-    assertExactErrorMessage(result, TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_CONFIG, EXTERNAL_RESOURCE_CONFIG_TOGETHER_ERROR);
+    assertHasErrorMessage(result, EXTERNAL_RESOURCE_USAGE_CONFIG, EXTERNAL_RESOURCE_CONFIG_TOGETHER_ERROR);
+    assertHasErrorMessage(result, TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_CONFIG, EXTERNAL_RESOURCE_CONFIG_TOGETHER_ERROR);
   }
 
   @Test
@@ -562,8 +561,8 @@ public class ValidatorTest {
     validator = new Validator(props, () -> mockClient);
 
     Config result = validator.validate();
-    assertExactErrorMessage(result, EXTERNAL_RESOURCE_USAGE_CONFIG, EXTERNAL_RESOURCE_CONFIG_TOGETHER_ERROR);
-    assertExactErrorMessage(result, TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_CONFIG, EXTERNAL_RESOURCE_CONFIG_TOGETHER_ERROR);
+    assertHasErrorMessage(result, EXTERNAL_RESOURCE_USAGE_CONFIG, EXTERNAL_RESOURCE_CONFIG_TOGETHER_ERROR);
+    assertHasErrorMessage(result, TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_CONFIG, EXTERNAL_RESOURCE_CONFIG_TOGETHER_ERROR);
   }
 
   @Test
@@ -575,11 +574,11 @@ public class ValidatorTest {
     validator = new Validator(props, () -> mockClient);
 
     Config result = validator.validate();
-    assertExactErrorMessage(result, TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_CONFIG,
+    assertHasErrorMessage(result, TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_CONFIG,
             EXTERNAL_RESOURCE_DATA_STREAM_MUTUAL_EXCLUSIVITY_ERROR);
-    assertExactErrorMessage(result, DATA_STREAM_TYPE_CONFIG,
+    assertHasErrorMessage(result, DATA_STREAM_TYPE_CONFIG,
             EXTERNAL_RESOURCE_DATA_STREAM_MUTUAL_EXCLUSIVITY_ERROR);
-    assertExactErrorMessage(result, DATA_STREAM_DATASET_CONFIG,
+    assertHasErrorMessage(result, DATA_STREAM_DATASET_CONFIG,
             EXTERNAL_RESOURCE_DATA_STREAM_MUTUAL_EXCLUSIVITY_ERROR);
   }
 
@@ -627,7 +626,7 @@ public class ValidatorTest {
 
     Config result = validator.validate();
     String expectedMessage = String.format(UNMAPPED_TOPIC_ERROR_FORMAT, TOPIC2);
-    assertExactErrorMessage(result, TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_CONFIG, expectedMessage);
+    assertHasErrorMessage(result, TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_CONFIG, expectedMessage);
   }
 
   @Test
@@ -639,7 +638,7 @@ public class ValidatorTest {
 
     Config result = validator.validate();
     String expectedMessage = String.format(UNCONFIGURED_TOPIC_ERROR_FORMAT, TOPIC2);
-    assertExactErrorMessage(result, TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_CONFIG, expectedMessage);
+    assertHasErrorMessage(result, TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_CONFIG, expectedMessage);
   }
 
   @Test
@@ -671,7 +670,7 @@ public class ValidatorTest {
 
     validator = new Validator(props, () -> mockClient);
     Config result = validator.validate();
-    assertExactErrorMessage(result, WRITE_METHOD_CONFIG, UPSERT_NOT_ALLOWED_WITH_DATASTREAM_ERROR);
+    assertHasErrorMessage(result, WRITE_METHOD_CONFIG, UPSERT_NOT_ALLOWED_WITH_DATASTREAM_ERROR);
   }
 
   @Test
@@ -687,7 +686,7 @@ public class ValidatorTest {
 
     validator = new Validator(props, () -> mockClient);
     Config result = validator.validate();
-    assertExactErrorMessage(result, BEHAVIOR_ON_NULL_VALUES_CONFIG, DELETE_NOT_ALLOWED_WITH_DATASTREAM_ERROR);
+    assertHasErrorMessage(result, BEHAVIOR_ON_NULL_VALUES_CONFIG, DELETE_NOT_ALLOWED_WITH_DATASTREAM_ERROR);
   }
 
   @Test
@@ -703,7 +702,7 @@ public class ValidatorTest {
 
     validator = new Validator(props, () -> mockClient);
     Config result = validator.validate();
-    assertExactErrorMessage(result, DATA_STREAM_TIMESTAMP_CONFIG, TIMESTAMP_FIELD_NOT_ALLOWED_ERROR);
+    assertHasErrorMessage(result, DATA_STREAM_TIMESTAMP_CONFIG, TIMESTAMP_FIELD_NOT_ALLOWED_ERROR);
   }
 
   @Test
@@ -734,7 +733,7 @@ public class ValidatorTest {
     validator = new Validator(props, () -> mockClient);
     Config result = validator.validate();
     String expectedMessage = String.format(RESOURCE_DOES_NOT_EXIST_ERROR_FORMAT, ExternalResourceUsage.INDEX.name().toLowerCase(), INDEX1);
-    assertExactErrorMessage(result, TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_CONFIG, expectedMessage);
+    assertHasErrorMessage(result, TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_CONFIG, expectedMessage);
   }
 
   @Test
@@ -765,7 +764,7 @@ public class ValidatorTest {
     validator = new Validator(props, () -> mockClient);
     Config result = validator.validate();
     String expectedMessage = String.format(RESOURCE_DOES_NOT_EXIST_ERROR_FORMAT, ExternalResourceUsage.ALIAS_INDEX.name().toLowerCase(), ALIAS1);
-    assertExactErrorMessage(result, TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_CONFIG, expectedMessage);
+    assertHasErrorMessage(result, TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_CONFIG, expectedMessage);
   }
 
   @Test
@@ -781,7 +780,7 @@ public class ValidatorTest {
     validator = new Validator(props, () -> mockClient);
     Config result = validator.validate();
     String expectedMessage = String.format(RESOURCE_EXISTENCE_CHECK_FAILED_ERROR_FORMAT, ExternalResourceUsage.INDEX.name().toLowerCase(), INDEX1, "Index not found");
-    assertExactErrorMessage(result, TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_CONFIG, expectedMessage);
+    assertHasErrorMessage(result, TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_CONFIG, expectedMessage);
   }
 
   @Test
@@ -802,15 +801,6 @@ public class ValidatorTest {
       if (configValue.name().equals(property)) {
         assertFalse(configValue.errorMessages().isEmpty());
         assertTrue(configValue.errorMessages().get(0).contains(msg));
-      }
-    }
-  }
-
-  private static void assertExactErrorMessage(Config config, String property, String expectedMessage) {
-    for (ConfigValue configValue : config.configValues()) {
-      if (configValue.name().equals(property)) {
-        assertFalse(configValue.errorMessages().isEmpty());
-        assertEquals(expectedMessage, configValue.errorMessages().get(0));
       }
     }
   }
