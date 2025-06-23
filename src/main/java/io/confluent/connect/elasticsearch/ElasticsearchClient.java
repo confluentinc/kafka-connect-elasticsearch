@@ -267,13 +267,14 @@ public class ElasticsearchClient {
   /**
    * Creates a mapping for the given index and schema.
    *
-   * @param index the index to create the mapping for
+   * @param resourceName the resource to create the mapping for
    * @param schema the schema to map
    */
-  public void createMapping(String index, Schema schema) {
-    PutMappingRequest request = new PutMappingRequest(index).source(Mapping.buildMapping(schema));
+  public void createMapping(String resourceName, Schema schema) {
+    PutMappingRequest request = new PutMappingRequest(resourceName)
+            .source(Mapping.buildMapping(schema));
     callWithRetries(
-        String.format("create mapping for index %s with schema %s", index, schema),
+        String.format("create mapping for index %s with schema %s", resourceName, schema),
         () -> client.indices().putMapping(request, RequestOptions.DEFAULT)
     );
   }
@@ -305,11 +306,11 @@ public class ElasticsearchClient {
 
   /**
    * Checks whether the index already has a mapping or not.
-   * @param index the index to check
+   * @param resourceName the resource to check
    * @return true if a mapping exists, false if it does not
    */
-  public boolean hasMapping(String index) {
-    MappingMetadata mapping = mapping(index);
+  public boolean hasMapping(String resourceName) {
+    MappingMetadata mapping = mapping(resourceName);
     return mapping != null && mapping.sourceAsMap() != null && !mapping.sourceAsMap().isEmpty();
   }
 
