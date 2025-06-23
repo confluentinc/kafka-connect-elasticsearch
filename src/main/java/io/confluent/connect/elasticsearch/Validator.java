@@ -39,6 +39,7 @@ import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.Secur
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BATCH_SIZE_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BEHAVIOR_ON_NULL_VALUES_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BehaviorOnNullValues;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_APIKEY_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_PASSWORD_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_USERNAME_CONFIG;
@@ -101,6 +102,7 @@ public class Validator {
     }
 
     validateCredentials();
+    validateApiKey();
     validateDataStreamConfigs();
     validateIgnoreConfigs();
     validateKerberos();
@@ -134,6 +136,22 @@ public class Validator {
       );
       addErrorMessage(CONNECTION_USERNAME_CONFIG, errorMessage);
       addErrorMessage(CONNECTION_PASSWORD_CONFIG, errorMessage);
+    }
+  }
+
+  private void validateApiKey() {
+    if (config.isApikeyConfigured()) {
+      if (config.isAuthenticatedConnection()) {
+        String errorMessage = String.format(
+            "Either only API Key (%s) or connection credentials (%s, %s) must be set.",
+            CONNECTION_APIKEY_CONFIG,
+            CONNECTION_USERNAME_CONFIG,
+            CONNECTION_PASSWORD_CONFIG
+        );
+        addErrorMessage(CONNECTION_APIKEY_CONFIG, errorMessage);
+        addErrorMessage(CONNECTION_USERNAME_CONFIG, errorMessage);
+        addErrorMessage(CONNECTION_PASSWORD_CONFIG, errorMessage);
+      }
     }
   }
 
