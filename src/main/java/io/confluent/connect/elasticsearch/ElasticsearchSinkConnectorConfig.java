@@ -453,7 +453,6 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   private static final String PROXY_GROUP = "Proxy";
   private static final String SSL_GROUP = "Security";
   private static final String KERBEROS_GROUP = "Kerberos";
-  private static final String DATA_STREAM_GROUP = "Data Stream";
 
   public enum BehaviorOnMalformedDoc {
     IGNORE,
@@ -498,7 +497,6 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
     addProxyConfigs(configDef);
     addSslConfigs(configDef);
     addKerberosConfigs(configDef);
-    addDataStreamConfigs(configDef);
     return configDef;
   }
 
@@ -516,6 +514,26 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
             ++order,
             Width.LONG,
             CONNECTION_URL_DISPLAY
+        ).define(
+            CONNECTION_USERNAME_CONFIG,
+            Type.STRING,
+            CONNECTION_USERNAME_DEFAULT,
+            Importance.MEDIUM,
+            CONNECTION_USERNAME_DOC,
+            CONNECTOR_GROUP,
+            ++order,
+            Width.SHORT,
+            CONNECTION_USERNAME_DISPLAY
+        ).define(
+            CONNECTION_PASSWORD_CONFIG,
+            Type.PASSWORD,
+            CONNECTION_PASSWORD_DEFAULT,
+            Importance.MEDIUM,
+            CONNECTION_PASSWORD_DOC,
+            CONNECTOR_GROUP,
+            ++order,
+            Width.SHORT,
+            CONNECTION_PASSWORD_DISPLAY
         ).define(
             EXTERNAL_RESOURCE_USAGE_CONFIG,
             Type.STRING,
@@ -539,25 +557,48 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
             Width.LONG,
             TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_DISPLAY
         ).define(
-            CONNECTION_USERNAME_CONFIG,
+            DATA_STREAM_TYPE_CONFIG,
             Type.STRING,
-            CONNECTION_USERNAME_DEFAULT,
-            Importance.MEDIUM,
-            CONNECTION_USERNAME_DOC,
+            DATA_STREAM_TYPE_DEFAULT.name(),
+            Importance.LOW,
+            DATA_STREAM_TYPE_DOC,
             CONNECTOR_GROUP,
             ++order,
             Width.SHORT,
-            CONNECTION_USERNAME_DISPLAY
+            DATA_STREAM_TYPE_DISPLAY,
+            new EnumRecommender<>(DataStreamType.class)
         ).define(
-            CONNECTION_PASSWORD_CONFIG,
-            Type.PASSWORD,
-            CONNECTION_PASSWORD_DEFAULT,
-            Importance.MEDIUM,
-            CONNECTION_PASSWORD_DOC,
+            DATA_STREAM_DATASET_CONFIG,
+            Type.STRING,
+            DATA_STREAM_DATASET_DEFAULT,
+            new DataStreamDatasetValidator(),
+            Importance.LOW,
+            DATA_STREAM_DATASET_DOC,
             CONNECTOR_GROUP,
             ++order,
-            Width.SHORT,
-            CONNECTION_PASSWORD_DISPLAY
+            Width.MEDIUM,
+            DATA_STREAM_DATASET_DISPLAY
+        ).define(
+            DATA_STREAM_NAMESPACE_CONFIG,
+            Type.STRING,
+            DATA_STREAM_NAMESPACE_DEFAULT,
+            new DataStreamNamespaceValidator(),
+            Importance.LOW,
+            DATA_STREAM_NAMESPACE_DOC,
+            CONNECTOR_GROUP,
+            ++order,
+            Width.MEDIUM,
+            DATA_STREAM_NAMESPACE_DISPLAY
+        ).define(
+            DATA_STREAM_TIMESTAMP_CONFIG,
+            Type.LIST,
+            DATA_STREAM_TIMESTAMP_DEFAULT,
+            Importance.LOW,
+            DATA_STREAM_TIMESTAMP_DOC,
+            CONNECTOR_GROUP,
+            ++order,
+            Width.LONG,
+            DATA_STREAM_TIMESTAMP_DISPLAY
         ).define(
             BATCH_SIZE_CONFIG,
             Type.INT,
@@ -915,55 +956,6 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
             orderInGroup++,
             Width.LONG,
             KERBEROS_KEYTAB_PATH
-    );
-  }
-
-  private static void addDataStreamConfigs(ConfigDef configDef) {
-    int order = 0;
-    configDef
-        .define(
-            DATA_STREAM_NAMESPACE_CONFIG,
-            Type.STRING,
-            DATA_STREAM_NAMESPACE_DEFAULT,
-            new DataStreamNamespaceValidator(),
-            Importance.LOW,
-            DATA_STREAM_NAMESPACE_DOC,
-            DATA_STREAM_GROUP,
-            ++order,
-            Width.MEDIUM,
-            DATA_STREAM_NAMESPACE_DISPLAY
-        ).define(
-            DATA_STREAM_DATASET_CONFIG,
-            Type.STRING,
-            DATA_STREAM_DATASET_DEFAULT,
-            new DataStreamDatasetValidator(),
-            Importance.LOW,
-            DATA_STREAM_DATASET_DOC,
-            DATA_STREAM_GROUP,
-            ++order,
-            Width.MEDIUM,
-            DATA_STREAM_DATASET_DISPLAY
-        ).define(
-            DATA_STREAM_TYPE_CONFIG,
-            Type.STRING,
-            DATA_STREAM_TYPE_DEFAULT.name(),
-            Importance.LOW,
-            DATA_STREAM_TYPE_DOC,
-            DATA_STREAM_GROUP,
-            ++order,
-            Width.SHORT,
-            DATA_STREAM_TYPE_DISPLAY,
-            new EnumRecommender<>(DataStreamType.class)
-        ).define(
-            DATA_STREAM_TIMESTAMP_CONFIG,
-            Type.LIST,
-            DATA_STREAM_TIMESTAMP_DEFAULT,
-            Importance.LOW,
-            DATA_STREAM_TIMESTAMP_DOC,
-            DATA_STREAM_GROUP,
-            ++order,
-            Width.LONG,
-            DATA_STREAM_TIMESTAMP_DISPLAY
     );
   }
 
