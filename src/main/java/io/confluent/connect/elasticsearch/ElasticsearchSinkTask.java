@@ -23,6 +23,7 @@ import java.util.function.BooleanSupplier;
 
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
+import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.errors.DataException;
 import org.apache.kafka.connect.sink.ErrantRecordReporter;
@@ -34,6 +35,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BehaviorOnNullValues;
+import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.ExternalResourceUsage;
 
 @SuppressWarnings("checkstyle:ClassDataAbstractionCoupling")
 public class ElasticsearchSinkTask extends SinkTask {
@@ -46,6 +48,7 @@ public class ElasticsearchSinkTask extends SinkTask {
   private ErrantRecordReporter reporter;
   private Set<String> existingMappings;
   private Set<String> indexCache;
+  private Map<String, String> topicToResourceMap;
   private OffsetTracker offsetTracker;
   private PartitionPauser partitionPauser;
 
@@ -62,6 +65,17 @@ public class ElasticsearchSinkTask extends SinkTask {
     this.converter = new DataConverter(config);
     this.existingMappings = new HashSet<>();
     this.indexCache = new HashSet<>();
+
+    // Initialize topic to resource mapping cache
+    if (!config.externalResourceUsage().equals(ExternalResourceUsage.DISABLED)) {
+      try {
+        this.topicToResourceMap = config.getTopicToExternalResourceMap();
+      } catch (ConfigException e) {
+        throw new ConnectException("Failed to parse topic-to-resource mappings: "
+                + e.getMessage(), e);
+      }
+    }
+
     int offsetHighWaterMark = config.maxBufferedRecords() * 10;
     int offsetLowWaterMark = config.maxBufferedRecords() * 5;
     this.partitionPauser = new PartitionPauser(context,
@@ -250,9 +264,22 @@ public class ElasticsearchSinkTask extends SinkTask {
   }
 
   private void tryWriteRecord(SinkRecord sinkRecord, OffsetState offsetState) {
-    String indexName = createIndexName(sinkRecord.topic());
-
-    ensureIndexExists(indexName);
+    String indexName;
+    if (!config.externalResourceUsage().equals(ExternalResourceUsage.DISABLED)) {
+      if (topicToResourceMap.containsKey(sinkRecord.topic())) {
+        indexName = topicToResourceMap.get(sinkRecord.topic());
+      } else {
+        throw new ConnectException(String.format(
+            "Topic '%s' is not mapped to any resource. "
+            + "All topics must be mapped when using topic-to-resource mapping configuration.",
+            sinkRecord.topic()
+        ));
+      }
+    } else {
+      indexName = createIndexName(sinkRecord.topic());
+      ensureIndexExists(indexName);
+    }
+    
     checkMapping(indexName, sinkRecord);
 
     DocWriteRequest<?> docWriteRequest = null;
