@@ -40,6 +40,13 @@ import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfi
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.SSL_CONFIG_PREFIX;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.KERBEROS_PRINCIPAL_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.WRITE_METHOD_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.EXTERNAL_RESOURCE_USAGE_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.ExternalResourceUsage;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.INVALID_MAPPING_FORMAT_ERROR;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.DUPLICATE_TOPIC_MAPPING_ERROR_FORMAT;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.DUPLICATE_RESOURCE_MAPPING_ERROR_FORMAT;
+import static io.confluent.connect.elasticsearch.Validator.*;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -64,8 +71,22 @@ import org.elasticsearch.rest.RestStatus;
 import org.junit.Before;
 import org.junit.Test;
 import org.mockito.Mockito;
+import org.elasticsearch.client.indices.GetIndexRequest;
+import org.elasticsearch.action.admin.indices.alias.get.GetAliasesRequest;
 
 public class ValidatorTest {
+
+  private static final String DELETE_BEHAVIOR = "delete";
+  private static final String UPSERT_METHOD = "upsert";
+  private static final String TOPICS_CONFIG_KEY = "topics";
+  private static final String TOPIC1 = "topic1";
+  private static final String TOPIC2 = "topic2";
+
+  // Resource names
+  private static final String INDEX1 = "index1";
+  private static final String INDEX2 = "index2";
+  private static final String ALIAS1 = "alias1";
+  private static final String LOGS_TEST_1 = "logs-test-1";
 
   private MainResponse mockInfoResponse;
   private Map<String, String> props;
@@ -76,7 +97,7 @@ public class ValidatorTest {
   public void setup() throws IOException {
     props = ElasticsearchSinkConnectorConfigTest.addNecessaryProps(new HashMap<>());
 
-    mockClient = mock(RestHighLevelClient.class);
+    mockClient = mock(RestHighLevelClient.class, Mockito.RETURNS_DEEP_STUBS);
     when(mockClient.ping(any(RequestOptions.class))).thenReturn(true);
     mockInfoResponse = mock(MainResponse.class, Mockito.RETURNS_DEEP_STUBS);
     when(mockClient.info(any(RequestOptions.class))).thenReturn(mockInfoResponse);
@@ -99,8 +120,8 @@ public class ValidatorTest {
 
   @Test
   public void testValidUpsertDeleteOnDefaultConfig() {
-    props.put(BEHAVIOR_ON_NULL_VALUES_CONFIG, "delete");
-    props.put(WRITE_METHOD_CONFIG, "upsert");
+    props.put(BEHAVIOR_ON_NULL_VALUES_CONFIG, DELETE_BEHAVIOR);
+    props.put(WRITE_METHOD_CONFIG, UPSERT_METHOD);
     validator = new Validator(props, () -> mockClient);
     Config result = validator.validate();
     assertNoErrors(result);
@@ -158,20 +179,33 @@ public class ValidatorTest {
   }
 
   @Test
-  public void testInvalidUpsertDeleteOnValidDataStreamConfigs() {
+  public void testInvalidUpsertOnValidDataStreamConfigs() {
     props.put(DATA_STREAM_DATASET_CONFIG, "a_valid_dataset");
     props.put(DATA_STREAM_TYPE_CONFIG, "logs");
     validator = new Validator(props, () -> mockClient);
     Config result = validator.validate();
     assertNoErrors(result);
 
-    props.put(BEHAVIOR_ON_NULL_VALUES_CONFIG, "delete");
-    props.put(WRITE_METHOD_CONFIG, "upsert");
+    props.put(WRITE_METHOD_CONFIG, UPSERT_METHOD);
     validator = new Validator(props, () -> mockClient);
 
     result = validator.validate();
-    assertHasErrorMessage(result, BEHAVIOR_ON_NULL_VALUES_CONFIG, "must not be");
-    assertHasErrorMessage(result, WRITE_METHOD_CONFIG, "must not be");
+    assertHasErrorMessage(result, WRITE_METHOD_CONFIG, UPSERT_NOT_ALLOWED_WITH_DATASTREAM_ERROR);
+  }
+
+  @Test
+  public void testInvalidDeleteOnValidDataStreamConfigs() {
+    props.put(DATA_STREAM_DATASET_CONFIG, "a_valid_dataset");
+    props.put(DATA_STREAM_TYPE_CONFIG, "logs");
+    validator = new Validator(props, () -> mockClient);
+    Config result = validator.validate();
+    assertNoErrors(result);
+
+    props.put(BEHAVIOR_ON_NULL_VALUES_CONFIG, DELETE_BEHAVIOR);
+    validator = new Validator(props, () -> mockClient);
+
+    result = validator.validate();
+    assertHasErrorMessage(result, BEHAVIOR_ON_NULL_VALUES_CONFIG, DELETE_NOT_ALLOWED_WITH_DATASTREAM_ERROR);
   }
 
   @Test
@@ -456,7 +490,7 @@ public class ValidatorTest {
 
     Config result = validator.validate();
 
-    assertHasErrorMessage(result, DATA_STREAM_TIMESTAMP_CONFIG, "only necessary for data streams");
+    assertHasErrorMessage(result, DATA_STREAM_TIMESTAMP_CONFIG, TIMESTAMP_FIELD_NOT_ALLOWED_ERROR);
   }
 
   @Test
@@ -508,6 +542,270 @@ public class ValidatorTest {
 
       assertNoErrors(result);
     }
+  }
+
+  @Test
+  public void testValidResourceMappingConfig() throws IOException {
+    props.put(EXTERNAL_RESOURCE_USAGE_CONFIG, ExternalResourceUsage.INDEX.name());
+    props.put(TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_CONFIG, TOPIC1 + ":" + INDEX1 + "," + TOPIC2 + ":" + INDEX2);
+    props.put(TOPICS_CONFIG_KEY, TOPIC1 + "," + TOPIC2);
+    when(mockClient.indices().exists(any(GetIndexRequest.class), any(RequestOptions.class)))
+        .thenReturn(true);
+    validator = new Validator(props, () -> mockClient);
+
+    Config result = validator.validate();
+    assertNoErrors(result);
+  }
+
+  @Test
+  public void testInvalidResourceTypeWithoutMapping() {
+    props.put(EXTERNAL_RESOURCE_USAGE_CONFIG, ExternalResourceUsage.INDEX.name());
+    validator = new Validator(props, () -> mockClient);
+
+    Config result = validator.validate();
+    assertHasErrorMessage(result, EXTERNAL_RESOURCE_USAGE_CONFIG, EXTERNAL_RESOURCE_CONFIG_TOGETHER_ERROR);
+    assertHasErrorMessage(result, TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_CONFIG, EXTERNAL_RESOURCE_CONFIG_TOGETHER_ERROR);
+  }
+
+  @Test
+  public void testInvalidMappingNoneResourceType() {
+    props.put(TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_CONFIG, TOPIC1 + ":" + INDEX1);
+    validator = new Validator(props, () -> mockClient);
+
+    Config result = validator.validate();
+    assertHasErrorMessage(result, EXTERNAL_RESOURCE_USAGE_CONFIG, EXTERNAL_RESOURCE_CONFIG_TOGETHER_ERROR);
+    assertHasErrorMessage(result, TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_CONFIG, EXTERNAL_RESOURCE_CONFIG_TOGETHER_ERROR);
+  }
+
+  @Test
+  public void testInvalidResourceMappingWithDataStreamConfigs() {
+    props.put(EXTERNAL_RESOURCE_USAGE_CONFIG, ExternalResourceUsage.INDEX.name());
+    props.put(TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_CONFIG, TOPIC1 + ":" + INDEX1);
+    props.put(DATA_STREAM_TYPE_CONFIG, "logs");
+    props.put(DATA_STREAM_DATASET_CONFIG, "dataset");
+    validator = new Validator(props, () -> mockClient);
+
+    Config result = validator.validate();
+    assertHasErrorMessage(result, TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_CONFIG,
+            EXTERNAL_RESOURCE_DATA_STREAM_MUTUAL_EXCLUSIVITY_ERROR);
+    assertHasErrorMessage(result, DATA_STREAM_TYPE_CONFIG,
+            EXTERNAL_RESOURCE_DATA_STREAM_MUTUAL_EXCLUSIVITY_ERROR);
+    assertHasErrorMessage(result, DATA_STREAM_DATASET_CONFIG,
+            EXTERNAL_RESOURCE_DATA_STREAM_MUTUAL_EXCLUSIVITY_ERROR);
+  }
+
+  @Test
+  public void testInvalidTopicMappingFormat() {
+    props.put(EXTERNAL_RESOURCE_USAGE_CONFIG, ExternalResourceUsage.INDEX.name());
+    props.put(TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_CONFIG, TOPIC1 + ":" + INDEX1 + ":extra," + TOPIC2 + ":" + INDEX2);
+    props.put(TOPICS_CONFIG_KEY, TOPIC1 + "," + TOPIC2);
+    validator = new Validator(props, () -> mockClient);
+
+    Config result = validator.validate();
+    assertHasErrorMessage(result, TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_CONFIG, INVALID_MAPPING_FORMAT_ERROR);
+  }
+
+  @Test
+  public void testInvalidDuplicateTopicMapping() {
+    props.put(EXTERNAL_RESOURCE_USAGE_CONFIG, ExternalResourceUsage.INDEX.name());
+    props.put(TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_CONFIG, TOPIC1 + ":" + INDEX1 + "," + TOPIC1 + ":" + INDEX2);
+    props.put(TOPICS_CONFIG_KEY, TOPIC1);
+    validator = new Validator(props, () -> mockClient);
+
+    Config result = validator.validate();
+    String expectedMessage = String.format(DUPLICATE_TOPIC_MAPPING_ERROR_FORMAT, TOPIC1);
+    assertHasErrorMessage(result, TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_CONFIG, expectedMessage);
+  }
+
+  @Test
+  public void testInvalidDuplicateResourceMapping() {
+    props.put(EXTERNAL_RESOURCE_USAGE_CONFIG, ExternalResourceUsage.INDEX.name());
+    props.put(TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_CONFIG, TOPIC1 + ":" + INDEX1 + "," + TOPIC2 + ":" + INDEX1);
+    props.put(TOPICS_CONFIG_KEY, TOPIC1 + "," + TOPIC2);
+    validator = new Validator(props, () -> mockClient);
+
+    Config result = validator.validate();
+    String expectedMessage = String.format(DUPLICATE_RESOURCE_MAPPING_ERROR_FORMAT, INDEX1);
+    assertHasErrorMessage(result, TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_CONFIG, expectedMessage);
+  }
+
+  @Test
+  public void testInvalidUnmappedTopic() {
+    props.put(EXTERNAL_RESOURCE_USAGE_CONFIG, ExternalResourceUsage.INDEX.name());
+    props.put(TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_CONFIG, TOPIC1 + ":" + INDEX1);
+    props.put(TOPICS_CONFIG_KEY, TOPIC1 + "," + TOPIC2); // topic2 is not mapped
+    validator = new Validator(props, () -> mockClient);
+
+    Config result = validator.validate();
+    String expectedMessage = String.format(UNMAPPED_TOPIC_ERROR_FORMAT, TOPIC2);
+    assertHasErrorMessage(result, TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_CONFIG, expectedMessage);
+  }
+
+  @Test
+  public void testInvalidUnconfiguredTopic() {
+    props.put(EXTERNAL_RESOURCE_USAGE_CONFIG, ExternalResourceUsage.INDEX.name());
+    props.put(TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_CONFIG, TOPIC1 + ":" + INDEX1 + "," + TOPIC2 + ":" + INDEX2);
+    props.put(TOPICS_CONFIG_KEY, TOPIC1); // topic2 is mapped but not configured
+    validator = new Validator(props, () -> mockClient);
+
+    Config result = validator.validate();
+    String expectedMessage = String.format(UNCONFIGURED_TOPIC_ERROR_FORMAT, TOPIC2);
+    assertHasErrorMessage(result, TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_CONFIG, expectedMessage);
+  }
+
+  @Test
+  public void testValidDataStreamResourceTypeWithTimestampField() throws IOException {
+    props.put(EXTERNAL_RESOURCE_USAGE_CONFIG, ExternalResourceUsage.DATASTREAM.name());
+    props.put(TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_CONFIG, TOPIC1 + ":" + LOGS_TEST_1);
+    props.put(TOPICS_CONFIG_KEY, TOPIC1);
+    props.put(DATA_STREAM_TIMESTAMP_CONFIG, "created_at");
+
+    // Mock data stream exists call
+    when(mockClient.indices().exists(any(GetIndexRequest.class), any(RequestOptions.class)))
+            .thenReturn(true);
+
+    validator = new Validator(props, () -> mockClient);
+    Config result = validator.validate();
+    assertNoErrors(result);
+  }
+
+  @Test
+  public void testInvalidAliasDataStreamResourceTypeWithUpsert() throws IOException {
+    props.put(EXTERNAL_RESOURCE_USAGE_CONFIG, ExternalResourceUsage.ALIAS_DATASTREAM.name());
+    props.put(TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_CONFIG, TOPIC1 + ":" + ALIAS1);
+    props.put(TOPICS_CONFIG_KEY, TOPIC1);
+    props.put(WRITE_METHOD_CONFIG, UPSERT_METHOD);
+
+    // Mock alias exists call
+    when(mockClient.indices().existsAlias(any(GetAliasesRequest.class), any(RequestOptions.class)))
+            .thenReturn(true);
+
+    validator = new Validator(props, () -> mockClient);
+    Config result = validator.validate();
+    assertHasErrorMessage(result, WRITE_METHOD_CONFIG, UPSERT_NOT_ALLOWED_WITH_DATASTREAM_ERROR);
+  }
+
+  @Test
+  public void testInvalidDataStreamResourceTypeWithDeleteBehavior() throws IOException {
+    props.put(EXTERNAL_RESOURCE_USAGE_CONFIG, ExternalResourceUsage.DATASTREAM.name());
+    props.put(TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_CONFIG, TOPIC1 + ":" + LOGS_TEST_1);
+    props.put(TOPICS_CONFIG_KEY, TOPIC1);
+    props.put(BEHAVIOR_ON_NULL_VALUES_CONFIG, DELETE_BEHAVIOR);
+
+    // Mock data stream exists call
+    when(mockClient.indices().exists(any(GetIndexRequest.class), any(RequestOptions.class)))
+            .thenReturn(true);
+
+    validator = new Validator(props, () -> mockClient);
+    Config result = validator.validate();
+    assertHasErrorMessage(result, BEHAVIOR_ON_NULL_VALUES_CONFIG, DELETE_NOT_ALLOWED_WITH_DATASTREAM_ERROR);
+  }
+
+  @Test
+  public void testInvalidIndexResourceTypeWithTimestampField() throws IOException {
+    props.put(EXTERNAL_RESOURCE_USAGE_CONFIG, ExternalResourceUsage.INDEX.name());
+    props.put(TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_CONFIG, TOPIC1 + ":" + INDEX1);
+    props.put(TOPICS_CONFIG_KEY, TOPIC1);
+    props.put(DATA_STREAM_TIMESTAMP_CONFIG, "created_at");
+
+    // Mock index exists call
+    when(mockClient.indices().exists(any(GetIndexRequest.class), any(RequestOptions.class)))
+            .thenReturn(true);
+
+    validator = new Validator(props, () -> mockClient);
+    Config result = validator.validate();
+    assertHasErrorMessage(result, DATA_STREAM_TIMESTAMP_CONFIG, TIMESTAMP_FIELD_NOT_ALLOWED_ERROR);
+  }
+
+  @Test
+  public void testValidIndexResourceExists() throws IOException {
+    props.put(EXTERNAL_RESOURCE_USAGE_CONFIG, ExternalResourceUsage.INDEX.name());
+    props.put(TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_CONFIG, TOPIC1 + ":" + INDEX1);
+    props.put(TOPICS_CONFIG_KEY, TOPIC1);
+
+    // Mock index exists call on the high-level client
+    when(mockClient.indices().exists(any(GetIndexRequest.class), any(RequestOptions.class)))
+        .thenReturn(true);
+
+    validator = new Validator(props, () -> mockClient);
+    Config result = validator.validate();
+    assertNoErrors(result);
+  }
+
+  @Test
+  public void testInvalidIndexResourceDoesNotExist() throws IOException {
+    props.put(EXTERNAL_RESOURCE_USAGE_CONFIG, ExternalResourceUsage.INDEX.name());
+    props.put(TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_CONFIG, TOPIC1 + ":" + INDEX1);
+    props.put(TOPICS_CONFIG_KEY, TOPIC1);
+
+    // Mock index does not exist call on the high-level client
+    when(mockClient.indices().exists(any(GetIndexRequest.class), any(RequestOptions.class)))
+        .thenReturn(false);
+
+    validator = new Validator(props, () -> mockClient);
+    Config result = validator.validate();
+    String expectedMessage = String.format(RESOURCE_DOES_NOT_EXIST_ERROR_FORMAT, ExternalResourceUsage.INDEX.name().toLowerCase(), INDEX1);
+    assertHasErrorMessage(result, TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_CONFIG, expectedMessage);
+  }
+
+  @Test
+  public void testValidAliasResourceExists() throws IOException {
+    props.put(EXTERNAL_RESOURCE_USAGE_CONFIG, ExternalResourceUsage.ALIAS_INDEX.name());
+    props.put(TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_CONFIG, TOPIC1 + ":" + ALIAS1);
+    props.put(TOPICS_CONFIG_KEY, TOPIC1);
+
+    // Mock alias exists call on the high-level client
+    when(mockClient.indices().existsAlias(any(GetAliasesRequest.class), any(RequestOptions.class)))
+        .thenReturn(true);
+
+    validator = new Validator(props, () -> mockClient);
+    Config result = validator.validate();
+    assertNoErrors(result);
+  }
+
+  @Test
+  public void testInvalidAliasResourceDoesNotExist() throws IOException {
+    props.put(EXTERNAL_RESOURCE_USAGE_CONFIG, ExternalResourceUsage.ALIAS_INDEX.name());
+    props.put(TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_CONFIG, TOPIC1 + ":" + ALIAS1);
+    props.put(TOPICS_CONFIG_KEY, TOPIC1);
+
+    // Mock alias does not exist call on the high-level client
+    when(mockClient.indices().existsAlias(any(GetAliasesRequest.class), any(RequestOptions.class)))
+        .thenReturn(false);
+
+    validator = new Validator(props, () -> mockClient);
+    Config result = validator.validate();
+    String expectedMessage = String.format(RESOURCE_DOES_NOT_EXIST_ERROR_FORMAT, ExternalResourceUsage.ALIAS_INDEX.name().toLowerCase(), ALIAS1);
+    assertHasErrorMessage(result, TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_CONFIG, expectedMessage);
+  }
+
+  @Test
+  public void testResourceExistenceCheckFailure() throws IOException {
+    props.put(EXTERNAL_RESOURCE_USAGE_CONFIG, ExternalResourceUsage.INDEX.name());
+    props.put(TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_CONFIG, TOPIC1 + ":" + INDEX1);
+    props.put(TOPICS_CONFIG_KEY, TOPIC1);
+
+    // Mock Elasticsearch exception on the high-level client
+    when(mockClient.indices().exists(any(GetIndexRequest.class), any(RequestOptions.class)))
+        .thenThrow(new ElasticsearchStatusException("Index not found", RestStatus.NOT_FOUND));
+
+    validator = new Validator(props, () -> mockClient);
+    Config result = validator.validate();
+    String expectedMessage = String.format(RESOURCE_EXISTENCE_CHECK_FAILED_ERROR_FORMAT, ExternalResourceUsage.INDEX.name().toLowerCase(), INDEX1, "Index not found");
+    assertHasErrorMessage(result, TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_CONFIG, expectedMessage);
+  }
+
+  @Test
+  public void testValidMappingWithWhitespace() throws IOException {
+    props.put(EXTERNAL_RESOURCE_USAGE_CONFIG, ExternalResourceUsage.INDEX.name());
+    props.put(TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_CONFIG, " " + TOPIC1 + " : " + INDEX1 + " , " + TOPIC2 + " : " + INDEX2 + " ");
+    props.put(TOPICS_CONFIG_KEY, TOPIC1 + "," + TOPIC2);
+    when(mockClient.indices().exists(any(GetIndexRequest.class), any(RequestOptions.class)))
+        .thenReturn(true);
+    validator = new Validator(props, () -> mockClient);
+
+    Config result = validator.validate();
+    assertNoErrors(result);
   }
 
   private static void assertHasErrorMessage(Config config, String property, String msg) {
