@@ -87,6 +87,7 @@ public class ValidatorTest {
   private static final String INDEX2 = "index2";
   private static final String ALIAS1 = "alias1";
   private static final String LOGS_TEST_1 = "logs-test-1";
+  private static final String VALID_DATASET = "a_valid_dataset";
 
   private MainResponse mockInfoResponse;
   private Map<String, String> props;
@@ -171,7 +172,7 @@ public class ValidatorTest {
 
   @Test
   public void testInvalidMissingOneDataStreamConfig() {
-    props.put(DATA_STREAM_DATASET_CONFIG, "a_valid_dataset");
+    props.put(DATA_STREAM_DATASET_CONFIG, VALID_DATASET);
     validator = new Validator(props, () -> mockClient);
     Config result = validator.validate();
     assertHasErrorMessage(result, DATA_STREAM_DATASET_CONFIG, "must be set");
@@ -180,7 +181,7 @@ public class ValidatorTest {
 
   @Test
   public void testInvalidUpsertOnValidDataStreamConfigs() {
-    props.put(DATA_STREAM_DATASET_CONFIG, "a_valid_dataset");
+    props.put(DATA_STREAM_DATASET_CONFIG, VALID_DATASET);
     props.put(DATA_STREAM_TYPE_CONFIG, "logs");
     validator = new Validator(props, () -> mockClient);
     Config result = validator.validate();
@@ -195,7 +196,7 @@ public class ValidatorTest {
 
   @Test
   public void testInvalidDeleteOnValidDataStreamConfigs() {
-    props.put(DATA_STREAM_DATASET_CONFIG, "a_valid_dataset");
+    props.put(DATA_STREAM_DATASET_CONFIG, VALID_DATASET);
     props.put(DATA_STREAM_TYPE_CONFIG, "logs");
     validator = new Validator(props, () -> mockClient);
     Config result = validator.validate();
@@ -822,7 +823,7 @@ public class ValidatorTest {
   }
 
   private void configureDataStream() {
-    props.put(DATA_STREAM_DATASET_CONFIG, "a_valid_dataset");
+    props.put(DATA_STREAM_DATASET_CONFIG, VALID_DATASET);
     props.put(DATA_STREAM_TYPE_CONFIG, "logs");
   }
 }
