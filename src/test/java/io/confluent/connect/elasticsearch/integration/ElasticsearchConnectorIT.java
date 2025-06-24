@@ -15,6 +15,7 @@
 
 package io.confluent.connect.elasticsearch.integration;
 
+import java.io.IOException;
 import java.text.SimpleDateFormat;
 import java.time.Duration;
 import java.util.Date;
@@ -37,24 +38,31 @@ import io.confluent.common.utils.IntegrationTest;
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig;
 import io.confluent.connect.elasticsearch.helper.ElasticsearchContainer;
 
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BATCH_SIZE_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BEHAVIOR_ON_NULL_VALUES_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BULK_SIZE_BYTES_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_PASSWORD_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_USERNAME_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.FLUSH_SYNCHRONOUSLY_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_KEY_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.LINGER_MS_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.WRITE_METHOD_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.*;
 import static org.apache.kafka.connect.runtime.ConnectorConfig.VALUE_CONVERTER_CLASS_CONFIG;
+import static org.apache.kafka.connect.runtime.SinkConnectorConfig.TOPICS_CONFIG;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 import static org.junit.Assert.assertEquals;
 
 @Category(IntegrationTest.class)
 public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
-
   // TODO: test compatibility
+  
+  private static final String topic1 = "users-topic";
+  private static final String topic2 = "orders-topic";
+  private static final String index1 = "users-index-1";
+  private static final String index2 = "users-index-2";
+  private static final String index3 = "orders-index-1";
+  private static final String index4 = "orders-index-2";
+  // Our data stream names follow the pattern "logs-{dataset}-{namespace}" to leverage the default "logs-*-*" template.
+  // If you need to use custom data stream names, ensure the corresponding index template exists first.
+  private static final String dataStream1 = "logs-users-1";
+  private static final String dataStream2 = "logs-users-2";
+  private static final String dataStream3 = "logs-orders-1";
+  private static final String dataStream4 = "logs-orders-2";
+  private static final String alias1 = "users-alias";
+  private static final String alias2 = "orders-alias";
 
   @BeforeClass
   public static void setupBeforeAll() {
@@ -344,5 +352,162 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
     props.put("transforms.TimestampRouter.topic.format", topicFormat);
     props.put("transforms.TimestampRouter.timestamp.format", timestampFormat);
     return topicFormat.replace("${topic}", TOPIC).replace("${timestamp}", formatter.format(date));
+  }
+
+  @Test
+  public void testResourceMappingMultipleTopicsToIndices() throws Exception {
+    setupResourceConfigs(ExternalResourceUsage.INDEX);
+
+    // Write records to each topic
+    writeRecordsToTopic(topic1, "users", 3);
+    writeRecordsToTopic(topic2, "orders", 3);
+
+    // Wait for records to be processed
+    await().atMost(Duration.ofMinutes(1)).untilAsserted(() -> {
+      assertThat(helperClient.search(index1)).hasSize(3);
+      assertThat(helperClient.search(index3)).hasSize(3);
+    });
+  }
+
+  @Test
+  public void testResourceMappingMultipleTopicsToDataStreams() throws Exception {
+    setupResourceConfigs(ExternalResourceUsage.DATASTREAM);
+
+    // Write records to each topic
+    writeRecordsToTopic(topic1, "users", 3);
+    writeRecordsToTopic(topic2, "orders", 3);
+
+    // Wait for records to be processed
+    await().atMost(Duration.ofMinutes(1)).untilAsserted(() -> {
+      assertThat(helperClient.search(dataStream1)).hasSize(3);
+      assertThat(helperClient.search(dataStream3)).hasSize(3);
+    });
+  }
+
+  @Test
+  public void testMultiTopicToMultiAliasWithRollover() throws Exception {
+    setupResourceConfigs(ExternalResourceUsage.ALIAS_INDEX);
+
+    // Write records to each topic
+    writeRecordsToTopic(topic1, "users", 3);
+    writeRecordsToTopic(topic2, "orders", 3);
+
+    // Wait for records to be processed
+    await().atMost(Duration.ofMinutes(1)).untilAsserted(() -> {
+      assertThat(helperClient.search(index1)).hasSize(3);
+      assertThat(helperClient.search(index2)).hasSize(0);
+      assertThat(helperClient.search(index3)).hasSize(3);
+      assertThat(helperClient.search(index4)).hasSize(0);
+    });
+
+    helperClient.updateAlias(index1, index2, alias1, index2);
+    helperClient.updateAlias(index3, index4, alias2, index4);
+
+    // Write more records
+    writeRecordsToTopic(topic1, "users", 2);
+    writeRecordsToTopic(topic2, "orders", 2);
+
+    // Wait for records to be processed
+    await().atMost(Duration.ofMinutes(1)).untilAsserted(() -> {
+      assertThat(helperClient.search(index1)).hasSize(3);
+      assertThat(helperClient.search(index2)).hasSize(2);
+      assertThat(helperClient.search(index3)).hasSize(3);
+      assertThat(helperClient.search(index4)).hasSize(2);
+    });
+  }
+
+  @Test
+  public void testMultiTopicToMultiDataStreamAliasWithRollover() throws Exception {
+    setupResourceConfigs(ExternalResourceUsage.ALIAS_DATASTREAM);
+
+    // Write records to each topic
+    writeRecordsToTopic(topic1, "users", 3);
+    writeRecordsToTopic(topic2, "orders", 3);
+
+    // Wait for records to be processed
+    await().atMost(Duration.ofMinutes(1)).untilAsserted(() -> {
+      assertThat(helperClient.search(dataStream1)).hasSize(3);
+      assertThat(helperClient.search(dataStream2)).hasSize(0);
+      assertThat(helperClient.search(dataStream3)).hasSize(3);
+      assertThat(helperClient.search(dataStream4)).hasSize(0);
+    });
+
+    // Perform rollover - switch write index to the second data stream
+    helperClient.updateAlias(dataStream1, dataStream2, alias1, dataStream2);
+    helperClient.updateAlias(dataStream3, dataStream4, alias2, dataStream4);
+
+    // Write more records
+    writeRecordsToTopic(topic1, "users", 2);
+    writeRecordsToTopic(topic2, "orders", 2);
+
+    // Wait for records to be processed
+    await().atMost(Duration.ofMinutes(1)).untilAsserted(() -> {
+      assertThat(helperClient.search(dataStream1)).hasSize(3);
+      assertThat(helperClient.search(dataStream2)).hasSize(2);
+      assertThat(helperClient.search(dataStream3)).hasSize(3);
+      assertThat(helperClient.search(dataStream4)).hasSize(2);
+    });
+  }
+
+  // Helper methods for writing different types of records
+  private void writeRecordsToTopic(String topic, String recordType, int numRecords) {
+    for (int i = 0; i < numRecords; i++) {
+      String record;
+      switch (recordType) {
+        case "users":
+          record = String.format("{\"user_id\":\"user_%d\",\"name\":\"User %d\",\"email\":\"user%d@example.com\"}", i, i, i);
+          break;
+        case "orders":
+          record = String.format("{\"order_id\":\"order_%d\",\"user_id\":\"user_%d\",\"amount\":%.2f}", i, i, 100.0 + i * 10);
+          break;
+        default:
+          record = String.format("{\"id\":%d,\"data\":\"test_data_%d\"}", i, i);
+      }
+      connect.kafka().produce(topic, String.valueOf(i), record);
+    }
+  }
+
+  // Helper methods for verifying data
+  private void setupResourceConfigs(ExternalResourceUsage resourceType) throws IOException, InterruptedException {
+    connect.kafka().createTopic(topic1);
+    connect.kafka().createTopic(topic2);
+
+    switch (resourceType) {
+      case INDEX:
+        props.put(EXTERNAL_RESOURCE_USAGE_CONFIG, ExternalResourceUsage.INDEX.name());
+        props.put(TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_CONFIG,
+            String.format("%s:%s,%s:%s", topic1, index1, topic2, index3));
+        props.put(TOPICS_CONFIG, String.format("%s,%s", topic1, topic2));
+        helperClient.createIndexesWithoutMapping(index1, index3);
+        break;
+      case DATASTREAM:
+        props.put(EXTERNAL_RESOURCE_USAGE_CONFIG, ExternalResourceUsage.DATASTREAM.name());
+        props.put(TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_CONFIG,
+            String.format("%s:%s,%s:%s", topic1, dataStream1, topic2, dataStream3));
+        props.put(TOPICS_CONFIG, String.format("%s,%s", topic1, topic2));
+        helperClient.createDataStreams(dataStream1, dataStream3);
+        break;
+      case ALIAS_INDEX:
+        props.put(EXTERNAL_RESOURCE_USAGE_CONFIG, ExternalResourceUsage.ALIAS_INDEX.name());
+        props.put(TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_CONFIG,
+            String.format("%s:%s,%s:%s", topic1, alias1, topic2, alias2));
+        props.put(TOPICS_CONFIG, String.format("%s,%s", topic1, topic2));
+        helperClient.createIndexesWithoutMapping(index1, index2, index3, index4);
+        helperClient.updateAlias(index1, index2, alias1, index1);
+        helperClient.updateAlias(index3, index4, alias2, index3);
+        break;
+      case ALIAS_DATASTREAM:
+        props.put(EXTERNAL_RESOURCE_USAGE_CONFIG, ExternalResourceUsage.ALIAS_DATASTREAM.name());
+        props.put(TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_CONFIG,
+            String.format("%s:%s,%s:%s", topic1, alias1, topic2, alias2));
+        props.put(TOPICS_CONFIG, String.format("%s,%s", topic1, topic2));
+        helperClient.createDataStreams(dataStream1, dataStream2, dataStream3, dataStream4);
+        helperClient.updateAlias(dataStream1, dataStream2, alias1, dataStream1);
+        helperClient.updateAlias(dataStream3, dataStream4, alias2, dataStream3);
+        break;
+    }
+    // Start the connector
+    connect.configureConnector(CONNECTOR_NAME, props);
+    waitForConnectorToStart(CONNECTOR_NAME, TASKS_MAX);
   }
 }
