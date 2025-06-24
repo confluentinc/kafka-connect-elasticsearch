@@ -49,20 +49,28 @@ import static org.junit.Assert.assertEquals;
 public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
   // TODO: test compatibility
   
-  private static final String topic1 = "users-topic";
-  private static final String topic2 = "orders-topic";
-  private static final String index1 = "users-index-1";
-  private static final String index2 = "users-index-2";
-  private static final String index3 = "orders-index-1";
-  private static final String index4 = "orders-index-2";
+  private static final String TOPIC_1 = "users-topic";
+  private static final String TOPIC_2 = "orders-topic";
+  private static final String INDEX_1 = "users-index-1";
+  private static final String INDEX_2 = "users-index-2";
+  private static final String INDEX_3 = "orders-index-1";
+  private static final String INDEX_4 = "orders-index-2";
   // Our data stream names follow the pattern "logs-{dataset}-{namespace}" to leverage the default "logs-*-*" template.
   // If you need to use custom data stream names, ensure the corresponding index template exists first.
-  private static final String dataStream1 = "logs-users-1";
-  private static final String dataStream2 = "logs-users-2";
-  private static final String dataStream3 = "logs-orders-1";
-  private static final String dataStream4 = "logs-orders-2";
-  private static final String alias1 = "users-alias";
-  private static final String alias2 = "orders-alias";
+  private static final String DATA_STREAM_1 = "logs-users-1";
+  private static final String DATA_STREAM_2 = "logs-users-2";
+  private static final String DATA_STREAM_3 = "logs-orders-1";
+  private static final String DATA_STREAM_4 = "logs-orders-2";
+  private static final String ALIAS_1 = "users-alias";
+  private static final String ALIAS_2 = "orders-alias";
+
+  // Constants for string formats to avoid duplication
+  private static final String TOPIC_RESOURCE_MAPPING_FORMAT = "%s:%s,%s:%s";
+  private static final String TOPICS_LIST_FORMAT = "%s,%s";
+
+  // Constants for record types to avoid duplication
+  private static final String USERS_RECORD_TYPE = "users";
+  private static final String ORDERS_RECORD_TYPE = "orders";
 
   @BeforeClass
   public static void setupBeforeAll() {
@@ -359,13 +367,13 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
     setupResourceConfigs(ExternalResourceUsage.INDEX);
 
     // Write records to each topic
-    writeRecordsToTopic(topic1, "users", 3);
-    writeRecordsToTopic(topic2, "orders", 3);
+    writeRecordsToTopic(TOPIC_1, USERS_RECORD_TYPE, 3);
+    writeRecordsToTopic(TOPIC_2, ORDERS_RECORD_TYPE, 3);
 
     // Wait for records to be processed
     await().atMost(Duration.ofMinutes(1)).untilAsserted(() -> {
-      assertThat(helperClient.search(index1)).hasSize(3);
-      assertThat(helperClient.search(index3)).hasSize(3);
+      assertThat(helperClient.search(INDEX_1)).hasSize(3);
+      assertThat(helperClient.search(INDEX_3)).hasSize(3);
     });
   }
 
@@ -374,13 +382,13 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
     setupResourceConfigs(ExternalResourceUsage.DATASTREAM);
 
     // Write records to each topic
-    writeRecordsToTopic(topic1, "users", 3);
-    writeRecordsToTopic(topic2, "orders", 3);
+    writeRecordsToTopic(TOPIC_1, USERS_RECORD_TYPE, 3);
+    writeRecordsToTopic(TOPIC_2, ORDERS_RECORD_TYPE, 3);
 
     // Wait for records to be processed
     await().atMost(Duration.ofMinutes(1)).untilAsserted(() -> {
-      assertThat(helperClient.search(dataStream1)).hasSize(3);
-      assertThat(helperClient.search(dataStream3)).hasSize(3);
+      assertThat(helperClient.search(DATA_STREAM_1)).hasSize(3);
+      assertThat(helperClient.search(DATA_STREAM_3)).hasSize(3);
     });
   }
 
@@ -389,30 +397,30 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
     setupResourceConfigs(ExternalResourceUsage.ALIAS_INDEX);
 
     // Write records to each topic
-    writeRecordsToTopic(topic1, "users", 3);
-    writeRecordsToTopic(topic2, "orders", 3);
+    writeRecordsToTopic(TOPIC_1, USERS_RECORD_TYPE, 3);
+    writeRecordsToTopic(TOPIC_2, ORDERS_RECORD_TYPE, 3);
 
     // Wait for records to be processed
     await().atMost(Duration.ofMinutes(1)).untilAsserted(() -> {
-      assertThat(helperClient.search(index1)).hasSize(3);
-      assertThat(helperClient.search(index2)).hasSize(0);
-      assertThat(helperClient.search(index3)).hasSize(3);
-      assertThat(helperClient.search(index4)).hasSize(0);
+      assertThat(helperClient.search(INDEX_1)).hasSize(3);
+      assertThat(helperClient.search(INDEX_2)).hasSize(0);
+      assertThat(helperClient.search(INDEX_3)).hasSize(3);
+      assertThat(helperClient.search(INDEX_4)).hasSize(0);
     });
 
-    helperClient.updateAlias(index1, index2, alias1, index2);
-    helperClient.updateAlias(index3, index4, alias2, index4);
+    helperClient.updateAlias(INDEX_1, INDEX_2, ALIAS_1, INDEX_2);
+    helperClient.updateAlias(INDEX_3, INDEX_4, ALIAS_2, INDEX_4);
 
     // Write more records
-    writeRecordsToTopic(topic1, "users", 2);
-    writeRecordsToTopic(topic2, "orders", 2);
+    writeRecordsToTopic(TOPIC_1, USERS_RECORD_TYPE, 2);
+    writeRecordsToTopic(TOPIC_2, ORDERS_RECORD_TYPE, 2);
 
     // Wait for records to be processed
     await().atMost(Duration.ofMinutes(1)).untilAsserted(() -> {
-      assertThat(helperClient.search(index1)).hasSize(3);
-      assertThat(helperClient.search(index2)).hasSize(2);
-      assertThat(helperClient.search(index3)).hasSize(3);
-      assertThat(helperClient.search(index4)).hasSize(2);
+      assertThat(helperClient.search(INDEX_1)).hasSize(3);
+      assertThat(helperClient.search(INDEX_2)).hasSize(2);
+      assertThat(helperClient.search(INDEX_3)).hasSize(3);
+      assertThat(helperClient.search(INDEX_4)).hasSize(2);
     });
   }
 
@@ -421,31 +429,31 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
     setupResourceConfigs(ExternalResourceUsage.ALIAS_DATASTREAM);
 
     // Write records to each topic
-    writeRecordsToTopic(topic1, "users", 3);
-    writeRecordsToTopic(topic2, "orders", 3);
+    writeRecordsToTopic(TOPIC_1, USERS_RECORD_TYPE, 3);
+    writeRecordsToTopic(TOPIC_2, ORDERS_RECORD_TYPE, 3);
 
     // Wait for records to be processed
     await().atMost(Duration.ofMinutes(1)).untilAsserted(() -> {
-      assertThat(helperClient.search(dataStream1)).hasSize(3);
-      assertThat(helperClient.search(dataStream2)).hasSize(0);
-      assertThat(helperClient.search(dataStream3)).hasSize(3);
-      assertThat(helperClient.search(dataStream4)).hasSize(0);
+      assertThat(helperClient.search(DATA_STREAM_1)).hasSize(3);
+      assertThat(helperClient.search(DATA_STREAM_2)).hasSize(0);
+      assertThat(helperClient.search(DATA_STREAM_3)).hasSize(3);
+      assertThat(helperClient.search(DATA_STREAM_4)).hasSize(0);
     });
 
     // Perform rollover - switch write index to the second data stream
-    helperClient.updateAlias(dataStream1, dataStream2, alias1, dataStream2);
-    helperClient.updateAlias(dataStream3, dataStream4, alias2, dataStream4);
+    helperClient.updateAlias(DATA_STREAM_1, DATA_STREAM_2, ALIAS_1, DATA_STREAM_2);
+    helperClient.updateAlias(DATA_STREAM_3, DATA_STREAM_4, ALIAS_2, DATA_STREAM_4);
 
     // Write more records
-    writeRecordsToTopic(topic1, "users", 2);
-    writeRecordsToTopic(topic2, "orders", 2);
+    writeRecordsToTopic(TOPIC_1, USERS_RECORD_TYPE, 2);
+    writeRecordsToTopic(TOPIC_2, ORDERS_RECORD_TYPE, 2);
 
     // Wait for records to be processed
     await().atMost(Duration.ofMinutes(1)).untilAsserted(() -> {
-      assertThat(helperClient.search(dataStream1)).hasSize(3);
-      assertThat(helperClient.search(dataStream2)).hasSize(2);
-      assertThat(helperClient.search(dataStream3)).hasSize(3);
-      assertThat(helperClient.search(dataStream4)).hasSize(2);
+      assertThat(helperClient.search(DATA_STREAM_1)).hasSize(3);
+      assertThat(helperClient.search(DATA_STREAM_2)).hasSize(2);
+      assertThat(helperClient.search(DATA_STREAM_3)).hasSize(3);
+      assertThat(helperClient.search(DATA_STREAM_4)).hasSize(2);
     });
   }
 
@@ -454,10 +462,10 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
     for (int i = 0; i < numRecords; i++) {
       String record;
       switch (recordType) {
-        case "users":
+        case USERS_RECORD_TYPE:
           record = String.format("{\"user_id\":\"user_%d\",\"name\":\"User %d\",\"email\":\"user%d@example.com\"}", i, i, i);
           break;
-        case "orders":
+        case ORDERS_RECORD_TYPE:
           record = String.format("{\"order_id\":\"order_%d\",\"user_id\":\"user_%d\",\"amount\":%.2f}", i, i, 100.0 + i * 10);
           break;
         default:
@@ -469,41 +477,41 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
 
   // Helper methods for verifying data
   private void setupResourceConfigs(ExternalResourceUsage resourceType) throws IOException, InterruptedException {
-    connect.kafka().createTopic(topic1);
-    connect.kafka().createTopic(topic2);
+    connect.kafka().createTopic(TOPIC_1);
+    connect.kafka().createTopic(TOPIC_2);
 
     switch (resourceType) {
       case INDEX:
         props.put(EXTERNAL_RESOURCE_USAGE_CONFIG, ExternalResourceUsage.INDEX.name());
         props.put(TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_CONFIG,
-            String.format("%s:%s,%s:%s", topic1, index1, topic2, index3));
-        props.put(TOPICS_CONFIG, String.format("%s,%s", topic1, topic2));
-        helperClient.createIndexesWithoutMapping(index1, index3);
+            String.format(TOPIC_RESOURCE_MAPPING_FORMAT, TOPIC_1, INDEX_1, TOPIC_2, INDEX_3));
+        props.put(TOPICS_CONFIG, String.format(TOPICS_LIST_FORMAT, TOPIC_1, TOPIC_2));
+        helperClient.createIndexesWithoutMapping(INDEX_1, INDEX_3);
         break;
       case DATASTREAM:
         props.put(EXTERNAL_RESOURCE_USAGE_CONFIG, ExternalResourceUsage.DATASTREAM.name());
         props.put(TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_CONFIG,
-            String.format("%s:%s,%s:%s", topic1, dataStream1, topic2, dataStream3));
-        props.put(TOPICS_CONFIG, String.format("%s,%s", topic1, topic2));
-        helperClient.createDataStreams(dataStream1, dataStream3);
+            String.format(TOPIC_RESOURCE_MAPPING_FORMAT, TOPIC_1, DATA_STREAM_1, TOPIC_2, DATA_STREAM_3));
+        props.put(TOPICS_CONFIG, String.format(TOPICS_LIST_FORMAT, TOPIC_1, TOPIC_2));
+        helperClient.createDataStreams(DATA_STREAM_1, DATA_STREAM_3);
         break;
       case ALIAS_INDEX:
         props.put(EXTERNAL_RESOURCE_USAGE_CONFIG, ExternalResourceUsage.ALIAS_INDEX.name());
         props.put(TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_CONFIG,
-            String.format("%s:%s,%s:%s", topic1, alias1, topic2, alias2));
-        props.put(TOPICS_CONFIG, String.format("%s,%s", topic1, topic2));
-        helperClient.createIndexesWithoutMapping(index1, index2, index3, index4);
-        helperClient.updateAlias(index1, index2, alias1, index1);
-        helperClient.updateAlias(index3, index4, alias2, index3);
+            String.format(TOPIC_RESOURCE_MAPPING_FORMAT, TOPIC_1, ALIAS_1, TOPIC_2, ALIAS_2));
+        props.put(TOPICS_CONFIG, String.format(TOPICS_LIST_FORMAT, TOPIC_1, TOPIC_2));
+        helperClient.createIndexesWithoutMapping(INDEX_1, INDEX_2, INDEX_3, INDEX_4);
+        helperClient.updateAlias(INDEX_1, INDEX_2, ALIAS_1, INDEX_1);
+        helperClient.updateAlias(INDEX_3, INDEX_4, ALIAS_2, INDEX_3);
         break;
       case ALIAS_DATASTREAM:
         props.put(EXTERNAL_RESOURCE_USAGE_CONFIG, ExternalResourceUsage.ALIAS_DATASTREAM.name());
         props.put(TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_CONFIG,
-            String.format("%s:%s,%s:%s", topic1, alias1, topic2, alias2));
-        props.put(TOPICS_CONFIG, String.format("%s,%s", topic1, topic2));
-        helperClient.createDataStreams(dataStream1, dataStream2, dataStream3, dataStream4);
-        helperClient.updateAlias(dataStream1, dataStream2, alias1, dataStream1);
-        helperClient.updateAlias(dataStream3, dataStream4, alias2, dataStream3);
+            String.format(TOPIC_RESOURCE_MAPPING_FORMAT, TOPIC_1, ALIAS_1, TOPIC_2, ALIAS_2));
+        props.put(TOPICS_CONFIG, String.format(TOPICS_LIST_FORMAT, TOPIC_1, TOPIC_2));
+        helperClient.createDataStreams(DATA_STREAM_1, DATA_STREAM_2, DATA_STREAM_3, DATA_STREAM_4);
+        helperClient.updateAlias(DATA_STREAM_1, DATA_STREAM_2, ALIAS_1, DATA_STREAM_1);
+        helperClient.updateAlias(DATA_STREAM_3, DATA_STREAM_4, ALIAS_2, DATA_STREAM_3);
         break;
     }
     // Start the connector
