@@ -963,10 +963,10 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
 
   public ElasticsearchSinkConnectorConfig(Map<String, String> props) {
     super(CONFIG, props);
-    this.kafkaTopics = toTopicArray(props);
+    this.kafkaTopics = getTopicArray(props);
   }
 
-  private String[] toTopicArray(Map<?, ?> config) {
+  private String[] getTopicArray(Map<?, ?> config) {
     Object obj = config.get("topics");
     return obj == null ? new String[0] : ((String) obj).trim().split("\\s*,\\s*");
   }
@@ -978,9 +978,11 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
    * @throws ConfigException if any mapping is invalid or has duplicates
    */
   public Map<String, String> getTopicToExternalResourceMap() {
+    List<String> mappings = topicToExternalResourceMapping();
     Map<String, String> topicToExternalResourceMap = new HashMap<>();
     Set<String> seenResources = new HashSet<>();
-    for (String mapping : topicToExternalResourceMapping()) {
+    
+    for (String mapping : mappings) {
       String[] parts = mapping.split(":");
       if (parts.length != 2) {
         throw new ConfigException(
@@ -1033,8 +1035,8 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
    */
   public boolean isDataStream() {
     // Check if using new external resource usage approach
-    ExternalResourceUsage usage = externalResourceUsage();
-    if (usage != ExternalResourceUsage.DISABLED) {
+    if (isExternalResourceUsageEnabled()) {
+      ExternalResourceUsage usage = externalResourceUsage();
       return usage == ExternalResourceUsage.DATASTREAM
               || usage == ExternalResourceUsage.ALIAS_DATASTREAM;
     }
@@ -1256,6 +1258,15 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
 
   public ExternalResourceUsage externalResourceUsage() {
     return ExternalResourceUsage.valueOf(getString(EXTERNAL_RESOURCE_USAGE_CONFIG).toUpperCase());
+  }
+
+  /**
+   * Checks if external resource usage is enabled.
+   * 
+   * @return true if external resource usage is configured, false if DISABLED
+   */
+  public boolean isExternalResourceUsageEnabled() {
+    return externalResourceUsage() != ExternalResourceUsage.DISABLED;
   }
 
   public List<String> topicToExternalResourceMapping() {
