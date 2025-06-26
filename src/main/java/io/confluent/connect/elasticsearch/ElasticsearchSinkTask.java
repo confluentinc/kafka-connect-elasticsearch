@@ -35,7 +35,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BehaviorOnNullValues;
-import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.ExternalResourceUsage;
 
 @SuppressWarnings("checkstyle:ClassDataAbstractionCoupling")
 public class ElasticsearchSinkTask extends SinkTask {
@@ -67,7 +66,7 @@ public class ElasticsearchSinkTask extends SinkTask {
     this.indexCache = new HashSet<>();
 
     // Initialize topic to resource mapping cache
-    if (!config.externalResourceUsage().equals(ExternalResourceUsage.DISABLED)) {
+    if (config.isExternalResourceUsageEnabled()) {
       try {
         this.topicToResourceMap = config.getTopicToExternalResourceMap();
       } catch (ConfigException e) {
@@ -266,19 +265,21 @@ public class ElasticsearchSinkTask extends SinkTask {
 
   private void tryWriteRecord(SinkRecord sinkRecord, OffsetState offsetState) {
     String resourceName;
-    if (!config.externalResourceUsage().equals(ExternalResourceUsage.DISABLED)) {
+    if (!config.isExternalResourceUsageEnabled()) {
+      resourceName = createIndexName(sinkRecord.topic());
+      ensureIndexExists(resourceName);
+    } else {
       if (topicToResourceMap.containsKey(sinkRecord.topic())) {
         resourceName = topicToResourceMap.get(sinkRecord.topic());
       } else {
         throw new ConnectException(String.format(
-            "Topic '%s' is not mapped to any resource. "
-            + "All topics must be mapped when using topic-to-resource mapping configuration.",
-            sinkRecord.topic()
+                "Topic '%s' is not mapped to any resource. "
+                + "All topics must be mapped when using topic-to-resource mapping configuration. "
+                + "Please check the '%s' configuration to ensure all topics are properly mapped.",
+                sinkRecord.topic(),
+                ElasticsearchSinkConnectorConfig.TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_CONFIG
         ));
       }
-    } else {
-      resourceName = createIndexName(sinkRecord.topic());
-      ensureIndexExists(resourceName);
     }
     
     checkMapping(resourceName, sinkRecord);
