@@ -69,7 +69,6 @@ import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfi
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.WriteMethod;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.EXTERNAL_RESOURCE_USAGE_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.ExternalResourceUsage;
 import static io.confluent.connect.elasticsearch.ExternalResourceExistenceChecker.ExternalResourceExistenceStrategy;
 
 public class Validator {
@@ -199,13 +198,10 @@ public class Validator {
    * - Ensures all configured topics have corresponding resource mappings
    */
   private void validateResourceConfigs() {
-    boolean hasExternalResourceUsage =
-            !config.externalResourceUsage().equals(ExternalResourceUsage.DISABLED);
-    boolean hasTopicToExternalResourceMapping =
-            !config.topicToExternalResourceMapping().isEmpty();
+    boolean hasResourceMappings = !config.topicToExternalResourceMapping().isEmpty();
 
     // Validate that both are set together or both are empty
-    if (hasExternalResourceUsage != hasTopicToExternalResourceMapping) {
+    if (config.isExternalResourceUsageEnabled() != hasResourceMappings) {
       addErrorMessage(EXTERNAL_RESOURCE_USAGE_CONFIG, EXTERNAL_RESOURCE_CONFIG_TOGETHER_ERROR);
       addErrorMessage(TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_CONFIG,
               EXTERNAL_RESOURCE_CONFIG_TOGETHER_ERROR);
@@ -213,7 +209,7 @@ public class Validator {
     }
 
     // Skip resource mapping validations when both are empty
-    if (!hasExternalResourceUsage) {
+    if (!hasResourceMappings) {
       return;
     }
 
@@ -494,7 +490,7 @@ public class Validator {
    * Only validates when external resource usage is enabled.
    */
   private void validateResourceExists(RestHighLevelClient client) {
-    if (config.externalResourceUsage().equals(ExternalResourceUsage.DISABLED)) {
+    if (!config.isExternalResourceUsageEnabled()) {
       return;
     }
 
