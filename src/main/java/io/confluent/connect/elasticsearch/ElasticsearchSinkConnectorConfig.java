@@ -404,10 +404,9 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   // Resource mapping configs
   public static final String EXTERNAL_RESOURCE_USAGE_CONFIG = "external.resource.usage";
   private static final String EXTERNAL_RESOURCE_USAGE_DOC = String.format(
-      "The type of resource to write to. Valid options are %s, %s, %s, %s, and %s. "
-      + "This determines whether the connector will write to regular indices, data streams, "
-      + "index aliases, or data stream aliases. When set to %s, the connector will "
-      + "auto-create indices or data streams based on the topic name and datastream configurations",
+      "The type of resource the connector writes to, such as indices, datastreams or aliases. "
+      + "Valid options are %s, %s, %s, %s, and %s. When set to %s, the connector will "
+      + "auto-create indices or datastreams based on the topic name and datastream configurations",
       ExternalResourceUsage.INDEX,
       ExternalResourceUsage.DATASTREAM,
       ExternalResourceUsage.ALIAS_INDEX,
