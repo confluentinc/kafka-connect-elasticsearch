@@ -118,17 +118,15 @@ public class ElasticsearchClient {
   private final Lock inFlightRequestLock = new ReentrantLock();
   private final Condition inFlightRequestsUpdated = inFlightRequestLock.newCondition();
   private final String esVersion;
-  private final String connectorName;
-  private final int taskId;
 
   @SuppressWarnings("deprecation")
   public ElasticsearchClient(
       ElasticsearchSinkConnectorConfig config,
       ErrantRecordReporter reporter,
-      Runnable afterBulkCallback
+      Runnable afterBulkCallback,
+      int taskId,
+      String connectorName
   ) {
-    connectorName = config.connectorName();
-    taskId = config.taskNumber();
     this.bulkExecutorService = Executors.newFixedThreadPool(config.maxInFlightRequests(),
       new ThreadFactory() {
         private final AtomicInteger threadNumber = new AtomicInteger(1);

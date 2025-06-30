@@ -71,7 +71,7 @@ public class ElasticsearchClientSslTest extends ElasticsearchClientTestBase {
   @Test
   public void testSsl() throws Exception {
     ElasticsearchClient client = new ElasticsearchClient(config, null, 
-    () -> offsetTracker.updateOffsets());
+    () -> offsetTracker.updateOffsets(), 1, "elasticsearch-sink");
     client.createIndexOrDataStream(index);
 
     writeRecord(sinkRecord(0), client);
