@@ -32,6 +32,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.concurrent.ThreadFactory;
 import java.util.function.BiConsumer;
 
 import org.apache.http.HttpHost;
@@ -117,6 +118,8 @@ public class ElasticsearchClient {
   private final Lock inFlightRequestLock = new ReentrantLock();
   private final Condition inFlightRequestsUpdated = inFlightRequestLock.newCondition();
   private final String esVersion;
+  private final String connectorName;
+  private final int taskId;
 
   @SuppressWarnings("deprecation")
   public ElasticsearchClient(
@@ -124,7 +127,19 @@ public class ElasticsearchClient {
       ErrantRecordReporter reporter,
       Runnable afterBulkCallback
   ) {
-    this.bulkExecutorService = Executors.newFixedThreadPool(config.maxInFlightRequests());
+    connectorName = config.connectorName();
+    taskId = config.taskNumber();
+    this.bulkExecutorService = Executors.newFixedThreadPool(config.maxInFlightRequests(),
+      new ThreadFactory() {
+        private final AtomicInteger threadNumber = new AtomicInteger(1);
+        @Override
+        public Thread newThread(Runnable r) {
+          Thread thread = Executors.defaultThreadFactory().newThread(r);
+          thread.setName(connectorName + "-" + taskId + "-elasticsearch-bulk-executor-"
+                  + threadNumber.getAndIncrement());
+          return thread;
+        }
+      });
     this.numBufferedRecords = new AtomicInteger(0);
     this.error = new AtomicReference<>();
     this.requestToSinkRecord = new ConcurrentHashMap<>();

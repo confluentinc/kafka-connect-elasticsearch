@@ -407,6 +407,13 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   private static final String KERBEROS_GROUP = "Kerberos";
   private static final String DATA_STREAM_GROUP = "Data Stream";
 
+  private final int taskId;
+  private final String connectorName;
+
+  public static final String TASK_ID_CONFIG =                   "taskId";
+  private static final ConfigDef.Type TASK_ID_TYPE =            ConfigDef.Type.INT;
+  public static final ConfigDef.Importance TASK_ID_IMPORTANCE = ConfigDef.Importance.LOW;
+
   public enum BehaviorOnMalformedDoc {
     IGNORE,
     WARN,
@@ -443,6 +450,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
     addSslConfigs(configDef);
     addKerberosConfigs(configDef);
     addDataStreamConfigs(configDef);
+    addInternalConfigs(configDef);
     return configDef;
   }
 
@@ -889,10 +897,30 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
     );
   }
 
+  private static void addInternalConfigs(ConfigDef configDef) {
+    configDef
+        .defineInternal(
+            TASK_ID_CONFIG,
+            TASK_ID_TYPE,
+            ConfigDef.NO_DEFAULT_VALUE,
+            TASK_ID_IMPORTANCE
+    );
+  }
+
   public static final ConfigDef CONFIG = baseConfigDef();
 
   public ElasticsearchSinkConnectorConfig(Map<String, String> props) {
     super(CONFIG, props);
+    taskId = getInt(TASK_ID_CONFIG);
+    connectorName = originalsStrings().get("name");
+  }
+
+  public int taskNumber() {
+    return taskId;
+  }
+
+  public String connectorName() {
+    return connectorName;
   }
 
   public boolean isAuthenticatedConnection() {
