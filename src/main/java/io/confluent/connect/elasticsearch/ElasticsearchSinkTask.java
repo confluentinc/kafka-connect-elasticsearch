@@ -42,7 +42,7 @@ public class ElasticsearchSinkTask extends SinkTask {
 
   private DataConverter converter;
   private ElasticsearchClient client;
-  private ElasticsearchSinkConnectorConfig config;
+  private ElasticsearchSinkTaskConfig config;
   private ErrantRecordReporter reporter;
   private Set<String> existingMappings;
   private Set<String> indexCache;
@@ -58,7 +58,7 @@ public class ElasticsearchSinkTask extends SinkTask {
   protected void start(Map<String, String> props, ElasticsearchClient client) {
     log.info("Starting ElasticsearchSinkTask.");
 
-    this.config = new ElasticsearchSinkConnectorConfig(props);
+    this.config = new ElasticsearchSinkTaskConfig(props);
     this.converter = new DataConverter(config);
     this.existingMappings = new HashSet<>();
     this.indexCache = new HashSet<>();
@@ -80,7 +80,8 @@ public class ElasticsearchSinkTask extends SinkTask {
     }
     Runnable afterBulkCallback = () -> offsetTracker.updateOffsets();
     this.client = client != null ? client
-        : new ElasticsearchClient(config, reporter, afterBulkCallback);
+        : new ElasticsearchClient(config, reporter, afterBulkCallback,
+            config.taskNumber(), config.connectorName());
 
     if (!config.flushSynchronously()) {
       this.offsetTracker = new AsyncOffsetTracker(context);
