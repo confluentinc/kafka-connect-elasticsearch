@@ -33,9 +33,14 @@ public class ElasticsearchSinkConnectorTest {
   public void shouldGenerateValidTaskConfigs() {
     connector.start(settings);
     List<Map<String, String>> taskConfigs = connector.taskConfigs(2);
-    assertFalse("zero task configs provided", taskConfigs.isEmpty());
-    for (Map<String, String> taskConfig : taskConfigs) {
-      assertEquals(settings, taskConfig);
+    assertEquals("Should generate exactly 2 task configs", 2, taskConfigs.size());
+    for (int i = 0; i < taskConfigs.size(); i++) {
+      Map<String, String> taskConfig = taskConfigs.get(i);
+      // Create expected config for this task
+      Map<String, String> expectedConfig = new HashMap<>(settings);
+      expectedConfig.put(ElasticsearchSinkTaskConfig.TASK_ID_CONFIG, String.valueOf(i));
+
+      assertEquals("Task config " + i + " should match expected", expectedConfig, taskConfig);
     }
   }
 
