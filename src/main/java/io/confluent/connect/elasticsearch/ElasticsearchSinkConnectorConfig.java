@@ -891,6 +891,10 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
 
   public static final ConfigDef CONFIG = baseConfigDef();
 
+  protected ElasticsearchSinkConnectorConfig(ConfigDef config, Map<String, String> properties) {
+    super(config, properties);
+  }
+
   public ElasticsearchSinkConnectorConfig(Map<String, String> props) {
     super(CONFIG, props);
   }
