@@ -98,6 +98,7 @@ public class ElasticsearchSinkTaskTest {
     props = ElasticsearchSinkConnectorConfigTest.addNecessaryProps(new HashMap<>());
     props.put(IGNORE_KEY_CONFIG, "true");
     props.put(FLUSH_SYNCHRONOUSLY_CONFIG, Boolean.toString(flushSynchronously));
+    props.put(ElasticsearchSinkTaskConfig.TASK_ID_CONFIG, "1");
 
     client = mock(ElasticsearchClient.class);
     context = mock(SinkTaskContext.class);

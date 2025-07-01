@@ -32,6 +32,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.concurrent.ThreadFactory;
 import java.util.function.BiConsumer;
 
 import org.apache.http.HttpHost;
@@ -122,9 +123,21 @@ public class ElasticsearchClient {
   public ElasticsearchClient(
       ElasticsearchSinkConnectorConfig config,
       ErrantRecordReporter reporter,
-      Runnable afterBulkCallback
+      Runnable afterBulkCallback,
+      int taskId,
+      String connectorName
   ) {
-    this.bulkExecutorService = Executors.newFixedThreadPool(config.maxInFlightRequests());
+    this.bulkExecutorService = Executors.newFixedThreadPool(config.maxInFlightRequests(),
+      new ThreadFactory() {
+        private final AtomicInteger threadNumber = new AtomicInteger(1);
+        @Override
+        public Thread newThread(Runnable r) {
+          Thread thread = Executors.defaultThreadFactory().newThread(r);
+          thread.setName(connectorName + "-" + taskId + "-elasticsearch-bulk-executor-"
+                  + threadNumber.getAndIncrement());
+          return thread;
+        }
+      });
     this.numBufferedRecords = new AtomicInteger(0);
     this.error = new AtomicReference<>();
     this.requestToSinkRecord = new ConcurrentHashMap<>();
