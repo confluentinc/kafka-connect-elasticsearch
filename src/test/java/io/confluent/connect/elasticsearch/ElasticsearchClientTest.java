@@ -51,6 +51,7 @@ import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import org.apache.kafka.connect.data.Schema;
@@ -741,6 +742,51 @@ public class ElasticsearchClientTest extends ElasticsearchClientTestBase {
     props.put(CONNECTION_URL_CONFIG, container.getConnectionUrl() + "/");
     config = new ElasticsearchSinkConnectorConfig(props);
     ElasticsearchClient client = new ElasticsearchClient(config, null, () -> offsetTracker.updateOffsets(), 1, "elasticsearch-sink");
+    client.close();
+  }
+
+  @Test
+  public void testThreadNamingWithConnectorNameAndTaskId() throws Exception {
+    props.put(MAX_IN_FLIGHT_REQUESTS_CONFIG, "2");
+    props.put(BATCH_SIZE_CONFIG, "1"); // Force small batches to create multiple threads
+    props.put(LINGER_MS_CONFIG, "100"); // Reduce linger time to process batches quickly
+    props.put(ElasticsearchSinkTaskConfig.TASK_ID_CONFIG, "1");
+    props.put("name", "elasticsearch-sink");
+    ElasticsearchSinkTaskConfig taskConfig = new ElasticsearchSinkTaskConfig(props);
+    
+    ElasticsearchClient client = new ElasticsearchClient(taskConfig, null, () -> offsetTracker.updateOffsets(),
+        1, "elasticsearch-sink");
+    client.createIndexOrDataStream(index);
+
+    // Trigger bulk operations to create threads
+    for (int i = 0; i < 10; i++) {
+      writeRecord(sinkRecord(i), client);
+    }
+    client.flush();
+
+    waitUntilRecordsInES(10);
+
+    // Expected thread name pattern should be: {connectorName}-{taskId}-elasticsearch-bulk-executor-{number}
+    String expectedPrefix = "elasticsearch-sink-1-elasticsearch-bulk-executor-";
+    
+    // Check that threads with the expected name pattern exist
+    Set<String> threadNames = Thread.getAllStackTraces().keySet().stream()
+        .map(Thread::getName)
+        .filter(name -> name.startsWith(expectedPrefix))
+        .collect(java.util.stream.Collectors.toSet());
+
+    assertTrue("Expected threads with prefix " + expectedPrefix + " to exist", 
+               !threadNames.isEmpty());
+
+    // Verify thread names follow the expected pattern
+    for (String threadName : threadNames) {
+      assertTrue("Thread name should start with expected prefix", 
+                 threadName.startsWith(expectedPrefix));
+      
+      String suffix = threadName.substring(expectedPrefix.length());
+      assertTrue("Thread name should end with a number", suffix.matches("\\d+"));
+    }
+
     client.close();
   }
 }

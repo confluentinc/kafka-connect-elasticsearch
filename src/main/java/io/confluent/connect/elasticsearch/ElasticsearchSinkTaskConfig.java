@@ -51,11 +51,11 @@ public class ElasticsearchSinkTaskConfig extends ElasticsearchSinkConnectorConfi
     connectorName = originalsStrings().get("name");
   }
 
-  public int taskNumber() {
+  public int getTaskId() {
     return taskId;
   }
 
-  public String connectorName() {
+  public String getConnectorName() {
     return connectorName;
   }
 }

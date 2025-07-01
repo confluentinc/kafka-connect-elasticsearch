@@ -81,7 +81,7 @@ public class ElasticsearchSinkTask extends SinkTask {
     Runnable afterBulkCallback = () -> offsetTracker.updateOffsets();
     this.client = client != null ? client
         : new ElasticsearchClient(config, reporter, afterBulkCallback,
-            config.taskNumber(), config.connectorName());
+            config.getTaskId(), config.getConnectorName());
 
     if (!config.flushSynchronously()) {
       this.offsetTracker = new AsyncOffsetTracker(context);
