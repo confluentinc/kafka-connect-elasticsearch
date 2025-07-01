@@ -28,6 +28,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.github.tomakehurst.wiremock.client.ResponseDefinitionBuilder;
 import com.github.tomakehurst.wiremock.client.WireMock;
 import com.github.tomakehurst.wiremock.junit.WireMockRule;
+import io.confluent.connect.elasticsearch.ElasticsearchSinkTaskConfig;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.connect.errors.ConnectException;
@@ -498,6 +499,7 @@ public class ElasticsearchSinkTaskIT {
     props.put(IGNORE_SCHEMA_CONFIG, "true");
     props.put(WRITE_METHOD_CONFIG, WriteMethod.UPSERT.toString());
     props.put(FLUSH_SYNCHRONOUSLY_CONFIG, Boolean.toString(synchronousFlush));
+    props.put(ElasticsearchSinkTaskConfig.TASK_ID_CONFIG, "1");
 
     return props;
   }
