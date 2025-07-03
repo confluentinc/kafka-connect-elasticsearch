@@ -960,6 +960,11 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
 
   public static final ConfigDef CONFIG = baseConfigDef();
 
+  protected ElasticsearchSinkConnectorConfig(ConfigDef config, Map<String, String> properties) {
+    super(config, properties);
+    this.kafkaTopics = getTopicArray(properties);
+  }
+
   public ElasticsearchSinkConnectorConfig(Map<String, String> props) {
     super(CONFIG, props);
     this.kafkaTopics = getTopicArray(props);
