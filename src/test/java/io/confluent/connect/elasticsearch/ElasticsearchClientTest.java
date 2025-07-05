@@ -780,7 +780,7 @@ public class ElasticsearchClientTest {
     helperClient = null;
 
     container.close();
-    container = ElasticsearchContainer.fromSystemProperties();
+    container = ElasticsearchContainer.fromSystemProperties().withSslEnabled(false);
     container.start();
   }
 
