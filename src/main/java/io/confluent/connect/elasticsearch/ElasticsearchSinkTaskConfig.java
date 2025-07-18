@@ -26,6 +26,7 @@ public class ElasticsearchSinkTaskConfig extends ElasticsearchSinkConnectorConfi
   public static final String TASK_ID_CONFIG =                   "taskId";
   private static final ConfigDef.Type TASK_ID_TYPE =            ConfigDef.Type.INT;
   public static final ConfigDef.Importance TASK_ID_IMPORTANCE = ConfigDef.Importance.LOW;
+  public static final int TASK_ID_DEFAULT = 0;
 
   /**
    * Return a ConfigDef object used to define this config's fields.
@@ -37,7 +38,7 @@ public class ElasticsearchSinkTaskConfig extends ElasticsearchSinkConnectorConfi
             .defineInternal(
                     TASK_ID_CONFIG,
                     TASK_ID_TYPE,
-                    ConfigDef.NO_DEFAULT_VALUE,
+                    TASK_ID_DEFAULT,
                     TASK_ID_IMPORTANCE
             );
   }
@@ -47,7 +48,7 @@ public class ElasticsearchSinkTaskConfig extends ElasticsearchSinkConnectorConfi
    */
   public ElasticsearchSinkTaskConfig(Map<String, String> properties) {
     super(config(), properties);
-    taskId = getInt(TASK_ID_CONFIG);
+    taskId = properties.containsKey(TASK_ID_CONFIG) ? getInt(TASK_ID_CONFIG) : 0;
     connectorName = originalsStrings().get("name");
   }
 
