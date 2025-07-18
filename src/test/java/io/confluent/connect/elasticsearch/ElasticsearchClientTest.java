@@ -767,7 +767,7 @@ public class ElasticsearchClientTest {
     config = new ElasticsearchSinkConnectorConfig(props);
     converter = new DataConverter(config);
 
-    ElasticsearchClient client = new ElasticsearchClient(config, null, () -> offsetTracker.updateOffsets());
+    ElasticsearchClient client = new ElasticsearchClient(config, null, () -> offsetTracker.updateOffsets(), 1, "elasticsearch-sink");
     helperClient = new ElasticsearchHelperClient(address, config,
         container.shouldStartClientInCompatibilityMode());
     client.createIndexOrDataStream(index);
