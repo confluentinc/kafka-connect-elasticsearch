@@ -23,6 +23,7 @@ import java.util.function.BooleanSupplier;
 
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
+import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.errors.DataException;
 import org.apache.kafka.connect.sink.ErrantRecordReporter;
@@ -42,10 +43,11 @@ public class ElasticsearchSinkTask extends SinkTask {
 
   private DataConverter converter;
   private ElasticsearchClient client;
-  private ElasticsearchSinkConnectorConfig config;
+  private ElasticsearchSinkTaskConfig config;
   private ErrantRecordReporter reporter;
   private Set<String> existingMappings;
   private Set<String> indexCache;
+  private Map<String, String> topicToResourceMap;
   private OffsetTracker offsetTracker;
   private PartitionPauser partitionPauser;
 
@@ -58,10 +60,21 @@ public class ElasticsearchSinkTask extends SinkTask {
   protected void start(Map<String, String> props, ElasticsearchClient client) {
     log.info("Starting ElasticsearchSinkTask.");
 
-    this.config = new ElasticsearchSinkConnectorConfig(props);
+    this.config = new ElasticsearchSinkTaskConfig(props);
     this.converter = new DataConverter(config);
     this.existingMappings = new HashSet<>();
     this.indexCache = new HashSet<>();
+
+    // Initialize topic to resource mapping cache
+    if (config.isExternalResourceUsageEnabled()) {
+      try {
+        this.topicToResourceMap = config.getTopicToExternalResourceMap();
+      } catch (ConfigException e) {
+        throw new ConnectException("Failed to parse topic-to-resource mappings: "
+                + e.getMessage(), e);
+      }
+    }
+
     int offsetHighWaterMark = config.maxBufferedRecords() * 10;
     int offsetLowWaterMark = config.maxBufferedRecords() * 5;
     this.partitionPauser = new PartitionPauser(context,
@@ -80,7 +93,8 @@ public class ElasticsearchSinkTask extends SinkTask {
     }
     Runnable afterBulkCallback = () -> offsetTracker.updateOffsets();
     this.client = client != null ? client
-        : new ElasticsearchClient(config, reporter, afterBulkCallback);
+        : new ElasticsearchClient(config, reporter, afterBulkCallback,
+            config.getTaskId(), config.getConnectorName());
 
     if (!config.flushSynchronously()) {
       this.offsetTracker = new AsyncOffsetTracker(context);
@@ -138,13 +152,13 @@ public class ElasticsearchSinkTask extends SinkTask {
     return Version.getVersion();
   }
 
-  private void checkMapping(String index, SinkRecord record) {
-    if (!config.shouldIgnoreSchema(record.topic()) && !existingMappings.contains(index)) {
-      if (!client.hasMapping(index)) {
-        client.createMapping(index, record.valueSchema());
+  private void checkMapping(String resourceName, SinkRecord record) {
+    if (!config.shouldIgnoreSchema(record.topic()) && !existingMappings.contains(resourceName)) {
+      if (!client.hasMapping(resourceName)) {
+        client.createMapping(resourceName, record.valueSchema());
       }
-      log.debug("Caching mapping for index '{}' locally.", index);
-      existingMappings.add(index);
+      log.debug("Caching mapping for resource '{}' locally.", resourceName);
+      existingMappings.add(resourceName);
     }
   }
 
@@ -250,14 +264,29 @@ public class ElasticsearchSinkTask extends SinkTask {
   }
 
   private void tryWriteRecord(SinkRecord sinkRecord, OffsetState offsetState) {
-    String indexName = createIndexName(sinkRecord.topic());
-
-    ensureIndexExists(indexName);
-    checkMapping(indexName, sinkRecord);
+    String resourceName;
+    if (!config.isExternalResourceUsageEnabled()) {
+      resourceName = createIndexName(sinkRecord.topic());
+      ensureIndexExists(resourceName);
+    } else {
+      if (topicToResourceMap.containsKey(sinkRecord.topic())) {
+        resourceName = topicToResourceMap.get(sinkRecord.topic());
+      } else {
+        throw new ConnectException(String.format(
+                "Topic '%s' is not mapped to any resource. "
+                + "All topics must be mapped when using topic-to-resource mapping configuration. "
+                + "Please check the '%s' configuration to ensure all topics are properly mapped.",
+                sinkRecord.topic(),
+                ElasticsearchSinkConnectorConfig.TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_CONFIG
+        ));
+      }
+    }
+    
+    checkMapping(resourceName, sinkRecord);
 
     DocWriteRequest<?> docWriteRequest = null;
     try {
-      docWriteRequest = converter.convertRecord(sinkRecord, indexName);
+      docWriteRequest = converter.convertRecord(sinkRecord, resourceName);
     } catch (DataException convertException) {
       reportBadRecord(sinkRecord, convertException);
 

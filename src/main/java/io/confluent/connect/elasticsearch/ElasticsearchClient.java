@@ -32,6 +32,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.concurrent.ThreadFactory;
 import java.util.function.BiConsumer;
 
 import org.apache.http.HttpHost;
@@ -122,9 +123,21 @@ public class ElasticsearchClient {
   public ElasticsearchClient(
       ElasticsearchSinkConnectorConfig config,
       ErrantRecordReporter reporter,
-      Runnable afterBulkCallback
+      Runnable afterBulkCallback,
+      int taskId,
+      String connectorName
   ) {
-    this.bulkExecutorService = Executors.newFixedThreadPool(config.maxInFlightRequests());
+    this.bulkExecutorService = Executors.newFixedThreadPool(config.maxInFlightRequests(),
+      new ThreadFactory() {
+        private final AtomicInteger threadNumber = new AtomicInteger(1);
+        @Override
+        public Thread newThread(Runnable r) {
+          Thread thread = Executors.defaultThreadFactory().newThread(r);
+          thread.setName(connectorName + "-" + taskId + "-elasticsearch-bulk-executor-"
+                  + threadNumber.getAndIncrement());
+          return thread;
+        }
+      });
     this.numBufferedRecords = new AtomicInteger(0);
     this.error = new AtomicReference<>();
     this.requestToSinkRecord = new ConcurrentHashMap<>();
@@ -267,13 +280,14 @@ public class ElasticsearchClient {
   /**
    * Creates a mapping for the given index and schema.
    *
-   * @param index the index to create the mapping for
+   * @param resourceName the resource to create the mapping for
    * @param schema the schema to map
    */
-  public void createMapping(String index, Schema schema) {
-    PutMappingRequest request = new PutMappingRequest(index).source(Mapping.buildMapping(schema));
+  public void createMapping(String resourceName, Schema schema) {
+    PutMappingRequest request = new PutMappingRequest(resourceName)
+            .source(Mapping.buildMapping(schema));
     callWithRetries(
-        String.format("create mapping for index %s with schema %s", index, schema),
+        String.format("create mapping for resource %s with schema %s", resourceName, schema),
         () -> client.indices().putMapping(request, RequestOptions.DEFAULT)
     );
   }
@@ -305,11 +319,11 @@ public class ElasticsearchClient {
 
   /**
    * Checks whether the index already has a mapping or not.
-   * @param index the index to check
+   * @param resourceName the resource to check
    * @return true if a mapping exists, false if it does not
    */
-  public boolean hasMapping(String index) {
-    MappingMetadata mapping = mapping(index);
+  public boolean hasMapping(String resourceName) {
+    MappingMetadata mapping = mapping(resourceName);
     return mapping != null && mapping.sourceAsMap() != null && !mapping.sourceAsMap().isEmpty();
   }
 
