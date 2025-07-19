@@ -434,14 +434,14 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   private static final String TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_DEFAULT = "";
 
   // Error message constants for topic-to-resource mapping validation
-  public static final String INVALID_MAPPING_FORMAT_ERROR = 
+  public static final String INVALID_MAPPING_FORMAT_ERROR =
       "Invalid topic-to-resource mapping format. Expected format: topic:resource";
-  
+
   public static final String DUPLICATE_TOPIC_MAPPING_ERROR_FORMAT =
           "Topic '%s' is mapped to multiple resources. "
           + "Each topic must be mapped to exactly one resource.";
-  
-  public static final String DUPLICATE_RESOURCE_MAPPING_ERROR_FORMAT = 
+
+  public static final String DUPLICATE_RESOURCE_MAPPING_ERROR_FORMAT =
       "Resource '%s' is mapped from multiple topics. "
       + "Each resource must be mapped to exactly one topic.";
 
@@ -985,7 +985,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
     List<String> mappings = topicToExternalResourceMapping();
     Map<String, String> topicToExternalResourceMap = new HashMap<>();
     Set<String> seenResources = new HashSet<>();
-    
+
     for (String mapping : mappings) {
       String[] parts = mapping.split(":");
       if (parts.length != 2) {
@@ -1034,7 +1034,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   /**
    * Determines if data streams are being used. Checks the external
    * resource usage approach first, then falls back to legacy data stream configs.
-   * 
+   *
    * @return true if data streams are configured, false otherwise
    */
   public boolean isDataStream() {
@@ -1266,7 +1266,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
 
   /**
    * Checks if external resource usage is enabled.
-   * 
+   *
    * @return true if external resource usage is configured, false if DISABLED
    */
   public boolean isExternalResourceUsageEnabled() {
