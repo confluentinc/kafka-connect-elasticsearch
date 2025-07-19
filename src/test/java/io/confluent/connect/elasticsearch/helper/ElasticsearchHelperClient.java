@@ -21,6 +21,7 @@ import co.elastic.clients.json.jackson.JacksonJsonpMapper;
 import co.elastic.clients.transport.rest_client.RestClientTransport;
 import org.apache.http.HttpHost;
 import org.apache.kafka.test.TestUtils;
+import org.elasticsearch.action.admin.indices.alias.IndicesAliasesRequest;
 import org.elasticsearch.action.admin.indices.delete.DeleteIndexRequest;
 import org.elasticsearch.action.search.SearchRequest;
 import org.elasticsearch.client.RequestOptions;
@@ -29,6 +30,7 @@ import org.elasticsearch.client.RestHighLevelClient;
 import org.elasticsearch.client.RestHighLevelClientBuilder;
 import org.elasticsearch.client.core.CountRequest;
 import org.elasticsearch.client.indices.CreateIndexRequest;
+import org.elasticsearch.client.indices.CreateDataStreamRequest;
 import org.elasticsearch.client.indices.DataStream;
 import org.elasticsearch.client.indices.DeleteDataStreamRequest;
 import org.elasticsearch.client.indices.GetDataStreamRequest;
@@ -140,6 +142,50 @@ public class ElasticsearchHelperClient {
   public void createIndex(String index, String jsonMappings) throws IOException {
     CreateIndexRequest createIndexRequest = new CreateIndexRequest(index).mapping(jsonMappings, XContentType.JSON);
     client.indices().create(createIndexRequest, RequestOptions.DEFAULT);
+  }
+
+  public void createIndexesWithoutMapping(String... indexes) throws IOException {
+    for (String index : indexes) {
+      // Check if index exists and delete it first to avoid "already exists" error
+      if (indexExists(index)) {
+        deleteIndex(index, false);
+      }
+      CreateIndexRequest createIndexRequest = new CreateIndexRequest(index);
+      client.indices().create(createIndexRequest, RequestOptions.DEFAULT);
+    }
+  }
+
+  public void createDataStreams(String... dataStreams) throws IOException {
+    for (String dataStream : dataStreams) {
+      // Check if data stream exists and delete it first to avoid "already exists" error
+      if (indexExists(dataStream)) {
+        deleteIndex(dataStream, true);
+      }
+      CreateDataStreamRequest createDataStreamRequest = new CreateDataStreamRequest(dataStream);
+      client.indices().createDataStream(createDataStreamRequest, RequestOptions.DEFAULT);
+    }
+  }
+
+  public void updateAlias(String index1, String index2, String alias, String writeIndex) throws IOException {
+    IndicesAliasesRequest request = new IndicesAliasesRequest();
+    
+    // Add index1 to alias
+    IndicesAliasesRequest.AliasActions addIndex1 =
+            IndicesAliasesRequest.AliasActions.add()
+                    .index(index1)
+                    .alias(alias)
+                    .writeIndex(index1.equals(writeIndex));
+
+    // Add index2 to alias
+    IndicesAliasesRequest.AliasActions addIndex2 =
+            IndicesAliasesRequest.AliasActions.add()
+                    .index(index2)
+                    .alias(alias)
+                    .writeIndex(index2.equals(writeIndex));
+
+    request.addAliasAction(addIndex1);
+    request.addAliasAction(addIndex2);
+    client.indices().updateAliases(request, RequestOptions.DEFAULT);
   }
 
   public SearchHits search(String index) throws IOException {
