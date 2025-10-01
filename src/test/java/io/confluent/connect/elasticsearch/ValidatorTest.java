@@ -46,6 +46,8 @@ import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfi
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.INVALID_MAPPING_FORMAT_ERROR;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.DUPLICATE_TOPIC_MAPPING_ERROR_FORMAT;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.DUPLICATE_RESOURCE_MAPPING_ERROR_FORMAT;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.TOO_MANY_MAPPINGS_ERROR_FORMAT;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.MAX_EXTERNAL_RESOURCE_MAPPINGS_CONFIG;
 import static io.confluent.connect.elasticsearch.Validator.*;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -81,6 +83,7 @@ public class ValidatorTest {
   private static final String TOPICS_CONFIG_KEY = "topics";
   private static final String TOPIC1 = "topic1";
   private static final String TOPIC2 = "topic2";
+  private static final String TOPIC3 = "topic3";
 
   // Resource names
   private static final String INDEX1 = "index1";
@@ -651,6 +654,58 @@ public class ValidatorTest {
 
     Config result = validator.validate();
     String expectedMessage = String.format(UNCONFIGURED_TOPIC_ERROR_FORMAT, TOPIC2);
+    assertHasErrorMessage(result, TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_CONFIG, expectedMessage);
+  }
+
+  @Test
+  public void testValidMappingWithinLimit() throws IOException {
+    props.put(EXTERNAL_RESOURCE_USAGE_CONFIG, ExternalResourceUsage.INDEX.name());
+    props.put(TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_CONFIG, TOPIC1 + ":" + INDEX1 + "," + TOPIC2 + ":" + INDEX2);
+    props.put(TOPICS_CONFIG_KEY, TOPIC1 + "," + TOPIC2);
+    props.put(MAX_EXTERNAL_RESOURCE_MAPPINGS_CONFIG, "5"); // Set limit higher than number of mappings
+    when(mockClient.indices().exists(any(GetIndexRequest.class), any(RequestOptions.class)))
+        .thenReturn(true);
+    validator = new Validator(props, () -> mockClient);
+
+    Config result = validator.validate();
+    assertNoErrors(result);
+  }
+
+  @Test
+  public void testInvalidTooManyMappings() {
+    props.put(EXTERNAL_RESOURCE_USAGE_CONFIG, ExternalResourceUsage.INDEX.name());
+    props.put(TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_CONFIG, TOPIC1 + ":" + INDEX1 + "," + TOPIC2 + ":" + INDEX2 + "," + TOPIC3 + ":index3");
+    props.put(TOPICS_CONFIG_KEY, TOPIC1 + "," + TOPIC2 + "," + TOPIC3);
+    props.put(MAX_EXTERNAL_RESOURCE_MAPPINGS_CONFIG, "2"); // Set limit lower than number of mappings
+    validator = new Validator(props, () -> mockClient);
+
+    Config result = validator.validate();
+    String expectedMessage = String.format(TOO_MANY_MAPPINGS_ERROR_FORMAT, 3, 2, MAX_EXTERNAL_RESOURCE_MAPPINGS_CONFIG);
+    assertHasErrorMessage(result, TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_CONFIG, expectedMessage);
+  }
+
+  @Test
+  public void testDefaultMappingLimit() {
+    // Create a mapping string with 16 topics (exceeds default limit of 15)
+    StringBuilder mappingBuilder = new StringBuilder();
+    StringBuilder topicsBuilder = new StringBuilder();
+    for (int i = 1; i <= 16; i++) {
+      if (i > 1) {
+        mappingBuilder.append(",");
+        topicsBuilder.append(",");
+      }
+      mappingBuilder.append("topic").append(i).append(":index").append(i);
+      topicsBuilder.append("topic").append(i);
+    }
+    
+    props.put(EXTERNAL_RESOURCE_USAGE_CONFIG, ExternalResourceUsage.INDEX.name());
+    props.put(TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_CONFIG, mappingBuilder.toString());
+    props.put(TOPICS_CONFIG_KEY, topicsBuilder.toString());
+    // Don't set MAX_EXTERNAL_RESOURCE_MAPPINGS_CONFIG to test default limit
+    validator = new Validator(props, () -> mockClient);
+
+    Config result = validator.validate();
+    String expectedMessage = String.format(TOO_MANY_MAPPINGS_ERROR_FORMAT, 16, 15, MAX_EXTERNAL_RESOURCE_MAPPINGS_CONFIG);
     assertHasErrorMessage(result, TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_CONFIG, expectedMessage);
   }
 
