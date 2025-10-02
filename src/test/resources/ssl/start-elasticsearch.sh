@@ -1,5 +1,9 @@
 #!/bin/bash
 
+# FIX CGROUP V2 ISSUE
+echo "Setting JVM options to work with cgroup v2..."
+export ES_JAVA_OPTS="-Xms512m -Xmx512m"
+
 # Generate the certificates used in the HTTPS tests.
 # Copy these into the docker image to make available to client (Java class in this repo) and
 # elastic server (docker container started in test setup). Volume mounting is unsolved issue.
@@ -94,10 +98,6 @@ export PATH=/usr/share/elasticsearch/jdk/bin/:$SAVE_PATH
 
 echo "Elasticsearch Configuration"
 cat /usr/share/elasticsearch/config/elasticsearch.yml
-
-# FIX CGROUP V2 ISSUE
-echo "Setting JVM options to work with cgroup v2..."
-export ES_JAVA_OPTS="-Xms512m -Xmx512m"
 
 echo
 echo "Starting Elasticsearch with SSL enabled ..."
