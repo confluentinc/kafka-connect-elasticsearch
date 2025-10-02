@@ -95,6 +95,10 @@ export PATH=/usr/share/elasticsearch/jdk/bin/:$SAVE_PATH
 echo "Elasticsearch Configuration"
 cat /usr/share/elasticsearch/config/elasticsearch.yml
 
+# FIX CGROUP V2 ISSUE
+echo "Setting JVM options to work with cgroup v2..."
+export ES_JAVA_OPTS="-Xms512m -Xmx512m"
+
 echo
 echo "Starting Elasticsearch with SSL enabled ..."
 su - elasticsearch<<EOF
