@@ -1,4 +1,4 @@
-- cluster.name: "docker-cluster"
+cluster.name: "docker-cluster"
 
 xpack.license.self_generated.type: trial
 xpack.security.enabled: true
