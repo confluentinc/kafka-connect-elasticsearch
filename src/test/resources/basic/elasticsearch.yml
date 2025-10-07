@@ -1,5 +1,4 @@
-cluster.name: "docker-cluster"
-network.host: 0.0.0.0
+- cluster.name: "docker-cluster"
 
 xpack.license.self_generated.type: trial
 xpack.security.enabled: true
