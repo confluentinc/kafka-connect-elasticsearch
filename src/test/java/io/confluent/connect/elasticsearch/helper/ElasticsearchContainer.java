@@ -370,7 +370,9 @@ public class ElasticsearchContainer
     builder
         .from(imageName)
         // Copy the Elasticsearch configuration
-        .copy("elasticsearch.yml", CONFIG_PATH + "/elasticsearch.yml");
+        .copy("elasticsearch.yml", CONFIG_PATH + "/elasticsearch.yml")
+        // Add JVM options to fix cgroup v2 compatibility issues in CI environments
+        .env("ES_JAVA_OPTS", "-Djdk.attach.allowAttachSelf=true -XX:+IgnoreUnrecognizedVMOptions");
 
     if (isSslEnabled()) {
       ArrayList<Integer> versionsInt = getImageVersion();
