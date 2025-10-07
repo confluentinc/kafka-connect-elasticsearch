@@ -72,7 +72,7 @@ public class ElasticsearchContainer
   /**
    * Default Elasticsearch version.
    */
-  public static final String DEFAULT_ES_VERSION = "8.2.2";
+  public static final String DEFAULT_ES_VERSION = "8.15.0";
 
   /**
    * Default Elasticsearch port.
@@ -370,9 +370,7 @@ public class ElasticsearchContainer
     builder
         .from(imageName)
         // Copy the Elasticsearch configuration
-        .copy("elasticsearch.yml", CONFIG_PATH + "/elasticsearch.yml")
-        // Add JVM options to fix cgroup v2 compatibility issues in CI environments
-        .env("ES_JAVA_OPTS", "-Djdk.attach.allowAttachSelf=true -XX:+IgnoreUnrecognizedVMOptions");
+        .copy("elasticsearch.yml", CONFIG_PATH + "/elasticsearch.yml");
 
     if (isSslEnabled()) {
       ArrayList<Integer> versionsInt = getImageVersion();
