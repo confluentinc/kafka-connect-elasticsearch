@@ -311,9 +311,6 @@ public class ElasticsearchContainer
   protected void configure() {
     super.configure();
 
-    // Set JVM memory options for CI environments
-    withEnv("ES_JAVA_OPTS", "-Xms512m -Xmx512m");
-
     waitingFor(
         Wait.forLogMessage(".*(Security is enabled|license .* valid).*", 1)
             .withStartupTimeout(Duration.ofMinutes(5))
