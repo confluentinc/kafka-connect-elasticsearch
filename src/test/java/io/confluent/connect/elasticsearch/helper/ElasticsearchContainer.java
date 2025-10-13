@@ -66,7 +66,7 @@ public class ElasticsearchContainer
   /**
    * Default Elasticsearch version.
    */
-  public static final String DEFAULT_ES_VERSION = "8.2.2";
+  public static final String DEFAULT_ES_VERSION = "8.15.0";
 
   /**
    * Default Elasticsearch port.
@@ -329,9 +329,6 @@ public class ElasticsearchContainer
       withEnv("cluster.routing.allocation.disk.threshold_enabled", "false");
       // Increase shared memory for ES 8.x
       withSharedMemorySize(4L * 1024 * 1024 * 1024); // 4GB instead of 2GB
-      // Fix for cgroup v2 compatibility issue with Java in ES 8.2.2 on Ubuntu 24.04
-      // This disables cgroup memory limit detection to prevent NullPointerException
-      withEnv("ES_JAVA_OPTS", "-Xms1g -Xmx1g -XX:-UseContainerSupport");
     }
 
     // Kerberos and basic auth are mutually exclusive authentication options
