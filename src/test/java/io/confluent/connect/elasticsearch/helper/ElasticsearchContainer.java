@@ -15,10 +15,7 @@
 
 package io.confluent.connect.elasticsearch.helper;
 
-import io.confluent.connect.elasticsearch.ElasticsearchClient;
-import io.confluent.connect.elasticsearch.RetryUtil;
 import org.apache.kafka.common.config.SslConfigs;
-import org.apache.kafka.test.TestUtils;
 import org.elasticsearch.client.security.user.User;
 import org.elasticsearch.client.security.user.privileges.Role;
 import org.slf4j.Logger;
@@ -26,12 +23,9 @@ import org.slf4j.LoggerFactory;
 import org.testcontainers.containers.ContainerLaunchException;
 import org.testcontainers.containers.output.OutputFrame;
 import org.testcontainers.containers.wait.strategy.Wait;
-import org.testcontainers.containers.wait.strategy.WaitStrategyTarget;
-import org.testcontainers.images.RemoteDockerImage;
 import org.testcontainers.images.builder.ImageFromDockerfile;
 import org.testcontainers.images.builder.dockerfile.DockerfileBuilder;
 import org.testcontainers.shaded.org.apache.commons.io.IOUtils;
-import org.testcontainers.utility.DockerImageName;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -177,7 +171,7 @@ public class ElasticsearchContainer
       }
       props.put(CONNECTION_URL_CONFIG, address);
       ElasticsearchHelperClient helperClient = getHelperClient(props);
-      helperClient.waitForConnection(30000);
+      helperClient.waitForConnection(120000); // 2 minutes for ES 8.x
       createUsersAndRoles(helperClient);
     }
   }
@@ -322,6 +316,23 @@ public class ElasticsearchContainer
         // Copy the network definitions
         .withFileFromClasspath("instances.yml", getFullResourcePath("instances.yml"))
         .withDockerfileFromBuilder(this::buildImage);
+
+    // Add ES 8.x specific environment variables
+    ArrayList<Integer> versionsInt = getImageVersion();
+    if (versionsInt.get(0) >= 8) {
+      log.info("Configuring Elasticsearch 8.x specific settings");
+      withEnv("discovery.type", "single-node");
+      withEnv("xpack.security.enrollment.enabled", "false");
+      withEnv("xpack.security.http.ssl.enabled", "false");
+      withEnv("xpack.security.transport.ssl.enabled", "false");
+      // Disable disk-based shard allocation to prevent read-only issues in tests
+      withEnv("cluster.routing.allocation.disk.threshold_enabled", "false");
+      // Increase shared memory for ES 8.x
+      withSharedMemorySize(4L * 1024 * 1024 * 1024); // 4GB instead of 2GB
+      // Fix for cgroup v2 compatibility issue with Java in ES 8.2.2 on Ubuntu 24.04
+      // This disables cgroup memory limit detection to prevent NullPointerException
+      withEnv("ES_JAVA_OPTS", "-Xms1g -Xmx1g -XX:-UseContainerSupport");
+    }
 
     // Kerberos and basic auth are mutually exclusive authentication options
     if (isBasicAuthEnabled()) {
@@ -583,10 +594,18 @@ public class ElasticsearchContainer
     Map<String, String> superUserProps = new HashMap<>(props);
     superUserProps.put(CONNECTION_USERNAME_CONFIG, ELASTIC_SUPERUSER_NAME);
     superUserProps.put(CONNECTION_PASSWORD_CONFIG, ELASTIC_SUPERUSER_PASSWORD);
+    
+    // Add longer timeouts for ES 8.x
+    if (esMajorVersion() >= 8) {
+      superUserProps.put("connection.timeout.ms", "10000");  // 10 seconds
+      superUserProps.put("read.timeout.ms", "30000");        // 30 seconds
+    }
+    
     ElasticsearchSinkConnectorConfig config = new ElasticsearchSinkConnectorConfig(superUserProps);
-    ElasticsearchHelperClient client = new ElasticsearchHelperClient(props.get(CONNECTION_URL_CONFIG), config,
-        shouldStartClientInCompatibilityMode());
-    return client;
+    // Always use compatibility mode for ES 8.x in tests to avoid version detection chicken-and-egg problem
+    boolean useCompatibilityMode = esMajorVersion() >= 8;
+    return new ElasticsearchHelperClient(props.get(CONNECTION_URL_CONFIG), config,
+        useCompatibilityMode);
   }
 
   /**
