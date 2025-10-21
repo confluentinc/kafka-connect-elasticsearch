@@ -33,6 +33,8 @@ import org.elasticsearch.search.SearchHit;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import io.confluent.common.utils.IntegrationTest;
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig;
@@ -47,6 +49,8 @@ import static org.junit.Assert.assertEquals;
 
 @Category(IntegrationTest.class)
 public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
+  private static final Logger logger = LoggerFactory.getLogger(ElasticsearchConnectorIT.class);
+  
   // TODO: test compatibility
   
   private static final String TOPIC_1 = "users-topic";
@@ -286,17 +290,56 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
   private void testBackwardsCompatibilityDataStreamVersionHelper(
       String version
   ) throws Exception {
-    // since we require older ES container we close the current one and set it back up
-    container.close();
-    container = ElasticsearchContainer.withESVersion(version);
-    container.start();
-    setupFromContainer();
+    logger.info("=== Starting backward compatibility test for ES version: {} ===", version);
+    
+    try {
+      // since we require older ES container we close the current one and set it back up
+      logger.info("Closing current container before switching to ES version: {}", version);
+      container.close();
+      
+      logger.info("Creating new container with ES version: {}", version);
+      container = ElasticsearchContainer.withESVersion(version);
+      
+      logger.info("Starting container with ES version: {}", version);
+      container.start();
+      logger.info("Container started successfully for ES version: {}", version);
+      
+      logger.info("Setting up from container for ES version: {}", version);
+      setupFromContainer();
+      logger.info("Setup completed for ES version: {}", version);
 
-    runSimpleTest(props);
+      logger.info("Running simple test for ES version: {}", version);
+      runSimpleTest(props);
+      logger.info("Simple test completed successfully for ES version: {}", version);
 
-    helperClient = null;
-    container.close();
-    setupBeforeAll();
+    } catch (Exception e) {
+      logger.error("Backward compatibility test failed for ES version: {}", version, e);
+      logger.error("Container details: {}", container.getDetailedContainerInfo());
+      
+      // Try to get container logs for debugging
+      try {
+        String containerLogs = container.getLogs();
+        logger.error("Container logs for ES version {}: {}", version, containerLogs);
+      } catch (Exception logException) {
+        logger.error("Could not retrieve container logs for ES version: {}", version, logException);
+      }
+      
+      // Log additional diagnostic information
+      logger.error("Diagnostic information for ES version {}:", version);
+      logger.error("  - Exception type: {}", e.getClass().getSimpleName());
+      logger.error("  - Exception message: {}", e.getMessage());
+      if (e.getCause() != null) {
+        logger.error("  - Root cause: {}", e.getCause().getMessage());
+      }
+      
+      throw e;
+    } finally {
+      logger.info("Cleaning up container for ES version: {}", version);
+      helperClient = null;
+      container.close();
+      setupBeforeAll();
+      logger.info("=== Completed backward compatibility test for ES version: {} ===", version);
+    }
   }
 
   @Test
