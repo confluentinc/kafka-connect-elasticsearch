@@ -15,10 +15,7 @@
 
 package io.confluent.connect.elasticsearch.helper;
 
-import io.confluent.connect.elasticsearch.ElasticsearchClient;
-import io.confluent.connect.elasticsearch.RetryUtil;
 import org.apache.kafka.common.config.SslConfigs;
-import org.apache.kafka.test.TestUtils;
 import org.elasticsearch.client.security.user.User;
 import org.elasticsearch.client.security.user.privileges.Role;
 import org.slf4j.Logger;
@@ -26,12 +23,9 @@ import org.slf4j.LoggerFactory;
 import org.testcontainers.containers.ContainerLaunchException;
 import org.testcontainers.containers.output.OutputFrame;
 import org.testcontainers.containers.wait.strategy.Wait;
-import org.testcontainers.containers.wait.strategy.WaitStrategyTarget;
-import org.testcontainers.images.RemoteDockerImage;
 import org.testcontainers.images.builder.ImageFromDockerfile;
 import org.testcontainers.images.builder.dockerfile.DockerfileBuilder;
 import org.testcontainers.shaded.org.apache.commons.io.IOUtils;
-import org.testcontainers.utility.DockerImageName;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -72,7 +66,7 @@ public class ElasticsearchContainer
   /**
    * Default Elasticsearch version.
    */
-  public static final String DEFAULT_ES_VERSION = "8.2.2";
+  public static final String DEFAULT_ES_VERSION = "8.15.0";
 
   /**
    * Default Elasticsearch port.
@@ -583,6 +577,7 @@ public class ElasticsearchContainer
     Map<String, String> superUserProps = new HashMap<>(props);
     superUserProps.put(CONNECTION_USERNAME_CONFIG, ELASTIC_SUPERUSER_NAME);
     superUserProps.put(CONNECTION_PASSWORD_CONFIG, ELASTIC_SUPERUSER_PASSWORD);
+    
     ElasticsearchSinkConnectorConfig config = new ElasticsearchSinkConnectorConfig(superUserProps);
     ElasticsearchHelperClient client = new ElasticsearchHelperClient(props.get(CONNECTION_URL_CONFIG), config,
         shouldStartClientInCompatibilityMode());
