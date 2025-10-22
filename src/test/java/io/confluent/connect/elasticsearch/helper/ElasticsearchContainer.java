@@ -307,9 +307,57 @@ public class ElasticsearchContainer
     }
   }
 
+  /**
+   * Determines if this ES version needs cgroup v1 compatibility.
+   * ES versions 7.x with Java 8 don't understand cgroup v2 (Ubuntu 24.04 default).
+   *
+   * @return true if cgroup v1 compatibility binds are needed
+   */
+  private boolean needsCgroupV1Compatibility() {
+    ArrayList<Integer> version = getImageVersion();
+    int majorVersion = version.get(0);
+    int minorVersion = version.get(1);
+
+    log.info("Checking cgroup compatibility for ES version {}.{}.{}",
+            majorVersion, minorVersion, version.get(2));
+    log.info("Host OS: {}", System.getProperty("os.name"));
+    log.info("Checking if /sys/fs/cgroup exists: {}",
+            new File("/sys/fs/cgroup").exists());
+
+    if (majorVersion == 7) {
+      log.info("ES 7.x detected - WILL ADD cgroup v1 compatibility");
+      return true;
+    }
+
+    if (majorVersion == 8 && minorVersion < 2) {
+      log.info("ES 8.0-8.1 detected - WILL ADD cgroup v1 compatibility");
+      return true;
+    }
+
+    log.info("ES {}+ detected - NO cgroup fixes needed",
+            majorVersion + "." + minorVersion);
+    return false;
+  }
+
   @Override
   protected void configure() {
     super.configure();
+
+    // Add cgroup v1 compatibility for older ES versions on Ubuntu 24.04
+    if (needsCgroupV1Compatibility()) {
+      log.info("Adding cgroup v1 compatibility mounts for ES version: {}", imageName);
+      withCreateContainerCmdModifier(cmd -> {
+        cmd.getHostConfig().withBinds(
+                // Mount cgroup as read-only to provide v1 compatibility view
+                new com.github.dockerjava.api.model.Bind(
+                        "/sys/fs/cgroup",
+                        new com.github.dockerjava.api.model.Volume("/sys/fs/cgroup"),
+                        com.github.dockerjava.api.model.AccessMode.ro
+                )
+        );
+        log.info("Applied cgroup v1 compatibility bind mounts");
+      });
+    }
 
     waitingFor(
         Wait.forLogMessage(".*(Security is enabled|license .* valid).*", 1)
