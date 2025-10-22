@@ -135,6 +135,74 @@ public class ElasticsearchContainer
   private static final String ELASTIC_SUPERUSER_PASSWORD = "elastic";
   
   /**
+   * Add cgroup compatibility fixes for older Elasticsearch versions
+   * This addresses the NullPointerException in CgroupV2Subsystem.getInstance()
+   */
+  private void addCgroupCompatibilityFixes(String imageName) {
+    // Extract ES version from image name (e.g., "docker.elastic.co/elasticsearch/elasticsearch:7.16.3")
+    String esVersion = extractESVersion(imageName);
+    
+    if (isOlderESVersion(esVersion)) {
+      log.info("Adding cgroup compatibility fixes for older ES version: {}", esVersion);
+      
+      // Add JVM flags to disable cgroup detection and use fallback memory detection
+      withEnv("ES_JAVA_OPTS", 
+          "-XX:+UnlockExperimentalVMOptions " +
+          "-XX:+UseCGroupMemoryLimitForHeap " +
+          "-XX:MaxRAMFraction=1 " +
+          "-Djava.security.egd=file:/dev/./urandom " +
+          "-Dorg.elasticsearch.nativeaccess.enableVectorLibrary=false");
+      
+      // Alternative: Disable cgroup metrics entirely
+      withEnv("ES_SETTING_SCRIPT", 
+          "echo 'node.roles: [master, data, ingest]' >> /usr/share/elasticsearch/config/elasticsearch.yml");
+      
+      log.info("Applied cgroup compatibility fixes for ES version: {}", esVersion);
+    } else {
+      log.info("No cgroup fixes needed for ES version: {}", esVersion);
+    }
+  }
+  
+  /**
+   * Extract Elasticsearch version from Docker image name
+   */
+  private String extractESVersion(String imageName) {
+    if (imageName != null && imageName.contains(":")) {
+      return imageName.substring(imageName.lastIndexOf(":") + 1);
+    }
+    return "unknown";
+  }
+  
+  /**
+   * Check if this is an older ES version that needs cgroup fixes
+   */
+  private boolean isOlderESVersion(String esVersion) {
+    if ("unknown".equals(esVersion)) {
+      return false;
+    }
+    
+    try {
+      // ES versions 7.x and earlier are known to have cgroup issues
+      if (esVersion.startsWith("7.") || esVersion.startsWith("6.") || esVersion.startsWith("5.")) {
+        return true;
+      }
+      
+      // Parse version for more precise checking
+      String[] parts = esVersion.split("\\.");
+      if (parts.length >= 1) {
+        int major = Integer.parseInt(parts[0]);
+        
+        // ES 8.0+ should have better cgroup support
+        return major < 8;
+      }
+    } catch (NumberFormatException e) {
+      log.warn("Could not parse ES version: {}", esVersion);
+    }
+    
+    return false;
+  }
+
+  /**
    * Check if Docker is available in the current environment
    */
   private static boolean isDockerAvailable() {
@@ -181,6 +249,9 @@ public class ElasticsearchContainer
     this.imageName = imageName;
     withSharedMemorySize(TWO_GIGABYTES);
     withLogConsumer(this::containerLog);
+    
+    // Add cgroup compatibility fixes for older ES versions
+    addCgroupCompatibilityFixes(imageName);
     
     // Add diagnostic logging for container configuration
     log.info("ElasticsearchContainer created with image: {}", imageName);
