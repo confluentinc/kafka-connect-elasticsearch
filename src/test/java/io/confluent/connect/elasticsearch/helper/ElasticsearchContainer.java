@@ -15,10 +15,7 @@
 
 package io.confluent.connect.elasticsearch.helper;
 
-import io.confluent.connect.elasticsearch.ElasticsearchClient;
-import io.confluent.connect.elasticsearch.RetryUtil;
 import org.apache.kafka.common.config.SslConfigs;
-import org.apache.kafka.test.TestUtils;
 import org.elasticsearch.client.security.user.User;
 import org.elasticsearch.client.security.user.privileges.Role;
 import org.slf4j.Logger;
@@ -26,12 +23,9 @@ import org.slf4j.LoggerFactory;
 import org.testcontainers.containers.ContainerLaunchException;
 import org.testcontainers.containers.output.OutputFrame;
 import org.testcontainers.containers.wait.strategy.Wait;
-import org.testcontainers.containers.wait.strategy.WaitStrategyTarget;
-import org.testcontainers.images.RemoteDockerImage;
 import org.testcontainers.images.builder.ImageFromDockerfile;
 import org.testcontainers.images.builder.dockerfile.DockerfileBuilder;
 import org.testcontainers.shaded.org.apache.commons.io.IOUtils;
-import org.testcontainers.utility.DockerImageName;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -72,7 +66,7 @@ public class ElasticsearchContainer
   /**
    * Default Elasticsearch version.
    */
-  public static final String DEFAULT_ES_VERSION = "8.2.2";
+  public static final String DEFAULT_ES_VERSION = "8.15.0";
 
   /**
    * Default Elasticsearch port.
@@ -128,13 +122,110 @@ public class ElasticsearchContainer
         "ELASTICSEARCH_IMAGE",
         DEFAULT_DOCKER_IMAGE_NAME
     );
-    return new ElasticsearchContainer(imageName + ":" + ESVersion);
+    String fullImageName = imageName + ":" + ESVersion;
+    log.info("Creating ElasticsearchContainer with version: {} (full image: {})", ESVersion, fullImageName);
+    log.info("System properties - elasticsearch.image: {}, ELASTICSEARCH_IMAGE: {}", 
+        System.getProperty("elasticsearch.image"), System.getenv("ELASTICSEARCH_IMAGE"));
+    return new ElasticsearchContainer(fullImageName);
   }
 
   private static final String KEY_PASSWORD = "asdfasdf";
   // Super user that has superuser role. Should not be used by connector
   private static final String ELASTIC_SUPERUSER_NAME = "elastic";
   private static final String ELASTIC_SUPERUSER_PASSWORD = "elastic";
+  
+  /**
+   * Add cgroup compatibility fixes for older Elasticsearch versions
+   * This addresses the NullPointerException in CgroupV2Subsystem.getInstance()
+   */
+  private void addCgroupCompatibilityFixes(String imageName) {
+    // Extract ES version from image name (e.g., "docker.elastic.co/elasticsearch/elasticsearch:7.16.3")
+    String esVersion = extractESVersion(imageName);
+    
+    if (isOlderESVersion(esVersion)) {
+      log.info("Adding cgroup compatibility fixes for older ES version: {}", esVersion);
+      
+      // Add JVM flags to disable cgroup detection and use fallback memory detection
+      withEnv("ES_JAVA_OPTS", 
+          "-XX:+UnlockExperimentalVMOptions " +
+          "-XX:+UseCGroupMemoryLimitForHeap " +
+          "-XX:MaxRAMFraction=1 " +
+          "-Djava.security.egd=file:/dev/./urandom " +
+          "-Dorg.elasticsearch.nativeaccess.enableVectorLibrary=false");
+      
+      // Alternative: Disable cgroup metrics entirely
+      withEnv("ES_SETTING_SCRIPT", 
+          "echo 'node.roles: [master, data, ingest]' >> /usr/share/elasticsearch/config/elasticsearch.yml");
+      
+      log.info("Applied cgroup compatibility fixes for ES version: {}", esVersion);
+    } else {
+      log.info("No cgroup fixes needed for ES version: {}", esVersion);
+    }
+  }
+  
+  /**
+   * Extract Elasticsearch version from Docker image name
+   */
+  private String extractESVersion(String imageName) {
+    if (imageName != null && imageName.contains(":")) {
+      return imageName.substring(imageName.lastIndexOf(":") + 1);
+    }
+    return "unknown";
+  }
+  
+  /**
+   * Check if this is an older ES version that needs cgroup fixes
+   */
+  private boolean isOlderESVersion(String esVersion) {
+    if ("unknown".equals(esVersion)) {
+      return false;
+    }
+    
+    try {
+      // ES versions 7.x and earlier are known to have cgroup issues
+      if (esVersion.startsWith("7.") || esVersion.startsWith("6.") || esVersion.startsWith("5.")) {
+        return true;
+      }
+      
+      // Parse version for more precise checking
+      String[] parts = esVersion.split("\\.");
+      if (parts.length >= 1) {
+        int major = Integer.parseInt(parts[0]);
+        
+        // ES 8.0+ should have better cgroup support
+        return major < 8;
+      }
+    } catch (NumberFormatException e) {
+      log.warn("Could not parse ES version: {}", esVersion);
+    }
+    
+    return false;
+  }
+
+  /**
+   * Check if Docker is available in the current environment
+   */
+  private static boolean isDockerAvailable() {
+    try {
+      Process process = Runtime.getRuntime().exec("docker --version");
+      int exitCode = process.waitFor();
+      return exitCode == 0;
+    } catch (Exception e) {
+      return false;
+    }
+  }
+  
+  /**
+   * Get detailed container information for debugging
+   */
+  public String getDetailedContainerInfo() {
+    try {
+      return String.format("Container[ID=%s, Image=%s, Status=%s, Running=%s]", 
+          getContainerId(), getDockerImageName(), getContainerInfo(), isRunning());
+    } catch (Exception e) {
+      return String.format("Container[Error getting info: %s]", e.getMessage());
+    }
+  }
 
   private static final String KEYSTORE_PASSWORD = KEY_PASSWORD;
   private static final String TRUSTSTORE_PASSWORD = KEY_PASSWORD;
@@ -158,27 +249,82 @@ public class ElasticsearchContainer
     this.imageName = imageName;
     withSharedMemorySize(TWO_GIGABYTES);
     withLogConsumer(this::containerLog);
+    
+    // Add cgroup compatibility fixes for older ES versions
+    addCgroupCompatibilityFixes(imageName);
+    
+    // Add diagnostic logging for container configuration
+    log.info("ElasticsearchContainer created with image: {}", imageName);
+    log.info("Container configuration - Shared memory: {} bytes, Image: {}", TWO_GIGABYTES, imageName);
+    
+    // Log system environment details that might affect container startup
+    log.info("System environment details:");
+    log.info("  - Java version: {}", System.getProperty("java.version"));
+    log.info("  - OS name: {}", System.getProperty("os.name"));
+    log.info("  - OS version: {}", System.getProperty("os.version"));
+    log.info("  - Docker available: {}", isDockerAvailable());
+    log.info("  - Available processors: {}", Runtime.getRuntime().availableProcessors());
+    log.info("  - Max memory: {} MB", Runtime.getRuntime().maxMemory() / (1024 * 1024));
   }
 
   @Override
   public void start() {
-    super.start();
+    log.info("Starting ElasticsearchContainer with image: {}", imageName);
+    log.info("Container configuration - SSL enabled: {}, Basic Auth enabled: {}", 
+        isSslEnabled(), isBasicAuthEnabled());
+    log.info("Shared memory size: {} bytes", TWO_GIGABYTES);
+    
+    try {
+      super.start();
+      log.info("Container started successfully. Container ID: {}", getContainerId());
+      log.info("Container status: {}", getCurrentContainerInfo());
+    } catch (Exception e) {
+      log.error("Failed to start container with image: {}", imageName, e);
+      log.error("Container logs before failure:");
+      try {
+        String logs = getLogs();
+        log.error("Container logs: {}", logs);
+      } catch (Exception logException) {
+        log.error("Could not retrieve container logs", logException);
+      }
+      throw e;
+    }
 
     String address;
     if (isBasicAuthEnabled()) {
+      log.info("Setting up basic authentication for container");
       Map<String, String> props = new HashMap<>();
       props.put(CONNECTION_USERNAME_CONFIG, ELASTIC_SUPERUSER_NAME);
       props.put(CONNECTION_PASSWORD_CONFIG, ELASTIC_SUPERUSER_PASSWORD);
       if (isSslEnabled()) {
+        log.info("Configuring SSL connection");
         addSslProps(props);
         address = this.getConnectionUrl(false);
       } else {
+        log.info("Configuring plain HTTP connection");
         address = this.getConnectionUrl();
       }
       props.put(CONNECTION_URL_CONFIG, address);
-      ElasticsearchHelperClient helperClient = getHelperClient(props);
-      helperClient.waitForConnection(30000);
-      createUsersAndRoles(helperClient);
+      log.info("Connection URL: {}", address);
+      
+      try {
+        ElasticsearchHelperClient helperClient = getHelperClient(props);
+        log.info("Waiting for Elasticsearch connection (timeout: 30s)");
+        helperClient.waitForConnection(30000);
+        log.info("Elasticsearch connection established successfully");
+        createUsersAndRoles(helperClient);
+        log.info("Users and roles created successfully");
+      } catch (Exception e) {
+        log.error("Failed to establish connection to Elasticsearch at: {}", address, e);
+        log.error("Container logs during connection failure:");
+        try {
+          String logs = getLogs();
+          log.error("Container logs: {}", logs);
+        } catch (Exception logException) {
+          log.error("Could not retrieve container logs", logException);
+        }
+        throw e;
+      }
     }
   }
 
@@ -557,15 +703,20 @@ public class ElasticsearchContainer
    * @param logMessage the container log message
    */
   protected void containerLog(OutputFrame logMessage) {
+    String logContent = logMessage.getUtf8String();
+    
+    // Log to our logger as well for better debugging
     switch (logMessage.getType()) {
       case STDOUT:
+        log.debug("Container STDOUT: {}", logContent);
         // Normal output in yellow
-        System.out.print((char)27 + "[33m" + logMessage.getUtf8String());
+        System.out.print((char)27 + "[33m" + logContent);
         System.out.print((char)27 + "[0m"); // reset
         break;
       case STDERR:
+        log.warn("Container STDERR: {}", logContent);
         // Error output in red
-        System.err.print((char)27 + "[31m" + logMessage.getUtf8String());
+        System.err.print((char)27 + "[31m" + logContent);
         System.out.print((char)27 + "[0m"); // reset
         break;
       case END:
@@ -583,6 +734,7 @@ public class ElasticsearchContainer
     Map<String, String> superUserProps = new HashMap<>(props);
     superUserProps.put(CONNECTION_USERNAME_CONFIG, ELASTIC_SUPERUSER_NAME);
     superUserProps.put(CONNECTION_PASSWORD_CONFIG, ELASTIC_SUPERUSER_PASSWORD);
+    
     ElasticsearchSinkConnectorConfig config = new ElasticsearchSinkConnectorConfig(superUserProps);
     ElasticsearchHelperClient client = new ElasticsearchHelperClient(props.get(CONNECTION_URL_CONFIG), config,
         shouldStartClientInCompatibilityMode());

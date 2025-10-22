@@ -275,7 +275,7 @@ public class ElasticsearchSinkTask extends SinkTask {
         throw new ConnectException(String.format(
                 "Topic '%s' is not mapped to any resource. "
                 + "All topics must be mapped when using topic-to-resource mapping configuration. "
-                + "Please check the '%s' configuration to ensure all topics are properly mapped.",
+                + "Please check '%s' configuration to ensure all topics are properly mapped.",
                 sinkRecord.topic(),
                 ElasticsearchSinkConnectorConfig.TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_CONFIG
         ));
