@@ -250,6 +250,52 @@ public class ElasticsearchSinkConnectorConfigTest {
     keytab.toFile().delete();
   }
 
+  @Test
+  public void testDefaultMaxExternalResourceMappings() {
+    ElasticsearchSinkConnectorConfig config = new ElasticsearchSinkConnectorConfig(props);
+    assertEquals(15, config.maxExternalResourceMappings());
+  }
+
+  @Test
+  public void testCustomMaxExternalResourceMappings() {
+    props.put(MAX_EXTERNAL_RESOURCE_MAPPINGS_CONFIG, "25");
+    ElasticsearchSinkConnectorConfig config = new ElasticsearchSinkConnectorConfig(props);
+    assertEquals(25, config.maxExternalResourceMappings());
+  }
+
+  @Test(expected = ConfigException.class)
+  public void shouldNotAllowZeroMaxExternalResourceMappings() {
+    props.put(MAX_EXTERNAL_RESOURCE_MAPPINGS_CONFIG, "0");
+    new ElasticsearchSinkConnectorConfig(props);
+  }
+
+  @Test(expected = ConfigException.class)
+  public void shouldNotAllowNegativeMaxExternalResourceMappings() {
+    props.put(MAX_EXTERNAL_RESOURCE_MAPPINGS_CONFIG, "-1");
+    new ElasticsearchSinkConnectorConfig(props);
+  }
+
+  @Test
+  public void shouldAllowValidTopicToExternalResourceMapping() {
+    props.put(EXTERNAL_RESOURCE_USAGE_CONFIG, ExternalResourceUsage.INDEX.name());
+    props.put(TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_CONFIG, "topic1:index1,topic2:index2");
+    ElasticsearchSinkConnectorConfig config = new ElasticsearchSinkConnectorConfig(props);
+    
+    assertNotNull(config);
+    Map<String, String> mappings = config.getTopicToExternalResourceMap();
+    assertEquals(2, mappings.size());
+    assertEquals("index1", mappings.get("topic1"));
+    assertEquals("index2", mappings.get("topic2"));
+  }
+
+  @Test(expected = ConfigException.class)
+  public void shouldNotAllowTooManyTopicToExternalResourceMappings() {
+    props.put(EXTERNAL_RESOURCE_USAGE_CONFIG, ExternalResourceUsage.INDEX.name());
+    props.put(MAX_EXTERNAL_RESOURCE_MAPPINGS_CONFIG, "2");
+    props.put(TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_CONFIG, "topic1:index1,topic2:index2,topic3:index3");
+    new ElasticsearchSinkConnectorConfig(props);
+  }
+
   public static Map<String, String> addNecessaryProps(Map<String, String> props) {
     if (props == null) {
       props = new HashMap<>();
