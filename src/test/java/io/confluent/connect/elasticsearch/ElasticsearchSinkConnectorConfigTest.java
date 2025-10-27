@@ -293,7 +293,24 @@ public class ElasticsearchSinkConnectorConfigTest {
     props.put(EXTERNAL_RESOURCE_USAGE_CONFIG, ExternalResourceUsage.INDEX.name());
     props.put(MAX_EXTERNAL_RESOURCE_MAPPINGS_CONFIG, "2");
     props.put(TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_CONFIG, "topic1:index1,topic2:index2,topic3:index3");
-    new ElasticsearchSinkConnectorConfig(props);
+    ElasticsearchSinkConnectorConfig config = new ElasticsearchSinkConnectorConfig(props);
+    // Trigger validation by calling the method
+    config.getTopicToExternalResourceMap();
+  }
+
+  @Test(expected = ConfigException.class)
+  public void shouldNotAllowTooManyTopicToExternalResourceMappingsWithDefaultLimit() {
+    props.put(EXTERNAL_RESOURCE_USAGE_CONFIG, ExternalResourceUsage.INDEX.name());
+    // Create 16 mappings (exceeds default limit of 15)
+    StringBuilder mappings = new StringBuilder();
+    for (int i = 1; i <= 16; i++) {
+      if (i > 1) mappings.append(",");
+      mappings.append("topic").append(i).append(":index").append(i);
+    }
+    props.put(TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_CONFIG, mappings.toString());
+    ElasticsearchSinkConnectorConfig config = new ElasticsearchSinkConnectorConfig(props);
+    // Trigger validation by calling the method
+    config.getTopicToExternalResourceMap();
   }
 
   public static Map<String, String> addNecessaryProps(Map<String, String> props) {
