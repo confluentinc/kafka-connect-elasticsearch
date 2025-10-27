@@ -89,6 +89,76 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
   }
 
   @Override
+  public void cleanup() throws Exception {
+    // Clean up all resources created by tests before calling super cleanup
+    if (container != null && container.isRunning() && helperClient != null) {
+      try {
+        // Clean up aliases first
+        try {
+          helperClient.deleteIndex(ALIAS_1, false);
+        } catch (Exception e) {
+          // Ignore if alias doesn't exist
+        }
+        try {
+          helperClient.deleteIndex(ALIAS_2, false);
+        } catch (Exception e) {
+          // Ignore if alias doesn't exist
+        }
+        
+        // Clean up indices
+        try {
+          helperClient.deleteIndex(INDEX_1, false);
+        } catch (Exception e) {
+          // Ignore if index doesn't exist
+        }
+        try {
+          helperClient.deleteIndex(INDEX_2, false);
+        } catch (Exception e) {
+          // Ignore if index doesn't exist
+        }
+        try {
+          helperClient.deleteIndex(INDEX_3, false);
+        } catch (Exception e) {
+          // Ignore if index doesn't exist
+        }
+        try {
+          helperClient.deleteIndex(INDEX_4, false);
+        } catch (Exception e) {
+          // Ignore if index doesn't exist
+        }
+        
+        // Clean up data streams
+        try {
+          helperClient.deleteIndex(DATA_STREAM_1, true);
+        } catch (Exception e) {
+          // Ignore if data stream doesn't exist
+        }
+        try {
+          helperClient.deleteIndex(DATA_STREAM_2, true);
+        } catch (Exception e) {
+          // Ignore if data stream doesn't exist
+        }
+        try {
+          helperClient.deleteIndex(DATA_STREAM_3, true);
+        } catch (Exception e) {
+          // Ignore if data stream doesn't exist
+        }
+        try {
+          helperClient.deleteIndex(DATA_STREAM_4, true);
+        } catch (Exception e) {
+          // Ignore if data stream doesn't exist
+        }
+      } catch (Exception e) {
+        // Log but don't fail cleanup
+        System.err.println("Error during cleanup: " + e.getMessage());
+      }
+    }
+    
+    // Call parent cleanup
+    super.cleanup();
+  }
+
+  @Override
   protected Map<String, String> createProps() {
     props = super.createProps();
     props.put(CONNECTION_USERNAME_CONFIG, ELASTIC_MINIMAL_PRIVILEGES_NAME);
