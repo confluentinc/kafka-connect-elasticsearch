@@ -506,7 +506,6 @@
                 <artifactId>maven-surefire-plugin</artifactId>
                 <configuration>
                     <argLine>@{argLine} -Djava.awt.headless=true -Dtests.security.manager=false -Dtests.jarhell.check=false</argLine>
-                    <excludedGroups>io.confluent.common.utils.IntegrationTest, IntegrationTest</excludedGroups>
                 </configuration>
             </plugin>
             <plugin>
