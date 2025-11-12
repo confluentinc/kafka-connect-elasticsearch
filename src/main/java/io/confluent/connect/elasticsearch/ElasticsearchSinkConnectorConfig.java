@@ -443,7 +443,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
 
   // Error message constants for topic-to-resource mapping validation
   public static final String INVALID_MAPPING_FORMAT_ERROR = 
-      "Invalid topic-to-resource mapping format. Expected format: topic:resource";
+      "Invalid topic-to-resource mapping format. The expected format: topic:resource";
   
   public static final String DUPLICATE_TOPIC_MAPPING_ERROR_FORMAT =
           "Topic '%s' is mapped to multiple resources. "
@@ -454,7 +454,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
       + "Each resource must be mapped to exactly one topic.";
 
   public static final String TOO_MANY_MAPPINGS_ERROR_FORMAT =
-          "Too many topic-to-external-resource mappings configured (%d). Maximum allowed is %d.";
+          "Too many topic-to-external-resource mappings are configured (%d). Maximum allowed limit is %d.";
 
   private final String[] kafkaTopics;
 
