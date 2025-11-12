@@ -15,6 +15,8 @@
 
 package io.confluent.connect.elasticsearch.integration;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
@@ -41,8 +43,10 @@ public abstract class BaseConnectorIT {
   protected RestApp restApp;
 
   protected void startConnect() {
+    Map<String, String> workerProps = new HashMap<>();
+    workerProps.put("plugin.discovery","hybrid_warn");
     connect = new EmbeddedConnectCluster.Builder()
-        .name("elasticsearch-it-connect-cluster")
+        .name("elasticsearch-it-connect-cluster").workerProps(workerProps)
         .build();
 
     // start the clusters
