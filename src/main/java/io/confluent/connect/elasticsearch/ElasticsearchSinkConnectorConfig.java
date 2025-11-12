@@ -454,7 +454,8 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
       + "Each resource must be mapped to exactly one topic.";
 
   public static final String TOO_MANY_MAPPINGS_ERROR_FORMAT =
-          "Too many topic-to-external-resource mappings are configured (%d). Maximum allowed limit is %d.";
+          "Too many topic-to-external-resource mappings are configured (%d). "
+                  + "Maximum allowed limit is %d.";
 
   private final String[] kafkaTopics;
 
