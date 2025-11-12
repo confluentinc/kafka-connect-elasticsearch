@@ -433,9 +433,17 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
           "Topic to External Resource Mapping";
   private static final String TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_DEFAULT = "";
 
+  public static final String MAX_EXTERNAL_RESOURCE_MAPPINGS_CONFIG =
+          "max.external.resource.mappings";
+  private static final String MAX_EXTERNAL_RESOURCE_MAPPINGS_DOC =
+          "The maximum number of topic-to-external-resource mappings allowed.";
+  private static final String MAX_EXTERNAL_RESOURCE_MAPPINGS_DISPLAY =
+          "Maximum External Resource Mappings";
+  private static final int MAX_EXTERNAL_RESOURCE_MAPPINGS_DEFAULT = 15;
+
   // Error message constants for topic-to-resource mapping validation
   public static final String INVALID_MAPPING_FORMAT_ERROR = 
-      "Invalid topic-to-resource mapping format. Expected format: topic:resource";
+      "Invalid topic-to-resource mapping format. The expected format: topic:resource";
   
   public static final String DUPLICATE_TOPIC_MAPPING_ERROR_FORMAT =
           "Topic '%s' is mapped to multiple resources. "
@@ -444,6 +452,9 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   public static final String DUPLICATE_RESOURCE_MAPPING_ERROR_FORMAT = 
       "Resource '%s' is mapped from multiple topics. "
       + "Each resource must be mapped to exactly one topic.";
+
+  public static final String TOO_MANY_MAPPINGS_ERROR_FORMAT =
+          "Too many topic-to-external-resource mappings are configured (%d). Maximum allowed limit is %d.";
 
   private final String[] kafkaTopics;
 
@@ -555,6 +566,17 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
             ++order,
             Width.LONG,
             TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_DISPLAY
+        ).define(
+            MAX_EXTERNAL_RESOURCE_MAPPINGS_CONFIG,
+            Type.INT,
+            MAX_EXTERNAL_RESOURCE_MAPPINGS_DEFAULT,
+            ConfigDef.Range.atLeast(1),
+            Importance.MEDIUM,
+            MAX_EXTERNAL_RESOURCE_MAPPINGS_DOC,
+            CONNECTOR_GROUP,
+            ++order,
+            Width.SHORT,
+            MAX_EXTERNAL_RESOURCE_MAPPINGS_DISPLAY
         ).define(
             DATA_STREAM_TYPE_CONFIG,
             Type.STRING,
@@ -1020,6 +1042,19 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
       topicToExternalResourceMap.put(topic, resource);
       seenResources.add(resource);
     }
+
+    // Check if the number of mappings exceeds the configured limit
+    int maxMappings = maxExternalResourceMappings();
+    if (topicToExternalResourceMap.size() > maxMappings) {
+      throw new ConfigException(
+              TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_CONFIG,
+              mappings.toString(),
+              String.format(TOO_MANY_MAPPINGS_ERROR_FORMAT,
+                      topicToExternalResourceMap.size(),
+                      maxMappings)
+      );
+    }
+
     return topicToExternalResourceMap;
   }
 
@@ -1279,6 +1314,10 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
 
   public String[] getKafkaTopics() {
     return this.kafkaTopics;
+  }
+
+  public int maxExternalResourceMappings() {
+    return getInt(MAX_EXTERNAL_RESOURCE_MAPPINGS_CONFIG);
   }
 
   private static class DataStreamNamespaceValidator implements Validator {
