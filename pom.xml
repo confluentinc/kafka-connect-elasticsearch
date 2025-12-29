@@ -5,7 +5,7 @@
     <parent>
         <groupId>io.confluent</groupId>
         <artifactId>common</artifactId>
-        <version>[7.9.0, 7.9.1)</version>
+        <version>[8.0.0, 8.0.1)</version>
     </parent>
 
     <artifactId>kafka-connect-elasticsearch</artifactId>
@@ -207,6 +207,12 @@
             <classifier>test</classifier>
             <scope>test</scope>
             <version>${kafka.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.kafka</groupId>
+            <artifactId>kafka-test-common-runtime</artifactId>
+            <version>${kafka.version}</version>
+            <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.testcontainers</groupId>
