@@ -10,6 +10,7 @@ import org.apache.kafka.connect.errors.ConnectException;
 
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Transformer that blocks all incoming requests until {@link #release(int)} is called
@@ -17,10 +18,18 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 public class BlockingTransformer extends ResponseTransformer {
 
+  // Static reference to track the current instance (WireMock creates via reflection)
+  private static final AtomicReference<BlockingTransformer> CURRENT_INSTANCE = new AtomicReference<>();
+
   private final Semaphore s = new Semaphore(0, true);
   private final AtomicInteger requestCount = new AtomicInteger();
 
   public static final String NAME = "blockingTransformer";
+
+  public BlockingTransformer() {
+    // Register this instance when WireMock creates it via reflection
+    CURRENT_INSTANCE.set(this);
+  }
 
   @Override
   public Response transform(Request request, Response response, FileSource files, Parameters parameters) {
@@ -63,10 +72,17 @@ public class BlockingTransformer extends ResponseTransformer {
     return false;
   }
 
+  /**
+   * Get the BlockingTransformer instance created by WireMock.
+   * WireMock creates the instance via reflection when the rule is initialized.
+   */
   public static BlockingTransformer getInstance(WireMockRule wireMockRule) {
-    return wireMockRule.getOptions()
-            .extensionsOfType(BlockingTransformer.class)
-            .get(NAME);
+    BlockingTransformer instance = CURRENT_INSTANCE.get();
+    if (instance == null) {
+      throw new IllegalStateException(
+              "No BlockingTransformer instance found. Ensure WireMockRule is initialized.");
+    }
+    return instance;
   }
 
 }
