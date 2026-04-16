@@ -105,10 +105,11 @@
                 </exclusion>
             </exclusions>
         </dependency>
+	<!-- update log4j version to currently defined in common, this should be removed after update of pom parent to something more modern -->
         <dependency>
             <groupId>org.apache.logging.log4j</groupId>
             <artifactId>log4j-api</artifactId>
-            <version>2.17.1</version>
+            <version>2.25.3</version>
         </dependency>
         <!-- pin jackson-dataformat-cbor for CVE - the version comes from confluentinc/common -->
         <dependency>
