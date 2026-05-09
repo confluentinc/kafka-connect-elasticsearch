@@ -234,6 +234,13 @@
             <artifactId>hadoop-minikdc</artifactId>
             <version>${hadoop.version}</version>
             <scope>test</scope>
+            <exclusions>
+                <!-- log4j 1.x is end-of-life and the 1.2.17 artifact is no longer reliably resolvable from upstream mirrors. reload4j (declared explicitly in test scope) provides drop-in org.apache.log4j.* classes for slf4j-log4j12. -->
+                <exclusion>
+                    <groupId>log4j</groupId>
+                    <artifactId>log4j</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
         <dependency>
             <groupId>org.assertj</groupId>
