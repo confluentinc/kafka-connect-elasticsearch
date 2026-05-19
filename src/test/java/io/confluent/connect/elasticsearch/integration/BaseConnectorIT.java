@@ -44,13 +44,22 @@ public abstract class BaseConnectorIT {
   protected void startConnect() {
     HashMap<String, String> workerProps = new HashMap<>();
     workerProps.put("plugin.discovery", "hybrid_warn");
-    connect = new EmbeddedConnectCluster.Builder()
-        .name("elasticsearch-it-connect-cluster")
-        .workerProps(workerProps)
-        .build();
-
-    // start the clusters
-    connect.start();
+    // The framework's worker startup timeout (5 min) is not configurable; retry once to
+    // handle transient CI resource exhaustion without failing the whole test run.
+    for (int attempt = 1; ; attempt++) {
+      connect = new EmbeddedConnectCluster.Builder()
+          .name("elasticsearch-it-connect-cluster")
+          .workerProps(workerProps)
+          .build();
+      try {
+        connect.start();
+        return;
+      } catch (AssertionError e) {
+        if (attempt >= 2) throw e;
+        log.warn("Connect cluster startup timed out (attempt {}), retrying", attempt);
+        try { connect.stop(); } catch (Exception ignored) {}
+      }
+    }
   }
 
   protected void stopConnect() {

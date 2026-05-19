@@ -16,18 +16,15 @@
 package io.confluent.connect.elasticsearch;
 
 import java.math.BigDecimal;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Field;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
-import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.errors.DataException;
-import org.elasticsearch.xcontent.XContentBuilder;
-import org.elasticsearch.xcontent.XContentFactory;
-
-import java.io.IOException;
 
 public class Mapping {
 
@@ -59,136 +56,122 @@ public class Mapping {
    * Build mapping from the provided schema.
    *
    * @param schema The schema used to build the mapping.
-   * @return the schema as a JSON mapping
+   * @return the schema as a mapping structure
    */
-  public static XContentBuilder buildMapping(Schema schema) {
-    try {
-      XContentBuilder builder = XContentFactory.jsonBuilder();
-      builder.startObject();
-      {
-        buildMapping(schema, builder);
-      }
-      builder.endObject();
-      return builder;
-    } catch (IOException e) {
-      throw new ConnectException("Failed to build mapping for schema " + schema, e);
-    }
+  public static Map<String, Object> buildMapping(Schema schema) {
+    Map<String, Object> root = new LinkedHashMap<>();
+    buildMapping(schema, root);
+    return root;
   }
 
-  private static XContentBuilder buildMapping(Schema schema, XContentBuilder builder)
-      throws IOException {
-
+  private static void buildMapping(Schema schema, Map<String, Object> out) {
     if (schema == null) {
       throw new DataException("Cannot infer mapping without schema.");
     }
 
     // Handle logical types
-    XContentBuilder logicalConversion = inferLogicalMapping(builder, schema);
+    Map<String, Object> logicalConversion = inferLogicalMapping(schema);
     if (logicalConversion != null) {
-      return logicalConversion;
+      out.putAll(logicalConversion);
+      return;
     }
 
     Schema.Type schemaType = schema.type();
-    switch (schema.type()) {
+    switch (schemaType) {
       case ARRAY:
-        return buildMapping(schema.valueSchema(), builder);
+        buildMapping(schema.valueSchema(), out);
+        return;
 
       case MAP:
-        return buildMap(schema, builder);
+        out.putAll(buildMap(schema));
+        return;
 
       case STRUCT:
-        return buildStruct(schema, builder);
+        out.putAll(buildStruct(schema));
+        return;
 
       default:
-        return inferPrimitive(builder, getElasticsearchType(schemaType), schema.defaultValue());
+        out.putAll(inferPrimitive(getElasticsearchType(schemaType), schema.defaultValue()));
     }
   }
 
-  private static void addTextMapping(XContentBuilder builder) throws IOException {
+  private static Map<String, Object> addTextMapping() {
     // Add additional mapping for indexing, per https://www.elastic.co/blog/strings-are-dead-long-live-strings
-    builder.startObject(FIELDS_FIELD);
-    {
-      builder.startObject(KEYWORD_FIELD);
-      {
-        builder.field(TYPE_FIELD, KEYWORD_TYPE);
-        builder.field(IGNORE_ABOVE_FIELD, 256);
-      }
-      builder.endObject();
-    }
-    builder.endObject();
+    Map<String, Object> keyword = new LinkedHashMap<>();
+    keyword.put(TYPE_FIELD, KEYWORD_TYPE);
+    keyword.put(IGNORE_ABOVE_FIELD, 256);
+    Map<String, Object> fields = new LinkedHashMap<>();
+    fields.put(KEYWORD_FIELD, keyword);
+    return fields;
   }
 
-  private static XContentBuilder buildMap(Schema schema, XContentBuilder builder)
-      throws IOException {
+  private static Map<String, Object> buildMap(Schema schema) {
+    Map<String, Object> keyMap = new LinkedHashMap<>();
+    buildMapping(schema.keySchema(), keyMap);
+    Map<String, Object> valueMap = new LinkedHashMap<>();
+    buildMapping(schema.valueSchema(), valueMap);
 
-    builder.startObject(PROPERTIES_FIELD);
-    {
-      builder.startObject(KEY_FIELD);
-      {
-        buildMapping(schema.keySchema(), builder);
-      }
-      builder.endObject();
-      builder.startObject(VALUE_FIELD);
-      {
-        buildMapping(schema.valueSchema(), builder);
-      }
-      builder.endObject();
-    }
-    return builder.endObject();
+    Map<String, Object> properties = new LinkedHashMap<>();
+    properties.put(KEY_FIELD, keyMap);
+    properties.put(VALUE_FIELD, valueMap);
+
+    Map<String, Object> result = new LinkedHashMap<>();
+    result.put(PROPERTIES_FIELD, properties);
+    return result;
   }
 
-  private static XContentBuilder buildStruct(Schema schema, XContentBuilder builder)
-      throws IOException {
-
-    builder.startObject(PROPERTIES_FIELD);
-    {
-      for (Field field : schema.fields()) {
-        builder.startObject(field.name());
-        {
-          buildMapping(field.schema(), builder);
-        }
-        builder.endObject();
-      }
+  private static Map<String, Object> buildStruct(Schema schema) {
+    Map<String, Object> properties = new LinkedHashMap<>();
+    for (Field field : schema.fields()) {
+      Map<String, Object> fieldMap = new LinkedHashMap<>();
+      buildMapping(field.schema(), fieldMap);
+      properties.put(field.name(), fieldMap);
     }
-    return builder.endObject();
+    Map<String, Object> result = new LinkedHashMap<>();
+    result.put(PROPERTIES_FIELD, properties);
+    return result;
   }
 
-  private static XContentBuilder inferPrimitive(
-      XContentBuilder builder,
-      String type,
-      Object defaultValue
-  ) throws IOException {
-
+  private static Map<String, Object> inferPrimitive(String type, Object defaultValue) {
     if (type == null) {
       throw new DataException(String.format("Invalid primitive type %s.", type));
     }
 
-    builder.field(TYPE_FIELD, type);
-    if (type.equals(TEXT_TYPE)) {
-      addTextMapping(builder);
+    Map<String, Object> m = new LinkedHashMap<>();
+    m.put(TYPE_FIELD, type);
+    if (TEXT_TYPE.equals(type)) {
+      m.put(FIELDS_FIELD, addTextMapping());
     }
 
     if (defaultValue == null) {
-      return builder;
+      return m;
     }
 
     switch (type) {
       case BYTE_TYPE:
-        return builder.field(DEFAULT_VALUE_FIELD, (byte) defaultValue);
+        m.put(DEFAULT_VALUE_FIELD, (byte) defaultValue);
+        break;
       case SHORT_TYPE:
-        return builder.field(DEFAULT_VALUE_FIELD, (short) defaultValue);
+        m.put(DEFAULT_VALUE_FIELD, (short) defaultValue);
+        break;
       case INTEGER_TYPE:
-        return builder.field(DEFAULT_VALUE_FIELD, (int) defaultValue);
+        m.put(DEFAULT_VALUE_FIELD, (int) defaultValue);
+        break;
       case LONG_TYPE:
-        return builder.field(DEFAULT_VALUE_FIELD, (long) defaultValue);
+        m.put(DEFAULT_VALUE_FIELD, (long) defaultValue);
+        break;
       case FLOAT_TYPE:
-        return builder.field(DEFAULT_VALUE_FIELD, (float) defaultValue);
+        m.put(DEFAULT_VALUE_FIELD, (float) defaultValue);
+        break;
       case DOUBLE_TYPE:
-        return builder.field(DEFAULT_VALUE_FIELD, (double) defaultValue);
+        m.put(DEFAULT_VALUE_FIELD, (double) defaultValue);
+        break;
       case BOOLEAN_TYPE:
-        return builder.field(DEFAULT_VALUE_FIELD, (boolean) defaultValue);
+        m.put(DEFAULT_VALUE_FIELD, (boolean) defaultValue);
+        break;
       case DATE_TYPE:
-        return builder.field(DEFAULT_VALUE_FIELD, ((java.util.Date) defaultValue).getTime());
+        m.put(DEFAULT_VALUE_FIELD, ((java.util.Date) defaultValue).getTime());
+        break;
       /*
        * IGNORE default values for text and binary types as this is not supported by ES side.
        * see https://www.elastic.co/guide/en/elasticsearch/reference/current/text.html and
@@ -197,15 +180,14 @@ public class Mapping {
       case STRING_TYPE:
       case TEXT_TYPE:
       case BINARY_TYPE:
-        return builder;
+        break;
       default:
         throw new DataException("Invalid primitive type " + type + ".");
     }
+    return m;
   }
 
-  private static XContentBuilder inferLogicalMapping(XContentBuilder builder, Schema schema)
-      throws IOException {
-
+  private static Map<String, Object> inferLogicalMapping(Schema schema) {
     if (schema.name() == null) {
       return null;
     }
@@ -214,11 +196,11 @@ public class Mapping {
       case Date.LOGICAL_NAME:
       case Time.LOGICAL_NAME:
       case Timestamp.LOGICAL_NAME:
-        return inferPrimitive(builder, DATE_TYPE, schema.defaultValue());
+        return inferPrimitive(DATE_TYPE, schema.defaultValue());
       case Decimal.LOGICAL_NAME:
-        Double defaultValue = schema.defaultValue() != null ? ((BigDecimal) schema.defaultValue())
-            .doubleValue() : null;
-        return inferPrimitive(builder, DOUBLE_TYPE, defaultValue);
+        Double defaultValue = schema.defaultValue() != null
+            ? ((BigDecimal) schema.defaultValue()).doubleValue() : null;
+        return inferPrimitive(DOUBLE_TYPE, defaultValue);
       default:
         // User-defined type or unknown built-in
         return null;

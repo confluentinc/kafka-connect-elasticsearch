@@ -21,10 +21,8 @@ sed -i "s/ipAddress/${IP_ADDRESS}/g" ${ES_DIR}/config/ssl/instances.yml
 echo "Setting up Elasticsearch and generating certificates in ${ES_DIR}"
 
 if [[ -n "$ELASTIC_PASSWORD" ]]; then
-    # Use system java to generate the certificates since the connector tests
-    # are built with Java 1.8 and the certs built with the container's java
-    # won't be readable.
-    export PATH="$(dirname $(which java)):$PATH"
+    # Add ES bundled JDK to PATH as fallback if system Java (keytool) is not present.
+    command -v keytool &>/dev/null || export PATH="/usr/share/elasticsearch/jdk/bin:$PATH"
 
     echo "=== CREATE Keystore ==="
     echo "Elastic password is: $ELASTIC_PASSWORD"
@@ -76,14 +74,18 @@ if [[ -n "$ELASTIC_PASSWORD" ]]; then
     mv ${ES_DIR}/config/ssl/cluster/elasticsearch/* ${ES_DIR}/config/ssl/
 
     echo "Generating truststore at ${ES_DIR}/config/ssl/truststore.jks"
-    keytool -keystore ${ES_DIR}/config/ssl/truststore.jks -import -file ${ES_DIR}/config/ssl/ca/ca.crt -alias cacert -storepass $STORE_PASSWORD -noprompt
+    # -storetype JKS: Java 9+ defaults to PKCS12; Kafka's SslFactory defaults to JKS, so force it.
+    keytool -keystore ${ES_DIR}/config/ssl/truststore.jks -storetype JKS -import -file ${ES_DIR}/config/ssl/ca/ca.crt -alias cacert -storepass $STORE_PASSWORD -noprompt
 
     echo "Generating keystore for client at ${ES_DIR}/config/ssl/keystore.jks"
-    # Generate a new PKCS12 keystore using our CA
-    openssl pkcs12 -export -in ${ES_DIR}/config/ssl/ca/ca.crt -inkey ${ES_DIR}/config/ssl/ca/ca.key -out ${ES_DIR}/config/ssl/client.p12 -name "clientkey" -passin pass:$STORE_PASSWORD -passout pass:$STORE_PASSWORD
+    # Use elasticsearch-certutil to create a PKCS12 client cert (avoids needing openssl).
+    ${ES_DIR}/bin/elasticsearch-certutil cert --silent --pass $STORE_PASSWORD \
+        --ca-cert ${ES_DIR}/config/ssl/ca/ca.crt --ca-key ${ES_DIR}/config/ssl/ca/ca.key \
+        --out ${ES_DIR}/config/ssl/client.p12
 
-    # Convert the PKCS12 keystore to JKS keytstore
-    keytool -importkeystore -destkeystore ${ES_DIR}/config/ssl/keystore.jks -deststorepass $STORE_PASSWORD -srckeystore ${ES_DIR}/config/ssl/client.p12 -srcstoretype PKCS12 -srcstorepass $STORE_PASSWORD -noprompt
+    # Convert the PKCS12 keystore to JKS keystore.
+    # -deststoretype JKS: Java 9+ defaults to PKCS12; Kafka's SslFactory defaults to JKS, so force it.
+    keytool -importkeystore -destkeystore ${ES_DIR}/config/ssl/keystore.jks -deststoretype JKS -deststorepass $STORE_PASSWORD -srckeystore ${ES_DIR}/config/ssl/client.p12 -srcstoretype PKCS12 -srcstorepass $STORE_PASSWORD -noprompt
     rm -f ${ES_DIR}/config/ssl/client.p12
 fi
 
@@ -96,7 +98,8 @@ cat /usr/share/elasticsearch/config/elasticsearch.yml
 
 echo
 echo "Starting Elasticsearch with SSL and Kerberos enabled ..."
-su - elasticsearch<<EOF
- /usr/local/bin/docker-entrypoint.sh
-EOF
+# eswrapper is the ES 8.x+ process supervisor that starts Elasticsearch as the elasticsearch user
+# and handles signal forwarding. exec replaces this shell so signals reach ES directly.
+# Replaces the older "su - elasticsearch" heredoc pattern used in earlier ES Docker images.
+exec /usr/local/bin/docker-entrypoint.sh eswrapper
 

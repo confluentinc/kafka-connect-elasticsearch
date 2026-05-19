@@ -8,7 +8,7 @@
 
     <!-- switch statements on types exceed maximum complexity -->
     <suppress
-      checks="(CyclomaticComplexity)"
+      checks="(CyclomaticComplexity|NPathComplexity)"
       files="(Mapping|DataConverter).java"
     />
 

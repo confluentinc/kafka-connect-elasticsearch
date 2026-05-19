@@ -19,8 +19,10 @@ import io.confluent.connect.elasticsearch.ElasticsearchClient;
 import io.confluent.connect.elasticsearch.RetryUtil;
 import org.apache.kafka.common.config.SslConfigs;
 import org.apache.kafka.test.TestUtils;
-import org.elasticsearch.client.security.user.User;
-import org.elasticsearch.client.security.user.privileges.Role;
+import co.elastic.clients.elasticsearch.security.PutRoleRequest;
+import co.elastic.clients.elasticsearch.security.PutUserRequest;
+import co.elastic.clients.util.ObjectBuilder;
+import java.util.function.Function;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.testcontainers.containers.ContainerLaunchException;
@@ -72,7 +74,7 @@ public class ElasticsearchContainer
   /**
    * Default Elasticsearch version.
    */
-  public static final String DEFAULT_ES_VERSION = "8.15.2";
+  public static final String DEFAULT_ES_VERSION = "8.19.15";
 
   /**
    * Default Elasticsearch port.
@@ -143,8 +145,8 @@ public class ElasticsearchContainer
   private final String imageName;
   private boolean enableSsl = false;
   private String keytabPath;
-  private List<Role> rolesToCreate;
-  private Map<User, String> usersToCreate;
+  private List<Function<PutRoleRequest.Builder, ObjectBuilder<PutRoleRequest>>> rolesToCreate;
+  private List<Function<PutUserRequest.Builder, ObjectBuilder<PutUserRequest>>> usersToCreate;
   private String localKeystorePath;
   private String localTruststorePath;
 
@@ -191,13 +193,13 @@ public class ElasticsearchContainer
     props.put(SSL_CONFIG_PREFIX + SslConfigs.SSL_KEY_PASSWORD_CONFIG, this.getKeyPassword());
   }
 
-  private void createUsersAndRoles(ElasticsearchHelperClient helperClient ) {
+  private void createUsersAndRoles(ElasticsearchHelperClient helperClient) {
     try {
-      for (Role role: this.rolesToCreate) {
-        helperClient.createRole(role);
+      for (Function<PutRoleRequest.Builder, ObjectBuilder<PutRoleRequest>> roleFn : this.rolesToCreate) {
+        helperClient.createRole(roleFn);
       }
-      for (Map.Entry<User,String> userToPassword: this.usersToCreate.entrySet()) {
-        helperClient.createUser(userToPassword);
+      for (Function<PutUserRequest.Builder, ObjectBuilder<PutUserRequest>> userFn : this.usersToCreate) {
+        helperClient.createUser(userFn);
       }
     } catch (IOException e) {
       throw new ContainerLaunchException("Container startup failed", e);
@@ -214,7 +216,10 @@ public class ElasticsearchContainer
     return this;
   }
 
-  public ElasticsearchContainer withBasicAuth(Map<User, String> users, List<Role> roles) {
+  public ElasticsearchContainer withBasicAuth(
+      List<Function<PutUserRequest.Builder, ObjectBuilder<PutUserRequest>>> users,
+      List<Function<PutRoleRequest.Builder, ObjectBuilder<PutRoleRequest>>> roles
+  ) {
     enableBasicAuth(users, roles);
     return this;
   }
@@ -274,7 +279,10 @@ public class ElasticsearchContainer
     return keytabPath != null;
   }
 
-  private void enableBasicAuth(Map<User, String> users, List<Role> roles) {
+  private void enableBasicAuth(
+      List<Function<PutUserRequest.Builder, ObjectBuilder<PutUserRequest>>> users,
+      List<Function<PutRoleRequest.Builder, ObjectBuilder<PutRoleRequest>>> roles
+  ) {
     if (isCreated()) {
       throw new IllegalStateException(
           "enableBasicAuth can only be used before the container is created."
@@ -311,8 +319,9 @@ public class ElasticsearchContainer
   protected void configure() {
     super.configure();
 
+    // ES 8.x+ uses structured JSON logging; wait for the "started" message in that format.
     waitingFor(
-        Wait.forLogMessage(".*(Security is enabled|license .* valid).*", 1)
+        Wait.forLogMessage(".*\"message\":\\s?\"started[\\s?|\"].*", 1)
             .withStartupTimeout(Duration.ofMinutes(5))
     );
 
@@ -379,16 +388,23 @@ public class ElasticsearchContainer
           .user("root")
           .copy("instances.yml", CONFIG_SSL_PATH + "/instances.yml")
           .copy("start-elasticsearch.sh", CONFIG_SSL_PATH + "/start-elasticsearch.sh");
-      if (versionsInt.get(0) == 8 || (versionsInt.get(0) == 7 && versionsInt.get(1) >= 15)) {
-        // Install keytool from java 1.8 since our connector is built with
-        // java 1.8 and the cert algoritm's won;t be compatible when using the newer
-        // java version on the container
-        // Also note that 7.16.3 test container uses Ubuntu now instead of CentOS
+      if (versionsInt.get(0) == 8) {
+        // ES 8.x images ship with Java 17+; install Java 8 so that keytool uses Java 8
+        // algorithms. Without this, keytool on ES 8.x generates keystores our Java 8
+        // connector cannot read. ES 9.x is not affected: the start scripts now pass
+        // explicit -storetype/-deststoretype JKS flags so the keystore format is correct
+        // regardless of the bundled JDK version.
         builder.run("apt update");
         builder.run("apt install -y openjdk-8-jre-headless");
       }
       builder
           .run("chmod +x " + CONFIG_SSL_PATH + "/start-elasticsearch.sh")
+          // Fix ownership so the elasticsearch user (uid=1000, gid=0) can write to the ssl
+          // directory at runtime. COPY during USER root creates root-owned files.
+          .run("chown -R 1000:0 " + CONFIG_SSL_PATH)
+          // Switch back to the elasticsearch user so the script does not run as root.
+          // ES 9.x images do not have su/runuser/gosu; the script execs the entrypoint directly.
+          .user("elasticsearch")
           .entryPoint(CONFIG_SSL_PATH + "/start-elasticsearch.sh");
     }
 
@@ -584,21 +600,14 @@ public class ElasticsearchContainer
     superUserProps.put(CONNECTION_USERNAME_CONFIG, ELASTIC_SUPERUSER_NAME);
     superUserProps.put(CONNECTION_PASSWORD_CONFIG, ELASTIC_SUPERUSER_PASSWORD);
     ElasticsearchSinkConnectorConfig config = new ElasticsearchSinkConnectorConfig(superUserProps);
-    ElasticsearchHelperClient client = new ElasticsearchHelperClient(props.get(CONNECTION_URL_CONFIG), config,
-        shouldStartClientInCompatibilityMode());
-    return client;
-  }
-
-  /**
-   * For high level rest client v7.17 api compatibility mode must be turned on for working with
-   * ES 8.
-   * @return true if the major version of image used is 8 i.e (ES 8.x.x)
-   */
-  public boolean shouldStartClientInCompatibilityMode() {
-    return esMajorVersion() == 8;
+    return new ElasticsearchHelperClient(props.get(CONNECTION_URL_CONFIG), config);
   }
 
   public int esMajorVersion() {
     return getImageVersion().get(0);
+  }
+
+  public int esMinorVersion() {
+    return getImageVersion().get(1);
   }
 }
