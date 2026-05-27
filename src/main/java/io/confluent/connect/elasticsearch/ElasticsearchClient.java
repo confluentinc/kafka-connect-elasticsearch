@@ -147,18 +147,6 @@ public class ElasticsearchClient {
       t.setDaemon(true);
       return t;
     });
-    // DispatchingTransport breaks a lock-ordering deadlock between BulkIngester's FnCondition lock
-    // and the HLRC NIO pool lock: by dispatching completion callbacks to a separate executor,
-    // the IO thread never directly acquires the FnCondition lock.
-    // It also retries transport-level failures (e.g. SocketTimeoutException), equivalent to what
-    // the original callWithRetries() provided in buildConsumer().
-    RestClientTransport rawTransport = new RestClientTransport(
-        restClient, new JacksonJsonpMapper());
-    DispatchingTransport transport = new DispatchingTransport(
-        rawTransport, callbackDispatcher, config.maxRetries(), config.retryBackoffMs());
-    this.client = new co.elastic.clients.elasticsearch.ElasticsearchClient(transport);
-
-    this.esVersion = getServerVersion();
 
     String threadPrefix = connectorName + "-" + taskId + "-elasticsearch-bulk-executor-";
     AtomicInteger threadCounter = new AtomicInteger(0);
@@ -170,6 +158,23 @@ public class ElasticsearchClient {
           return t;
         }
     );
+
+    // DispatchingTransport breaks a lock-ordering deadlock between BulkIngester's FnCondition lock
+    // and the HLRC NIO pool lock: by dispatching completion callbacks to a separate executor,
+    // the IO thread never directly acquires the FnCondition lock.
+    // It also retries transport-level failures (e.g. SocketTimeoutException), equivalent to what
+    // the original callWithRetries() provided in buildConsumer().
+    // bulkScheduler is shared with BulkIngester's flush scheduling. schedule() merely enqueues
+    // the retry task without occupying the scheduler thread, so sharing is safe and does not
+    // warrant a separate pool.
+    RestClientTransport rawTransport = new RestClientTransport(
+        restClient, new JacksonJsonpMapper());
+    DispatchingTransport transport = new DispatchingTransport(
+        rawTransport, callbackDispatcher, bulkScheduler,
+        config.maxRetries(), config.retryBackoffMs());
+    this.client = new co.elastic.clients.elasticsearch.ElasticsearchClient(transport);
+
+    this.esVersion = getServerVersion();
 
     this.bulkIngester = BulkIngester.<SinkRecordAndOffset>of(b -> {
       b.client(this.client)
@@ -712,13 +717,16 @@ public class ElasticsearchClient {
   private static final class DispatchingTransport implements ElasticsearchTransport {
     private final RestClientTransport delegate;
     private final ExecutorService executor;
+    private final ScheduledExecutorService scheduler;
     private final int maxRetries;
     private final long retryBackoffMs;
 
     DispatchingTransport(RestClientTransport delegate, ExecutorService executor,
+                         ScheduledExecutorService scheduler,
                          int maxRetries, long retryBackoffMs) {
       this.delegate = delegate;
       this.executor = executor;
+      this.scheduler = scheduler;
       this.maxRetries = maxRetries;
       this.retryBackoffMs = retryBackoffMs;
     }
@@ -750,14 +758,10 @@ public class ElasticsearchClient {
                 // ResponseException for 4xx/5xx, etc.), mirroring callWithRetries() in the
                 // original HLRC buildConsumer() which caught Exception unconditionally.
                 if (err != null && retriesLeft > 0) {
-                  try {
-                    Thread.sleep(backoffMs);
-                  } catch (InterruptedException ie) {
-                    Thread.currentThread().interrupt();
-                    result.completeExceptionally(err);
-                    return;
-                  }
-                  sendAsync(request, endpoint, options, result, retriesLeft - 1, backoffMs * 2);
+                  scheduler.schedule(
+                      () -> sendAsync(request, endpoint, options, result,
+                          retriesLeft - 1, backoffMs * 2),
+                      backoffMs, TimeUnit.MILLISECONDS);
                 } else if (err != null) {
                   result.completeExceptionally(err);
                 } else {
