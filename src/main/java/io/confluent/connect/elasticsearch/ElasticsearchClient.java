@@ -456,11 +456,13 @@ public class ElasticsearchClient {
       @Override
       public void afterBulk(long executionId, BulkRequest request,
                             List<SinkRecordAndOffset> contexts, Throwable failure) {
-        // Whole-request failure fires after all transport retries (DispatchingTransport +
-        // BulkIngester backoffPolicy) are exhausted. Failing the task is intentional:
-        // transport failures are ambiguous infrastructure errors, not document-quality
-        // issues, so DLQ semantics ("this record is bad") do not apply. This matches
-        // the pre-migration HLRC BulkProcessor.Listener.afterBulk(Throwable) exactly.
+        // Whole-request failure fires after DispatchingTransport exhausts its retries.
+        // BulkIngester.backoffPolicy plays no role here: it only retries per-document
+        // HTTP 429 items in an otherwise-successful response body. It never retries a
+        // transport-level failure. Failing the task is intentional: transport failures
+        // are ambiguous infrastructure errors, not document-quality issues, so DLQ
+        // semantics ("this record is bad") do not apply. This matches the pre-migration
+        // HLRC BulkProcessor.Listener.afterBulk(Throwable) exactly.
         // bulkFinished always runs so numBufferedRecords is decremented and
         // waitForInFlightRequests() cannot stall. Failed records never get markProcessed()
         // so their offsets do not advance and the batch can be replayed after restart.
