@@ -169,10 +169,19 @@ public class Validator {
         validateResourceExists(client);
       } catch (IOException e) {
         log.warn("Closing the client failed.", e);
-      } catch (Throwable e) {
-        log.error("Failed to create client to verify connection. ", e);
-        addErrorMessage(CONNECTION_URL_CONFIG, "Failed to create client to verify connection. "
-            + e.getMessage());
+      } catch (ConfigException e) {
+        log.error("Invalid configuration encountered while building Elasticsearch client.", e);
+        addErrorMessage(CONNECTION_URL_CONFIG,
+            "Invalid Elasticsearch client configuration: " + e.getMessage());
+      } catch (IllegalArgumentException e) {
+        log.error("Malformed connection URL.", e);
+        addErrorMessage(CONNECTION_URL_CONFIG,
+            "Malformed Elasticsearch connection URL: " + e.getMessage());
+      } catch (RuntimeException e) {
+        log.error("Failed to initialize Elasticsearch client.", e);
+        addErrorMessage(CONNECTION_URL_CONFIG,
+            "Could not initialize the Elasticsearch client. This may indicate the cluster is "
+                + "unreachable or there is a transient infrastructure issue: " + e.getMessage());
       }
     }
 
