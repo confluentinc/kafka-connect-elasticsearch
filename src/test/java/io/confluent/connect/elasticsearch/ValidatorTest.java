@@ -61,6 +61,7 @@ import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.Map;
 import org.apache.kafka.common.config.Config;
+import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.config.ConfigValue;
 import org.apache.kafka.common.config.SslConfigs;
 import org.elasticsearch.ElasticsearchStatusException;
@@ -151,6 +152,36 @@ public class ValidatorTest {
     validator = new Validator(props, () -> mockClient);
     Config result = validator.validate();
     assertHasErrorMessage(result, CONNECTION_URL_CONFIG, "Could not connect to Elasticsearch. Error message: Deleted resource.");
+  }
+
+  @Test
+  public void testClientFactoryThrowsConfigException() {
+    validator = new Validator(props, () -> {
+      throw new ConfigException("bad keystore path");
+    });
+    Config result = validator.validate();
+    assertHasErrorMessage(result, CONNECTION_URL_CONFIG,
+        "Invalid Elasticsearch client configuration: ");
+  }
+
+  @Test
+  public void testClientFactoryThrowsIllegalArgumentException() {
+    validator = new Validator(props, () -> {
+      throw new IllegalArgumentException("malformed url");
+    });
+    Config result = validator.validate();
+    assertHasErrorMessage(result, CONNECTION_URL_CONFIG,
+        "Malformed Elasticsearch connection URL: malformed url");
+  }
+
+  @Test
+  public void testClientFactoryThrowsGenericRuntimeException() {
+    validator = new Validator(props, () -> {
+      throw new RuntimeException("tls handshake failed");
+    });
+    Config result = validator.validate();
+    assertHasErrorMessage(result, CONNECTION_URL_CONFIG,
+        "Could not initialize the Elasticsearch client.");
   }
 
   @Test
