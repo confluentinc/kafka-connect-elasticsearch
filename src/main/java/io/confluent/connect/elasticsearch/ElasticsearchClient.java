@@ -368,12 +368,6 @@ public class ElasticsearchClient {
 
   public void throwIfFailed() {
     if (isFailed()) {
-      try {
-        close();
-      } catch (ConnectException e) {
-        // if close fails, want to still throw the original exception
-        log.warn("Couldn't close elasticsearch client", e);
-      }
       throw error.get();
     }
   }
