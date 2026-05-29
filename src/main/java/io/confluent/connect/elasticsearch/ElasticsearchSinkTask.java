@@ -30,7 +30,7 @@ import org.apache.kafka.connect.sink.ErrantRecordReporter;
 import org.apache.kafka.connect.sink.SinkRecord;
 import org.apache.kafka.connect.sink.SinkTask;
 import org.apache.kafka.connect.sink.SinkTaskContext;
-import org.elasticsearch.action.DocWriteRequest;
+import co.elastic.clients.elasticsearch.core.bulk.BulkOperation;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -284,9 +284,9 @@ public class ElasticsearchSinkTask extends SinkTask {
     
     checkMapping(resourceName, sinkRecord);
 
-    DocWriteRequest<?> docWriteRequest = null;
+    BulkOperation bulkOperation = null;
     try {
-      docWriteRequest = converter.convertRecord(sinkRecord, resourceName);
+      bulkOperation = converter.convertRecord(sinkRecord, resourceName);
     } catch (DataException convertException) {
       reportBadRecord(sinkRecord, convertException);
 
@@ -298,9 +298,9 @@ public class ElasticsearchSinkTask extends SinkTask {
       }
     }
 
-    if (docWriteRequest != null) {
+    if (bulkOperation != null) {
       logTrace("Adding {} to bulk processor.", sinkRecord);
-      client.index(sinkRecord, docWriteRequest, offsetState);
+      client.index(sinkRecord, bulkOperation, offsetState);
     }
   }
 

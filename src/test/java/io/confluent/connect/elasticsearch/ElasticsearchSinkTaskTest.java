@@ -32,7 +32,7 @@ import org.apache.kafka.connect.errors.DataException;
 import org.apache.kafka.connect.sink.ErrantRecordReporter;
 import org.apache.kafka.connect.sink.SinkRecord;
 import org.apache.kafka.connect.sink.SinkTaskContext;
-import org.elasticsearch.action.DocWriteRequest;
+import co.elastic.clients.elasticsearch.core.bulk.BulkOperation;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -117,7 +117,7 @@ public class ElasticsearchSinkTaskTest {
     SinkRecord nullRecord = record(true, true, 0);
     when(assignment.contains(eq(new TopicPartition(TOPIC, 1)))).thenReturn(true);
     task.put(Collections.singletonList(nullRecord));
-    verify(client, never()).index(eq(nullRecord), any(DocWriteRequest.class), any(AsyncOffsetState.class));
+    verify(client, never()).index(eq(nullRecord), any(BulkOperation.class), any(AsyncOffsetState.class));
 
     // don't skip non-null
     when(context.assignment()).thenReturn(Collections.singleton(new TopicPartition(TOPIC, 1)));
@@ -125,9 +125,9 @@ public class ElasticsearchSinkTaskTest {
     SinkRecord notNullRecord = record(true, false, 1);
     task.put(Collections.singletonList(notNullRecord));
     if (flushSynchronously) {
-      verify(client, times(1)).index(eq(notNullRecord), any(DocWriteRequest.class), any(SyncOffsetTracker.SyncOffsetState.class));
+      verify(client, times(1)).index(eq(notNullRecord), any(BulkOperation.class), any(SyncOffsetTracker.SyncOffsetState.class));
     } else {
-      verify(client, times(1)).index(eq(notNullRecord), any(DocWriteRequest.class), any(AsyncOffsetState.class));
+      verify(client, times(1)).index(eq(notNullRecord), any(BulkOperation.class), any(AsyncOffsetState.class));
     }
   }
 

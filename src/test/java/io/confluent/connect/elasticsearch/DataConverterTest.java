@@ -20,13 +20,17 @@ import org.apache.kafka.common.record.TimestampType;
 import org.apache.kafka.connect.data.*;
 import org.apache.kafka.connect.errors.DataException;
 import org.apache.kafka.connect.sink.SinkRecord;
-import org.elasticsearch.action.DocWriteRequest;
-import org.elasticsearch.action.delete.DeleteRequest;
-import org.elasticsearch.action.index.IndexRequest;
-import org.elasticsearch.index.VersionType;
+import co.elastic.clients.elasticsearch.core.bulk.BulkOperation;
+import co.elastic.clients.json.JsonData;
+import co.elastic.clients.json.jackson.JacksonJsonpMapper;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.json.stream.JsonGenerator;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.io.IOException;
+import java.io.StringWriter;
 import java.math.BigDecimal;
 import java.util.Arrays;
 import java.util.Collections;
@@ -41,6 +45,7 @@ import static io.confluent.connect.elasticsearch.DataConverter.TIMESTAMP_FIELD;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.fail;
@@ -352,11 +357,11 @@ public class DataConverterTest {
     props.put(ElasticsearchSinkConnectorConfig.BEHAVIOR_ON_NULL_VALUES_CONFIG, BehaviorOnNullValues.DELETE.name());
     converter = new DataConverter(new ElasticsearchSinkConnectorConfig(props));
     SinkRecord sinkRecord = createSinkRecordWithValue(null);
-    DeleteRequest actualRecord = (DeleteRequest) converter.convertRecord(sinkRecord, index);
+    BulkOperation actualRecord = converter.convertRecord(sinkRecord, index);
 
-    assertEquals(key, actualRecord.id());
-    assertEquals(index, actualRecord.index());
-    assertEquals(sinkRecord.kafkaOffset(), actualRecord.version());
+    assertEquals(key, actualRecord.delete().id());
+    assertEquals(index, actualRecord.delete().index());
+    assertEquals(sinkRecord.kafkaOffset(), (long) actualRecord.delete().version());
   }
 
   @Test
@@ -374,11 +379,11 @@ public class DataConverterTest {
     SinkRecord sinkRecord = createSinkRecordWithValue(null);
     sinkRecord.headers().addLong(externalVersionHeader, expectedExternalVersion);
 
-    DeleteRequest actualRecord = (DeleteRequest) converter.convertRecord(sinkRecord, index);
+    BulkOperation actualRecord = converter.convertRecord(sinkRecord, index);
 
-    assertEquals(key, actualRecord.id());
-    assertEquals(index, actualRecord.index());
-    assertEquals(expectedExternalVersion, actualRecord.version());
+    assertEquals(key, actualRecord.delete().id());
+    assertEquals(index, actualRecord.delete().index());
+    assertEquals(expectedExternalVersion, (long) actualRecord.delete().version());
   }
 
   @Test
@@ -399,11 +404,11 @@ public class DataConverterTest {
     SinkRecord sinkRecord = createSinkRecordWithValue(struct);
     sinkRecord.headers().addLong(externalVersionHeader, expectedExternalVersion);
 
-    IndexRequest actualRecord = (IndexRequest) converter.convertRecord(sinkRecord, index);
+    BulkOperation actualRecord = converter.convertRecord(sinkRecord, index);
 
-    assertEquals(key, actualRecord.id());
-    assertEquals(index, actualRecord.index());
-    assertEquals(expectedExternalVersion, actualRecord.version());
+    assertEquals(key, actualRecord.index().id());
+    assertEquals(index, actualRecord.index().index());
+    assertEquals(expectedExternalVersion, (long) actualRecord.index().version());
   }
 
   @Test
@@ -445,8 +450,8 @@ public class DataConverterTest {
     converter = new DataConverter(new ElasticsearchSinkConnectorConfig(props));
 
     SinkRecord sinkRecord = createSinkRecordWithValue(new Struct(schema).put("string","test"));
-    DocWriteRequest<?> req = converter.convertRecord(sinkRecord, index);
-    assertNull(req.id());
+    BulkOperation req = converter.convertRecord(sinkRecord, index);
+    assertNull(req.index().id());
   }
 
   @Test
@@ -457,8 +462,8 @@ public class DataConverterTest {
     converter = new DataConverter(new ElasticsearchSinkConnectorConfig(props));
 
     SinkRecord sinkRecord = createSinkRecordWithValue(new Struct(schema).put("string","test"));
-    DocWriteRequest<?> req = converter.convertRecord(sinkRecord, index);
-    assertNotNull(req.id());
+    BulkOperation req = converter.convertRecord(sinkRecord, index);
+    assertNotNull(req.update().id());
   }
 
   public SinkRecord createSinkRecordWithValue(Object value) {
@@ -475,19 +480,19 @@ public class DataConverterTest {
   }
 
   @Test
-  public void testDoNotInjectPayloadTimestampIfNotDataStream() {
+  public void testDoNotInjectPayloadTimestampIfNotDataStream() throws IOException {
     converter = new DataConverter(new ElasticsearchSinkConnectorConfig(props));
     Schema preProcessedSchema = converter.preProcessSchema(schema);
     Struct struct = new Struct(preProcessedSchema).put("string", "myValue");
     SinkRecord sinkRecord = createSinkRecordWithValue(struct);
 
-    IndexRequest actualRecord = (IndexRequest) converter.convertRecord(sinkRecord, index);
+    BulkOperation actualRecord = converter.convertRecord(sinkRecord, index);
 
-    assertFalse(actualRecord.sourceAsMap().containsKey(TIMESTAMP_FIELD));
+    assertFalse(extractDocument(actualRecord).containsKey(TIMESTAMP_FIELD));
   }
 
   @Test
-  public void testDoNotInjectMissingPayloadTimestampIfDataStreamAndTimestampMapNotFound() {
+  public void testDoNotInjectMissingPayloadTimestampIfDataStreamAndTimestampMapNotFound() throws IOException {
     configureDataStream();
     props.put(ElasticsearchSinkConnectorConfig.DATA_STREAM_TIMESTAMP_CONFIG, "timestampFieldNotPresent");
     converter = new DataConverter(new ElasticsearchSinkConnectorConfig(props));
@@ -495,25 +500,25 @@ public class DataConverterTest {
     Struct struct = new Struct(preProcessedSchema).put("string", "myValue");
     SinkRecord sinkRecord = createSinkRecordWithValue(struct);
 
-    IndexRequest actualRecord = (IndexRequest) converter.convertRecord(sinkRecord, index);
-    assertFalse(actualRecord.sourceAsMap().containsKey(TIMESTAMP_FIELD));
+    BulkOperation actualRecord = converter.convertRecord(sinkRecord, index);
+    assertFalse(extractDocument(actualRecord).containsKey(TIMESTAMP_FIELD));
   }
 
   @Test
-  public void testInjectPayloadTimestampIfDataStreamAndNoTimestampMapSet() {
+  public void testInjectPayloadTimestampIfDataStreamAndNoTimestampMapSet() throws IOException {
     configureDataStream();
     converter = new DataConverter(new ElasticsearchSinkConnectorConfig(props));
     Schema preProcessedSchema = converter.preProcessSchema(schema);
     Struct struct = new Struct(preProcessedSchema).put("string", "myValue");
     SinkRecord sinkRecord = createSinkRecordWithValue(struct);
 
-    IndexRequest actualRecord = (IndexRequest) converter.convertRecord(sinkRecord, index);
+    BulkOperation actualRecord = converter.convertRecord(sinkRecord, index);
 
-    assertEquals(recordTimestamp, actualRecord.sourceAsMap().get(TIMESTAMP_FIELD));
+    assertEquals(recordTimestamp, ((Number) extractDocument(actualRecord).get(TIMESTAMP_FIELD)).longValue());
   }
 
   @Test
-  public void testInjectPayloadTimestampEvenIfAlreadyExistsAndTimestampMapNotSet() {
+  public void testInjectPayloadTimestampEvenIfAlreadyExistsAndTimestampMapNotSet() throws IOException {
     configureDataStream();
     converter = new DataConverter(new ElasticsearchSinkConnectorConfig(props));
     schema = SchemaBuilder
@@ -526,13 +531,13 @@ public class DataConverterTest {
     Struct struct = new Struct(preProcessedSchema).put(TIMESTAMP_FIELD, timestamp);
     SinkRecord sinkRecord = createSinkRecordWithValue(struct);
 
-    IndexRequest actualRecord = (IndexRequest) converter.convertRecord(sinkRecord, index);
+    BulkOperation actualRecord = converter.convertRecord(sinkRecord, index);
 
-    assertEquals(recordTimestamp, actualRecord.sourceAsMap().get(TIMESTAMP_FIELD));
+    assertEquals(recordTimestamp, ((Number) extractDocument(actualRecord).get(TIMESTAMP_FIELD)).longValue());
   }
 
   @Test
-  public void testMapPayloadTimestampIfDataStreamSetAndOneTimestampMapSet() {
+  public void testMapPayloadTimestampIfDataStreamSetAndOneTimestampMapSet() throws IOException {
     String timestampFieldMap = "onefield";
     configureDataStream();
     props.put(ElasticsearchSinkConnectorConfig.DATA_STREAM_TIMESTAMP_CONFIG, timestampFieldMap);
@@ -547,13 +552,13 @@ public class DataConverterTest {
     Struct struct = new Struct(preProcessedSchema).put(timestampFieldMap, timestamp);
     SinkRecord sinkRecord = createSinkRecordWithValue(struct);
 
-    IndexRequest actualRecord = (IndexRequest) converter.convertRecord(sinkRecord, index);
+    BulkOperation actualRecord = converter.convertRecord(sinkRecord, index);
 
-    assertEquals(timestamp, actualRecord.sourceAsMap().get(TIMESTAMP_FIELD));
+    assertEquals(timestamp, extractDocument(actualRecord).get(TIMESTAMP_FIELD));
   }
 
   @Test
-  public void testMapPayloadTimestampByPriorityIfMultipleTimestampMapsSet() {
+  public void testMapPayloadTimestampByPriorityIfMultipleTimestampMapsSet() throws IOException {
     String timestampFieldToUse = "two";
     configureDataStream();
     props.put(ElasticsearchSinkConnectorConfig.DATA_STREAM_TIMESTAMP_CONFIG, "one, two, field");
@@ -569,9 +574,9 @@ public class DataConverterTest {
     Struct struct = new Struct(preProcessedSchema).put(timestampFieldToUse, timestamp).put("field", "other");
     SinkRecord sinkRecord = createSinkRecordWithValue(struct);
 
-    IndexRequest actualRecord = (IndexRequest) converter.convertRecord(sinkRecord, index);
+    BulkOperation actualRecord = converter.convertRecord(sinkRecord, index);
 
-    assertEquals(timestamp, actualRecord.sourceAsMap().get(TIMESTAMP_FIELD));
+    assertEquals(timestamp, extractDocument(actualRecord).get(TIMESTAMP_FIELD));
   }
 
   @Test(expected = DataException.class)
@@ -593,9 +598,22 @@ public class DataConverterTest {
     Struct struct = new Struct(preProcessedSchema).put("string", "myValue");
     SinkRecord sinkRecord = createSinkRecordWithValue(struct);
 
-    IndexRequest actualRecord = (IndexRequest) converter.convertRecord(sinkRecord, index);
+    BulkOperation actualRecord = converter.convertRecord(sinkRecord, index);
 
-    assertEquals(VersionType.INTERNAL, actualRecord.versionType());
+    assertTrue(actualRecord.isCreate());
+  }
+
+  @SuppressWarnings("unchecked")
+  private Map<String, Object> extractDocument(BulkOperation op) throws IOException {
+    JsonData doc = op.isCreate()
+        ? (JsonData) op.create().document()
+        : (JsonData) op.index().document();
+    JacksonJsonpMapper jsonpMapper = new JacksonJsonpMapper();
+    StringWriter sw = new StringWriter();
+    try (JsonGenerator gen = jsonpMapper.jsonProvider().createGenerator(sw)) {
+      doc.serialize(gen, jsonpMapper);
+    }
+    return jsonpMapper.objectMapper().readValue(sw.toString(), new TypeReference<Map<String, Object>>() {});
   }
 
   private void configureDataStream() {

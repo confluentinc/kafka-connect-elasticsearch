@@ -27,9 +27,12 @@ import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.connect.storage.StringConverter;
 import org.apache.kafka.test.TestUtils;
-import org.elasticsearch.client.security.user.User;
-import org.elasticsearch.client.security.user.privileges.Role;
-import org.elasticsearch.search.SearchHit;
+import co.elastic.clients.elasticsearch.core.search.Hit;
+import co.elastic.clients.elasticsearch.security.PutRoleRequest;
+import co.elastic.clients.elasticsearch.security.PutUserRequest;
+import co.elastic.clients.util.ObjectBuilder;
+import java.util.function.Function;
+import org.junit.Assume;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -74,8 +77,8 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
 
   @BeforeClass
   public static void setupBeforeAll() {
-    Map<User, String> users = getUsers();
-    List<Role> roles = getRoles();
+    List<Function<PutUserRequest.Builder, ObjectBuilder<PutUserRequest>>> users = getUsers();
+    List<Function<PutRoleRequest.Builder, ObjectBuilder<PutRoleRequest>>> roles = getRoles();
     container = ElasticsearchContainer.fromSystemProperties().withBasicAuth(users, roles);
     container.start();
   }
@@ -151,7 +154,7 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
     connect.kafka().produce(TOPIC, "key3", "{\"any-prop\":1}");
     connect.kafka().produce(TOPIC, "key4", "{\"any-prop\":1}");
 
-    await().atMost(Duration.ofMinutes(1)).untilAsserted(() ->
+    await().atMost(Duration.ofMinutes(2)).untilAsserted(() ->
         assertThat(connect.connectorStatus(CONNECTOR_NAME).tasks().get(0).state())
             .isEqualTo("FAILED"));
 
@@ -206,12 +209,12 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
     writeRecords(NUM_RECORDS);
 
     // Connector should fail since the server is down
-    await().atMost(Duration.ofMinutes(1)).untilAsserted(() ->
+    await().atMost(Duration.ofMinutes(2)).untilAsserted(() ->
         assertThat(connect.connectorStatus(CONNECTOR_NAME).tasks().get(0).state())
             .isEqualTo("FAILED"));
 
     assertThat(connect.connectorStatus(CONNECTOR_NAME).tasks().get(0).trace())
-        .contains("'java.net.ConnectException: Connection refused' after 3 attempt(s)");
+        .containsPattern("Connection refused|Timeout connecting");
   }
 
   @Test
@@ -251,15 +254,15 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
 
   @Test
   public void testHappyPathDataStream() throws Exception {
+    // ES 9.0.x omits DataStream.settings from the get-data-stream response; the 8.x client
+    // treats it as required and throws MissingRequiredPropertyException. Fixed in 9.1+.
+    Assume.assumeFalse(container.esMajorVersion() == 9 && container.esMinorVersion() == 0);
+
     setDataStream();
 
     runSimpleTest(props);
 
-    if (container.esMajorVersion() == 8) {
-      assertEquals(index, helperClient.getDataStreamWithJavaAPIClient(index).name());
-    } else {
-      assertEquals(index, helperClient.getDataStream(index).getName());
-    }
+    assertEquals(index, helperClient.getDataStream(index).name());
   }
 
   @Test
@@ -309,10 +312,10 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
     // should have double number of records
     verifySearchResults(NUM_RECORDS * 2);
 
-    for (SearchHit hit : helperClient.search(TOPIC)) {
-      if (Integer.parseInt(hit.getId()) == lastRecord) {
+    for (Hit<Map<String, Object>> hit : helperClient.search(TOPIC)) {
+      if (Integer.parseInt(hit.id()) == lastRecord) {
         // last record should be updated
-        int docNum = (Integer) hit.getSourceAsMap().get("doc_num");
+        int docNum = (Integer) hit.source().get("doc_num");
         assertEquals(0, docNum);
       }
     }

@@ -19,8 +19,10 @@ import io.confluent.common.utils.IntegrationTest;
 import io.confluent.connect.elasticsearch.helper.ElasticsearchContainer;
 
 import org.apache.kafka.common.config.SslConfigs;
-import org.elasticsearch.client.security.user.User;
-import org.elasticsearch.client.security.user.privileges.Role;
+import co.elastic.clients.elasticsearch.security.PutRoleRequest;
+import co.elastic.clients.elasticsearch.security.PutUserRequest;
+import co.elastic.clients.util.ObjectBuilder;
+import java.util.function.Function;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -43,8 +45,8 @@ public class ElasticsearchConnectorSslIT extends ElasticsearchConnectorBaseIT {
 
   @BeforeClass
   public static void setupBeforeAll() {
-    Map<User, String> users = getUsers();
-    List<Role> roles = getRoles();
+    List<Function<PutUserRequest.Builder, ObjectBuilder<PutUserRequest>>> users = getUsers();
+    List<Function<PutRoleRequest.Builder, ObjectBuilder<PutRoleRequest>>> roles = getRoles();
     container = ElasticsearchContainer.fromSystemProperties().withSslEnabled(true).withBasicAuth(users, roles);
     container.start();
   }
