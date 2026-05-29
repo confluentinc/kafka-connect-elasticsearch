@@ -110,6 +110,7 @@ public class ElasticsearchClient {
   private final RestClient restClient;
   private final ExecutorService callbackDispatcher;
   private final ScheduledExecutorService bulkScheduler;
+  private final ScheduledExecutorService retryScheduler;
   private final ElasticsearchSinkConnectorConfig config;
   private final ErrantRecordReporter reporter;
   private final Time clock;
@@ -159,18 +160,30 @@ public class ElasticsearchClient {
         }
     );
 
+    // retryScheduler is intentionally separate from bulkScheduler. BulkIngester submits
+    // afterBulk callbacks to bulkScheduler and its single thread can block inside
+    // FnCondition.awaitUninterruptibly() waiting for a concurrency slot. If retry tasks
+    // shared that same thread they would never run, permanently deadlocking the flush.
+    String retryPrefix = connectorName + "-" + taskId + "-es-retry-";
+    AtomicInteger retryCounter = new AtomicInteger(0);
+    this.retryScheduler = Executors.newScheduledThreadPool(
+        1,
+        r -> {
+          Thread t = new Thread(r, retryPrefix + retryCounter.getAndIncrement());
+          t.setDaemon(true);
+          return t;
+        }
+    );
+
     // DispatchingTransport breaks a lock-ordering deadlock between BulkIngester's FnCondition lock
     // and the HLRC NIO pool lock: by dispatching completion callbacks to a separate executor,
     // the IO thread never directly acquires the FnCondition lock.
     // It also retries transport-level failures (e.g. SocketTimeoutException), equivalent to what
     // the original callWithRetries() provided in buildConsumer().
-    // bulkScheduler is shared with BulkIngester's flush scheduling. schedule() merely enqueues
-    // the retry task without occupying the scheduler thread, so sharing is safe and does not
-    // warrant a separate pool.
     RestClientTransport rawTransport = new RestClientTransport(
         restClient, new JacksonJsonpMapper());
     DispatchingTransport transport = new DispatchingTransport(
-        rawTransport, callbackDispatcher, bulkScheduler,
+        rawTransport, callbackDispatcher, retryScheduler,
         config.maxRetries(), config.retryBackoffMs());
     this.client = new co.elastic.clients.elasticsearch.ElasticsearchClient(transport);
 
@@ -211,6 +224,7 @@ public class ElasticsearchClient {
     this.restClient = restClient;
     this.callbackDispatcher = Executors.newCachedThreadPool();
     this.bulkScheduler = Executors.newScheduledThreadPool(1);
+    this.retryScheduler = Executors.newScheduledThreadPool(1);
     this.bulkIngester = bulkIngester;
     this.client = null;
     this.esVersion = UNKNOWN_VERSION_TAG;
@@ -527,6 +541,7 @@ public class ElasticsearchClient {
     // shutdown() not shutdownNow(): bulkIngester.close() already drained all pending flushes,
     // so only future periodic triggers remain — no need to interrupt any running task.
     bulkScheduler.shutdown();
+    retryScheduler.shutdown();
     callbackDispatcher.shutdown();
     try {
       restClient.close();
