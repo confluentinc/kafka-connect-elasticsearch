@@ -25,7 +25,6 @@ import co.elastic.clients.elasticsearch.core.bulk.BulkResponseItem;
 import co.elastic.clients.elasticsearch.indices.get_mapping.IndexMappingRecord;
 import co.elastic.clients.json.JsonpMapper;
 import co.elastic.clients.json.jackson.JacksonJsonpMapper;
-import co.elastic.clients.transport.BackoffPolicy;
 import co.elastic.clients.transport.ElasticsearchTransport;
 import co.elastic.clients.transport.Endpoint;
 import co.elastic.clients.transport.TransportOptions;
@@ -195,8 +194,6 @@ public class ElasticsearchClient {
           .maxConcurrentRequests(config.maxInFlightRequests())
           .flushInterval(config.lingerMs(), TimeUnit.MILLISECONDS)
           .scheduler(this.bulkScheduler)
-          .backoffPolicy(BackoffPolicy.exponentialBackoff(
-              config.retryBackoffMs(), config.maxRetries()))
           .listener(buildListener(afterBulkCallback));
       if (config.bulkSize() > 0) {
         b.maxSize(config.bulkSize());
