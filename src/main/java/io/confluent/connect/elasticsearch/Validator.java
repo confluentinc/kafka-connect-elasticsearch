@@ -15,16 +15,16 @@
 
 package io.confluent.connect.elasticsearch;
 
+import co.elastic.clients.elasticsearch.ElasticsearchClient;
+import co.elastic.clients.elasticsearch._types.ElasticsearchException;
+import co.elastic.clients.json.jackson.JacksonJsonpMapper;
+import co.elastic.clients.transport.rest_client.RestClientTransport;
 import org.apache.http.HttpHost;
 import org.apache.kafka.common.config.Config;
 import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.config.ConfigValue;
 import org.apache.kafka.common.config.SslConfigs;
-import org.elasticsearch.ElasticsearchStatusException;
-import org.elasticsearch.client.core.MainResponse;
-import org.elasticsearch.client.RequestOptions;
 import org.elasticsearch.client.RestClient;
-import org.elasticsearch.client.RestHighLevelClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -75,8 +75,7 @@ public class Validator {
 
   private static final Logger log = LoggerFactory.getLogger(Validator.class);
 
-  private static final String CONNECTOR_V11_COMPATIBLE_ES_VERSION = "7.0.0";
-  private static final String DATA_STREAM_COMPATIBLE_ES_VERSION = "7.9.0";
+  private static final String CONNECTOR_V11_COMPATIBLE_ES_VERSION = "8.0.0";
 
   public static final String EXTERNAL_RESOURCE_CONFIG_TOGETHER_ERROR =
           String.format("Invalid configuration:"
@@ -163,7 +162,7 @@ public class Validator {
 
     if (!hasErrors()) {
       // no point in connection validation if previous ones fails
-      try (RestHighLevelClient client = clientFactory.client()) {
+      try (ElasticsearchClient client = clientFactory.client()) {
         validateConnection(client);
         validateVersion(client);
         validateResourceExists(client);
@@ -458,28 +457,15 @@ public class Validator {
     }
   }
 
-  private void validateVersion(RestHighLevelClient client) {
-    MainResponse response;
+  private void validateVersion(ElasticsearchClient client) {
+    String esVersionNumber;
     try {
-      response = client.info(RequestOptions.DEFAULT);
-    } catch (IOException | ElasticsearchStatusException e) {
+      esVersionNumber = client.info().version().number();
+    } catch (IOException | ElasticsearchException e) {
       // Same error messages as from validating the connection for IOException.
       // Insufficient privileges to validate the version number if caught
-      // ElasticsearchStatusException.
+      // ElasticsearchException.
       return;
-    }
-    String esVersionNumber = response.getVersion().getNumber();
-    if (config.isDataStream()
-        && compareVersions(esVersionNumber, DATA_STREAM_COMPATIBLE_ES_VERSION) < 0) {
-      String errorMessage = String.format(
-          "Elasticsearch version %s is not compatible with data streams. Elasticsearch"
-              + "version must be at least %s.",
-          esVersionNumber,
-          DATA_STREAM_COMPATIBLE_ES_VERSION
-      );
-      addErrorMessage(CONNECTION_URL_CONFIG, errorMessage);
-      addErrorMessage(DATA_STREAM_TYPE_CONFIG, errorMessage);
-      addErrorMessage(DATA_STREAM_DATASET_CONFIG, errorMessage);
     }
     if (compareVersions(esVersionNumber, CONNECTOR_V11_COMPATIBLE_ES_VERSION) < 0) {
       String errorMessage = String.format(
@@ -498,7 +484,7 @@ public class Validator {
    * Checks resource existence based on the configured external resource type.
    * Only validates when external resource usage is enabled.
    */
-  private void validateResourceExists(RestHighLevelClient client) {
+  private void validateResourceExists(ElasticsearchClient client) {
     if (!config.isExternalResourceUsageEnabled()) {
       return;
     }
@@ -518,7 +504,7 @@ public class Validator {
           addErrorMessage(TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_CONFIG, errorMessage);
           return;
         }
-      } catch (IOException | ElasticsearchStatusException e) {
+      } catch (IOException | ElasticsearchException e) {
         String errorMessage = String.format(
                 RESOURCE_EXISTENCE_CHECK_FAILED_ERROR_FORMAT,
                 config.externalResourceUsage().name().toLowerCase(),
@@ -556,14 +542,14 @@ public class Validator {
     return versionSplit.length - compatibleSplit.length;
   }
 
-  private void validateConnection(RestHighLevelClient client) {
+  private void validateConnection(ElasticsearchClient client) {
     boolean successful;
     String exceptionMessage = "";
     try {
-      successful = client.ping(RequestOptions.DEFAULT);
-    } catch (ElasticsearchStatusException e) {
+      successful = client.ping().value();
+    } catch (ElasticsearchException e) {
       switch (e.status()) {
-        case FORBIDDEN:
+        case 403:
           // ES is up, but user is not authorized to ping server
           successful = true;
           break;
@@ -632,19 +618,19 @@ public class Validator {
     values.get(property).addErrorMessage(error);
   }
 
-  private RestHighLevelClient createClient() {
+  private ElasticsearchClient createClient() {
     ConfigCallbackHandler configCallbackHandler = new ConfigCallbackHandler(config);
-    return new RestHighLevelClient(
-        RestClient
-            .builder(
-                config.connectionUrls()
-                    .stream()
-                    .map(HttpHost::create)
-                    .collect(Collectors.toList())
-                    .toArray(new HttpHost[config.connectionUrls().size()])
-            )
-            .setHttpClientConfigCallback(configCallbackHandler)
-    );
+    RestClient restClient = RestClient
+        .builder(
+            config.connectionUrls()
+                .stream()
+                .map(HttpHost::create)
+                .collect(Collectors.toList())
+                .toArray(new HttpHost[0])
+        )
+        .setHttpClientConfigCallback(configCallbackHandler)
+        .build();
+    return new ElasticsearchClient(new RestClientTransport(restClient, new JacksonJsonpMapper()));
   }
 
   private boolean hasErrors() {
@@ -658,6 +644,6 @@ public class Validator {
   }
 
   interface ClientFactory {
-    RestHighLevelClient client();
+    ElasticsearchClient client();
   }
 }

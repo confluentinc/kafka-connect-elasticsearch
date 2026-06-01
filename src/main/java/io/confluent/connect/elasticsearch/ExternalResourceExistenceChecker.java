@@ -15,13 +15,10 @@
 
 package io.confluent.connect.elasticsearch;
 
-import java.io.IOException;
+import co.elastic.clients.elasticsearch.ElasticsearchClient;
+import co.elastic.clients.elasticsearch._types.ElasticsearchException;
 
-import org.elasticsearch.ElasticsearchStatusException;
-import org.elasticsearch.client.RequestOptions;
-import org.elasticsearch.client.RestHighLevelClient;
-import org.elasticsearch.client.indices.GetIndexRequest;
-import org.elasticsearch.action.admin.indices.alias.get.GetAliasesRequest;
+import java.io.IOException;
 
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.ExternalResourceUsage;
 
@@ -37,15 +34,14 @@ public class ExternalResourceExistenceChecker {
   public interface ExternalResourceExistenceStrategy {
     /**
      * Checks if an external resource exists in Elasticsearch.
-     * 
+     *
      * @param client the Elasticsearch client
      * @param resource the resource name to check
      * @return true if the resource exists, false otherwise
      * @throws IOException if there's an I/O error
-     * @throws ElasticsearchStatusException if there's an Elasticsearch error
+     * @throws ElasticsearchException if there's an Elasticsearch error
      */
-    boolean exists(RestHighLevelClient client, String resource) 
-        throws IOException, ElasticsearchStatusException;
+    boolean exists(ElasticsearchClient client, String resource) throws IOException;
   }
 
   /**
@@ -54,12 +50,8 @@ public class ExternalResourceExistenceChecker {
   public static class IndexAndDataStreamExistenceStrategy
           implements ExternalResourceExistenceStrategy {
     @Override
-    public boolean exists(RestHighLevelClient client, String resource) 
-            throws IOException, ElasticsearchStatusException {
-      return client.indices().exists(
-          new GetIndexRequest(resource), 
-          RequestOptions.DEFAULT
-      );
+    public boolean exists(ElasticsearchClient client, String resource) throws IOException {
+      return client.indices().exists(r -> r.index(resource)).value();
     }
   }
 
@@ -68,18 +60,14 @@ public class ExternalResourceExistenceChecker {
    */
   public static class AliasExistenceStrategy implements ExternalResourceExistenceStrategy {
     @Override
-    public boolean exists(RestHighLevelClient client, String resource) 
-            throws IOException, ElasticsearchStatusException {
-      return client.indices().existsAlias(
-          new GetAliasesRequest(resource), 
-          RequestOptions.DEFAULT
-      );
+    public boolean exists(ElasticsearchClient client, String resource) throws IOException {
+      return client.indices().existsAlias(r -> r.name(resource)).value();
     }
   }
 
   /**
    * Factory method to get the appropriate existence strategy based on external resource type.
-   * 
+   *
    * @param externalResourceUsage the type of external resource to check
    * @return the appropriate existence strategy
    * @throws IllegalArgumentException if the resource type is not supported

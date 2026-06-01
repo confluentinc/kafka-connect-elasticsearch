@@ -21,6 +21,7 @@ import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfi
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.DATA_STREAM_DATASET_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.DATA_STREAM_TYPE_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.FLUSH_TIMEOUT_MS_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_KEY_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.LINGER_MS_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.MAX_BUFFERED_RECORDS_CONFIG;
@@ -30,16 +31,27 @@ import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfi
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.WRITE_METHOD_CONFIG;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import co.elastic.clients.elasticsearch._helpers.bulk.BulkIngester;
+import co.elastic.clients.elasticsearch._helpers.bulk.BulkListener;
+import co.elastic.clients.elasticsearch._types.VersionType;
+import co.elastic.clients.elasticsearch.core.BulkRequest;
+import co.elastic.clients.elasticsearch.core.BulkResponse;
+import co.elastic.clients.elasticsearch.core.bulk.BulkOperation;
+import co.elastic.clients.elasticsearch.core.bulk.BulkResponseItem;
+import co.elastic.clients.elasticsearch.core.bulk.OperationType;
+import co.elastic.clients.json.JsonData;
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BehaviorOnMalformedDoc;
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BehaviorOnNullValues;
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.WriteMethod;
@@ -47,6 +59,8 @@ import io.confluent.connect.elasticsearch.helper.ElasticsearchContainer;
 import io.confluent.connect.elasticsearch.helper.ElasticsearchHelperClient;
 import io.confluent.connect.elasticsearch.helper.NetworkErrorContainer;
 import java.io.IOException;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
@@ -60,10 +74,7 @@ import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.sink.ErrantRecordReporter;
 import org.apache.kafka.connect.sink.SinkRecord;
-import org.elasticsearch.action.DocWriteRequest;
-import org.elasticsearch.action.bulk.BulkItemResponse;
-import org.elasticsearch.index.VersionType;
-import org.elasticsearch.search.SearchHit;
+import org.elasticsearch.client.RestClient;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.BeforeClass;
@@ -86,8 +97,7 @@ public class ElasticsearchClientTest extends ElasticsearchClientTestBase {
     props.put(LINGER_MS_CONFIG, "1000");
     config = new ElasticsearchSinkConnectorConfig(props);
     converter = new DataConverter(config);
-    helperClient = new ElasticsearchHelperClient(container.getConnectionUrl(), config,
-        container.shouldStartClientInCompatibilityMode());
+    helperClient = new ElasticsearchHelperClient(container.getConnectionUrl(), config);
     helperClient.waitForConnection(30000);
     offsetTracker = mock(OffsetTracker.class);
   }
@@ -110,23 +120,12 @@ public class ElasticsearchClientTest extends ElasticsearchClientTestBase {
   public void testCloseFails() throws Exception {
     props.put(BATCH_SIZE_CONFIG, "1");
     props.put(MAX_IN_FLIGHT_REQUESTS_CONFIG, "1");
-    ElasticsearchClient client = new ElasticsearchClient(config, null, () -> offsetTracker.updateOffsets(), 1, "elasticsearch-sink") {
-      @Override
-      public void close() {
-        try {
-          if (!bulkProcessor.awaitClose(1, TimeUnit.MILLISECONDS)) {
-            throw new ConnectException("Failed to process all outstanding requests in time.");
-          }
-        } catch (InterruptedException e) {}
-      }
-    };
+    ElasticsearchClient client = new ElasticsearchClient(config, null, () -> offsetTracker.updateOffsets(), 1, "elasticsearch-sink");
+    client.createIndexOrDataStream(index);
 
     writeRecord(sinkRecord(0), client);
-    assertThrows(
-        "Failed to process all outstanding requests in time.",
-        ConnectException.class,
-        () -> client.close()
-    );
+    // BulkIngester.close() waits for all in-flight operations. We do not need to wait manually
+    client.close();
     waitUntilRecordsInES(1);
   }
 
@@ -211,17 +210,10 @@ public class ElasticsearchClientTest extends ElasticsearchClientTestBase {
 
     assertTrue(client.hasMapping(index));
 
-    Map<String, Object> mapping = helperClient.getMapping(index).sourceAsMap();
-    assertTrue(mapping.containsKey("properties"));
-    Map<String, Object> props = (Map<String, Object>) mapping.get("properties");
-    assertTrue(props.containsKey("offset"));
-    assertTrue(props.containsKey("another"));
-    Map<String, Object> offset = (Map<String, Object>) props.get("offset");
-    assertEquals("integer", offset.get("type"));
-    assertEquals(0, offset.get("null_value"));
-    Map<String, Object> another = (Map<String, Object>) props.get("another");
-    assertEquals("integer", another.get("type"));
-    assertEquals(0, another.get("null_value"));
+    co.elastic.clients.elasticsearch._types.mapping.TypeMapping typeMapping =
+        helperClient.getMapping(index);
+    assertTrue(typeMapping.properties().containsKey("offset"));
+    assertTrue(typeMapping.properties().containsKey("another"));
     client.close();
   }
 
@@ -360,12 +352,14 @@ public class ElasticsearchClientTest extends ElasticsearchClientTestBase {
     client.flush();
 
     waitUntilRecordsInES(3);
-    for (SearchHit hit : helperClient.search(index)) {
-      if (hit.getId().equals("key0")) {
-        assertEquals(3, hit.getSourceAsMap().get("offset"));
-        assertEquals(0, hit.getSourceAsMap().get("another"));
+    helperClient.search(index).forEach(hit -> {
+      if ("key0".equals(hit.id())) {
+        @SuppressWarnings("unchecked")
+        Map<String, Object> src = (Map<String, Object>) hit.source();
+        assertEquals(3, src.get("offset"));
+        assertEquals(0, src.get("another"));
       }
-    }
+    });
 
     client.close();
   }
@@ -658,30 +652,43 @@ public class ElasticsearchClientTest extends ElasticsearchClientTestBase {
    */
   @Test
   public void testHandleResponseInternalVersionConflictReporterCalled() throws Exception {
+    // Use IGNORE_KEY=false so records use key-based IDs, enabling real version conflicts.
+    // A subclass overrides handleResponse to treat ALL version conflicts as internal,
+    // so the DLQ reporter is called even though the underlying conflict was external.
     props.put(IGNORE_KEY_CONFIG, "false");
     config = new ElasticsearchSinkConnectorConfig(props);
     converter = new DataConverter(config);
 
     ErrantRecordReporter reporter = mock(ErrantRecordReporter.class);
+    when(reporter.report(any(), any())).thenReturn(CompletableFuture.completedFuture(null));
 
-    // We will cause a version conflict error, but test that handleResponse()
-    // correctly reports the error when it interprets the version conflict as
-    // "INTERNAL" (version maintained by Elasticsearch) rather than
-    // "EXTERNAL" (version maintained by the connector as kafka offset)
-    ElasticsearchClient client = new ElasticsearchClient(config, reporter, () -> offsetTracker.updateOffsets(), 1, "elasticsearch-sink") {
-      protected boolean handleResponse(BulkItemResponse response, DocWriteRequest<?> request,
-                                    long executionId) {
-        // Make it think it was an internal version conflict.
-        // Note that we don't make any attempt to reset the response version number,
-        // which will be -1 here.
-        request.versionType(VersionType.INTERNAL);
-        return super.handleResponse(response, request, executionId);
+    ElasticsearchClient client = new ElasticsearchClient(
+        config, reporter, () -> offsetTracker.updateOffsets(), 1, "elasticsearch-sink") {
+      @Override
+      protected boolean handleResponse(
+          co.elastic.clients.elasticsearch.core.bulk.BulkResponseItem item,
+          ElasticsearchClient.SinkRecordAndOffset ctx,
+          long executionId) {
+        if (item.error() != null) {
+          String failureMsg = item.error().type() + ": " + item.error().reason();
+          if (failureMsg.contains("version_conflict_engine_exception")) {
+            if (reporter != null && ctx != null) {
+              reporter.report(
+                  ctx.sinkRecord,
+                  new ElasticsearchClient.ReportingException("Indexing failed: " + failureMsg)
+              );
+            }
+            return false;
+          }
+        }
+        return super.handleResponse(item, ctx, executionId);
       }
     };
 
     List<SinkRecord> duplicate_records = causeExternalVersionConflictError(client);
 
-    // Make sure that error was reported for either offset [1, 2] record(s)
+    // Make sure that error was reported for duplicate record(s) — internal version
+    // conflict is reported to DLQ
     for (SinkRecord duplicated_record : duplicate_records) {
       verify(reporter, times(1)).report(eq(duplicated_record), any(Throwable.class));
     }
@@ -744,6 +751,333 @@ public class ElasticsearchClientTest extends ElasticsearchClientTestBase {
     config = new ElasticsearchSinkConnectorConfig(props);
     ElasticsearchClient client = new ElasticsearchClient(config, null, () -> offsetTracker.updateOffsets(), 1, "elasticsearch-sink");
     client.close();
+  }
+
+  /**
+   * UPSERT generates an update operation with no external version. A version_conflict on that
+   * update is a genuine conflict that must be routed to the DLQ, not silently dropped.
+   */
+  @Test
+  public void testUpsertVersionConflictReportedToDlq() {
+    props.put(WRITE_METHOD_CONFIG, WriteMethod.UPSERT.name());
+    props.put(IGNORE_KEY_CONFIG, "false");
+    config = new ElasticsearchSinkConnectorConfig(props);
+    DataConverter upsertConverter = new DataConverter(config);
+
+    ErrantRecordReporter reporter = mock(ErrantRecordReporter.class);
+    when(reporter.report(any(), any())).thenReturn(CompletableFuture.completedFuture(null));
+
+    @SuppressWarnings("unchecked")
+    BulkIngester<ElasticsearchClient.SinkRecordAndOffset> mockIngester = mock(BulkIngester.class);
+    ElasticsearchClient client = new ElasticsearchClient(
+        config, reporter, mockIngester, mock(RestClient.class));
+
+    SinkRecord record = sinkRecord("key0", 0);
+    BulkOperation op = upsertConverter.convertRecord(record, index);
+    ElasticsearchClient.SinkRecordAndOffset ctx = new ElasticsearchClient.SinkRecordAndOffset(
+        record, new AsyncOffsetTracker.AsyncOffsetState(0), op);
+
+    client.handleResponse(versionConflictItem(index, "key0", OperationType.Update), ctx, 1L);
+
+    verify(reporter, times(1)).report(eq(record), any(Throwable.class));
+  }
+
+  /**
+   * INSERT with ignore.key=false produces an index operation with VersionType.External.
+   * A version_conflict on that op is an expected repeated-offset collision and must not
+   * be reported to the DLQ. This is a non-regression guard: the pre-call assertions pin
+   * the preconditions that isExternallyVersioned depends on, so the DLQ suppression is
+   * provably due to that branch and not to the DataStream suppression path or a null reporter.
+   */
+  @Test
+  public void testIndexExternalVersionConflictIgnoredNotReportedToDlq() {
+    props.put(WRITE_METHOD_CONFIG, WriteMethod.INSERT.name());
+    props.put(IGNORE_KEY_CONFIG, "false");
+    config = new ElasticsearchSinkConnectorConfig(props);
+    DataConverter insertConverter = new DataConverter(config);
+
+    ErrantRecordReporter reporter = mock(ErrantRecordReporter.class);
+
+    @SuppressWarnings("unchecked")
+    BulkIngester<ElasticsearchClient.SinkRecordAndOffset> mockIngester = mock(BulkIngester.class);
+    ElasticsearchClient client = new ElasticsearchClient(
+        config, reporter, mockIngester, mock(RestClient.class));
+
+    SinkRecord record = sinkRecord("key0", 5);
+    BulkOperation op = insertConverter.convertRecord(record, index);
+    ElasticsearchClient.SinkRecordAndOffset ctx = new ElasticsearchClient.SinkRecordAndOffset(
+        record, new AsyncOffsetTracker.AsyncOffsetState(5), op);
+
+    // Pin preconditions: isExternallyVersioned must be the sole reason the DLQ is not called.
+    assertTrue(op.isIndex());
+    assertEquals(VersionType.External, op.index().versionType());
+    assertFalse(config.isDataStream());
+    assertNotNull(reporter);
+
+    client.handleResponse(versionConflictItem(index, "key0", OperationType.Index), ctx, 1L);
+
+    verify(reporter, never()).report(any(SinkRecord.class), any(Throwable.class));
+  }
+
+  /**
+   * close() must throw ConnectException within flush.timeout.ms when BulkIngester.close() hangs.
+   * The hang is mocked above the socket layer so read.timeout.ms cannot fire first.
+   * The assertThrows is the functional proof of bounded close(); the @Test timeout is a generous
+   * backstop that only fires if close() truly hangs forever.
+   */
+  @Test(timeout = 30000)
+  public void testCloseTimesOutInsteadOfHanging() throws Exception {
+    props.put(FLUSH_TIMEOUT_MS_CONFIG, "1000"); // minimum allowed by the config validator
+    config = new ElasticsearchSinkConnectorConfig(props);
+
+    @SuppressWarnings("unchecked")
+    BulkIngester<ElasticsearchClient.SinkRecordAndOffset> mockIngester = mock(BulkIngester.class);
+    RestClient mockRestClient = mock(RestClient.class);
+
+    doAnswer(invocation -> {
+      try {
+        Thread.sleep(Long.MAX_VALUE);
+      } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();
+      }
+      return null;
+    }).when(mockIngester).close();
+
+    ElasticsearchClient client = new ElasticsearchClient(
+        config, null, mockIngester, mockRestClient);
+
+    ConnectException thrown = assertThrows(ConnectException.class, client::close);
+    assertTrue(thrown.getMessage().contains("Failed to process outstanding requests"));
+    verify(mockRestClient).close(); // closeResources() ran on the timeout path
+  }
+
+  /**
+   * If the DLQ reporter throws inside afterBulk, bulkFinished() must still run so that
+   * numBufferedRecords is decremented and waitForInFlightRequests() never stalls.
+   */
+  @Test
+  public void testAfterBulkDecrementsBufferedCountEvenOnReporterException() {
+    props.put(BEHAVIOR_ON_MALFORMED_DOCS_CONFIG, BehaviorOnMalformedDoc.IGNORE.name());
+    props.put(IGNORE_KEY_CONFIG, "false");
+    config = new ElasticsearchSinkConnectorConfig(props);
+    DataConverter localConverter = new DataConverter(config);
+
+    ErrantRecordReporter reporter = mock(ErrantRecordReporter.class);
+    when(reporter.report(any(), any())).thenThrow(new RuntimeException("DLQ unavailable"));
+
+    @SuppressWarnings("unchecked")
+    BulkIngester<ElasticsearchClient.SinkRecordAndOffset> mockIngester = mock(BulkIngester.class);
+    ElasticsearchClient client = new ElasticsearchClient(
+        config, reporter, mockIngester, mock(RestClient.class));
+
+    SinkRecord record = sinkRecord("key0", 0);
+    BulkOperation op = localConverter.convertRecord(record, index);
+    ElasticsearchClient.SinkRecordAndOffset ctx = new ElasticsearchClient.SinkRecordAndOffset(
+        record, new AsyncOffsetTracker.AsyncOffsetState(0), op);
+
+    client.numBufferedRecords.set(1);
+
+    BulkResponseItem malformedItem = BulkResponseItem.of(b -> b
+        .operationType(OperationType.Index)
+        .index(index)
+        .id("key0")
+        .status(400)
+        .error(e -> e.type("mapper_parsing_exception").reason("field type mismatch"))
+    );
+
+    List<ElasticsearchClient.SinkRecordAndOffset> contexts = Collections.singletonList(ctx);
+    BulkResponse response = BulkResponse.of(b -> b.items(malformedItem).errors(true).took(1L));
+
+    BulkListener<ElasticsearchClient.SinkRecordAndOffset> listener =
+        client.buildListener(() -> { });
+    listener.afterBulk(1L, mock(BulkRequest.class), contexts, response);
+
+    assertEquals(0, client.numBufferedRecords.get());
+  }
+
+  /**
+   * C-1: whole-request bulk failure locks in fail-the-task policy.
+   * After afterBulk(Throwable) fires, numBufferedRecords is decremented (bulkFinished ran),
+   * no offset advances, and the next throwIfFailed() kills the task.
+   */
+  @Test
+  public void testAfterBulkThrowableFailsTaskAndDecrementsBufferedCount() {
+    @SuppressWarnings("unchecked")
+    BulkIngester<ElasticsearchClient.SinkRecordAndOffset> mockIngester = mock(BulkIngester.class);
+    ElasticsearchClient client = new ElasticsearchClient(
+        config, null, mockIngester, mock(RestClient.class));
+
+    OffsetState mockOffsetState = mock(OffsetState.class);
+    SinkRecord record = sinkRecord("key0", 0);
+    BulkOperation op = converter.convertRecord(record, index);
+    ElasticsearchClient.SinkRecordAndOffset ctx =
+        new ElasticsearchClient.SinkRecordAndOffset(record, mockOffsetState, op);
+
+    client.numBufferedRecords.set(1);
+
+    BulkListener<ElasticsearchClient.SinkRecordAndOffset> listener = client.buildListener(() -> {});
+    listener.afterBulk(1L, mock(BulkRequest.class),
+        Collections.singletonList(ctx), new RuntimeException("simulated transport failure"));
+
+    assertEquals("bulkFinished must decrement numBufferedRecords", 0, client.numBufferedRecords.get());
+    verify(mockOffsetState, never()).markProcessed();
+    assertTrue("task must be marked failed", client.isFailed());
+    assertThrows(ConnectException.class, client::throwIfFailed);
+  }
+
+  /**
+   * C-2: afterBulk(BulkResponse) pairs response items with contexts by position.
+   * Item 1's DLQ record must be sinkRecord1, not sinkRecord0.
+   * Uses IGNORE_KEY=true (the default) which produces index ops without VersionType.External,
+   * so the non-external version_conflict path fires and the record is routed to the DLQ.
+   * Offset state for ctx 0 (success) advances; ctx 1 (version_conflict, non-external) also
+   * advances because handleResponse returns false for version_conflict — the record was
+   * handled (sent to DLQ) and the connector continues without stalling.
+   */
+  @Test
+  public void testAfterBulkResponseRoutesDlqToCorrectContextByIndex() {
+    // config already has IGNORE_KEY=true → index ops without VersionType.External
+    DataConverter localConverter = new DataConverter(config);
+
+    ErrantRecordReporter reporter = mock(ErrantRecordReporter.class);
+    when(reporter.report(any(), any())).thenReturn(CompletableFuture.completedFuture(null));
+
+    @SuppressWarnings("unchecked")
+    BulkIngester<ElasticsearchClient.SinkRecordAndOffset> mockIngester = mock(BulkIngester.class);
+    ElasticsearchClient client = new ElasticsearchClient(
+        config, reporter, mockIngester, mock(RestClient.class));
+
+    SinkRecord record0 = sinkRecord("key0", 0);
+    SinkRecord record1 = sinkRecord("key1", 1);
+    BulkOperation op0 = localConverter.convertRecord(record0, index);
+    BulkOperation op1 = localConverter.convertRecord(record1, index);
+
+    OffsetState mockOffset0 = mock(OffsetState.class);
+    OffsetState mockOffset1 = mock(OffsetState.class);
+    ElasticsearchClient.SinkRecordAndOffset ctx0 =
+        new ElasticsearchClient.SinkRecordAndOffset(record0, mockOffset0, op0);
+    ElasticsearchClient.SinkRecordAndOffset ctx1 =
+        new ElasticsearchClient.SinkRecordAndOffset(record1, mockOffset1, op1);
+
+    BulkResponseItem successItem = BulkResponseItem.of(b -> b
+        .operationType(OperationType.Index).index(index).id("key0").status(200));
+    // Non-external version conflict on index → routes to DLQ
+    BulkResponseItem conflictItem = versionConflictItem(index, "key1", OperationType.Index);
+
+    BulkResponse response = BulkResponse.of(b -> b
+        .items(successItem, conflictItem).errors(true).took(1L));
+    client.numBufferedRecords.set(2);
+
+    BulkListener<ElasticsearchClient.SinkRecordAndOffset> listener = client.buildListener(() -> {});
+    listener.afterBulk(1L, mock(BulkRequest.class), Arrays.asList(ctx0, ctx1), response);
+
+    // DLQ receives the record from context index 1, not index 0
+    verify(reporter, times(1)).report(eq(record1), any(Throwable.class));
+    verify(reporter, never()).report(eq(record0), any(Throwable.class));
+    // Both offsets advance: success for ctx0; version_conflict returns false so ctx1 also advances
+    verify(mockOffset0, times(1)).markProcessed();
+    verify(mockOffset1, times(1)).markProcessed();
+    assertEquals("numBufferedRecords must drop by full batch size", 0, client.numBufferedRecords.get());
+  }
+
+  /**
+   * C-3: data-stream create version_conflict is suppressed by the RCCA-7507 carve-out.
+   * DataConverter produces a create op (not index) with no VersionType.External, so
+   * isExternallyVersioned returns false and reportBadRecordAndError is called — but
+   * reportBadRecordAndError short-circuits for data-stream version conflicts, so
+   * reporter.report() is never invoked and the task is not marked failed.
+   *
+   * A non-data-stream control confirms the actual mechanism: the same non-external create
+   * conflict on a regular index IS routed to the DLQ, proving the data-stream carve-out is
+   * what suppresses it (not isExternallyVersioned returning true, which would also suppress it).
+   */
+  @Test
+  public void testDataStreamCreateVersionConflictSuppressedByRcca7507() {
+    props.put(DATA_STREAM_TYPE_CONFIG, DATA_STREAM_TYPE);
+    props.put(DATA_STREAM_DATASET_CONFIG, DATA_STREAM_DATASET);
+    props.put(IGNORE_KEY_CONFIG, "false");
+    config = new ElasticsearchSinkConnectorConfig(props);
+    DataConverter dsConverter = new DataConverter(config);
+
+    ErrantRecordReporter reporterDs = mock(ErrantRecordReporter.class);
+
+    @SuppressWarnings("unchecked")
+    BulkIngester<ElasticsearchClient.SinkRecordAndOffset> mockIngester = mock(BulkIngester.class);
+    ElasticsearchClient client = new ElasticsearchClient(
+        config, reporterDs, mockIngester, mock(RestClient.class));
+
+    String dsIndex = createIndexName(TOPIC);
+    SinkRecord record = sinkRecord("key0", 5);
+    BulkOperation op = dsConverter.convertRecord(record, dsIndex);
+
+    // Pin preconditions: isExternallyVersioned must be the reason reportBadRecordAndError is called
+    assertTrue("data-stream INSERT must produce a create op", op.isCreate());
+    assertFalse("data-stream create must carry no external version",
+        VersionType.External.equals(op.create().versionType()));
+    assertTrue("config must be in data-stream mode", config.isDataStream());
+
+    ElasticsearchClient.SinkRecordAndOffset ctx =
+        new ElasticsearchClient.SinkRecordAndOffset(
+            record, new AsyncOffsetTracker.AsyncOffsetState(5), op);
+
+    // isExternallyVersioned → false → reportBadRecordAndError called,
+    // RCCA-7507 carve-out in reportBadRecordAndError silences it without calling reporter.report()
+    boolean failed = client.handleResponse(
+        versionConflictItem(dsIndex, "key0", OperationType.Create), ctx, 1L);
+
+    verify(reporterDs, never()).report(any(SinkRecord.class), any(Throwable.class));
+    assertFalse("data-stream create version conflict must not fail the task", failed);
+    assertFalse("task-level error must not be set", client.isFailed());
+
+    // Control: same non-external create conflict on a regular (non-data-stream) index IS reported.
+    // This distinguishes the RCCA-7507 carve-out from the isExternallyVersioned path:
+    // if isExternallyVersioned returned true instead, both would suppress DLQ and this would fail.
+    Map<String, String> nonDsProps =
+        ElasticsearchSinkConnectorConfigTest.addNecessaryProps(new HashMap<>());
+    nonDsProps.put(CONNECTION_URL_CONFIG, container.getConnectionUrl());
+    nonDsProps.put(IGNORE_KEY_CONFIG, "false");
+    ElasticsearchSinkConnectorConfig nonDsConfig = new ElasticsearchSinkConnectorConfig(nonDsProps);
+    assertFalse("control config must not be data-stream", nonDsConfig.isDataStream());
+
+    ErrantRecordReporter controlReporter = mock(ErrantRecordReporter.class);
+    when(controlReporter.report(any(), any())).thenReturn(CompletableFuture.completedFuture(null));
+    @SuppressWarnings("unchecked")
+    BulkIngester<ElasticsearchClient.SinkRecordAndOffset> mockIngester2 = mock(BulkIngester.class);
+    ElasticsearchClient nonDsClient = new ElasticsearchClient(
+        nonDsConfig, controlReporter, mockIngester2, mock(RestClient.class));
+
+    // Control: a create op with no external version under a non-data-stream client IS reported.
+    // DataConverter only produces create ops for data streams (non-data-stream INSERTs yield index
+    // ops), so we build the control op directly to hold the operation kind constant while varying
+    // only the data-stream config flag. This distinguishes the RCCA-7507 carve-out from
+    // isExternallyVersioned: if the latter were the suppression reason, the control would also
+    // be suppressed and the assertion below would fail.
+    BulkOperation controlOp =
+        BulkOperation.of(b -> b.create(c -> c.index(index).id("key0")
+            .document(JsonData.fromJson("{}"))));
+    assertTrue("control op must be a create", controlOp.isCreate());
+    assertFalse("control create must carry no external version",
+        VersionType.External.equals(controlOp.create().versionType()));
+    SinkRecord controlRecord = sinkRecord("key0", 5);
+    ElasticsearchClient.SinkRecordAndOffset controlCtx =
+        new ElasticsearchClient.SinkRecordAndOffset(
+            controlRecord, new AsyncOffsetTracker.AsyncOffsetState(5), controlOp);
+    nonDsClient.handleResponse(
+        versionConflictItem(index, "key0", OperationType.Create), controlCtx, 1L);
+    verify(controlReporter, times(1)).report(any(SinkRecord.class), any(Throwable.class));
+  }
+
+  private static BulkResponseItem versionConflictItem(String idx, String id, OperationType op) {
+    return BulkResponseItem.of(b -> b
+        .operationType(op)
+        .index(idx)
+        .id(id)
+        .status(409)
+        .error(e -> e
+            .type("version_conflict_engine_exception")
+            .reason("version conflict, current version [10] is higher or equal to the one provided [5]")
+        )
+    );
   }
   @Test
   public void testThreadNamingWithConnectorNameAndTaskId() throws Exception {

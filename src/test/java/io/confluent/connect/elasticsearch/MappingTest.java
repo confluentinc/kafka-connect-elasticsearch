@@ -15,13 +15,13 @@
 
 package io.confluent.connect.elasticsearch;
 
-import com.github.tomakehurst.wiremock.common.Json;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.util.HashMap;
+import java.util.Map;
 import org.apache.kafka.connect.data.ConnectSchema;
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
@@ -32,7 +32,6 @@ import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
 import org.apache.kafka.connect.errors.DataException;
-import org.elasticsearch.xcontent.XContentBuilder;
 import org.junit.Test;
 
 import static io.confluent.connect.elasticsearch.Mapping.KEYWORD_TYPE;
@@ -47,17 +46,17 @@ public class MappingTest {
 
   @Test(expected = DataException.class)
   public void testBuildMappingWithNullSchema() {
-    XContentBuilder builder = Mapping.buildMapping(null);
+    Map<String, Object> result = Mapping.buildMapping(null);
   }
 
   @Test
-  public void testBuildMapping() throws IOException {
+  public void testBuildMapping() throws Exception {
     JsonObject result = runTest(createSchema());
     verifyMapping(createSchema(), result);
   }
 
   @Test
-  public void testBuildMappingForString() throws IOException {
+  public void testBuildMappingForString() throws Exception {
     Schema schema = SchemaBuilder.struct()
         .name("record")
         .field("string", Schema.STRING_SCHEMA)
@@ -73,7 +72,7 @@ public class MappingTest {
   }
 
   @Test
-  public void testBuildMappingSetsDefaultValue() throws IOException {
+  public void testBuildMappingSetsDefaultValue() throws Exception {
     Schema schema = SchemaBuilder
         .struct()
         .name("record")
@@ -97,7 +96,7 @@ public class MappingTest {
   }
 
   @Test
-  public void testBuildMappingSetsDefaultValueForDate() throws IOException {
+  public void testBuildMappingSetsDefaultValueForDate() throws Exception {
     java.util.Date expected = new java.util.Date();
     Schema schema = SchemaBuilder
         .struct()
@@ -114,7 +113,7 @@ public class MappingTest {
   }
 
   @Test
-  public void testBuildMappingSetsNoDefaultValueForStrings() throws IOException {
+  public void testBuildMappingSetsNoDefaultValueForStrings() throws Exception {
     Schema schema = SchemaBuilder
         .struct()
         .name("record")
@@ -160,11 +159,9 @@ public class MappingTest {
         .field("timestamp", Timestamp.SCHEMA);
   }
 
-  private static JsonObject runTest(Schema schema) throws IOException {
-    XContentBuilder builder = Mapping.buildMapping(schema);
-    builder.flush();
-    ByteArrayOutputStream stream = (ByteArrayOutputStream) builder.getOutputStream();
-    return  (JsonObject) JsonParser.parseString(stream.toString());
+  private static JsonObject runTest(Schema schema) throws Exception {
+    String json = new ObjectMapper().writeValueAsString(Mapping.buildMapping(schema));
+    return (JsonObject) JsonParser.parseString(json);
   }
 
   private void verifyMapping(Schema schema, JsonObject mapping) {
