@@ -268,8 +268,11 @@ public class DataConverter {
           //fromConnectHeader byte output is UTF_8
           request.version(Long.parseLong(new String(versionValue, StandardCharsets.UTF_8)));
         } catch (NumberFormatException e) {
-          throw new ConnectException("Error converting to long: "
-                  + new String(versionValue, StandardCharsets.UTF_8), e);
+          // Do not include the raw header value here: it is record-derived content and
+          // this exception can propagate uncaught to the Connect worker's error log.
+          throw new ConnectException(
+              "Error converting external version header '" + versionHeader.key()
+                  + "' to long for " + recordString(record), e);
         }
       } else {
         request.version(record.kafkaOffset());
