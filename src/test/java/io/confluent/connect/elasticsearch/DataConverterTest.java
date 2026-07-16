@@ -18,6 +18,7 @@ package io.confluent.connect.elasticsearch;
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BehaviorOnNullValues;
 import org.apache.kafka.common.record.TimestampType;
 import org.apache.kafka.connect.data.*;
+import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.errors.DataException;
 import org.apache.kafka.connect.sink.SinkRecord;
 import org.elasticsearch.action.DocWriteRequest;
@@ -43,6 +44,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertThrows;
+import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 public class DataConverterTest {
@@ -404,6 +406,31 @@ public class DataConverterTest {
     assertEquals(key, actualRecord.id());
     assertEquals(index, actualRecord.index());
     assertEquals(expectedExternalVersion, actualRecord.version());
+  }
+
+  @Test
+  public void externalVersionHeaderInvalidValueDoesNotLeakHeaderValueOrCause() {
+    String externalVersionHeader = "version";
+    String invalidVersionValue = "not-a-long-CANARY";
+
+    props.put(ElasticsearchSinkConnectorConfig.IGNORE_KEY_CONFIG, "false");
+    props.put(ElasticsearchSinkConnectorConfig.IGNORE_SCHEMA_CONFIG, "false");
+    props.put(ElasticsearchSinkConnectorConfig.EXTERNAL_VERSION_HEADER_CONFIG, externalVersionHeader);
+    converter = new DataConverter(new ElasticsearchSinkConnectorConfig(props));
+
+    Schema preProcessedSchema = converter.preProcessSchema(schema);
+    Struct struct = new Struct(preProcessedSchema).put("string", "myValue");
+    SinkRecord sinkRecord = createSinkRecordWithValue(struct);
+    sinkRecord.headers().addString(externalVersionHeader, invalidVersionValue);
+
+    ConnectException exception = assertThrows(
+        ConnectException.class,
+        () -> converter.convertRecord(sinkRecord, index)
+    );
+
+    assertNull(exception.getCause());
+    assertFalse(exception.getMessage().contains(invalidVersionValue));
+    assertTrue(exception.getMessage().contains(externalVersionHeader));
   }
 
   @Test

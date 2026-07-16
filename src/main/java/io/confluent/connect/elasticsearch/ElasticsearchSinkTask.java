@@ -291,7 +291,10 @@ public class ElasticsearchSinkTask extends SinkTask {
       reportBadRecord(sinkRecord, convertException);
 
       if (config.dropInvalidMessage()) {
-        log.error("Can't convert {}.", recordString(sinkRecord), convertException);
+        // Log only the exception type, not the exception itself: its message may originate
+        // from a third-party converter and could echo back raw record content.
+        log.error("Can't convert {}. Failure type: {}",
+            recordString(sinkRecord), convertException.getClass().getName());
         offsetState.markProcessed();
       } else {
         throw convertException;
