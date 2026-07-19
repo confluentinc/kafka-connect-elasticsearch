@@ -22,7 +22,10 @@ import java.security.PrivilegedExceptionAction;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 import javax.net.ssl.HostnameVerifier;
 import javax.net.ssl.SSLContext;
 import javax.security.auth.Subject;
@@ -106,16 +109,45 @@ public class ConfigCallbackHandler implements HttpClientConfigCallback {
     }
 
     if (config.isKerberosEnabled() && config.isSslEnabled()) {
-      log.info("Using Kerberos and SSL connection to {}.", config.connectionUrls());
+      log.info("Using Kerberos and SSL connection to {}.", redactedConnectionUrls());
     } else if (config.isKerberosEnabled()) {
-      log.info("Using Kerberos connection to {}.", config.connectionUrls());
+      log.info("Using Kerberos connection to {}.", redactedConnectionUrls());
     } else if (config.isSslEnabled()) {
-      log.info("Using SSL connection to {}.", config.connectionUrls());
+      log.info("Using SSL connection to {}.", redactedConnectionUrls());
     } else {
-      log.info("Using unsecured connection to {}.", config.connectionUrls());
+      log.info("Using unsecured connection to {}.", redactedConnectionUrls());
     }
 
     return builder;
+  }
+
+  /**
+   * Returns the configured connection URLs with any embedded {@code user:password@} credential
+   * stripped out, so they are safe to log. Credentials should normally be supplied via the
+   * dedicated {@code connection.username}/{@code connection.password} configs, but nothing
+   * prevents a URL from carrying them directly.
+   */
+  private Set<String> redactedConnectionUrls() {
+    return config.connectionUrls().stream()
+        .map(ConfigCallbackHandler::redactUserInfo)
+        .collect(Collectors.toCollection(LinkedHashSet::new));
+  }
+
+  static String redactUserInfo(String url) {
+    int authorityStart = url.indexOf("://") >= 0 ? url.indexOf("://") + 3 : 0;
+    int authorityEnd = url.length();
+    for (char delimiter : new char[] {'/', '?', '#'}) {
+      int delimiterIndex = url.indexOf(delimiter, authorityStart);
+      if (delimiterIndex >= 0) {
+        authorityEnd = Math.min(authorityEnd, delimiterIndex);
+      }
+    }
+    // The user-info/host separator is the LAST '@' within the authority component, since a
+    // password (unlike a host) may itself contain '@' characters.
+    int atIndex = url.lastIndexOf('@', authorityEnd - 1);
+    return atIndex < authorityStart
+        ? url
+        : url.substring(0, authorityStart) + url.substring(atIndex + 1);
   }
 
   /**
