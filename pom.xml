@@ -48,7 +48,9 @@
         <hadoop.version>3.3.1</hadoop.version>
         <apacheds-jdbm1.version>2.0.0-M2</apacheds-jdbm1.version>
         <log4j.version>2.25.4</log4j.version>
-        <jackson.version>2.18.6</jackson.version>
+        <jackson.version>2.21.5</jackson.version>
+        <!-- jackson-annotations dropped patch-level versioning starting with the 2.20 line -->
+        <jackson.annotations.version>2.21</jackson.annotations.version>
         <!-- temporary fix by pinning the version until we upgrade to a version of common that contains this or newer version.
             See https://github.com/confluentinc/common/pull/332 for details (common-parent 7.0.0-0) -->
         <dependency.check.version>6.1.6</dependency.check.version>
@@ -308,7 +310,7 @@
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-annotations</artifactId>
-            <version>${jackson.version}</version>
+            <version>${jackson.annotations.version}</version>
         </dependency>
     </dependencies>
 
@@ -322,7 +324,7 @@
             <dependency>
                 <groupId>com.fasterxml.jackson.core</groupId>
                 <artifactId>jackson-annotations</artifactId>
-                <version>${jackson.version}</version>
+                <version>${jackson.annotations.version}</version>
             </dependency>
             <dependency>
                 <groupId>com.fasterxml.jackson</groupId>
@@ -335,6 +337,12 @@
                 <groupId>com.fasterxml.jackson.dataformat</groupId>
                 <artifactId>jackson-dataformat-cbor</artifactId>
                 <version>${jackson.version}</version>
+            </dependency>
+            <!-- jackson-datatype-jsr310 2.21.5 is not yet available via the internal artifact mirror; 2.21.4 is compatible and unaffected by the CVEs this bump addresses (test scope only). -->
+            <dependency>
+                <groupId>com.fasterxml.jackson.datatype</groupId>
+                <artifactId>jackson-datatype-jsr310</artifactId>
+                <version>2.21.4</version>
             </dependency>
             <!-- Align all log4j artifacts (incl. transitive log4j-core via elasticsearch) to ${log4j.version}. -->
             <dependency>
