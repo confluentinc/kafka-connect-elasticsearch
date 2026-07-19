@@ -585,11 +585,10 @@ public class ElasticsearchClient {
         // and thus can be ignored, since the newer value (higher offset) should
         // remain the key's value in any case.
         if (request == null || request.versionType() != VersionType.EXTERNAL) {
-          log.warn("{} version conflict for operation {} on document '{}' version {}"
+          log.warn("{} version conflict for operation {} version {}"
                           + " in index '{}'.",
                   request != null ? request.versionType() : "UNKNOWN",
                   response.getOpType(),
-                  response.getId(),
                   response.getVersion(),
                   response.getIndex()
           );
@@ -612,10 +611,9 @@ public class ElasticsearchClient {
           // Note: For external version conflicts, response.getVersion() will be returned as -1,
           // but we have the actual version number for this record because we set it in
           // the request.
-          log.debug("Ignoring EXTERNAL version conflict for operation {} on"
-                          + " document '{}' version {} in index '{}'.",
+          log.debug("Ignoring EXTERNAL version conflict for operation {}"
+                          + " version {} in index '{}'.",
                   response.getOpType(),
-                  response.getId(),
                   request.version(),
                   response.getIndex()
           );
