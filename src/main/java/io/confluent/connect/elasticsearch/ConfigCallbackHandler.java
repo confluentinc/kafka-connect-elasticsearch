@@ -133,10 +133,21 @@ public class ConfigCallbackHandler implements HttpClientConfigCallback {
         .collect(Collectors.toCollection(LinkedHashSet::new));
   }
 
-  private static String redactUserInfo(String url) {
+  static String redactUserInfo(String url) {
     int authorityStart = url.indexOf("://") >= 0 ? url.indexOf("://") + 3 : 0;
-    int atIndex = url.indexOf('@', authorityStart);
-    return atIndex < 0 ? url : url.substring(0, authorityStart) + url.substring(atIndex + 1);
+    int authorityEnd = url.length();
+    for (char delimiter : new char[] {'/', '?', '#'}) {
+      int delimiterIndex = url.indexOf(delimiter, authorityStart);
+      if (delimiterIndex >= 0) {
+        authorityEnd = Math.min(authorityEnd, delimiterIndex);
+      }
+    }
+    // The user-info/host separator is the LAST '@' within the authority component, since a
+    // password (unlike a host) may itself contain '@' characters.
+    int atIndex = url.lastIndexOf('@', authorityEnd - 1);
+    return atIndex < authorityStart
+        ? url
+        : url.substring(0, authorityStart) + url.substring(atIndex + 1);
   }
 
   /**
