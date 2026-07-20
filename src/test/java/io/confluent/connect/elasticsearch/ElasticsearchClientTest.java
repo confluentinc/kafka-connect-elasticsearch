@@ -78,6 +78,7 @@ import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.mockito.ArgumentCaptor;
 
 public class ElasticsearchClientTest {
 
@@ -589,6 +590,55 @@ public class ElasticsearchClientTest {
     }
 
     verify(reporter, times(1)).report(eq(badRecord), any(Throwable.class));
+    client.close();
+  }
+
+  /**
+   * Elasticsearch's own mapper_parsing_exception message can include a "Preview of field's
+   * value" fragment of the offending document. The connector must not pass that fragment
+   * through to the DLQ report verbatim.
+   */
+  @Test
+  public void testReporterDoesNotLeakElasticsearchFailureMessage() throws Exception {
+    props.put(IGNORE_KEY_CONFIG, "false");
+    props.put(BEHAVIOR_ON_MALFORMED_DOCS_CONFIG, BehaviorOnMalformedDoc.IGNORE.name());
+    config = new ElasticsearchSinkConnectorConfig(props);
+    converter = new DataConverter(config);
+
+    ErrantRecordReporter reporter = mock(ErrantRecordReporter.class);
+    when(reporter.report(any(), any()))
+            .thenReturn(CompletableFuture.completedFuture(null));
+    ElasticsearchClient client = new ElasticsearchClient(config, reporter, () -> offsetTracker.updateOffsets(), 1, "elasticsearch-sink");
+    client.createIndexOrDataStream(index);
+    client.createMapping(index, schema());
+
+    Schema schema = SchemaBuilder
+            .struct()
+            .name("record")
+            .field("offset", SchemaBuilder.bool().defaultValue(false).build())
+            .build();
+    Struct value = new Struct(schema).put("offset", false);
+    SinkRecord badRecord = sinkRecord("key0", schema, value, 1);
+
+    writeRecord(sinkRecord("key0", 0), client);
+    client.flush();
+    waitUntilRecordsInES(1);
+
+    writeRecord(badRecord, client);
+    client.flush();
+
+    // failed requests take a bit longer
+    for (int i = 2; i < 7; i++) {
+      writeRecord(sinkRecord("key" + i, i + 1), client);
+      client.flush();
+      waitUntilRecordsInES(i);
+    }
+
+    ArgumentCaptor<Throwable> exceptionCaptor = ArgumentCaptor.forClass(Throwable.class);
+    verify(reporter, times(1)).report(eq(badRecord), exceptionCaptor.capture());
+    String reportedMessage = exceptionCaptor.getValue().getMessage();
+    assertFalse(reportedMessage.contains("Preview of field's value"));
+    assertTrue(reportedMessage.contains("Enable DEBUG logging"));
     client.close();
   }
 

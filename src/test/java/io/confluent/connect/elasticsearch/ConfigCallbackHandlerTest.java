@@ -16,7 +16,11 @@
 package io.confluent.connect.elasticsearch;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertThrows;
+import static org.junit.Assert.assertTrue;
 
+import org.apache.http.HttpHost;
 import org.junit.Test;
 
 public class ConfigCallbackHandlerTest {
@@ -71,5 +75,25 @@ public class ConfigCallbackHandlerTest {
         "host:9243",
         ConfigCallbackHandler.redactUserInfo("user:password@host:9243")
     );
+  }
+
+  @Test
+  public void createRedactedHttpHostParsesValidUrl() {
+    HttpHost host = ConfigCallbackHandler.createRedactedHttpHost("https://host:9243");
+    assertEquals("host", host.getHostName());
+    assertEquals(9243, host.getPort());
+  }
+
+  @Test
+  public void createRedactedHttpHostRedactsCredentialOnParseFailure() {
+    // A space is illegal in a URI authority and forces HttpHost.create() to throw; the raw
+    // credential must not survive into the resulting exception's message.
+    IllegalArgumentException e = assertThrows(
+        IllegalArgumentException.class,
+        () -> ConfigCallbackHandler.createRedactedHttpHost(
+            "https://user:p@ssw0rd@host name:9243")
+    );
+    assertFalse(e.getMessage().contains("p@ssw0rd"));
+    assertTrue(e.getMessage().contains("host name:9243"));
   }
 }
