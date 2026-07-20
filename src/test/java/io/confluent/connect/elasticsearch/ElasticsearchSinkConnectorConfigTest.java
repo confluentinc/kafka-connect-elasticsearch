@@ -5,6 +5,7 @@ import static org.apache.kafka.common.config.SslConfigs.SSL_ENDPOINT_IDENTIFICAT
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.SecurityProtocol;
@@ -205,6 +206,19 @@ public class ElasticsearchSinkConnectorConfigTest {
   public void shouldNotAllowInvalidUrl() {
     props.put(CONNECTION_URL_CONFIG, ".com:/bbb/dfs,http://valid.com");
     new ElasticsearchSinkConnectorConfig(props);
+  }
+
+  @Test
+  public void shouldRedactCredentialFromInvalidUrlErrorMessage() {
+    // A space is illegal in a URI authority and forces new URI(url) to throw; the raw credential
+    // must not survive into the ConfigException's own message or its `value` field, since Kafka's
+    // own config-validation machinery renders that value verbatim in its generated message too.
+    props.put(CONNECTION_URL_CONFIG, "https://user:p@ssw0rd@bad host.com");
+    ConfigException e = assertThrows(
+        ConfigException.class,
+        () -> new ElasticsearchSinkConnectorConfig(props)
+    );
+    assertFalse(e.getMessage().contains("p@ssw0rd"));
   }
 
   @Test(expected = ConfigException.class)
