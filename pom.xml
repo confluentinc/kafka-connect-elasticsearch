@@ -49,7 +49,6 @@
         <apacheds-jdbm1.version>2.0.0-M2</apacheds-jdbm1.version>
         <log4j.version>2.25.4</log4j.version>
         <jackson.version>2.21.5</jackson.version>
-        <!-- jackson-annotations dropped patch-level versioning starting with the 2.20 line -->
         <jackson.annotations.version>2.21</jackson.annotations.version>
         <!-- temporary fix by pinning the version until we upgrade to a version of common that contains this or newer version.
             See https://github.com/confluentinc/common/pull/332 for details (common-parent 7.0.0-0) -->
