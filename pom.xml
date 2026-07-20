@@ -338,12 +338,6 @@
                 <artifactId>jackson-dataformat-cbor</artifactId>
                 <version>${jackson.version}</version>
             </dependency>
-            <!-- jackson-datatype-jsr310 2.21.5 is not yet available via the internal artifact mirror; 2.21.4 is compatible and unaffected by the CVEs this bump addresses (test scope only). -->
-            <dependency>
-                <groupId>com.fasterxml.jackson.datatype</groupId>
-                <artifactId>jackson-datatype-jsr310</artifactId>
-                <version>2.21.4</version>
-            </dependency>
             <!-- Align all log4j artifacts (incl. transitive log4j-core via elasticsearch) to ${log4j.version}. -->
             <dependency>
                 <groupId>org.apache.logging.log4j</groupId>
