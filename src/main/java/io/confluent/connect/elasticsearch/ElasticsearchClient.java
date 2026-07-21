@@ -151,7 +151,7 @@ public class ElasticsearchClient {
         .builder(
             config.connectionUrls()
                 .stream()
-                .map(HttpHost::create)
+                .map(ConfigCallbackHandler::createRedactedHttpHost)
                 .collect(toList())
                 .toArray(new HttpHost[config.connectionUrls().size()])
         ).setHttpClientConfigCallback(configCallbackHandler).build();
@@ -722,9 +722,16 @@ public class ElasticsearchClient {
           ? sinkRecords.get(response.getItemId())
           : null;
       if (original != null) {
+        // Elasticsearch's own failure message (e.g. for document_parsing_exception) can include
+        // a preview of the offending field's value, so it isn't included here; enable DEBUG on
+        // this class to see it.
+        log.debug("Indexing failed for operation {} in index '{}': {}",
+            response.getOpType(), response.getIndex(), response.getFailureMessage());
         reporter.report(
             original.sinkRecord,
-            new ReportingException("Indexing failed: " + response.getFailureMessage())
+            new ReportingException("Indexing failed for operation " + response.getOpType()
+                + " in index '" + response.getIndex() + "'. Enable DEBUG logging on "
+                + ElasticsearchClient.class.getName() + " to see the full Elasticsearch response.")
         );
       }
     }

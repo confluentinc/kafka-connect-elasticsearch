@@ -1373,8 +1373,16 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
         try {
           new URI(url);
         } catch (URISyntaxException e) {
+          // Redact any embedded user:password@ credential before it reaches the ConfigException
+          // message (both the custom message below and Kafka's own generated message, which
+          // renders the `value` argument verbatim).
+          List<String> redactedUrls = urls.stream()
+              .map(ConfigCallbackHandler::redactUserInfo)
+              .collect(Collectors.toList());
           throw new ConfigException(
-              name, value, "The provided url '" + url + "' is not a valid url."
+              name, redactedUrls,
+              "The provided url '" + ConfigCallbackHandler.redactUserInfo(url)
+                  + "' is not a valid url."
           );
         }
       }
