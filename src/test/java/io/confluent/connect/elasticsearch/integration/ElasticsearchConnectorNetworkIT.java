@@ -22,13 +22,11 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.IntStream;
 
-import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.any;
 import static com.github.tomakehurst.wiremock.client.WireMock.anyUrl;
 import static com.github.tomakehurst.wiremock.client.WireMock.containing;
 import static com.github.tomakehurst.wiremock.client.WireMock.lessThan;
 import static com.github.tomakehurst.wiremock.client.WireMock.moreThanOrExactly;
-import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.stubFor;
@@ -48,6 +46,7 @@ import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfi
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.MAX_RETRIES_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.READ_TIMEOUT_MS_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.RETRY_BACKOFF_MS_CONFIG;
+import static io.confluent.connect.elasticsearch.helper.ElasticSearchMockUtil.basicBulkOk;
 import static io.confluent.connect.elasticsearch.helper.ElasticSearchMockUtil.basicEmptyOk;
 import static io.confluent.connect.elasticsearch.helper.ElasticSearchMockUtil.addMinimalHeaders;
 import static io.confluent.connect.elasticsearch.helper.ElasticSearchMockUtil.minimumResponseJson;
@@ -64,6 +63,22 @@ import static org.awaitility.Awaitility.await;
 
 @Category(IntegrationTest.class)
 public class ElasticsearchConnectorNetworkIT extends BaseConnectorIT {
+
+  // Drop-in replacements for WireMock.okJson()/aResponse() that add the response headers the
+  // Elasticsearch client requires. The Java API Client verifies X-Elastic-Product on *every*
+  // response (ElasticsearchTransportBase.checkProductHeader) and raises
+  // "Missing [X-Elastic-Product] header" even for a 200, whereas the high level REST client did
+  // not enforce it. Several stubs in this class previously omitted it, which failed the bulk
+  // request outright. Wrapping the factories fixes every call site at once and keeps stubs that
+  // already call addMinimalHeaders explicitly working unchanged (setting a header twice is a no-op).
+  private static com.github.tomakehurst.wiremock.client.ResponseDefinitionBuilder okJson(
+      String body) {
+    return addMinimalHeaders(com.github.tomakehurst.wiremock.client.WireMock.okJson(body));
+  }
+
+  private static com.github.tomakehurst.wiremock.client.ResponseDefinitionBuilder aResponse() {
+    return addMinimalHeaders(com.github.tomakehurst.wiremock.client.WireMock.aResponse());
+  }
 
   @Rule
   public WireMockRule wireMockRule = new WireMockRule(options()
@@ -85,6 +100,11 @@ public class ElasticsearchConnectorNetworkIT extends BaseConnectorIT {
 
     // Send a generic "success" back for anything not explictly mocked
     stubFor(any(anyUrl()).atPriority(10).willReturn(basicEmptyOk()));
+    // ...but /_bulk needs a bulk-shaped body, not the info-shaped one above: the Java API Client
+    // requires BulkResponse.took and .errors, so serving the catch-all body for a bulk request
+    // fails deserialization. Priority 9 beats the catch-all (10) while still losing to the
+    // per-test stubs below, which use WireMock's default priority of 5.
+    stubFor(post(urlPathEqualTo("/_bulk")).atPriority(9).willReturn(basicBulkOk()));
   }
 
   @After
@@ -199,17 +219,25 @@ public class ElasticsearchConnectorNetworkIT extends BaseConnectorIT {
 
     connect.configureConnector(CONNECTOR_NAME, props);
     waitForConnectorToStart(CONNECTOR_NAME, TASKS_MAX);
-    writeRecords(NUM_RECORDS);
+    // Exactly BATCH_SIZE (4) records, not NUM_RECORDS (5): a leftover partial batch would be
+    // drained by BulkIngester.close() when the task stops, adding an extra request and breaking
+    // the verify() count below.
+    writeRecords(4);
 
-    // Connector should fail since the request takes longer than request timeout
-    await().atMost(Duration.ofMinutes(1)).untilAsserted(() ->
+    // Connector should fail since the request takes longer than request timeout.
+    // Two minutes, not one: the bulk error is now latched by the listener after put() returns, so
+    // throwIfFailed() surfaces it on the *next* put() -- which Connect only issues on its next
+    // poll/offset-commit cycle. One minute races that cadence.
+    await().atMost(Duration.ofMinutes(2)).untilAsserted(() ->
             assertThat(connect.connectorStatus(CONNECTOR_NAME).tasks().get(0).state())
                     .isEqualTo("FAILED"));
 
+    // The trace is now our listener's message. Pre-migration it was RetryUtil's
+    // "Failed to execute bulk request due to 'ElasticsearchStatusException[...]' after N
+    // attempt(s)", because retries happened above the client; they now happen inside
+    // RetryingTransport, which does not decorate the exception.
     assertThat(connect.connectorStatus(CONNECTOR_NAME).tasks().get(0).trace())
-            .contains("Failed to execute bulk request due to 'ElasticsearchStatusException" +
-                    "[Elasticsearch exception [type=circuit_breaking_exception, " +
-                    "reason=Data too large]]' after 3 attempt(s)");
+            .contains("Bulk request failed");
 
     // 1 + 2 retries
     verify(3, postRequestedFor(urlPathEqualTo("/_bulk")));
@@ -223,16 +251,17 @@ public class ElasticsearchConnectorNetworkIT extends BaseConnectorIT {
 
     connect.configureConnector(CONNECTOR_NAME, props);
     waitForConnectorToStart(CONNECTOR_NAME, TASKS_MAX);
-    writeRecords(NUM_RECORDS);
+    // See testTooManyRequests for why this is BATCH_SIZE records, a 2-minute wait, and a
+    // different trace assertion.
+    writeRecords(4);
 
     // Connector should fail since the request takes longer than request timeout
-    await().atMost(Duration.ofMinutes(1)).untilAsserted(() ->
+    await().atMost(Duration.ofMinutes(2)).untilAsserted(() ->
             assertThat(connect.connectorStatus(CONNECTOR_NAME).tasks().get(0).state())
                     .isEqualTo("FAILED"));
 
     assertThat(connect.connectorStatus(CONNECTOR_NAME).tasks().get(0).trace())
-            .contains("[HTTP/1.1 503 Service Unavailable]")
-            .contains("after 3 attempt(s)");
+            .contains("Bulk request failed");
 
     // 1 + 2 retries
     verify(3, postRequestedFor(urlPathEqualTo("/_bulk")));
@@ -388,6 +417,11 @@ public class ElasticsearchConnectorNetworkIT extends BaseConnectorIT {
   public static String errorBulkResponse(int items) throws JsonProcessingException {
     ObjectNode response = MAPPER.createObjectNode();
     ArrayNode itemsArray = response
+            // "took" is required by the Java API Client: BulkResponse marks it non-null, so a
+            // response omitting it fails deserialization with
+            // "Missing required property 'BulkResponse.took'" and the bulk request is reported as
+            // failed even on a 200. The high level REST client tolerated its absence.
+            .put("took", 30)
             .put("errors", false)
             .putArray("items");
 
@@ -409,6 +443,8 @@ public class ElasticsearchConnectorNetworkIT extends BaseConnectorIT {
   public static String errorBulkResponse(int items, String errorType, int... errorIdx) throws JsonProcessingException {
     ObjectNode response = MAPPER.createObjectNode();
     ArrayNode itemsArray = response
+            // see the note on "took" in the overload above
+            .put("took", 30)
             .put("errors", true)
             .putArray("items");
 
