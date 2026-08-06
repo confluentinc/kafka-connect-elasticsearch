@@ -103,7 +103,7 @@ public class ValidatorTest {
     when(mockClient.ping()).thenReturn(new BooleanResponse(true));
     mockInfoResponse = mock(InfoResponse.class, Mockito.RETURNS_DEEP_STUBS);
     when(mockClient.info()).thenReturn(mockInfoResponse);
-    when(mockInfoResponse.version().number()).thenReturn("8.19.8");
+    when(mockInfoResponse.version().number()).thenReturn("8.19.19");
   }
 
   @Test
@@ -451,7 +451,7 @@ public class ValidatorTest {
   @Test
   public void testCompatibleESVersionWithConnector() {
     validator = new Validator(props, () -> mockClient);
-    String[] compatibleESVersions = {"8.0.0", "8.10.10", "8.19.8", "9.0.0", "10.10.10"};
+    String[] compatibleESVersions = {"8.0.0", "8.10.10", "8.19.19", "9.0.0", "10.10.10"};
     for (String version : compatibleESVersions) {
       when(mockInfoResponse.version().number()).thenReturn(version);
       Config result = validator.validate();

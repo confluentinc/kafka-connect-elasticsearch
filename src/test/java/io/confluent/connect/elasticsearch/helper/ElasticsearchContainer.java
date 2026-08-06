@@ -73,7 +73,7 @@ public class ElasticsearchContainer
    * <em>greater</em> minor version. Testing an 8.19.x client against an older 8.x server (this was
    * previously 8.15.2) puts the combination outside Elastic's supported range.
    */
-  public static final String DEFAULT_ES_VERSION = "8.19.8";
+  public static final String DEFAULT_ES_VERSION = "8.19.19";
 
   /**
    * Default Elasticsearch port.

@@ -34,7 +34,7 @@ public class ElasticSearchMockUtil {
         .put("cluster_uuid", "83EJmDNrRVirBWcZDgs9ew")
         .put("tagline", "You Know, for Search")
         .putObject("version")
-        .put("number", "8.19.8")
+        .put("number", "8.19.19")
         .put("build_flavor", "default")
         .put("build_type", "docker")
         .put("build_hash", "83EJmDNrRVirBWcZDgs9ew")
