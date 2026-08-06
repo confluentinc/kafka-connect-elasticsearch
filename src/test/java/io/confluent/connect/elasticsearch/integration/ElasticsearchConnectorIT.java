@@ -151,7 +151,12 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
     connect.kafka().produce(TOPIC, "key3", "{\"any-prop\":1}");
     connect.kafka().produce(TOPIC, "key4", "{\"any-prop\":1}");
 
-    await().atMost(Duration.ofMinutes(1)).untilAsserted(() ->
+    // Two minutes, not one: the bulk error is latched by the listener after put() returns, so
+    // throwIfFailed() surfaces it on the *next* put() -- which Connect only issues on its next
+    // poll/offset-commit cycle (offset.flush.interval.ms, 60s by default). A one-minute wait
+    // races that cadence. Pre-migration the batch executed on the calling thread, so the error
+    // was latched before put() returned.
+    await().atMost(Duration.ofMinutes(2)).untilAsserted(() ->
         assertThat(connect.connectorStatus(CONNECTOR_NAME).tasks().get(0).state())
             .isEqualTo("FAILED"));
 
@@ -206,7 +211,12 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
     writeRecords(NUM_RECORDS);
 
     // Connector should fail since the server is down
-    await().atMost(Duration.ofMinutes(1)).untilAsserted(() ->
+    // Two minutes, not one: the bulk error is latched by the listener after put() returns, so
+    // throwIfFailed() surfaces it on the *next* put() -- which Connect only issues on its next
+    // poll/offset-commit cycle (offset.flush.interval.ms, 60s by default). A one-minute wait
+    // races that cadence. Pre-migration the batch executed on the calling thread, so the error
+    // was latched before put() returned.
+    await().atMost(Duration.ofMinutes(2)).untilAsserted(() ->
         assertThat(connect.connectorStatus(CONNECTOR_NAME).tasks().get(0).state())
             .isEqualTo("FAILED"));
 
