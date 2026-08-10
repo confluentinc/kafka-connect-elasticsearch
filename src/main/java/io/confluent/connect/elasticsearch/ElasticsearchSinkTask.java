@@ -144,7 +144,11 @@ public class ElasticsearchSinkTask extends SinkTask {
   @Override
   public void stop() {
     log.debug("Stopping Elasticsearch client.");
-    client.close();
+    // The framework can call stop() on a task whose start() never ran or never completed
+    // (e.g. a sibling task's startup failure aborts this one first), leaving client unset.
+    if (client != null) {
+      client.close();
+    }
   }
 
   @Override
