@@ -341,6 +341,14 @@ public class ElasticsearchSinkTaskTest {
   }
 
   @Test
+  public void testStopBeforeStartDoesNotThrow() {
+    // The framework can call stop() on a task whose start() never ran or never completed
+    // (e.g. a sibling task's startup failure aborts this one first), leaving client unset.
+    task = new ElasticsearchSinkTask();
+    task.stop();
+  }
+
+  @Test
   public void testVersion() {
     setUpTask();
     assertNotEquals("0.0.0.0", task.version());
