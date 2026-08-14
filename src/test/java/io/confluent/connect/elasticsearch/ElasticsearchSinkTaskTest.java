@@ -341,6 +341,17 @@ public class ElasticsearchSinkTaskTest {
   }
 
   @Test
+  public void testStopBeforeStartDoesNotThrow() {
+    // The framework can call stop() on a task whose start() never ran or never completed
+    // (e.g. a sibling task's startup failure aborts this one first), leaving client unset.
+    // Uses a local task so the shared fixture is left untouched, and initialize() to match how
+    // Connect builds a task before start().
+    ElasticsearchSinkTask neverStarted = new ElasticsearchSinkTask();
+    neverStarted.initialize(context);
+    neverStarted.stop();
+  }
+
+  @Test
   public void testVersion() {
     setUpTask();
     assertNotEquals("0.0.0.0", task.version());
