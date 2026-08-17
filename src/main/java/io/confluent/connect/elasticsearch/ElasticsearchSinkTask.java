@@ -42,7 +42,7 @@ public class ElasticsearchSinkTask extends SinkTask {
   private static final Logger log = LoggerFactory.getLogger(ElasticsearchSinkTask.class);
 
   private DataConverter converter;
-  private ElasticsearchClient client;
+  private ElasticsearchSinkClient client;
   private ElasticsearchSinkTaskConfig config;
   private ErrantRecordReporter reporter;
   private Set<String> existingMappings;
@@ -57,7 +57,7 @@ public class ElasticsearchSinkTask extends SinkTask {
   }
 
   // visible for testing
-  protected void start(Map<String, String> props, ElasticsearchClient client) {
+  protected void start(Map<String, String> props, ElasticsearchSinkClient client) {
     log.info("Starting ElasticsearchSinkTask.");
 
     this.config = new ElasticsearchSinkTaskConfig(props);
@@ -93,7 +93,7 @@ public class ElasticsearchSinkTask extends SinkTask {
     }
     Runnable afterBulkCallback = () -> offsetTracker.updateOffsets();
     this.client = client != null ? client
-        : new ElasticsearchClient(config, reporter, afterBulkCallback,
+        : new ElasticsearchSinkClient(config, reporter, afterBulkCallback,
             config.getTaskId(), config.getConnectorName());
 
     if (!config.flushSynchronously()) {

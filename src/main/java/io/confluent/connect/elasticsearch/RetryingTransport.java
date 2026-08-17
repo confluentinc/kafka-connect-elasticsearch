@@ -33,13 +33,13 @@ import java.util.concurrent.TimeUnit;
  * <p>Only {@link #performRequestAsync} is retried here -- that is the only path BulkIngester uses
  * (via its internal async client). The synchronous {@link #performRequest} path (used by
  * indexExists/createIndex/createMapping/hasMapping, via
- * {@link ElasticsearchClient#callWithRetries}) is passed through unchanged: those calls already
+ * {@link ElasticsearchSinkClient#callWithRetries}) is passed through unchanged: those calls already
  * have their own retry loop one layer up via
  * {@link RetryUtil#callWithRetries}, and retrying here too would double the retry budget for
  * every attempt (confirmed necessary by tracing PR #920's own history: combining
  * transport-level retry with BulkIngester's separate backoffPolicy compounds retries up to
  * (maxRetries+1)^2 attempts per document -- BulkIngester.backoffPolicy is deliberately never
- * configured in {@link ElasticsearchClient} for the same reason).
+ * configured in {@link ElasticsearchSinkClient} for the same reason).
  *
  * <p>Note on a design not adopted: PR #920 wraps the transport in a DispatchingTransport that
  * hands async completions to a dedicated executor, to break a lock-ordering deadlock between

@@ -131,7 +131,7 @@ public abstract class ElasticsearchClientTestBase {
     );
   }
 
-  protected void writeRecord(SinkRecord record, ElasticsearchClient client) {
+  protected void writeRecord(SinkRecord record, ElasticsearchSinkClient client) {
     client.index(record, converter.convertRecord(record, createIndexName(record.topic())),
             new AsyncOffsetTracker.AsyncOffsetState(record.kafkaOffset()));
   }

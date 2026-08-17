@@ -15,6 +15,7 @@
 
 package io.confluent.connect.elasticsearch;
 
+import co.elastic.clients.elasticsearch.ElasticsearchClient;
 import co.elastic.clients.elasticsearch._helpers.bulk.BulkIngester;
 import co.elastic.clients.elasticsearch._helpers.bulk.BulkListener;
 import co.elastic.clients.elasticsearch._types.ElasticsearchException;
@@ -83,9 +84,9 @@ import static java.util.stream.Collectors.toList;
  * in failure of the task.
  */
 @SuppressWarnings("checkstyle:ClassDataAbstractionCoupling")
-public class ElasticsearchClient {
+public class ElasticsearchSinkClient {
 
-  private static final Logger log = LoggerFactory.getLogger(ElasticsearchClient.class);
+  private static final Logger log = LoggerFactory.getLogger(ElasticsearchSinkClient.class);
 
   private static final long WAIT_TIME_MS = 10;
   private static final long CLOSE_WAIT_TIME_MS = 5_000;
@@ -108,7 +109,7 @@ public class ElasticsearchClient {
   private final ConcurrentMap<Long, List<SinkRecordAndOffset>> inFlightRequests;
   private final ElasticsearchSinkConnectorConfig config;
   private final ErrantRecordReporter reporter;
-  private final co.elastic.clients.elasticsearch.ElasticsearchClient client;
+  private final ElasticsearchClient client;
   private final RestClient restClient;
   private final ScheduledExecutorService bulkScheduler;
   private final ScheduledExecutorService retryScheduler;
@@ -118,7 +119,7 @@ public class ElasticsearchClient {
   private final Condition inFlightRequestsUpdated = inFlightRequestLock.newCondition();
   private final String esVersion;
 
-  public ElasticsearchClient(
+  public ElasticsearchSinkClient(
       ElasticsearchSinkConnectorConfig config,
       ErrantRecordReporter reporter,
       Runnable afterBulkCallback,
@@ -171,7 +172,7 @@ public class ElasticsearchClient {
         new RestClientTransport(restClient, new JacksonJsonpMapper());
     RetryingTransport transport = new RetryingTransport(
         rawTransport, retryScheduler, config.maxRetries(), config.retryBackoffMs());
-    this.client = new co.elastic.clients.elasticsearch.ElasticsearchClient(transport);
+    this.client = new ElasticsearchClient(transport);
 
     this.esVersion = getServerVersion();
 
@@ -227,12 +228,12 @@ public class ElasticsearchClient {
    *
    * @return the underlying ElasticsearchClient
    */
-  public co.elastic.clients.elasticsearch.ElasticsearchClient client() {
+  public ElasticsearchClient client() {
     return client;
   }
 
   /**
-   * Closes the ElasticsearchClient.
+   * Closes the ElasticsearchSinkClient.
    *
    * @throws ConnectException if all the records fail to flush before the timeout.
    */
