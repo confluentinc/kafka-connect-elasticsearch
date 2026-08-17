@@ -125,23 +125,13 @@ public class ElasticsearchClient {
       int taskId,
       String connectorName
   ) {
-    // Takes over from the pre-migration bulkExecutorService: instead of a single fixed thread pool
-    // that held blocking bulk calls, we now build the connection, two schedulers and the layered
-    // client here. bulkScheduler + retryScheduler replace that pool (nothing blocks any more --
-    // sends are async and retries are scheduled), and RetryingTransport interposes our retry logic
-    // beneath the typed client. See the field javadoc and RetryingTransport for the full rationale.
     this.threadNamePrefix = connectorName + "-" + taskId + "-";
 
-    ConfigCallbackHandler configCallbackHandler = new ConfigCallbackHandler(config);
-    this.restClient = RestClient
-        .builder(
-            config.connectionUrls()
-                .stream()
-                .map(HttpHost::create)
-                .collect(toList())
-                .toArray(new HttpHost[config.connectionUrls().size()])
-        ).setHttpClientConfigCallback(configCallbackHandler).build();
-
+    // Takes over from the pre-migration bulkExecutorService: that single fixed thread pool held
+    // blocking bulk calls and slept during retries; bulkScheduler + retryScheduler replace it now
+    // that nothing blocks (sends are async, retries are scheduled). retryScheduler is consumed
+    // lower down by RetryingTransport, once restClient exists.
+    //
     // BulkIngester runs BOTH its flushInterval timer and every BulkListener callback on the
     // scheduler passed to its builder: the constructor calls scheduler.scheduleWithFixedDelay for
     // the timer, and listenerAfterBulkSuccess/listenerAfterBulkException both call
@@ -156,11 +146,6 @@ public class ElasticsearchClient {
         daemonThreadFactory(threadNamePrefix + "elasticsearch-bulk-scheduler-"));
     this.retryScheduler = Executors.newScheduledThreadPool(1,
         daemonThreadFactory(threadNamePrefix + "elasticsearch-retry-scheduler-"));
-    RestClientTransport rawTransport =
-        new RestClientTransport(restClient, new JacksonJsonpMapper());
-    RetryingTransport transport = new RetryingTransport(
-        rawTransport, retryScheduler, config.maxRetries(), config.retryBackoffMs());
-    this.client = new co.elastic.clients.elasticsearch.ElasticsearchClient(transport);
 
     this.numBufferedRecords = new AtomicInteger(0);
     this.error = new AtomicReference<>();
@@ -168,6 +153,25 @@ public class ElasticsearchClient {
     this.config = config;
     this.reporter = reporter;
     this.clock = Time.SYSTEM;
+
+    // Assemble the layered client: RestClient (HTTP) -> RestClientTransport (JSON) ->
+    // RetryingTransport (our scheduled retries) -> typed ElasticsearchClient. Must follow both
+    // restClient and retryScheduler above.
+    ConfigCallbackHandler configCallbackHandler = new ConfigCallbackHandler(config);
+    this.restClient = RestClient
+        .builder(
+            config.connectionUrls()
+                .stream()
+                .map(HttpHost::create)
+                .collect(toList())
+                .toArray(new HttpHost[config.connectionUrls().size()])
+        ).setHttpClientConfigCallback(configCallbackHandler).build();
+
+    RestClientTransport rawTransport =
+        new RestClientTransport(restClient, new JacksonJsonpMapper());
+    RetryingTransport transport = new RetryingTransport(
+        rawTransport, retryScheduler, config.maxRetries(), config.retryBackoffMs());
+    this.client = new co.elastic.clients.elasticsearch.ElasticsearchClient(transport);
 
     this.esVersion = getServerVersion();
 
