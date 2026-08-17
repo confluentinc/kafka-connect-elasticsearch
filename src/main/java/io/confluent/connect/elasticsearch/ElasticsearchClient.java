@@ -125,12 +125,12 @@ public class ElasticsearchClient {
       int taskId,
       String connectorName
   ) {
-    this.numBufferedRecords = new AtomicInteger(0);
-    this.error = new AtomicReference<>();
-    this.inFlightRequests = reporter != null ? new ConcurrentHashMap<>() : null;
-    this.config = config;
-    this.reporter = reporter;
-    this.clock = Time.SYSTEM;
+    // Takes over from the pre-migration bulkExecutorService: instead of a single fixed thread pool
+    // that held blocking bulk calls, we now build the connection, two schedulers and the layered
+    // client here. bulkScheduler + retryScheduler replace that pool (nothing blocks any more --
+    // sends are async and retries are scheduled), and RetryingTransport interposes our retry logic
+    // beneath the typed client. See the field javadoc and RetryingTransport for the full rationale.
+    this.threadNamePrefix = connectorName + "-" + taskId + "-";
 
     ConfigCallbackHandler configCallbackHandler = new ConfigCallbackHandler(config);
     this.restClient = RestClient
@@ -141,8 +141,6 @@ public class ElasticsearchClient {
                 .collect(toList())
                 .toArray(new HttpHost[config.connectionUrls().size()])
         ).setHttpClientConfigCallback(configCallbackHandler).build();
-
-    this.threadNamePrefix = connectorName + "-" + taskId + "-";
 
     // BulkIngester runs BOTH its flushInterval timer and every BulkListener callback on the
     // scheduler passed to its builder: the constructor calls scheduler.scheduleWithFixedDelay for
@@ -163,6 +161,13 @@ public class ElasticsearchClient {
     RetryingTransport transport = new RetryingTransport(
         rawTransport, retryScheduler, config.maxRetries(), config.retryBackoffMs());
     this.client = new co.elastic.clients.elasticsearch.ElasticsearchClient(transport);
+
+    this.numBufferedRecords = new AtomicInteger(0);
+    this.error = new AtomicReference<>();
+    this.inFlightRequests = reporter != null ? new ConcurrentHashMap<>() : null;
+    this.config = config;
+    this.reporter = reporter;
+    this.clock = Time.SYSTEM;
 
     this.esVersion = getServerVersion();
 
