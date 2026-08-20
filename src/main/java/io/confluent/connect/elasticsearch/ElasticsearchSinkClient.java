@@ -128,21 +128,8 @@ public class ElasticsearchSinkClient {
   ) {
     this.threadNamePrefix = connectorName + "-" + taskId + "-";
 
-    // Takes over from the pre-migration bulkExecutorService: that single fixed thread pool held
-    // blocking bulk calls and slept during retries; bulkScheduler + retryScheduler replace it now
-    // that nothing blocks (sends are async, retries are scheduled). retryScheduler is consumed
-    // lower down by RetryingTransport, once restClient exists.
-    //
-    // BulkIngester runs BOTH its flushInterval timer and every BulkListener callback on the
-    // scheduler passed to its builder: the constructor calls scheduler.scheduleWithFixedDelay for
-    // the timer, and listenerAfterBulkSuccess/listenerAfterBulkException both call
-    // scheduler.submit(...) for the callbacks. A single thread would therefore serialize all
-    // afterBulk processing (handleResponse over up to batch.size items, DLQ reporting and offset
-    // marking) against each other and against the timer. Sized maxInFlightRequests + 1 to preserve
-    // the pre-migration behaviour, where callbacks ran on the maxInFlightRequests-sized
-    // bulkExecutorService and the flush timer had BulkProcessor's own separate scheduler. The
-    // callback path was already concurrent before this migration, which is why
-    // reportBadRecordAndError is synchronized and bulkFinished takes inFlightRequestLock.
+    // bulkScheduler runs BulkIngester's flush timer AND every afterBulk callback; sized N+1 so the
+    // timer isn't starved behind N concurrent callbacks.
     this.bulkScheduler = Executors.newScheduledThreadPool(config.maxInFlightRequests() + 1,
         daemonThreadFactory(threadNamePrefix + "elasticsearch-bulk-scheduler-"));
     this.retryScheduler = Executors.newScheduledThreadPool(1,
