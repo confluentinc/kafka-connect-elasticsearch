@@ -29,9 +29,9 @@ import org.apache.kafka.connect.sink.SinkRecord;
  */
 public class SyncOffsetTracker implements OffsetTracker {
 
-  private ElasticsearchClient client;
+  private ElasticsearchSinkClient client;
 
-  public SyncOffsetTracker(ElasticsearchClient client) {
+  public SyncOffsetTracker(ElasticsearchSinkClient client) {
     this.client = client;
   }
 
