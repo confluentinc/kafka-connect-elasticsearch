@@ -30,7 +30,7 @@ import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.sink.SinkRecord;
-import org.elasticsearch.ElasticsearchStatusException;
+import co.elastic.clients.elasticsearch._types.ElasticsearchException;
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Before;
@@ -63,8 +63,7 @@ public abstract class ElasticsearchClientTestBase {
     props.put(LINGER_MS_CONFIG, "1000");
     config = new ElasticsearchSinkConnectorConfig(props);
     converter = new DataConverter(config);
-    helperClient = new ElasticsearchHelperClient(container.getConnectionUrl(), config,
-        container.shouldStartClientInCompatibilityMode());
+    helperClient = new ElasticsearchHelperClient(container.getConnectionUrl(), config);
     helperClient.waitForConnection(30000);
     offsetTracker = mock(OffsetTracker.class);
   }
@@ -118,8 +117,10 @@ public abstract class ElasticsearchClientTestBase {
         () -> {
           try {
             return helperClient.getDocCount(index) == expectedRecords;
-          } catch (ElasticsearchStatusException e) {
-            if (e.getMessage().contains("index_not_found_exception")) {
+          } catch (ElasticsearchException e) {
+            // Exact match on the structured error type rather than a substring test on
+            // getMessage(), which the new client may leave null.
+            if (e.error() != null && "index_not_found_exception".equals(e.error().type())) {
               return false;
             }
             throw e;
@@ -130,7 +131,7 @@ public abstract class ElasticsearchClientTestBase {
     );
   }
 
-  protected void writeRecord(SinkRecord record, ElasticsearchClient client) {
+  protected void writeRecord(SinkRecord record, ElasticsearchSinkClient client) {
     client.index(record, converter.convertRecord(record, createIndexName(record.topic())),
             new AsyncOffsetTracker.AsyncOffsetState(record.kafkaOffset()));
   }
