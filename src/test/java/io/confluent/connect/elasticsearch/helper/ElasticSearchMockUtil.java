@@ -24,12 +24,19 @@ public class ElasticSearchMockUtil {
     // Note that "version.number" is somewhat arbitrary for our testing purposes,
     // although for some version (i.e. [7.0,7.14]) it checks for other fields,
     // so the mock might fail in that case.
+    // build_flavor and build_type are required by the Java API Client: ElasticsearchVersionInfo
+    // marks them non-null, so a response omitting them fails deserialization with
+    // "Missing required property 'ElasticsearchVersionInfo.buildFlavor'" and the whole request is
+    // reported as a failure even on a 200. The high level REST client tolerated their absence.
+    // version.number is 8.x here because the client only supports 8.x servers.
     response.put("name", "KafkaESClusterNodeold_1")
         .put("cluster_name", "KafkaESCluster")
         .put("cluster_uuid", "83EJmDNrRVirBWcZDgs9ew")
         .put("tagline", "You Know, for Search")
         .putObject("version")
-        .put("number", "7.16.3")
+        .put("number", "8.19.19")
+        .put("build_flavor", "default")
+        .put("build_type", "docker")
         .put("build_hash", "83EJmDNrRVirBWcZDgs9ew")
         .put("build_date", "2018-04-12T16:25:14.838Z")
         .put("build_snapshot", "false")
@@ -76,6 +83,37 @@ public class ElasticSearchMockUtil {
    */
   public static ResponseDefinitionBuilder basicEmptyOk() {
     return addMinimalHeaders(WireMock.ok().withBody(minimumResponseJson()));
+  }
+
+  /**
+   * A minimal valid {@code _bulk} response body: no items and no errors.
+   *
+   * <p>Needed because {@link #minimumResponseJson()} is shaped like the cluster-info response
+   * ({@code GET /}), and a catch-all {@code any(anyUrl())} stub serving that body for a
+   * {@code POST /_bulk} request now fails deserialization with "Missing required property
+   * 'BulkResponse.took'" / "'BulkResponse.errors'". The Java API Client marks both non-null,
+   * whereas the high level REST client tolerated their absence. Tests that do not stub
+   * {@code /_bulk} explicitly should fall back to {@link #basicBulkOk()} rather than the
+   * info-shaped catch-all.
+   */
+  public static String minimumBulkResponseJson() {
+    try {
+      ObjectNode response = MAPPER.createObjectNode();
+      response.put("took", 30).put("errors", false).putArray("items");
+      return MAPPER.writerWithDefaultPrettyPrinter().writeValueAsString(response);
+    } catch (JsonProcessingException e) {
+      throw new RuntimeException(
+          "Error writing default bulk response json to string: " + e.getMessage(), e
+      );
+    }
+  }
+
+  /**
+   * A valid, empty "OK" response for {@code POST /_bulk}.
+   * @return ResponseDefinitionBuilder for a decodable bulk response
+   */
+  public static ResponseDefinitionBuilder basicBulkOk() {
+    return addMinimalHeaders(WireMock.ok().withBody(minimumBulkResponseJson()));
   }
 
 }

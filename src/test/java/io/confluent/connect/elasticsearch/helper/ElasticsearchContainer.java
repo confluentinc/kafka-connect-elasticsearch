@@ -15,12 +15,9 @@
 
 package io.confluent.connect.elasticsearch.helper;
 
-import io.confluent.connect.elasticsearch.ElasticsearchClient;
-import io.confluent.connect.elasticsearch.RetryUtil;
+import co.elastic.clients.elasticsearch.security.RoleDescriptor;
+import co.elastic.clients.elasticsearch.security.User;
 import org.apache.kafka.common.config.SslConfigs;
-import org.apache.kafka.test.TestUtils;
-import org.elasticsearch.client.security.user.User;
-import org.elasticsearch.client.security.user.privileges.Role;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.testcontainers.containers.ContainerLaunchException;
@@ -43,7 +40,6 @@ import java.net.URISyntaxException;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig;
@@ -71,8 +67,13 @@ public class ElasticsearchContainer
 
   /**
    * Default Elasticsearch version.
+   *
+   * <p>Kept in step with the {@code elasticsearch.java.version} client pinned in {@code pom.xml}.
+   * The Java API Client is forward compatible only: it supports servers of the same or a
+   * <em>greater</em> minor version. Testing an 8.19.x client against an older 8.x server (this was
+   * previously 8.15.2) puts the combination outside Elastic's supported range.
    */
-  public static final String DEFAULT_ES_VERSION = "8.15.2";
+  public static final String DEFAULT_ES_VERSION = "8.19.19";
 
   /**
    * Default Elasticsearch port.
@@ -143,7 +144,7 @@ public class ElasticsearchContainer
   private final String imageName;
   private boolean enableSsl = false;
   private String keytabPath;
-  private List<Role> rolesToCreate;
+  private Map<String, RoleDescriptor> rolesToCreate;
   private Map<User, String> usersToCreate;
   private String localKeystorePath;
   private String localTruststorePath;
@@ -193,8 +194,8 @@ public class ElasticsearchContainer
 
   private void createUsersAndRoles(ElasticsearchHelperClient helperClient ) {
     try {
-      for (Role role: this.rolesToCreate) {
-        helperClient.createRole(role);
+      for (Map.Entry<String, RoleDescriptor> role: this.rolesToCreate.entrySet()) {
+        helperClient.createRole(role.getKey(), role.getValue());
       }
       for (Map.Entry<User,String> userToPassword: this.usersToCreate.entrySet()) {
         helperClient.createUser(userToPassword);
@@ -214,7 +215,8 @@ public class ElasticsearchContainer
     return this;
   }
 
-  public ElasticsearchContainer withBasicAuth(Map<User, String> users, List<Role> roles) {
+  public ElasticsearchContainer withBasicAuth(
+      Map<User, String> users, Map<String, RoleDescriptor> roles) {
     enableBasicAuth(users, roles);
     return this;
   }
@@ -274,7 +276,7 @@ public class ElasticsearchContainer
     return keytabPath != null;
   }
 
-  private void enableBasicAuth(Map<User, String> users, List<Role> roles) {
+  private void enableBasicAuth(Map<User, String> users, Map<String, RoleDescriptor> roles) {
     if (isCreated()) {
       throw new IllegalStateException(
           "enableBasicAuth can only be used before the container is created."
@@ -584,18 +586,7 @@ public class ElasticsearchContainer
     superUserProps.put(CONNECTION_USERNAME_CONFIG, ELASTIC_SUPERUSER_NAME);
     superUserProps.put(CONNECTION_PASSWORD_CONFIG, ELASTIC_SUPERUSER_PASSWORD);
     ElasticsearchSinkConnectorConfig config = new ElasticsearchSinkConnectorConfig(superUserProps);
-    ElasticsearchHelperClient client = new ElasticsearchHelperClient(props.get(CONNECTION_URL_CONFIG), config,
-        shouldStartClientInCompatibilityMode());
-    return client;
-  }
-
-  /**
-   * For high level rest client v7.17 api compatibility mode must be turned on for working with
-   * ES 8.
-   * @return true if the major version of image used is 8 i.e (ES 8.x.x)
-   */
-  public boolean shouldStartClientInCompatibilityMode() {
-    return esMajorVersion() == 8;
+    return new ElasticsearchHelperClient(props.get(CONNECTION_URL_CONFIG), config);
   }
 
   public int esMajorVersion() {
