@@ -211,21 +211,8 @@ public class ElasticsearchSinkClient {
    * @throws ConnectException if all the records fail to flush before the timeout.
    */
   public void close() {
-    // BulkIngester.close() has no timeout of its own -- it blocks in
-    // FnCondition.whenReady(closedAndFlushed) until operations are drained, requestsInFlightCount
-    // is 0 and both listenerInProgressCount and retriesInProgressCount reach 0. Run it on its own
-    // thread so we can bound the wait by flush.timeout.ms, matching the pre-migration
-    // BulkProcessor.awaitClose(timeout, unit) contract.
-    //
-    // Known limitation on timeout: that wait uses Condition.awaitUninterruptibly(), so the
-    // abandoned close thread cannot be interrupted out of it, and listenerInProgressCount is
-    // incremented before each listener task is submitted to bulkScheduler. If closeResources()
-    // below reaches bulkScheduler.shutdownNow() while listener tasks are still queued, those tasks
-    // are discarded, the counter never returns to 0 and the abandoned thread parks permanently.
-    // It is a daemon thread, so JVM exit is unaffected, but a worker that repeatedly times out on
-    // close will accumulate one parked thread per occurrence. Sizing bulkScheduler at
-    // maxInFlightRequests + 1 (see constructor) makes a listener backlog far less likely; removing
-    // the failure mode entirely needs a redesign of the close path and is tracked separately.
+    // BulkIngester.close() has no timeout; run it on a daemon thread so future.get can bound the
+    // wait by flush.timeout.ms, matching the old BulkProcessor.awaitClose(timeout) contract.
     ExecutorService closeExecutor = Executors.newSingleThreadExecutor(
         daemonThreadFactory(threadNamePrefix + "elasticsearch-bulk-ingester-close-"));
     try {
