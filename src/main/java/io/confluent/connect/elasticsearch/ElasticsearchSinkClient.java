@@ -142,9 +142,6 @@ public class ElasticsearchSinkClient {
     this.reporter = reporter;
     this.clock = Time.SYSTEM;
 
-    // Assemble the layered client: RestClient (HTTP) -> RestClientTransport (JSON) ->
-    // RetryingTransport (our scheduled retries) -> typed ElasticsearchClient. Must follow both
-    // restClient and retryScheduler above.
     ConfigCallbackHandler configCallbackHandler = new ConfigCallbackHandler(config);
     this.restClient = RestClient
         .builder(
@@ -167,17 +164,6 @@ public class ElasticsearchSinkClient {
         .client(this.client)
         .maxOperations(config.batchSize())
         .maxSize(config.bulkSize())
-        // Preserves the pre-migration concurrency exactly. BulkProcessor was configured with
-        // setConcurrentRequests(maxInFlightRequests - 1), which produced a Semaphore of that many
-        // permits, so max.in.flight.requests=N has always allowed N-1 concurrent bulk requests.
-        // ElasticsearchConnectorNetworkIT documents this in a TODO and records that correcting the
-        // off-by-one "would be a breaking change", so it is deliberately not corrected here.
-        //
-        // Math.max(1, ...) is required, not defensive: max.in.flight.requests permits 1
-        // (between(1, 1000)), and the two APIs differ exactly at zero. Old
-        // setConcurrentRequests(0) meant Semaphore(1) plus a latch, i.e. one synchronous request;
-        // new maxConcurrentRequests(0) gates on requestsInFlightCount < 0, which is never true, so
-        // no request would ever be admitted.
         .maxConcurrentRequests(Math.max(1, config.maxInFlightRequests() - 1))
         .flushInterval(config.lingerMs(), TimeUnit.MILLISECONDS)
         .scheduler(this.bulkScheduler)
