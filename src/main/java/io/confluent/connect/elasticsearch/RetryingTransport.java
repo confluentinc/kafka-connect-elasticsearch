@@ -26,29 +26,14 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Wraps a {@link co.elastic.clients.transport.Transport} to retry transport-level failures
- * (timeouts, connection errors, non-2xx responses raised as exceptions) on the async bulk-request
- * path, using the same jittered exponential backoff as {@link RetryUtil} elsewhere in the client.
+ * Wraps an {@link ElasticsearchTransport} to retry transport-level failures (timeouts, connection
+ * errors, non-2xx raised as exceptions) on the async path used by BulkIngester, with the same
+ * jittered backoff as {@link RetryUtil}.
  *
- * <p>Only {@link #performRequestAsync} is retried here -- that is the only path BulkIngester uses
- * (via its internal async client). The synchronous {@link #performRequest} path (used by
- * indexExists/createIndex/createMapping/hasMapping, via
- * {@link ElasticsearchSinkClient#callWithRetries}) is passed through unchanged: those calls already
- * have their own retry loop one layer up via
- * {@link RetryUtil#callWithRetries}, and retrying here too would double the retry budget for
- * every attempt (confirmed necessary by tracing PR #920's own history: combining
- * transport-level retry with BulkIngester's separate backoffPolicy compounds retries up to
- * (maxRetries+1)^2 attempts per document -- BulkIngester.backoffPolicy is deliberately never
- * configured in {@link ElasticsearchSinkClient} for the same reason).
- *
- * <p>Note on a design not adopted: PR #920 wraps the transport in a DispatchingTransport that
- * hands async completions to a dedicated executor, to break a lock-ordering deadlock between
- * BulkIngester's internal condition and the HTTP client's NIO threads. That was tried here and
- * measurably made no difference -- the integration-test failures it was expected to fix were
- * caused entirely by WireMock stubs omitting response fields the new client requires
- * (X-Elastic-Product header, ElasticsearchVersionInfo.buildFlavor), not by any deadlock. It was
- * therefore reverted rather than carried as unjustified machinery. If a genuine stall is ever
- * observed under load, that is the design to revisit.
+ * <p>Only {@link #performRequestAsync} is retried; {@link #performRequest} is passed through
+ * because its callers already retry via {@link RetryUtil#callWithRetries}, and a second layer here
+ * would square the retry budget. Retries are scheduled (never slept) so no thread is held while
+ * waiting.
  */
 final class RetryingTransport implements ElasticsearchTransport {
   private final ElasticsearchTransport delegate;
@@ -87,12 +72,8 @@ final class RetryingTransport implements ElasticsearchTransport {
       if (err == null) {
         result.complete(resp);
       } else if (retriesSoFar < maxRetries) {
-        // Seed with retriesSoFar + 1, not retriesSoFar: RetryUtil.callWithRetries increments its
-        // attempt counter *before* invoking the callable, so it seeds the first retry with 1.
-        // Passing retriesSoFar (0-based) here would halve every wait in the schedule relative to
-        // the synchronous path and to the pre-migration behaviour -- e.g. with the defaults
-        // (retry.backoff.ms=100, max.retries=5) mean total backoff before giving up would be
-        // 1550 ms instead of 3100 ms, cutting the recovery window an overwhelmed cluster gets.
+        // Seed with retriesSoFar + 1 (not retriesSoFar): RetryUtil increments before the first
+        // call, so seeding with 0 here would halve every backoff versus the sync path.
         long backoffMs = RetryUtil.computeRandomRetryWaitTimeInMillis(
             retriesSoFar + 1, retryBackoffMs);
         retryScheduler.schedule(
