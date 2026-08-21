@@ -134,10 +134,8 @@ public class ElasticsearchSinkTask extends SinkTask {
       // This will just trigger an asynchronous execution of any buffered records
       client.flush();
     } catch (IllegalStateException e) {
-      // Retained defensively. BulkProcessor.flush() called ensureOpen() and threw this once
-      // closed; BulkIngester.flush() has no such guard -- it short-circuits on an empty
-      // operations list -- so on a closed ingester this is now a silent no-op rather than a
-      // throw, and this branch is not expected to be reached.
+      // Defensive: BulkIngester.flush() no-ops on a closed ingester rather than throwing (unlike
+      // the old BulkProcessor), so this branch is not expected to be reached.
       log.debug("Tried to flush data to Elasticsearch, but the bulk ingester is closed.", e);
     }
     Map<TopicPartition, OffsetAndMetadata> offsets = offsetTracker.offsets(currentOffsets);
