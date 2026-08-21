@@ -562,54 +562,58 @@ public class Validator {
       exceptionMessage = String.format("Error message: %s", e.getMessage());
     }
     if (!successful) {
-      String errorMessage = String.format(
-          "Could not connect to Elasticsearch. %s",
+      addConnectionErrorMessages(exceptionMessage);
+    }
+  }
+
+  private void addConnectionErrorMessages(String exceptionMessage) {
+    String errorMessage = String.format(
+        "Could not connect to Elasticsearch. %s",
+        exceptionMessage
+    );
+    addErrorMessage(CONNECTION_URL_CONFIG, errorMessage);
+
+    if (config.isAuthenticatedConnection()) {
+      errorMessage = String.format(
+          "Could not authenticate the user. Check the '%s' and '%s'. %s",
+          CONNECTION_USERNAME_CONFIG,
+          CONNECTION_PASSWORD_CONFIG,
           exceptionMessage
       );
-      addErrorMessage(CONNECTION_URL_CONFIG, errorMessage);
+      addErrorMessage(CONNECTION_USERNAME_CONFIG, errorMessage);
+      addErrorMessage(CONNECTION_PASSWORD_CONFIG, errorMessage);
+    }
 
-      if (config.isAuthenticatedConnection()) {
-        errorMessage = String.format(
-            "Could not authenticate the user. Check the '%s' and '%s'. %s",
-            CONNECTION_USERNAME_CONFIG,
-            CONNECTION_PASSWORD_CONFIG,
-            exceptionMessage
-        );
-        addErrorMessage(CONNECTION_USERNAME_CONFIG, errorMessage);
-        addErrorMessage(CONNECTION_PASSWORD_CONFIG, errorMessage);
-      }
+    if (config.isSslEnabled()) {
+      errorMessage = String.format(
+          "Could not connect to Elasticsearch. Check your SSL settings.%s",
+          exceptionMessage
+      );
 
-      if (config.isSslEnabled()) {
-        errorMessage = String.format(
-            "Could not connect to Elasticsearch. Check your SSL settings.%s",
-            exceptionMessage
-        );
+      addErrorMessage(SECURITY_PROTOCOL_CONFIG, errorMessage);
+    }
 
-        addErrorMessage(SECURITY_PROTOCOL_CONFIG, errorMessage);
-      }
+    if (config.isKerberosEnabled()) {
+      errorMessage = String.format(
+          "Could not connect to Elasticsearch. Check your Kerberos settings. %s",
+          exceptionMessage
+      );
 
-      if (config.isKerberosEnabled()) {
-        errorMessage = String.format(
-            "Could not connect to Elasticsearch. Check your Kerberos settings. %s",
-            exceptionMessage
-        );
+      addErrorMessage(KERBEROS_PRINCIPAL_CONFIG, errorMessage);
+      addErrorMessage(KERBEROS_KEYTAB_PATH_CONFIG, errorMessage);
+    }
 
-        addErrorMessage(KERBEROS_PRINCIPAL_CONFIG, errorMessage);
-        addErrorMessage(KERBEROS_KEYTAB_PATH_CONFIG, errorMessage);
-      }
+    if (config.isBasicProxyConfigured()) {
+      errorMessage = String.format(
+          "Could not connect to Elasticsearch. Check your proxy settings. %s",
+          exceptionMessage
+      );
+      addErrorMessage(PROXY_HOST_CONFIG, errorMessage);
+      addErrorMessage(PROXY_PORT_CONFIG, errorMessage);
 
-      if (config.isBasicProxyConfigured()) {
-        errorMessage = String.format(
-            "Could not connect to Elasticsearch. Check your proxy settings. %s",
-            exceptionMessage
-        );
-        addErrorMessage(PROXY_HOST_CONFIG, errorMessage);
-        addErrorMessage(PROXY_PORT_CONFIG, errorMessage);
-
-        if (config.isProxyWithAuthenticationConfigured()) {
-          addErrorMessage(PROXY_USERNAME_CONFIG, errorMessage);
-          addErrorMessage(PROXY_PASSWORD_CONFIG, errorMessage);
-        }
+      if (config.isProxyWithAuthenticationConfigured()) {
+        addErrorMessage(PROXY_USERNAME_CONFIG, errorMessage);
+        addErrorMessage(PROXY_PASSWORD_CONFIG, errorMessage);
       }
     }
   }
