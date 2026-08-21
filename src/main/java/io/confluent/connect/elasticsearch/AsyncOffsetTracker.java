@@ -35,10 +35,10 @@ import static java.util.stream.Collectors.toMap;
 /**
  * It's an asynchronous implementation of <code>OffsetTracker</code>
  *
- * <p>Since ElasticsearchClient can potentially process multiple batches asynchronously for the same
- * partition, if we don't want to wait for all in-flight batches at the end of the put call
+ * <p>Since ElasticsearchSinkClient can potentially process multiple batches asynchronously for
+ * the same partition, if we don't want to wait for all in-flight batches at the end of the put call
  * (or flush/preCommit) we need to keep track of what's the highest offset that is safe to commit.
- * For now, we do that at the individual record level because batching is handled by BulkProcessor,
+ * For now, we do that at the individual record level because batching is handled by BulkIngester,
  * and we don't have control over grouping/ordering.
  */
 class AsyncOffsetTracker implements OffsetTracker {
