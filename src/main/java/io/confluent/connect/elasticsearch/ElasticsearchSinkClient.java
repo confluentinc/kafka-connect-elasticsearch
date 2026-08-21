@@ -220,14 +220,15 @@ public class ElasticsearchSinkClient {
       future.get(config.flushTimeoutMs(), TimeUnit.MILLISECONDS);
     } catch (TimeoutException e) {
       throw new ConnectException(
-          "Failed to process outstanding requests in time while closing the ElasticsearchClient."
+          "Failed to process outstanding requests in time while closing "
+              + "the ElasticsearchSinkClient."
       );
     } catch (ExecutionException e) {
-      throw new ConnectException("Failed to close ElasticsearchClient.", e.getCause());
+      throw new ConnectException("Failed to close ElasticsearchSinkClient.", e.getCause());
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
       throw new ConnectException(
-          "Interrupted while processing all in-flight requests on ElasticsearchClient close.", e
+          "Interrupted while processing all in-flight requests on ElasticsearchSinkClient close.", e
       );
     } finally {
       closeExecutor.shutdownNow();
