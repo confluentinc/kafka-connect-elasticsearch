@@ -433,6 +433,28 @@ public class DataConverterTest {
   }
 
   @Test
+  public void externalVersionHeaderMissingThrowsConnectException() {
+    String externalVersionHeader = "version";
+
+    props.put(ElasticsearchSinkConnectorConfig.IGNORE_KEY_CONFIG, "false");
+    props.put(ElasticsearchSinkConnectorConfig.IGNORE_SCHEMA_CONFIG, "false");
+    props.put(ElasticsearchSinkConnectorConfig.EXTERNAL_VERSION_HEADER_CONFIG, externalVersionHeader);
+    converter = new DataConverter(new ElasticsearchSinkConnectorConfig(props));
+
+    Schema preProcessedSchema = converter.preProcessSchema(schema);
+    Struct struct = new Struct(preProcessedSchema).put("string", "myValue");
+    // Record carries no header with the configured name.
+    SinkRecord sinkRecord = createSinkRecordWithValue(struct);
+
+    ConnectException exception = assertThrows(
+        ConnectException.class,
+        () -> converter.convertRecord(sinkRecord, index)
+    );
+
+    assertTrue(exception.getMessage().contains(externalVersionHeader));
+  }
+
+  @Test
   public void ignoreDeleteOnNullValueWithNullKey() {
     props.put(ElasticsearchSinkConnectorConfig.COMPACT_MAP_ENTRIES_CONFIG, "true");
     props.put(ElasticsearchSinkConnectorConfig.IGNORE_KEY_CONFIG, "false");

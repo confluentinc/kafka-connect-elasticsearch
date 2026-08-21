@@ -314,7 +314,14 @@ public class DataConverter {
    */
   private long resolveExternalVersion(SinkRecord record) {
     if (config.hasExternalVersionHeader()) {
-      final Header versionHeader = record.headers().lastWithName(config.externalVersionHeader());
+      final String headerName = config.externalVersionHeader();
+      final Header versionHeader = record.headers().lastWithName(headerName);
+      if (versionHeader == null) {
+        throw new ConnectException(
+            String.format(
+                "External version header '%s' is configured but not found in record headers",
+                headerName));
+      }
       final byte[] versionValue = HEADER_CONVERTER.fromConnectHeader(
               record.topic(),
               versionHeader.key(),
