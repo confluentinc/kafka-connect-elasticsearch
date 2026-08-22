@@ -258,6 +258,17 @@ public class ElasticsearchClientTest extends ElasticsearchClientTestBase {
   }
 
   @Test
+  public void testHasMappingWithoutProperties() throws IOException {
+    // A mapping with content outside "properties" (dynamic, dynamic_templates, _meta, runtime)
+    // must count as an existing mapping, so the connector does not overwrite it.
+    helperClient.createIndex(index, "{\"dynamic\":\"strict\"}");
+
+    ElasticsearchSinkClient client = new ElasticsearchSinkClient(config, null, () -> offsetTracker.updateOffsets(), 1, "elasticsearch-sink");
+    assertTrue(client.hasMapping(index));
+    client.close();
+  }
+
+  @Test
   public void testBuffersCorrectly() throws Exception {
     props.put(MAX_IN_FLIGHT_REQUESTS_CONFIG, "1");
     props.put(MAX_BUFFERED_RECORDS_CONFIG, "1");

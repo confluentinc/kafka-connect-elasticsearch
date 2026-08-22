@@ -26,6 +26,8 @@ import co.elastic.clients.elasticsearch.core.bulk.BulkOperation;
 import co.elastic.clients.elasticsearch.core.bulk.BulkResponseItem;
 import co.elastic.clients.elasticsearch.indices.GetMappingResponse;
 import co.elastic.clients.elasticsearch.indices.get_mapping.IndexMappingRecord;
+import co.elastic.clients.json.JsonpMapper;
+import co.elastic.clients.json.JsonpUtils;
 import co.elastic.clients.json.jackson.JacksonJsonpMapper;
 import co.elastic.clients.transport.rest_client.RestClientTransport;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -110,6 +112,7 @@ public class ElasticsearchSinkClient {
   private final ElasticsearchSinkConnectorConfig config;
   private final ErrantRecordReporter reporter;
   private final ElasticsearchClient client;
+  private final JsonpMapper jsonpMapper;
   private final RestClient restClient;
   private final ScheduledExecutorService bulkScheduler;
   private final ScheduledExecutorService retryScheduler;
@@ -152,8 +155,9 @@ public class ElasticsearchSinkClient {
                 .toArray(new HttpHost[config.connectionUrls().size()])
         ).setHttpClientConfigCallback(configCallbackHandler).build();
 
+    this.jsonpMapper = new JacksonJsonpMapper();
     RestClientTransport rawTransport =
-        new RestClientTransport(restClient, new JacksonJsonpMapper());
+        new RestClientTransport(restClient, jsonpMapper);
     RetryingTransport transport = new RetryingTransport(
         rawTransport, retryScheduler, config.maxRetries(), config.retryBackoffMs());
     this.client = new ElasticsearchClient(transport);
@@ -315,8 +319,12 @@ public class ElasticsearchSinkClient {
         () -> client.indices().getMapping(r -> r.index(resourceName))
     );
     IndexMappingRecord record = response.result().get(resourceName);
+    // A mapping counts as present if the mappings object has ANY content (properties, dynamic,
+    // dynamic_templates, _meta, runtime, ...), not just declared properties — matching the
+    // pre-migration sourceAsMap()-non-empty semantics. Serializing through the client's own
+    // mapper avoids enumerating TypeMapping fields, which grow across client versions.
     return record != null && record.mappings() != null
-        && !record.mappings().properties().isEmpty();
+        && !"{}".equals(JsonpUtils.toJsonString(record.mappings(), jsonpMapper));
   }
 
   /**
