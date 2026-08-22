@@ -62,15 +62,14 @@ public class ElasticsearchClientSslTest extends ElasticsearchClientTestBase {
     props.put(SSL_CONFIG_PREFIX + SslConfigs.SSL_KEY_PASSWORD_CONFIG, container.getKeyPassword());
     config = new ElasticsearchSinkConnectorConfig(props);
     converter = new DataConverter(config);
-    helperClient = new ElasticsearchHelperClient(address, config,
-        container.shouldStartClientInCompatibilityMode());
+    helperClient = new ElasticsearchHelperClient(address, config);
     helperClient.waitForConnection(30000);
     offsetTracker = mock(OffsetTracker.class);
   }
 
   @Test
   public void testSsl() throws Exception {
-    ElasticsearchClient client = new ElasticsearchClient(config, null, 
+    ElasticsearchSinkClient client = new ElasticsearchSinkClient(config, null, 
     () -> offsetTracker.updateOffsets(), 1, "elasticsearch-sink");
     client.createIndexOrDataStream(index);
 
