@@ -18,6 +18,7 @@ package io.confluent.connect.elasticsearch;
 import co.elastic.clients.elasticsearch.ElasticsearchClient;
 import co.elastic.clients.elasticsearch._types.ElasticsearchException;
 import co.elastic.clients.json.jackson.JacksonJsonpMapper;
+import co.elastic.clients.transport.TransportException;
 import co.elastic.clients.transport.rest_client.RestClientTransport;
 import org.apache.http.HttpHost;
 import org.apache.kafka.common.config.Config;
@@ -547,15 +548,22 @@ public class Validator {
     String exceptionMessage = "";
     try {
       successful = client.ping().value();
+    } catch (TransportException e) {
+      // ping is HEAD / via a BooleanEndpoint; the client's low-level ignore list lets a 403 come
+      // back as a response, and because HEAD has no body it surfaces here as a TransportException
+      // (not an ElasticsearchException). A 403 means ES is up but the user cannot ping it, which
+      // is fine for a sink principal, so treat it as reachable -- matching the old HLRC behavior.
+      if (e.statusCode() == 403) {
+        successful = true;
+      } else {
+        successful = false;
+        exceptionMessage = String.format("Error message: %s", e.getMessage());
+      }
     } catch (ElasticsearchException e) {
-      switch (e.status()) {
-        case 403:
-          // ES is up, but user is not authorized to ping server
-          successful = true;
-          break;
-        default:
-          successful = false;
-          exceptionMessage = String.format("Error message: %s", e.getMessage());
+      // Safety net for any path that still surfaces a typed status (403 -> reachable).
+      successful = e.status() == 403;
+      if (!successful) {
+        exceptionMessage = String.format("Error message: %s", e.getMessage());
       }
     } catch (Exception e) {
       successful = false;
