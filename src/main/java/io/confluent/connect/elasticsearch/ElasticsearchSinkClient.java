@@ -160,12 +160,21 @@ public class ElasticsearchSinkClient {
 
     this.esVersion = getServerVersion();
 
+    if (config.lingerMs() == 0) {
+      // BulkIngester schedules its flush timer with scheduleWithFixedDelay, which rejects a
+      // period <= 0. linger.ms=0 is a valid, previously-working config, so clamp it to 1 ms
+      // (flush immediately) rather than crash the task at start.
+      log.warn("{}=0 is treated as 1 ms (flush immediately); the Elasticsearch BulkIngester "
+          + "does not support a zero flush interval.",
+          ElasticsearchSinkConnectorConfig.LINGER_MS_CONFIG);
+    }
+
     this.bulkIngester = BulkIngester.<SinkRecordAndOffset>of(b -> b
         .client(this.client)
         .maxOperations(config.batchSize())
         .maxSize(config.bulkSize())
         .maxConcurrentRequests(Math.max(1, config.maxInFlightRequests() - 1))
-        .flushInterval(config.lingerMs(), TimeUnit.MILLISECONDS)
+        .flushInterval(Math.max(1L, config.lingerMs()), TimeUnit.MILLISECONDS)
         .scheduler(this.bulkScheduler)
         .listener(buildListener(afterBulkCallback))
     );
