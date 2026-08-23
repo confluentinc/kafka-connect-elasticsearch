@@ -80,25 +80,37 @@ final class RetryingTransport implements ElasticsearchTransport {
       return;
     }
     delegate.performRequestAsync(request, endpoint, options).whenComplete((resp, err) -> {
-      if (err == null) {
-        result.complete(resp);
-      } else if (retriesSoFar < maxRetries && !closed) {
-        // Seed with retriesSoFar + 1 (not retriesSoFar): RetryUtil increments before the first
-        // call, so seeding with 0 here would halve every backoff versus the sync path.
-        long backoffMs = RetryUtil.computeRandomRetryWaitTimeInMillis(
-            retriesSoFar + 1, retryBackoffMs);
-        try {
-          retryScheduler.schedule(
-              () -> attempt(request, endpoint, options, result, retriesSoFar + 1),
-              backoffMs, TimeUnit.MILLISECONDS);
-        } catch (RejectedExecutionException rejected) {
-          // Scheduler already shut down. Complete the future instead of leaving it pending
-          // forever: BulkIngester.close() waits on every in-flight request.
-          err.addSuppressed(rejected);
+      // Nothing may escape this callback: a throw lands in the discarded dependent stage,
+      // leaving `result` pending forever — BulkIngester's request slot then leaks silently
+      // and the pipeline stalls blaming a healthy Elasticsearch.
+      try {
+        if (err == null) {
+          result.complete(resp);
+        } else if (retriesSoFar < maxRetries && !closed) {
+          // Seed with retriesSoFar + 1 (not retriesSoFar): RetryUtil increments before the
+          // first call, so seeding with 0 here would halve every backoff versus the sync path.
+          long backoffMs = RetryUtil.computeRandomRetryWaitTimeInMillis(
+              retriesSoFar + 1, retryBackoffMs);
+          try {
+            retryScheduler.schedule(
+                () -> attempt(request, endpoint, options, result, retriesSoFar + 1),
+                backoffMs, TimeUnit.MILLISECONDS);
+          } catch (RejectedExecutionException rejected) {
+            // Scheduler already shut down. Complete the future instead of leaving it pending
+            // forever: BulkIngester.close() waits on every in-flight request.
+            err.addSuppressed(rejected);
+            result.completeExceptionally(err);
+          }
+        } else {
           result.completeExceptionally(err);
         }
-      } else {
-        result.completeExceptionally(err);
+      } catch (Throwable callbackFailure) {
+        if (err != null) {
+          err.addSuppressed(callbackFailure);
+          result.completeExceptionally(err);
+        } else {
+          result.completeExceptionally(callbackFailure);
+        }
       }
     });
   }
