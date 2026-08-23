@@ -222,7 +222,7 @@ public class ConfigCallbackHandler implements HttpClientConfigCallback {
 
       return cm;
     } catch (IOReactorException e) {
-      throw new ConnectException("Unable to open ElasticsearchClient.", e);
+      throw new ConnectException("Unable to open ElasticsearchSinkClient.", e);
     }
   }
 

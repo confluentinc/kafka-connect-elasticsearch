@@ -30,7 +30,7 @@ import org.apache.kafka.connect.sink.ErrantRecordReporter;
 import org.apache.kafka.connect.sink.SinkRecord;
 import org.apache.kafka.connect.sink.SinkTask;
 import org.apache.kafka.connect.sink.SinkTaskContext;
-import org.elasticsearch.action.DocWriteRequest;
+import co.elastic.clients.elasticsearch.core.bulk.BulkOperation;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -42,7 +42,7 @@ public class ElasticsearchSinkTask extends SinkTask {
   private static final Logger log = LoggerFactory.getLogger(ElasticsearchSinkTask.class);
 
   private DataConverter converter;
-  private ElasticsearchClient client;
+  private ElasticsearchSinkClient client;
   private ElasticsearchSinkTaskConfig config;
   private ErrantRecordReporter reporter;
   private Set<String> existingMappings;
@@ -57,7 +57,7 @@ public class ElasticsearchSinkTask extends SinkTask {
   }
 
   // visible for testing
-  protected void start(Map<String, String> props, ElasticsearchClient client) {
+  protected void start(Map<String, String> props, ElasticsearchSinkClient client) {
     log.info("Starting ElasticsearchSinkTask.");
 
     this.config = new ElasticsearchSinkTaskConfig(props);
@@ -93,7 +93,7 @@ public class ElasticsearchSinkTask extends SinkTask {
     }
     Runnable afterBulkCallback = () -> offsetTracker.updateOffsets();
     this.client = client != null ? client
-        : new ElasticsearchClient(config, reporter, afterBulkCallback,
+        : new ElasticsearchSinkClient(config, reporter, afterBulkCallback,
             config.getTaskId(), config.getConnectorName());
 
     if (!config.flushSynchronously()) {
@@ -134,7 +134,9 @@ public class ElasticsearchSinkTask extends SinkTask {
       // This will just trigger an asynchronous execution of any buffered records
       client.flush();
     } catch (IllegalStateException e) {
-      log.debug("Tried to flush data to Elasticsearch, but BulkProcessor is already closed.", e);
+      // Defensive: BulkIngester.flush() no-ops on a closed ingester rather than throwing (unlike
+      // the old BulkProcessor), so this branch is not expected to be reached.
+      log.debug("Tried to flush data to Elasticsearch, but the bulk ingester is closed.", e);
     }
     Map<TopicPartition, OffsetAndMetadata> offsets = offsetTracker.offsets(currentOffsets);
     log.debug("preCommitting offsets {}", offsets);
@@ -284,9 +286,9 @@ public class ElasticsearchSinkTask extends SinkTask {
     
     checkMapping(resourceName, sinkRecord);
 
-    DocWriteRequest<?> docWriteRequest = null;
+    BulkOperation bulkOperation = null;
     try {
-      docWriteRequest = converter.convertRecord(sinkRecord, resourceName);
+      bulkOperation = converter.convertRecord(sinkRecord, resourceName);
     } catch (DataException convertException) {
       reportBadRecord(sinkRecord, convertException);
 
@@ -301,9 +303,9 @@ public class ElasticsearchSinkTask extends SinkTask {
       }
     }
 
-    if (docWriteRequest != null) {
-      logTrace("Adding {} to bulk processor.", sinkRecord);
-      client.index(sinkRecord, docWriteRequest, offsetState);
+    if (bulkOperation != null) {
+      logTrace("Adding {} to bulk ingester.", sinkRecord);
+      client.index(sinkRecord, bulkOperation, offsetState);
     }
   }
 
