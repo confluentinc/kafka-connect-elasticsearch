@@ -146,6 +146,32 @@ public class ElasticsearchClientTest extends ElasticsearchClientTestBase {
     waitUntilRecordsInES(1);
   }
 
+  /**
+   * Pins the contract the already-exists race handling in createIndex/createDataStream relies
+   * on: a create of an existing index fails with the exact structured type in error().type(),
+   * so the connector can match that field instead of the client-formatted exception message
+   * (whose template has already changed once, HLRC -> elasticsearch-java).
+   */
+  @Test
+  public void testAlreadyExistsErrorCarriesStructuredType() throws Exception {
+    org.elasticsearch.client.RestClient rest = org.elasticsearch.client.RestClient
+        .builder(org.apache.http.HttpHost.create(container.getConnectionUrl())).build();
+    co.elastic.clients.elasticsearch.ElasticsearchClient raw =
+        new co.elastic.clients.elasticsearch.ElasticsearchClient(
+            new co.elastic.clients.transport.rest_client.RestClientTransport(
+                rest, new co.elastic.clients.json.jackson.JacksonJsonpMapper()));
+    raw.indices().create(r -> r.index(index));
+    try {
+      raw.indices().create(r -> r.index(index));
+      org.junit.Assert.fail("expected already-exists exception");
+    } catch (co.elastic.clients.elasticsearch._types.ElasticsearchException e) {
+      assertEquals("resource_already_exists_exception", e.error().type());
+      assertEquals(400, e.status());
+    } finally {
+      rest.close();
+    }
+  }
+
   @Test
   public void testCreateIndex() throws IOException {
     ElasticsearchSinkClient client = new ElasticsearchSinkClient(config, null, () -> offsetTracker.updateOffsets(), 1, "elasticsearch-sink");

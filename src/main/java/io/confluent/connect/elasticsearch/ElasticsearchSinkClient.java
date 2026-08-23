@@ -105,6 +105,7 @@ public class ElasticsearchSinkClient {
       )
   );
   private static final String UNKNOWN_VERSION_TAG = "Unknown";
+  private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
   protected final AtomicInteger numBufferedRecords;
   private final AtomicReference<ConnectException> error;
   protected final BulkIngester<SinkRecordAndOffset> bulkIngester;
@@ -273,7 +274,7 @@ public class ElasticsearchSinkClient {
    */
   public void createMapping(String resourceName, Schema schema) {
     try {
-      String mappingJson = new ObjectMapper().writeValueAsString(Mapping.buildMapping(schema));
+      String mappingJson = OBJECT_MAPPER.writeValueAsString(Mapping.buildMapping(schema));
       callWithRetries(
           String.format("create mapping for resource %s with schema %s", resourceName, schema),
           () -> client.indices().putMapping(
@@ -610,9 +611,10 @@ public class ElasticsearchSinkClient {
         () -> {
           try {
             client.indices().createDataStream(r -> r.name(dataStream));
-          } catch (ElasticsearchException | IOException e) {
-            if (e.getMessage() == null
-                || !e.getMessage().contains(RESOURCE_ALREADY_EXISTS_EXCEPTION)) {
+          } catch (ElasticsearchException e) {
+            // benign create-vs-create race: someone else created it between our existence
+            // check and this call; matched on the structured error type, not the message
+            if (!RESOURCE_ALREADY_EXISTS_EXCEPTION.equals(e.error().type())) {
               throw e;
             }
             return false;
@@ -634,9 +636,10 @@ public class ElasticsearchSinkClient {
         () -> {
           try {
             client.indices().create(r -> r.index(index));
-          } catch (ElasticsearchException | IOException e) {
-            if (e.getMessage() == null
-                || !e.getMessage().contains(RESOURCE_ALREADY_EXISTS_EXCEPTION)) {
+          } catch (ElasticsearchException e) {
+            // benign create-vs-create race: someone else created it between our existence
+            // check and this call; matched on the structured error type, not the message
+            if (!RESOURCE_ALREADY_EXISTS_EXCEPTION.equals(e.error().type())) {
               throw e;
             }
             return false;
