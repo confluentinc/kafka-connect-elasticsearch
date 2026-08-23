@@ -16,12 +16,10 @@
 package io.confluent.connect.elasticsearch;
 
 import com.github.tomakehurst.wiremock.common.Json;
+import com.google.gson.Gson;
 import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
 import java.math.BigDecimal;
-import java.util.HashMap;
+import java.util.Map;
 import org.apache.kafka.connect.data.ConnectSchema;
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
@@ -32,7 +30,6 @@ import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
 import org.apache.kafka.connect.errors.DataException;
-import org.elasticsearch.xcontent.XContentBuilder;
 import org.junit.Test;
 
 import static io.confluent.connect.elasticsearch.Mapping.KEYWORD_TYPE;
@@ -47,17 +44,17 @@ public class MappingTest {
 
   @Test(expected = DataException.class)
   public void testBuildMappingWithNullSchema() {
-    XContentBuilder builder = Mapping.buildMapping(null);
+    Map<String, Object> mapping = Mapping.buildMapping(null);
   }
 
   @Test
-  public void testBuildMapping() throws IOException {
+  public void testBuildMapping() {
     JsonObject result = runTest(createSchema());
     verifyMapping(createSchema(), result);
   }
 
   @Test
-  public void testBuildMappingForString() throws IOException {
+  public void testBuildMappingForString() {
     Schema schema = SchemaBuilder.struct()
         .name("record")
         .field("string", Schema.STRING_SCHEMA)
@@ -73,7 +70,7 @@ public class MappingTest {
   }
 
   @Test
-  public void testBuildMappingSetsDefaultValue() throws IOException {
+  public void testBuildMappingSetsDefaultValue() {
     Schema schema = SchemaBuilder
         .struct()
         .name("record")
@@ -97,7 +94,7 @@ public class MappingTest {
   }
 
   @Test
-  public void testBuildMappingSetsDefaultValueForDate() throws IOException {
+  public void testBuildMappingSetsDefaultValueForDate() {
     java.util.Date expected = new java.util.Date();
     Schema schema = SchemaBuilder
         .struct()
@@ -114,7 +111,7 @@ public class MappingTest {
   }
 
   @Test
-  public void testBuildMappingSetsNoDefaultValueForStrings() throws IOException {
+  public void testBuildMappingSetsNoDefaultValueForStrings() {
     Schema schema = SchemaBuilder
         .struct()
         .name("record")
@@ -160,11 +157,9 @@ public class MappingTest {
         .field("timestamp", Timestamp.SCHEMA);
   }
 
-  private static JsonObject runTest(Schema schema) throws IOException {
-    XContentBuilder builder = Mapping.buildMapping(schema);
-    builder.flush();
-    ByteArrayOutputStream stream = (ByteArrayOutputStream) builder.getOutputStream();
-    return  (JsonObject) JsonParser.parseString(stream.toString());
+  private static JsonObject runTest(Schema schema) {
+    Map<String, Object> mapping = Mapping.buildMapping(schema);
+    return (JsonObject) new Gson().toJsonTree(mapping);
   }
 
   private void verifyMapping(Schema schema, JsonObject mapping) {
@@ -183,17 +178,15 @@ public class MappingTest {
       }
     }
 
-    DataConverter converter = new DataConverter(new ElasticsearchSinkConnectorConfig(ElasticsearchSinkConnectorConfigTest.addNecessaryProps(new HashMap<>())));
     Schema.Type schemaType = schema.type();
     switch (schemaType) {
       case ARRAY:
         verifyMapping(schema.valueSchema(), mapping);
         break;
       case MAP:
-        Schema newSchema = converter.preProcessSchema(schema);
         JsonObject mapProperties = mapping.get("properties").getAsJsonObject();
-        verifyMapping(newSchema.keySchema(), mapProperties.get(KEY_FIELD).getAsJsonObject());
-        verifyMapping(newSchema.valueSchema(), mapProperties.get(VALUE_FIELD).getAsJsonObject());
+        verifyMapping(schema.keySchema(), mapProperties.get(KEY_FIELD).getAsJsonObject());
+        verifyMapping(schema.valueSchema(), mapProperties.get(VALUE_FIELD).getAsJsonObject());
         break;
       case STRUCT:
         JsonObject properties = mapping.get("properties").getAsJsonObject();
