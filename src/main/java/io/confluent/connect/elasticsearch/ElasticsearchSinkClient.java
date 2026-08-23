@@ -589,6 +589,19 @@ public class ElasticsearchSinkClient {
     transport.failPendingRequests(
         new IOException("Request abandoned: the Elasticsearch client is closing."));
 
+    // Give BulkIngester's bookkeeping a bounded chance to drain before the scheduler shutdown:
+    // freeing a slot wakes the close-drain into sending still-buffered operations as one more
+    // (now fail-fast) request, and BulkIngester submits afterBulk to bulkScheduler BEFORE
+    // releasing the slot — a completion that lands after shutdown() aborts on
+    // RejectedExecutionException with the slot still held, wedging the daemon close thread
+    // forever. Buffered operations must drain too, not just in-flight requests: the freed slot
+    // reads pendingRequests()==0 for a moment before the woken drain thread sends the buffer.
+    long drainDeadline = clock.milliseconds() + CLOSE_WAIT_TIME_MS;
+    while ((bulkIngester.pendingRequests() > 0 || bulkIngester.pendingOperations() > 0)
+        && clock.milliseconds() < drainDeadline) {
+      clock.sleep(WAIT_TIME_MS);
+    }
+
     bulkScheduler.shutdown();
     retryScheduler.shutdown();
     try {

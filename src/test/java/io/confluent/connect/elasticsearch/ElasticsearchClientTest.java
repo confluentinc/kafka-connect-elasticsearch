@@ -634,6 +634,56 @@ public class ElasticsearchClientTest extends ElasticsearchClientTestBase {
   }
 
   /**
+   * Variant of the test above with operations still buffered beyond the in-flight request:
+   * failing the pending futures frees the slot, the ingester's close-drain then sends the
+   * buffered operations as a NEW request created after the failPendingRequests snapshot, and
+   * its completion after bulkScheduler.shutdown() aborts BulkIngester's bookkeeping
+   * (RejectedExecutionException fires before requestsInFlightCount--), re-wedging the close
+   * thread the same way the original leak did.
+   */
+  @Test(timeout = 120_000)
+  public void testCloseTimeoutWithBufferedRecordsDoesNotLeakCloseThread() throws Exception {
+    props.put(BATCH_SIZE_CONFIG, "3");
+    props.put(MAX_IN_FLIGHT_REQUESTS_CONFIG, "2");
+    props.put(MAX_RETRIES_CONFIG, "100");
+    props.put(RETRY_BACKOFF_MS_CONFIG, "30000");
+    props.put(FLUSH_TIMEOUT_MS_CONFIG, "2000");
+    props.put(LINGER_MS_CONFIG, "200");
+    config = new ElasticsearchSinkConnectorConfig(props);
+    converter = new DataConverter(config);
+
+    String connectorName = "es-close-drain-leak-test";
+    ElasticsearchSinkClient client = new ElasticsearchSinkClient(config, null, () -> offsetTracker.updateOffsets(), 1, connectorName);
+    client.createIndexOrDataStream(index);
+
+    NetworkErrorContainer delay = new NetworkErrorContainer(container.getContainerName());
+    delay.start();
+
+    try {
+      // the flush timer sends this record alone; it occupies the only slot in a 30s retry
+      writeRecord(sinkRecord(0), client);
+      Thread.sleep(1000);
+      // these stay buffered: the batch is not full, so the slot gate admits them
+      writeRecord(sinkRecord(1), client);
+      writeRecord(sinkRecord(2), client);
+
+      assertThrows(ConnectException.class, client::close);
+
+      String closeThreadName = connectorName + "-1-elasticsearch-bulk-ingester-close";
+      org.apache.kafka.test.TestUtils.waitForCondition(
+          () -> Thread.getAllStackTraces().keySet().stream()
+              .noneMatch(t -> t.getName().startsWith(closeThreadName)),
+          20_000,
+          "bulk-ingester close thread is still parked after closeResources()"
+      );
+
+      Thread.sleep(config.readTimeoutMs() * 4L);
+    } finally {
+      delay.stop();
+    }
+  }
+
+  /**
    * Test that verifies the following when behavior.on.malformed.docs is set to IGNORE:
    * - The reporter is called which reports all the errors along with bad records to DLQ.
    * - The connector doesn't fail and keeps processing other records.

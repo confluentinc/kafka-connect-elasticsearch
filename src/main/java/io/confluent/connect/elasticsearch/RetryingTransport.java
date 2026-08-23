@@ -66,8 +66,25 @@ final class RetryingTransport implements ElasticsearchTransport {
       RequestT request, Endpoint<RequestT, ResponseT, ErrorT> endpoint,
       TransportOptions options) {
     CompletableFuture<ResponseT> result = new CompletableFuture<>();
+    if (closed) {
+      // The client is closing. Fail new requests immediately (e.g. BulkIngester's close-drain
+      // flushing operations that were still buffered when failPendingRequests ran) so their
+      // completion happens while the bulk scheduler is still alive; a completion arriving
+      // after the scheduler shutdown aborts BulkIngester's bookkeeping before it releases the
+      // request slot, wedging the close thread forever.
+      result.completeExceptionally(
+          new IOException("Request rejected: the Elasticsearch client is closing."));
+      return result;
+    }
     pendingRequests.add(result);
     result.whenComplete((resp, err) -> pendingRequests.remove(result));
+    if (closed) {
+      // closed flipped between the check above and the add: make sure this request cannot be
+      // missed by a concurrent failPendingRequests iteration
+      result.completeExceptionally(
+          new IOException("Request rejected: the Elasticsearch client is closing."));
+      return result;
+    }
     attempt(request, endpoint, options, result, 0);
     return result;
   }
