@@ -33,7 +33,6 @@ import org.apache.kafka.common.config.ConfigDef.Type;
 import org.apache.kafka.common.config.ConfigDef.Validator;
 import org.apache.kafka.common.config.ConfigDef.Width;
 import org.apache.kafka.common.config.types.Password;
-import org.elasticsearch.common.unit.ByteSizeValue;
 
 import static org.apache.kafka.common.config.ConfigDef.Range.between;
 import static org.apache.kafka.common.config.SslConfigs.SSL_ENDPOINT_IDENTIFICATION_ALGORITHM_CONFIG;
@@ -1130,8 +1129,8 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
     return BehaviorOnNullValues.valueOf(getString(BEHAVIOR_ON_NULL_VALUES_CONFIG).toUpperCase());
   }
 
-  public ByteSizeValue bulkSize() {
-    return new ByteSizeValue(getLong(BULK_SIZE_BYTES_CONFIG));
+  public long bulkSize() {
+    return getLong(BULK_SIZE_BYTES_CONFIG);
   }
 
   public boolean compression() {
