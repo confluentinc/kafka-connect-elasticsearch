@@ -55,6 +55,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.BooleanSupplier;
 
 import org.apache.http.HttpHost;
 import org.apache.kafka.common.utils.Time;
@@ -70,6 +71,7 @@ import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.Behav
 
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.FLUSH_TIMEOUT_MS_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.MAX_BUFFERED_RECORDS_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.MAX_IN_FLIGHT_REQUESTS_CONFIG;
 import static java.util.stream.Collectors.toList;
 
 /**
@@ -121,6 +123,7 @@ public class ElasticsearchSinkClient {
   private final Lock inFlightRequestLock = new ReentrantLock();
   private final Condition inFlightRequestsUpdated = inFlightRequestLock.newCondition();
   private final String esVersion;
+  private final int maxConcurrentRequests;
 
   public ElasticsearchSinkClient(
       ElasticsearchSinkConnectorConfig config,
@@ -173,11 +176,12 @@ public class ElasticsearchSinkClient {
           ElasticsearchSinkConnectorConfig.LINGER_MS_CONFIG);
     }
 
+    this.maxConcurrentRequests = Math.max(1, config.maxInFlightRequests() - 1);
     this.bulkIngester = BulkIngester.<SinkRecordAndOffset>of(b -> b
         .client(this.client)
         .maxOperations(config.batchSize())
         .maxSize(config.bulkSize())
-        .maxConcurrentRequests(Math.max(1, config.maxInFlightRequests() - 1))
+        .maxConcurrentRequests(maxConcurrentRequests)
         .flushInterval(Math.max(1L, config.lingerMs()), TimeUnit.MILLISECONDS)
         .scheduler(this.bulkScheduler)
         .listener(buildListener(afterBulkCallback))
@@ -291,6 +295,10 @@ public class ElasticsearchSinkClient {
    * Triggers a flush of any buffered records.
    */
   public void flush() {
+    // BulkIngester.flush() parks uninterruptibly when there are buffered operations and every
+    // request slot is busy (with an empty buffer it returns immediately).
+    verifyFreeBulkSlot(() -> bulkIngester.pendingOperations() > 0
+        && bulkIngester.pendingRequests() >= maxConcurrentRequests);
     bulkIngester.flush();
   }
 
@@ -347,6 +355,7 @@ public class ElasticsearchSinkClient {
 
     // TODO should we just pause partitions instead of blocking and failing the connector?
     verifyNumBufferedRecords();
+    verifyFreeBulkSlot(this::addWouldBlock);
 
     numBufferedRecords.incrementAndGet();
     bulkIngester.add(operation, new SinkRecordAndOffset(record, offsetState, operation));
@@ -381,6 +390,53 @@ public class ElasticsearchSinkClient {
         );
       }
     }
+  }
+
+  /**
+   * Waits (bounded by flush.timeout.ms, responsive to interruption) while {@code wouldBlock}
+   * holds, so the calling thread never reaches BulkIngester's internal wait — that wait is
+   * uninterruptible (FnCondition.awaitUninterruptibly) and swallows the worker interrupt
+   * Connect uses to cancel a stuck task. The old BulkProcessor blocked on an interruptible
+   * semaphore here, so a stuck task could always be cancelled.
+   */
+  private void verifyFreeBulkSlot(BooleanSupplier wouldBlock) {
+    long maxWaitTime = clock.milliseconds() + config.flushTimeoutMs();
+    while (wouldBlock.getAsBoolean()) {
+      if (Thread.currentThread().isInterrupted()) {
+        throw new ConnectException("Interrupted while waiting for a free bulk request slot.");
+      }
+      clock.sleep(WAIT_TIME_MS);
+      if (clock.milliseconds() > maxWaitTime) {
+        throw new ConnectException(
+            String.format("All %d bulk request slot(s) stayed busy longer than %d ms; "
+                            + "Elasticsearch is not keeping up with the write load. "
+                            + "Consider increasing %s or %s.",
+                    maxConcurrentRequests,
+                    config.flushTimeoutMs(),
+                    FLUSH_TIMEOUT_MS_CONFIG,
+                    MAX_IN_FLIGHT_REQUESTS_CONFIG
+            )
+        );
+      }
+    }
+  }
+
+  /**
+   * True in exactly the state where BulkIngester.add() would park uninterruptibly: every
+   * request slot is busy and this operation would fill the batch (by count, or by bytes when
+   * bulk.size.bytes is set), making add() flush and wait for a slot. One residual window
+   * remains: an operation whose own size pushes the batch past bulk.size.bytes cannot be
+   * predicted without serializing it, and the flush-timer thread can take the last free slot
+   * between this check and add().
+   */
+  private boolean addWouldBlock() {
+    if (bulkIngester.pendingRequests() < maxConcurrentRequests) {
+      return false;
+    }
+    boolean fillsBatchCount = bulkIngester.pendingOperations() + 1 >= config.batchSize();
+    boolean fillsBatchBytes = config.bulkSize() > 0
+        && bulkIngester.pendingOperationsSize() >= config.bulkSize();
+    return fillsBatchCount || fillsBatchBytes;
   }
 
   /**

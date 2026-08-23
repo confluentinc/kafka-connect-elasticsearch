@@ -21,6 +21,7 @@ import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfi
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.DATA_STREAM_DATASET_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.DATA_STREAM_TYPE_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.FLUSH_TIMEOUT_MS_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_KEY_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.LINGER_MS_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.MAX_BUFFERED_RECORDS_CONFIG;
@@ -488,6 +489,50 @@ public class ElasticsearchClientTest extends ElasticsearchClientTestBase {
     delay.stop();
 
     waitUntilRecordsInES(1);
+  }
+
+  /**
+   * When every bulk request slot is stuck (ES unreachable, requests cycling through retries),
+   * a write that needs a slot must fail within ~flush.timeout.ms instead of parking in
+   * BulkIngester's uninterruptible internal wait, where task cancellation cannot reach it.
+   * The timeout guards against a regression re-introducing the indefinite hang.
+   */
+  @Test(timeout = 90_000)
+  public void testWriteFailsInsteadOfBlockingWhenBulkSlotsExhausted() throws Exception {
+    props.put(BATCH_SIZE_CONFIG, "1");                 // every record is its own bulk request
+    props.put(MAX_IN_FLIGHT_REQUESTS_CONFIG, "2");     // one ingester slot (max(1, 2-1))
+    props.put(MAX_RETRIES_CONFIG, "100");              // keep the stuck request retrying...
+    props.put(RETRY_BACKOFF_MS_CONFIG, "1000");        // ...well past the flush timeout
+    props.put(FLUSH_TIMEOUT_MS_CONFIG, "2000");
+    config = new ElasticsearchSinkConnectorConfig(props);
+    converter = new DataConverter(config);
+
+    ElasticsearchSinkClient client = new ElasticsearchSinkClient(config, null, () -> offsetTracker.updateOffsets(), 1, "elasticsearch-sink");
+    client.createIndexOrDataStream(index);
+
+    NetworkErrorContainer delay = new NetworkErrorContainer(container.getContainerName());
+    delay.start();
+
+    try {
+      // occupies the only slot; the request hangs, then cycles through retries
+      writeRecord(sinkRecord(0), client);
+
+      // needs the slot: must throw, not hang
+      ConnectException e =
+          assertThrows(ConnectException.class, () -> writeRecord(sinkRecord(1), client));
+      assertTrue(e.getMessage(), e.getMessage().contains("bulk request slot"));
+
+      // let pumba's 10s pause window elapse so ES unpauses itself; stopping pumba mid-pause
+      // leaves the ES container paused forever (same reason testRetryRecordsOnSocketTimeoutFailure
+      // sleeps before stopping it)
+      Thread.sleep(config.readTimeoutMs() * 4L);
+    } finally {
+      delay.stop();
+    }
+
+    // after ES recovers, the stuck record completes and the client closes cleanly
+    waitUntilRecordsInES(1);
+    client.close();
   }
 
   /**
