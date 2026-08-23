@@ -16,7 +16,6 @@
 package io.confluent.connect.elasticsearch;
 
 import co.elastic.clients.elasticsearch.core.bulk.BulkOperation;
-import co.elastic.clients.json.JsonData;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BehaviorOnNullValues;
 import org.apache.kafka.common.record.TimestampType;
@@ -525,15 +524,57 @@ public class DataConverterTest {
   /**
    * Reads back the JSON document body of an index/create bulk operation as a {@code Map}, the
    * equivalent of the old HLRC {@code IndexRequest.sourceAsMap()}. The document is always built
-   * via {@code JsonData.fromJson(...)} in {@link DataConverter}, so it's always safe to read back
-   * via {@link JsonData#toJson()} (guaranteed valid JSON text per the JSON-P spec, independent of
-   * any particular JsonpMapper wiring) and re-parse with Jackson.
+   * as {@code BinaryData} in {@link DataConverter} (the connector's own JSON bytes, sent to
+   * Elasticsearch verbatim), so read the raw bytes back and re-parse with Jackson.
    */
   private static Map<String, Object> documentAsMap(BulkOperation operation) throws Exception {
-    JsonData document = operation.isCreate()
-        ? (JsonData) operation.create().document()
-        : (JsonData) operation.index().document();
-    return new ObjectMapper().readValue(document.toJson().toString(), Map.class);
+    return new ObjectMapper().readValue(documentJson(operation.isCreate()
+        ? operation.create().document()
+        : operation.index().document()), Map.class);
+  }
+
+  /** The exact bytes the client will put on the wire for this document or update action. */
+  private static String documentJson(Object binaryData) throws Exception {
+    java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+    ((co.elastic.clients.util.BinaryData) binaryData).writeTo(out);
+    return new String(out.toByteArray(), java.nio.charset.StandardCharsets.UTF_8);
+  }
+
+  /**
+   * The payload must reach the wire byte-for-byte as BinaryData: parsing it into a JSON tree
+   * and re-serializing corrupts numbers (the client re-emits integrals as long, wrapping
+   * unsigned 64-bit ids negative, and everything else as double, collapsing high-precision
+   * decimals — reproduced end-to-end on a CP 8.0 worker whose JsonConverter emits such digits).
+   * The BinaryData type IS the verbatim guarantee: BulkIngester passes it through untouched.
+   */
+  @Test
+  public void testDocumentIsVerbatimPayloadBytes() throws Exception {
+    Schema numSchema = SchemaBuilder.struct().name("s")
+        .field("n", Schema.INT64_SCHEMA)
+        .field("string", Schema.STRING_SCHEMA)
+        .build();
+    Struct value = new Struct(numSchema).put("n", Long.MAX_VALUE).put("string", "myValue");
+    SinkRecord record = new SinkRecord(topic, partition, Schema.STRING_SCHEMA, key,
+        numSchema, value, offset, recordTimestamp, TimestampType.CREATE_TIME);
+
+    String wire = documentJson(converter.convertRecord(record, index).index().document());
+    assertEquals("{\"n\":9223372036854775807,\"string\":\"myValue\"}", wire);
+  }
+
+  @Test
+  public void testUpsertActionWrapsPayloadVerbatim() throws Exception {
+    props.put(ElasticsearchSinkConnectorConfig.WRITE_METHOD_CONFIG,
+        ElasticsearchSinkConnectorConfig.WriteMethod.UPSERT.name());
+    converter = new DataConverter(new ElasticsearchSinkConnectorConfig(props));
+
+    Struct value = new Struct(schema).put("string", "myValue");
+    SinkRecord record = new SinkRecord(topic, partition, Schema.STRING_SCHEMA, key,
+        schema, value, offset, recordTimestamp, TimestampType.CREATE_TIME);
+
+    String action = documentJson(converter.convertRecord(record, index).update().binaryAction());
+    assertEquals(
+        "{\"doc\":{\"string\":\"myValue\"},\"upsert\":{\"string\":\"myValue\"}}",
+        action);
   }
 
   @Test
