@@ -16,6 +16,7 @@
 package io.confluent.connect.elasticsearch;
 
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BATCH_SIZE_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BULK_SIZE_BYTES_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BEHAVIOR_ON_MALFORMED_DOCS_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BEHAVIOR_ON_NULL_VALUES_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG;
@@ -170,6 +171,29 @@ public class ElasticsearchClientTest extends ElasticsearchClientTestBase {
     } finally {
       rest.close();
     }
+  }
+
+  /**
+   * bulk.size.bytes=0 is a legal config that meant "flush after every record" on the old
+   * BulkProcessor (the byte limit was only a send trigger). BulkIngester treats maxSize=0 as
+   * "never admit an operation", parking the first add() forever in its uninterruptible wait;
+   * the connector clamps 0 to 1 byte to restore the old semantics. The timeout guards the hang.
+   */
+  @Test(timeout = 60_000)
+  public void testBulkSizeBytesZeroStillWrites() throws Exception {
+    props.put(BULK_SIZE_BYTES_CONFIG, "0");
+    props.put(LINGER_MS_CONFIG, "100");
+    config = new ElasticsearchSinkConnectorConfig(props);
+    converter = new DataConverter(config);
+
+    ElasticsearchSinkClient client = new ElasticsearchSinkClient(config, null, () -> offsetTracker.updateOffsets(), 1, "elasticsearch-sink");
+    client.createIndexOrDataStream(index);
+
+    writeRecord(sinkRecord(0), client);
+    writeRecord(sinkRecord(1), client);
+
+    waitUntilRecordsInES(2);
+    client.close();
   }
 
   @Test

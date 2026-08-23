@@ -123,6 +123,7 @@ public class ElasticsearchSinkClient {
   private final Condition inFlightRequestsUpdated = inFlightRequestLock.newCondition();
   private final String esVersion;
   private final int maxConcurrentRequests;
+  private final long bulkMaxSizeBytes;
 
   public ElasticsearchSinkClient(
       ElasticsearchSinkConnectorConfig config,
@@ -174,11 +175,23 @@ public class ElasticsearchSinkClient {
           ElasticsearchSinkConnectorConfig.LINGER_MS_CONFIG);
     }
 
+    if (config.bulkSize() == 0) {
+      // BulkIngester treats maxSize=0 as "never admit an operation" (its canAddOperation check
+      // is currentSize < maxSize, false even for an empty buffer), which parks the first add()
+      // forever in an uninterruptible wait. The old BulkProcessor used the byte limit only as a
+      // send trigger, so bulk.size.bytes=0 was a valid flush-after-every-record config; clamp
+      // to 1 byte, which reproduces exactly that behavior.
+      log.warn("{}=0 is treated as 1 byte (flush after every record); the Elasticsearch "
+          + "BulkIngester does not support a zero bulk byte limit.",
+          ElasticsearchSinkConnectorConfig.BULK_SIZE_BYTES_CONFIG);
+    }
+    this.bulkMaxSizeBytes = config.bulkSize() == 0 ? 1L : config.bulkSize();
+
     this.maxConcurrentRequests = Math.max(1, config.maxInFlightRequests() - 1);
     this.bulkIngester = BulkIngester.<SinkRecordAndOffset>of(b -> b
         .client(this.client)
         .maxOperations(config.batchSize())
-        .maxSize(config.bulkSize())
+        .maxSize(bulkMaxSizeBytes)
         .maxConcurrentRequests(maxConcurrentRequests)
         .flushInterval(Math.max(1L, config.lingerMs()), TimeUnit.MILLISECONDS)
         .scheduler(this.bulkScheduler)
@@ -432,8 +445,8 @@ public class ElasticsearchSinkClient {
       return false;
     }
     boolean fillsBatchCount = bulkIngester.pendingOperations() + 1 >= config.batchSize();
-    boolean fillsBatchBytes = config.bulkSize() > 0
-        && bulkIngester.pendingOperationsSize() >= config.bulkSize();
+    boolean fillsBatchBytes = bulkMaxSizeBytes > 0
+        && bulkIngester.pendingOperationsSize() >= bulkMaxSizeBytes;
     return fillsBatchCount || fillsBatchBytes;
   }
 
