@@ -536,6 +536,54 @@ public class ElasticsearchClientTest extends ElasticsearchClientTestBase {
   }
 
   /**
+   * When close() times out with a request still cycling through retries, closeResources() must
+   * fail that request's future so the daemon thread inside BulkIngester.close() can finish.
+   * Without that, the retry discarded by the scheduler shutdown leaves the future pending
+   * forever and the thread (plus the buffered records it retains) leaks — once per connector
+   * restart against an unreachable Elasticsearch.
+   */
+  @Test(timeout = 90_000)
+  public void testCloseTimeoutDoesNotLeakCloseThread() throws Exception {
+    props.put(BATCH_SIZE_CONFIG, "1");
+    props.put(MAX_IN_FLIGHT_REQUESTS_CONFIG, "2");
+    props.put(MAX_RETRIES_CONFIG, "100");
+    props.put(RETRY_BACKOFF_MS_CONFIG, "30000");   // hold the request in retry past close()
+    props.put(FLUSH_TIMEOUT_MS_CONFIG, "2000");
+    config = new ElasticsearchSinkConnectorConfig(props);
+    converter = new DataConverter(config);
+
+    // unique connector name so the thread scan below cannot match other tests' close threads
+    String connectorName = "es-close-leak-test";
+    ElasticsearchSinkClient client = new ElasticsearchSinkClient(config, null, () -> offsetTracker.updateOffsets(), 1, connectorName);
+    client.createIndexOrDataStream(index);
+
+    NetworkErrorContainer delay = new NetworkErrorContainer(container.getContainerName());
+    delay.start();
+
+    try {
+      // request goes in flight against the paused ES and cycles into a 30s retry backoff
+      writeRecord(sinkRecord(0), client);
+
+      // close() must give up at flush.timeout.ms...
+      assertThrows(ConnectException.class, client::close);
+
+      // ...and the daemon close thread must then exit instead of parking forever
+      String closeThreadName = connectorName + "-1-elasticsearch-bulk-ingester-close";
+      org.apache.kafka.test.TestUtils.waitForCondition(
+          () -> Thread.getAllStackTraces().keySet().stream()
+              .noneMatch(t -> t.getName().startsWith(closeThreadName)),
+          15_000,
+          "bulk-ingester close thread is still parked after closeResources()"
+      );
+
+      // let pumba's 10s pause window elapse before stopping it (see the test above)
+      Thread.sleep(config.readTimeoutMs() * 4L);
+    } finally {
+      delay.stop();
+    }
+  }
+
+  /**
    * Test that verifies the following when behavior.on.malformed.docs is set to IGNORE:
    * - The reporter is called which reports all the errors along with bad records to DLQ.
    * - The connector doesn't fail and keeps processing other records.

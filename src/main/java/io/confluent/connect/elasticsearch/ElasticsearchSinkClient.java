@@ -116,6 +116,7 @@ public class ElasticsearchSinkClient {
   private final ElasticsearchClient client;
   private final JsonpMapper jsonpMapper;
   private final RestClient restClient;
+  private final RetryingTransport transport;
   private final ScheduledExecutorService bulkScheduler;
   private final ScheduledExecutorService retryScheduler;
   private final String threadNamePrefix;
@@ -161,7 +162,7 @@ public class ElasticsearchSinkClient {
     this.jsonpMapper = new JacksonJsonpMapper();
     RestClientTransport rawTransport =
         new RestClientTransport(restClient, jsonpMapper);
-    RetryingTransport transport = new RetryingTransport(
+    this.transport = new RetryingTransport(
         rawTransport, retryScheduler, config.maxRetries(), config.retryBackoffMs());
     this.client = new ElasticsearchClient(transport);
 
@@ -573,6 +574,14 @@ public class ElasticsearchSinkClient {
    * Closes all the connection and thread resources of the client.
    */
   private void closeResources() {
+    // Fail in-flight requests BEFORE shutting down the schedulers. BulkIngester's completion
+    // handling submits afterBulk to bulkScheduler before releasing the request slot, so the
+    // scheduler must still be alive; and once retryScheduler.shutdownNow() discards a queued
+    // retry, that request's future could never complete on its own — leaving the daemon thread
+    // inside bulkIngester.close() parked forever, leaking it plus the buffered records.
+    transport.failPendingRequests(
+        new IOException("Request abandoned: the Elasticsearch client is closing."));
+
     bulkScheduler.shutdown();
     retryScheduler.shutdown();
     try {

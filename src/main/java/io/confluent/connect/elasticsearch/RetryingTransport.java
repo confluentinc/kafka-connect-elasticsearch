@@ -21,7 +21,10 @@ import co.elastic.clients.transport.Endpoint;
 import co.elastic.clients.transport.TransportOptions;
 
 import java.io.IOException;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
@@ -40,6 +43,8 @@ final class RetryingTransport implements ElasticsearchTransport {
   private final ScheduledExecutorService retryScheduler;
   private final int maxRetries;
   private final long retryBackoffMs;
+  private final Set<CompletableFuture<?>> pendingRequests = ConcurrentHashMap.newKeySet();
+  private volatile boolean closed = false;
 
   RetryingTransport(ElasticsearchTransport delegate, ScheduledExecutorService retryScheduler,
                      int maxRetries, long retryBackoffMs) {
@@ -61,6 +66,8 @@ final class RetryingTransport implements ElasticsearchTransport {
       RequestT request, Endpoint<RequestT, ResponseT, ErrorT> endpoint,
       TransportOptions options) {
     CompletableFuture<ResponseT> result = new CompletableFuture<>();
+    pendingRequests.add(result);
+    result.whenComplete((resp, err) -> pendingRequests.remove(result));
     attempt(request, endpoint, options, result, 0);
     return result;
   }
@@ -68,21 +75,45 @@ final class RetryingTransport implements ElasticsearchTransport {
   private <RequestT, ResponseT, ErrorT> void attempt(
       RequestT request, Endpoint<RequestT, ResponseT, ErrorT> endpoint,
       TransportOptions options, CompletableFuture<ResponseT> result, int retriesSoFar) {
+    if (result.isDone()) {
+      // failed by failPendingRequests() while this retry sat in the scheduler queue
+      return;
+    }
     delegate.performRequestAsync(request, endpoint, options).whenComplete((resp, err) -> {
       if (err == null) {
         result.complete(resp);
-      } else if (retriesSoFar < maxRetries) {
+      } else if (retriesSoFar < maxRetries && !closed) {
         // Seed with retriesSoFar + 1 (not retriesSoFar): RetryUtil increments before the first
         // call, so seeding with 0 here would halve every backoff versus the sync path.
         long backoffMs = RetryUtil.computeRandomRetryWaitTimeInMillis(
             retriesSoFar + 1, retryBackoffMs);
-        retryScheduler.schedule(
-            () -> attempt(request, endpoint, options, result, retriesSoFar + 1),
-            backoffMs, TimeUnit.MILLISECONDS);
+        try {
+          retryScheduler.schedule(
+              () -> attempt(request, endpoint, options, result, retriesSoFar + 1),
+              backoffMs, TimeUnit.MILLISECONDS);
+        } catch (RejectedExecutionException rejected) {
+          // Scheduler already shut down. Complete the future instead of leaving it pending
+          // forever: BulkIngester.close() waits on every in-flight request.
+          err.addSuppressed(rejected);
+          result.completeExceptionally(err);
+        }
       } else {
         result.completeExceptionally(err);
       }
     });
+  }
+
+  /**
+   * Fails every request still awaiting a response or a scheduled retry, and stops scheduling new
+   * retries. Must be called while the BulkIngester scheduler is still running: BulkIngester's
+   * completion handling submits afterBulk to that scheduler before releasing the request slot,
+   * so failing the futures after the scheduler shutdown would wedge BulkIngester.close() forever.
+   */
+  void failPendingRequests(Exception reason) {
+    closed = true;
+    for (CompletableFuture<?> pending : pendingRequests) {
+      pending.completeExceptionally(reason);
+    }
   }
 
   @Override
