@@ -786,8 +786,7 @@ public class ElasticsearchClientTest extends ElasticsearchClientTestBase {
     // "EXTERNAL" (version maintained by the connector as kafka offset)
     ElasticsearchSinkClient client = new ElasticsearchSinkClient(config, reporter, () -> offsetTracker.updateOffsets(), 1, "elasticsearch-sink") {
       @Override
-      protected boolean handleResponse(BulkResponseItem item, SinkRecordAndOffset ctx,
-                                    long executionId) {
+      protected boolean handleResponse(BulkResponseItem item, SinkRecordAndOffset ctx) {
         // Make it think it was an internal version conflict.
         //
         // Pre-migration this flipped request.versionType(VersionType.INTERNAL) in place. A
@@ -801,8 +800,7 @@ public class ElasticsearchClientTest extends ElasticsearchClientTestBase {
             .versionType(VersionType.Internal)
             .version(ctx.operation.index().version())));
         return super.handleResponse(item,
-            new SinkRecordAndOffset(ctx.sinkRecord, ctx.offsetState, internallyVersioned),
-            executionId);
+            new SinkRecordAndOffset(ctx.sinkRecord, ctx.offsetState, internallyVersioned));
       }
     };
 

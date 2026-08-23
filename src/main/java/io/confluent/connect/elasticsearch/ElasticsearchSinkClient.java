@@ -40,8 +40,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.Callable;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -110,7 +108,6 @@ public class ElasticsearchSinkClient {
   protected final AtomicInteger numBufferedRecords;
   private final AtomicReference<ConnectException> error;
   protected final BulkIngester<SinkRecordAndOffset> bulkIngester;
-  private final ConcurrentMap<Long, List<SinkRecordAndOffset>> inFlightRequests;
   private final ElasticsearchSinkConnectorConfig config;
   private final ErrantRecordReporter reporter;
   private final ElasticsearchClient client;
@@ -144,7 +141,6 @@ public class ElasticsearchSinkClient {
 
     this.numBufferedRecords = new AtomicInteger(0);
     this.error = new AtomicReference<>();
-    this.inFlightRequests = reporter != null ? new ConcurrentHashMap<>() : null;
     this.config = config;
     this.reporter = reporter;
     this.clock = Time.SYSTEM;
@@ -484,9 +480,7 @@ public class ElasticsearchSinkClient {
       @Override
       public void beforeBulk(long executionId, BulkRequest request,
                               List<SinkRecordAndOffset> contexts) {
-        if (inFlightRequests != null) {
-          inFlightRequests.put(executionId, contexts);
-        }
+        // no-op: afterBulk receives the contexts directly, so nothing needs tracking here
       }
 
       @Override
@@ -497,7 +491,7 @@ public class ElasticsearchSinkClient {
         int idx = 0;
         for (BulkResponseItem item : items) {
           SinkRecordAndOffset ctx = idx < contexts.size() ? contexts.get(idx) : null;
-          boolean failed = handleResponse(item, ctx, executionId);
+          boolean failed = handleResponse(item, ctx);
           if (!failed && ctx != null) {
             ctx.offsetState.markProcessed();
           }
@@ -506,7 +500,7 @@ public class ElasticsearchSinkClient {
 
         afterBulkCallback.run();
 
-        bulkFinished(executionId, contexts.size());
+        bulkFinished(contexts.size());
       }
 
       @Override
@@ -514,11 +508,10 @@ public class ElasticsearchSinkClient {
                              List<SinkRecordAndOffset> contexts, Throwable failure) {
         log.warn("Bulk request {} failed", executionId, failure);
         error.compareAndSet(null, new ConnectException("Bulk request failed", failure));
-        bulkFinished(executionId, contexts.size());
+        bulkFinished(contexts.size());
       }
 
-      private void bulkFinished(long executionId, int count) {
-        removeFromInFlightRequests(executionId);
+      private void bulkFinished(int count) {
         inFlightRequestLock.lock();
         try {
           numBufferedRecords.addAndGet(-count);
@@ -658,13 +651,11 @@ public class ElasticsearchSinkClient {
    * Successful responses are ignored. Failed responses are reported to the DLQ and handled
    * according to configuration (ignore or fail). Version conflicts are ignored.
    *
-   * @param item        the response item to process
-   * @param ctx         the context carrying the original record and offset state, or null
-   * @param executionId the execution id of the request
+   * @param item the response item to process
+   * @param ctx  the context carrying the original record and offset state, or null
    * @return true if the record was not successfully processed, and we should not commit its offset
    */
-  protected boolean handleResponse(BulkResponseItem item, SinkRecordAndOffset ctx,
-                                    long executionId) {
+  protected boolean handleResponse(BulkResponseItem item, SinkRecordAndOffset ctx) {
     if (item.error() != null) {
       String errorType = item.error().type();
       if (MALFORMED_DOC_ERRORS.contains(errorType)) {
@@ -759,17 +750,6 @@ public class ElasticsearchSinkClient {
    */
   public boolean isFailed() {
     return error.get() != null;
-  }
-
-  /**
-   * Removes the mapping for bulk request id to records being written.
-   *
-   * @param executionId the execution id of the bulk request
-   */
-  private void removeFromInFlightRequests(long executionId) {
-    if (inFlightRequests != null) {
-      inFlightRequests.remove(executionId);
-    }
   }
 
   /**
