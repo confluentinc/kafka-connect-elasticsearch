@@ -133,6 +133,14 @@ public class ElasticsearchSinkTask extends SinkTask {
     try {
       // This will just trigger an asynchronous execution of any buffered records
       client.flush();
+    } catch (ConnectException e) {
+      // flush() throws when the task is interrupted mid-wait (shutdown) or a bulk failure has
+      // been latched. Either way, don't fail the commit: committing the offsets already marked
+      // processed is safe, and rethrowing would make the framework rewind and redeliver the
+      // whole uncommitted window (duplicate documents for configs without external versioning).
+      // A latched failure still fails the task on the next put().
+      log.warn("Could not flush buffered records before committing offsets; committing offsets "
+          + "for records already acknowledged.", e);
     } catch (IllegalStateException e) {
       // Defensive: BulkIngester.flush() no-ops on a closed ingester rather than throwing (unlike
       // the old BulkProcessor), so this branch is not expected to be reached.

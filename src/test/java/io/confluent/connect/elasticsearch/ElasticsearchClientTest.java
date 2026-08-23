@@ -543,17 +543,17 @@ public class ElasticsearchClientTest extends ElasticsearchClientTestBase {
 
   /**
    * When every bulk request slot is stuck (ES unreachable, requests cycling through retries),
-   * a write that needs a slot must fail within ~flush.timeout.ms instead of parking in
-   * BulkIngester's uninterruptible internal wait, where task cancellation cannot reach it.
-   * The timeout guards against a regression re-introducing the indefinite hang.
+   * a write that needs a slot waits in the connector's own gate instead of BulkIngester's
+   * uninterruptible internal wait — so task cancellation (thread interrupt, Connect's only
+   * mechanism for stopping a stuck task) works. There is deliberately no deadline: sustained
+   * backpressure throttles the task, it does not fail it (pre-migration semantics).
    */
   @Test(timeout = 90_000)
-  public void testWriteFailsInsteadOfBlockingWhenBulkSlotsExhausted() throws Exception {
+  public void testWriteBlocksInterruptiblyWhenBulkSlotsExhausted() throws Exception {
     props.put(BATCH_SIZE_CONFIG, "1");                 // every record is its own bulk request
     props.put(MAX_IN_FLIGHT_REQUESTS_CONFIG, "2");     // one ingester slot (max(1, 2-1))
     props.put(MAX_RETRIES_CONFIG, "100");              // keep the stuck request retrying...
-    props.put(RETRY_BACKOFF_MS_CONFIG, "1000");        // ...well past the flush timeout
-    props.put(FLUSH_TIMEOUT_MS_CONFIG, "2000");
+    props.put(RETRY_BACKOFF_MS_CONFIG, "30000");       // ...for the whole test
     config = new ElasticsearchSinkConnectorConfig(props);
     converter = new DataConverter(config);
 
@@ -567,10 +567,27 @@ public class ElasticsearchClientTest extends ElasticsearchClientTestBase {
       // occupies the only slot; the request hangs, then cycles through retries
       writeRecord(sinkRecord(0), client);
 
-      // needs the slot: must throw, not hang
-      ConnectException e =
-          assertThrows(ConnectException.class, () -> writeRecord(sinkRecord(1), client));
-      assertTrue(e.getMessage(), e.getMessage().contains("bulk request slot"));
+      // needs the slot: waits in the gate...
+      java.util.concurrent.atomic.AtomicReference<Exception> thrown =
+          new java.util.concurrent.atomic.AtomicReference<>();
+      Thread writer = new Thread(() -> {
+        try {
+          writeRecord(sinkRecord(1), client);
+        } catch (Exception e) {
+          thrown.set(e);
+        }
+      }, "gate-writer");
+      writer.start();
+      Thread.sleep(2000);
+      assertTrue("writer should still be waiting, not failed", writer.isAlive());
+
+      // ...and responds to the interrupt Connect uses for task cancellation
+      writer.interrupt();
+      writer.join(10_000);
+      assertFalse("writer thread ignored the interrupt (parked in the library's "
+          + "uninterruptible wait?)", writer.isAlive());
+      assertTrue(String.valueOf(thrown.get()), thrown.get() instanceof ConnectException);
+      assertTrue(thrown.get().getMessage(), thrown.get().getMessage().contains("Interrupted"));
 
       // let pumba's 10s pause window elapse so ES unpauses itself; stopping pumba mid-pause
       // leaves the ES container paused forever (same reason testRetryRecordsOnSocketTimeoutFailure

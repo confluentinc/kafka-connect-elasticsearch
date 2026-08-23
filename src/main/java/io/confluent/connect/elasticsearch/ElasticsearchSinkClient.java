@@ -69,7 +69,6 @@ import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.Behav
 
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.FLUSH_TIMEOUT_MS_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.MAX_BUFFERED_RECORDS_CONFIG;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.MAX_IN_FLIGHT_REQUESTS_CONFIG;
 import static java.util.stream.Collectors.toList;
 
 /**
@@ -404,31 +403,21 @@ public class ElasticsearchSinkClient {
   }
 
   /**
-   * Waits (bounded by flush.timeout.ms, responsive to interruption) while {@code wouldBlock}
-   * holds, so the calling thread never reaches BulkIngester's internal wait — that wait is
-   * uninterruptible (FnCondition.awaitUninterruptibly) and swallows the worker interrupt
-   * Connect uses to cancel a stuck task. The old BulkProcessor blocked on an interruptible
-   * semaphore here, so a stuck task could always be cancelled.
+   * Waits while {@code wouldBlock} holds, so the calling thread never reaches BulkIngester's
+   * internal wait — that wait is uninterruptible (FnCondition.awaitUninterruptibly) and
+   * swallows the worker interrupt Connect uses to cancel a stuck task. Like the old
+   * BulkProcessor's interruptible semaphore, this wait has no deadline: sustained backpressure
+   * throttles the task rather than failing it, and the wait ends when a slot frees, the task
+   * is interrupted (cancellation), or a bulk failure is latched (retries exhausted — the
+   * latched error surfaces here with its real cause instead of a slots-stayed-busy message).
    */
   private void verifyFreeBulkSlot(BooleanSupplier wouldBlock) {
-    long maxWaitTime = clock.milliseconds() + config.flushTimeoutMs();
     while (wouldBlock.getAsBoolean()) {
       if (Thread.currentThread().isInterrupted()) {
         throw new ConnectException("Interrupted while waiting for a free bulk request slot.");
       }
+      throwIfFailed();
       clock.sleep(WAIT_TIME_MS);
-      if (clock.milliseconds() > maxWaitTime) {
-        throw new ConnectException(
-            String.format("All %d bulk request slot(s) stayed busy longer than %d ms; "
-                            + "Elasticsearch is not keeping up with the write load. "
-                            + "Consider increasing %s or %s.",
-                    maxConcurrentRequests,
-                    config.flushTimeoutMs(),
-                    FLUSH_TIMEOUT_MS_CONFIG,
-                    MAX_IN_FLIGHT_REQUESTS_CONFIG
-            )
-        );
-      }
     }
   }
 

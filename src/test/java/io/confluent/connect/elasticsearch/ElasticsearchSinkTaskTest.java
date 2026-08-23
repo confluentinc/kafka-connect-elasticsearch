@@ -333,6 +333,18 @@ public class ElasticsearchSinkTaskTest {
   }
 
   @Test
+  public void testFlushConnectExceptionDoesNotFailCommit() {
+    setUpTask();
+    doThrow(new ConnectException("Interrupted while waiting for a free bulk request slot."))
+        .when(client).flush();
+
+    // must not rethrow: an escaping exception makes the framework rewind to the last committed
+    // offsets and redeliver the whole window (duplicates for configs without external versions)
+    task.preCommit(null);
+    verify(client, times(1)).flush();
+  }
+
+  @Test
   public void testStartAndStop() {
     task = new ElasticsearchSinkTask();
     task.initialize(context);
