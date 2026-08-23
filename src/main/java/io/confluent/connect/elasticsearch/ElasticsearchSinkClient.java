@@ -699,9 +699,11 @@ public class ElasticsearchSinkClient {
         // remain the key's value in any case.
         boolean isExternalVersioned = ctx != null && isExternallyVersioned(ctx.operation);
         if (!isExternalVersioned) {
-          log.warn("Version conflict for operation {} on document '{}' in index '{}'.",
+          // The document id is the Kafka record key when key.ignore=false, so it stays out of
+          // WARN (and DEBUG below) and appears only at TRACE, matching the pre-migration split.
+          log.warn("Version conflict for operation {} version {} in index '{}'.",
                   item.operationType(),
-                  item.id(),
+                  item.version(),
                   item.index()
           );
 
@@ -717,10 +719,10 @@ public class ElasticsearchSinkClient {
         } else {
           // This is an out-of-order or (more likely) repeated topic offset.  Allow the
           // higher offset's value for this key to remain.
-          log.debug("Ignoring EXTERNAL version conflict for operation {} on document '{}'"
+          log.debug("Ignoring EXTERNAL version conflict for operation {} version {}"
                           + " in index '{}'.",
                   item.operationType(),
-                  item.id(),
+                  item.version(),
                   item.index()
           );
         }
