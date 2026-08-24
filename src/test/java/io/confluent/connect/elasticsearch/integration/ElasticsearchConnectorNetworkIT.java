@@ -146,11 +146,10 @@ public class ElasticsearchConnectorNetworkIT extends BaseConnectorIT {
 
     BlockingTransformer blockingTransformer = BlockingTransformer.getInstance(wireMockRule);
 
-    // TODO MAX_IN_FLIGHT_REQUESTS_CONFIG is misleading (it allows 1 less concurrent request
-    // than configure), but fixing it would be a breaking change.
-    // Consider allowing 0 (blocking) and removing "-1"
+    // As of 16.0, max.in.flight.requests=N allows exactly N concurrent requests
+    // (pre-16.0 it allowed N-1).
     await().untilAsserted(() -> {
-      assertThat(blockingTransformer.queueLength()).isEqualTo(3);
+      assertThat(blockingTransformer.queueLength()).isEqualTo(4);
     });
 
     blockingTransformer.release(10);

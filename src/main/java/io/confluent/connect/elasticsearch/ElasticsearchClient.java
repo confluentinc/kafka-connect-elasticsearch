@@ -214,9 +214,11 @@ public class ElasticsearchClient {
         .client(dispatchingAsyncClient)
         .maxOperations(config.batchSize())
         .maxSize(maxBulkSizeBytes)
-        // BulkProcessor's concurrentRequests was set to maxInFlightRequests - 1 (0 meant
-        // synchronous execution); keep the same effective number of in-flight requests.
-        .maxConcurrentRequests(Math.max(1, config.maxInFlightRequests() - 1))
+        // Direct total cap on concurrent bulk requests. Before 16.0 the connector passed
+        // maxInFlightRequests - 1 to BulkProcessor (whose parameter counted requests beyond
+        // the one being built), so max.in.flight.requests=N effectively allowed N-1 requests;
+        // as of 16.0 the config means what it says.
+        .maxConcurrentRequests(config.maxInFlightRequests())
         .flushInterval(flushIntervalMs, TimeUnit.MILLISECONDS)
         // Retries HTTP 429 (too many requests) per operation. All other bulk item errors are
         // handled by the listener; transport failures are retried by re-adding the batch.
