@@ -22,6 +22,7 @@ import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfi
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.DATA_STREAM_DATASET_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.DATA_STREAM_TYPE_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_KEY_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BULK_SIZE_BYTES_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.LINGER_MS_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.MAX_BUFFERED_RECORDS_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.MAX_IN_FLIGHT_REQUESTS_CONFIG;
@@ -30,6 +31,7 @@ import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfi
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.WRITE_METHOD_CONFIG;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -60,10 +62,12 @@ import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.sink.ErrantRecordReporter;
 import org.apache.kafka.connect.sink.SinkRecord;
-import org.elasticsearch.action.DocWriteRequest;
-import org.elasticsearch.action.bulk.BulkItemResponse;
-import org.elasticsearch.index.VersionType;
-import org.elasticsearch.search.SearchHit;
+import co.elastic.clients.elasticsearch._types.mapping.Property;
+import co.elastic.clients.elasticsearch._types.mapping.TypeMapping;
+import co.elastic.clients.elasticsearch.core.bulk.BulkOperation;
+import co.elastic.clients.elasticsearch.core.bulk.BulkResponseItem;
+import co.elastic.clients.elasticsearch.core.search.Hit;
+import co.elastic.clients.json.JsonData;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.BeforeClass;
@@ -86,8 +90,7 @@ public class ElasticsearchClientTest extends ElasticsearchClientTestBase {
     props.put(LINGER_MS_CONFIG, "1000");
     config = new ElasticsearchSinkConnectorConfig(props);
     converter = new DataConverter(config);
-    helperClient = new ElasticsearchHelperClient(container.getConnectionUrl(), config,
-        container.shouldStartClientInCompatibilityMode());
+    helperClient = new ElasticsearchHelperClient(container.getConnectionUrl(), config);
     helperClient.waitForConnection(30000);
     offsetTracker = mock(OffsetTracker.class);
   }
@@ -97,6 +100,11 @@ public class ElasticsearchClientTest extends ElasticsearchClientTestBase {
     if (helperClient != null && helperClient.indexExists(index)){
       helperClient.deleteIndex(index, config.isDataStream());
     }
+  }
+
+  @SuppressWarnings("unchecked")
+  private static Map<String, Object> sourceAsMap(Hit<JsonData> hit) {
+    return hit.source() == null ? new HashMap<>() : hit.source().to(Map.class);
   }
 
   @Test
@@ -113,11 +121,9 @@ public class ElasticsearchClientTest extends ElasticsearchClientTestBase {
     ElasticsearchClient client = new ElasticsearchClient(config, null, () -> offsetTracker.updateOffsets(), 1, "elasticsearch-sink") {
       @Override
       public void close() {
-        try {
-          if (!bulkProcessor.awaitClose(1, TimeUnit.MILLISECONDS)) {
-            throw new ConnectException("Failed to process all outstanding requests in time.");
-          }
-        } catch (InterruptedException e) {}
+        if (numBufferedRecords.get() > 0) {
+          throw new ConnectException("Failed to process all outstanding requests in time.");
+        }
       }
     };
 
@@ -202,7 +208,6 @@ public class ElasticsearchClientTest extends ElasticsearchClientTestBase {
   }
 
   @Test
-  @SuppressWarnings("unchecked")
   public void testCreateMapping() throws IOException {
     ElasticsearchClient client = new ElasticsearchClient(config, null, () -> offsetTracker.updateOffsets(), 1, "elasticsearch-sink");
     client.createIndexOrDataStream(index);
@@ -211,17 +216,16 @@ public class ElasticsearchClientTest extends ElasticsearchClientTestBase {
 
     assertTrue(client.hasMapping(index));
 
-    Map<String, Object> mapping = helperClient.getMapping(index).sourceAsMap();
-    assertTrue(mapping.containsKey("properties"));
-    Map<String, Object> props = (Map<String, Object>) mapping.get("properties");
-    assertTrue(props.containsKey("offset"));
-    assertTrue(props.containsKey("another"));
-    Map<String, Object> offset = (Map<String, Object>) props.get("offset");
-    assertEquals("integer", offset.get("type"));
-    assertEquals(0, offset.get("null_value"));
-    Map<String, Object> another = (Map<String, Object>) props.get("another");
-    assertEquals("integer", another.get("type"));
-    assertEquals(0, another.get("null_value"));
+    TypeMapping mapping = helperClient.getMapping(index);
+    assertNotNull(mapping);
+    assertTrue(mapping.properties().containsKey("offset"));
+    assertTrue(mapping.properties().containsKey("another"));
+    Property offset = mapping.properties().get("offset");
+    assertTrue(offset.isInteger());
+    assertEquals(0, offset.integer().nullValue().intValue());
+    Property another = mapping.properties().get("another");
+    assertTrue(another.isInteger());
+    assertEquals(0, another.integer().nullValue().intValue());
     client.close();
   }
 
@@ -242,6 +246,49 @@ public class ElasticsearchClientTest extends ElasticsearchClientTestBase {
     client.createIndexOrDataStream(index);
 
     assertFalse(client.hasMapping(index));
+    client.close();
+  }
+
+  @Test
+  public void testHasMappingWithoutProperties() throws Exception {
+    // A pre-created mapping that only sets dynamic behavior has no properties, but must still
+    // count as existing so the connector does not overwrite it.
+    helperClient.createIndex(index, "{\"dynamic\": \"strict\"}");
+    ElasticsearchClient client = new ElasticsearchClient(config, null, () -> offsetTracker.updateOffsets(), 1, "elasticsearch-sink");
+
+    assertTrue(client.hasMapping(index));
+    client.close();
+  }
+
+  @Test
+  public void testWritesWithZeroLingerMs() throws Exception {
+    // linger.ms=0 is valid and used to mean "flush immediately"; the BulkIngester flush timer
+    // does not accept 0, so the client clamps it instead of failing at construction time.
+    props.put(LINGER_MS_CONFIG, "0");
+    config = new ElasticsearchSinkConnectorConfig(props);
+    ElasticsearchClient client = new ElasticsearchClient(config, null, () -> offsetTracker.updateOffsets(), 1, "elasticsearch-sink");
+    client.createIndexOrDataStream(index);
+
+    writeRecord(sinkRecord(0), client);
+    client.flush();
+
+    waitUntilRecordsInES(1);
+    client.close();
+  }
+
+  @Test
+  public void testWritesWithZeroBulkSizeBytes() throws Exception {
+    // bulk.size.bytes=0 is valid and used to flush on every record; the BulkIngester treats
+    // only negative sizes as unlimited, so the client clamps 0 instead of blocking every add.
+    props.put(BULK_SIZE_BYTES_CONFIG, "0");
+    config = new ElasticsearchSinkConnectorConfig(props);
+    ElasticsearchClient client = new ElasticsearchClient(config, null, () -> offsetTracker.updateOffsets(), 1, "elasticsearch-sink");
+    client.createIndexOrDataStream(index);
+
+    writeRecord(sinkRecord(0), client);
+    client.flush();
+
+    waitUntilRecordsInES(1);
     client.close();
   }
 
@@ -360,10 +407,11 @@ public class ElasticsearchClientTest extends ElasticsearchClientTestBase {
     client.flush();
 
     waitUntilRecordsInES(3);
-    for (SearchHit hit : helperClient.search(index)) {
-      if (hit.getId().equals("key0")) {
-        assertEquals(3, hit.getSourceAsMap().get("offset"));
-        assertEquals(0, hit.getSourceAsMap().get("another"));
+    for (Hit<JsonData> hit : helperClient.search(index)) {
+      if (hit.id().equals("key0")) {
+        Map<String, Object> source = sourceAsMap(hit);
+        assertEquals(3, source.get("offset"));
+        assertEquals(0, source.get("another"));
       }
     }
 
@@ -669,13 +717,21 @@ public class ElasticsearchClientTest extends ElasticsearchClientTestBase {
     // "INTERNAL" (version maintained by Elasticsearch) rather than
     // "EXTERNAL" (version maintained by the connector as kafka offset)
     ElasticsearchClient client = new ElasticsearchClient(config, reporter, () -> offsetTracker.updateOffsets(), 1, "elasticsearch-sink") {
-      protected boolean handleResponse(BulkItemResponse response, DocWriteRequest<?> request,
-                                    long executionId) {
-        // Make it think it was an internal version conflict.
-        // Note that we don't make any attempt to reset the response version number,
-        // which will be -1 here.
-        request.versionType(VersionType.INTERNAL);
-        return super.handleResponse(response, request, executionId);
+      @Override
+      protected boolean handleResponse(BulkResponseItem response, BulkOpContext context) {
+        // Make it think it was an internal version conflict by stripping the external
+        // versioning from the operation before it is interpreted. Note that we don't
+        // make any attempt to reset the response version number.
+        BulkOpContext internalContext = context;
+        if (context.operation.isIndex()) {
+          BulkOperation internalOperation = BulkOperation.of(b -> b.index(i -> i
+              .index(context.operation.index().index())
+              .id(context.operation.index().id())
+              .document(context.operation.index().document())));
+          internalContext =
+              new BulkOpContext(context.sinkRecord, context.offsetState, internalOperation);
+        }
+        return super.handleResponse(response, internalContext);
       }
     };
 
@@ -765,26 +821,19 @@ public class ElasticsearchClientTest extends ElasticsearchClientTestBase {
     client.flush();
     waitUntilRecordsInES(10);
 
-    // Expected thread name pattern should be: {connectorName}-{taskId}-elasticsearch-bulk-executor-{number}
-    String expectedPrefix = "elasticsearch-sink-1-elasticsearch-bulk-executor-";
+    // Bulk requests are executed by the BulkIngester on the low-level rest client's
+    // I/O threads; the connector-owned named thread is the bulk retry scheduler:
+    // {connectorName}-{taskId}-elasticsearch-bulk-retry
+    String expectedName = "elasticsearch-sink-1-elasticsearch-bulk-retry";
 
-    // Check that threads with the expected name pattern exist
+    // Check that a thread with the expected name exists
     Set<String> threadNames = Thread.getAllStackTraces().keySet().stream()
             .map(Thread::getName)
-            .filter(name -> name.startsWith(expectedPrefix))
+            .filter(name -> name.equals(expectedName))
             .collect(java.util.stream.Collectors.toSet());
 
-    assertTrue("Expected threads with prefix " + expectedPrefix + " to exist",
+    assertTrue("Expected thread named " + expectedName + " to exist",
             !threadNames.isEmpty());
-
-    // Verify thread names follow the expected pattern
-    for (String threadName : threadNames) {
-      assertTrue("Thread name should start with expected prefix",
-              threadName.startsWith(expectedPrefix));
-
-      String suffix = threadName.substring(expectedPrefix.length());
-      assertTrue("Thread name should end with a number", suffix.matches("\\d+"));
-    }
 
     client.close();
   }

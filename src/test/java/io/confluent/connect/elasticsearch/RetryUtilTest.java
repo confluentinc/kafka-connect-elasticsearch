@@ -51,6 +51,14 @@ public class RetryUtilTest {
   }
 
   @Test
+  public void computeRetryBackoffForZeroBackoff() {
+    // A zero backoff means retry immediately; it must not throw from the random range.
+    assertEquals(0L, RetryUtil.computeRandomRetryWaitTimeInMillis(0, 0L));
+    assertEquals(0L, RetryUtil.computeRandomRetryWaitTimeInMillis(1, 0L));
+    assertEquals(0L, RetryUtil.computeRandomRetryWaitTimeInMillis(10, 0L));
+  }
+
+  @Test
   public void computeRetryBackoffForNegativeRetryTimes() {
     assertComputeRetryInRange(1, -100L);
     assertComputeRetryInRange(10, -100L);
