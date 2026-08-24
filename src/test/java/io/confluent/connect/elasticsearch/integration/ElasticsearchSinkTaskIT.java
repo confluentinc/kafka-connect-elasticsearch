@@ -55,7 +55,6 @@ import io.confluent.connect.elasticsearch.ElasticsearchSinkTask;
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.any;
 import static com.github.tomakehurst.wiremock.client.WireMock.anyUrl;
-import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.stubFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
@@ -71,6 +70,7 @@ import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfi
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.WRITE_METHOD_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.WriteMethod;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.*;
+import static io.confluent.connect.elasticsearch.helper.ElasticSearchMockUtil.addMinimalHeaders;
 import static io.confluent.connect.elasticsearch.helper.ElasticSearchMockUtil.basicEmptyOk;
 import static io.confluent.connect.elasticsearch.integration.ElasticsearchConnectorNetworkIT.errorBulkResponse;
 import static java.util.stream.Collectors.toList;
@@ -116,6 +116,12 @@ public class ElasticsearchSinkTaskIT {
   // Convenience drop-in replacement for static import of WireMock.ok()
   private static ResponseDefinitionBuilder ok() {
     return basicEmptyOk();
+  }
+
+  // Convenience drop-in replacement for static import of WireMock.okJson(): the new
+  // Elasticsearch client rejects responses without the X-Elastic-Product header.
+  private static ResponseDefinitionBuilder okJson(String body) {
+    return addMinimalHeaders(com.github.tomakehurst.wiremock.client.WireMock.okJson(body));
   }
 
   @Before
@@ -184,21 +190,24 @@ public class ElasticsearchSinkTaskIT {
             .collect(toList());
     task.put(records);
 
-    // All is safe to commit
-    Map<TopicPartition, OffsetAndMetadata> currentOffsets =
+    // All is safe to commit. Bulk requests execute asynchronously, so wait for the
+    // responses to be processed.
+    final Map<TopicPartition, OffsetAndMetadata> allOffsets =
             ImmutableMap.of(tp, new OffsetAndMetadata(6));
-    assertThat(task.preCommit(currentOffsets))
-            .isEqualTo(currentOffsets);
+    await().untilAsserted(() -> assertThat(task.preCommit(allOffsets))
+            .isEqualTo(allOffsets));
 
-    // Now check that we actually fail and offsets are not past the failed record
+    // Now check that we actually fail and offsets are not past the failed record.
+    // The failure is detected asynchronously and thrown from a subsequent put call.
     props.put(BEHAVIOR_ON_MALFORMED_DOCS_CONFIG, "fail");
     task.initialize(context);
     task.start(props);
 
-    assertThatThrownBy(() -> task.put(records))
+    await().untilAsserted(() -> assertThatThrownBy(() -> task.put(records))
             .isInstanceOf(ConnectException.class)
-            .hasMessageContaining("Indexing record failed");
-    currentOffsets = ImmutableMap.of(tp, new OffsetAndMetadata(0));
+            .hasMessageContaining("Indexing record failed"));
+    Map<TopicPartition, OffsetAndMetadata> currentOffsets =
+            ImmutableMap.of(tp, new OffsetAndMetadata(0));
     assertThat(getOffsetOrZero(task.preCommit(currentOffsets), tp))
             .isLessThanOrEqualTo(1);
   }
@@ -238,11 +247,12 @@ public class ElasticsearchSinkTaskIT {
             sinkRecord(tp, 2));
     task.put(records);
 
-    // All is safe to commit
-    Map<TopicPartition, OffsetAndMetadata> currentOffsets =
+    // All is safe to commit. Bulk requests execute asynchronously, so wait for the
+    // responses to be processed.
+    final Map<TopicPartition, OffsetAndMetadata> allOffsets =
             ImmutableMap.of(tp, new OffsetAndMetadata(3));
-    assertThat(task.preCommit(currentOffsets))
-            .isEqualTo(currentOffsets);
+    await().untilAsserted(() -> assertThat(task.preCommit(allOffsets))
+            .isEqualTo(allOffsets));
 
     // Now check that we actually fail and offsets are not past the failed record
     props.put(DROP_INVALID_MESSAGE_CONFIG, "false");
@@ -254,8 +264,9 @@ public class ElasticsearchSinkTaskIT {
             .isInstanceOf(DataException.class)
             .hasMessageContaining("Key is used as document id and can not be null");
 
-    currentOffsets = ImmutableMap.of(tp, new OffsetAndMetadata(0));
-    assertThat(task.preCommit(currentOffsets).get(tp).offset())
+    Map<TopicPartition, OffsetAndMetadata> currentOffsets =
+            ImmutableMap.of(tp, new OffsetAndMetadata(0));
+    assertThat(getOffsetOrZero(task.preCommit(currentOffsets), tp))
             .isLessThanOrEqualTo(1);
   }
 
@@ -287,11 +298,12 @@ public class ElasticsearchSinkTaskIT {
             sinkRecord(tp, 2));
     task.put(records);
 
-    // All is safe to commit
-    Map<TopicPartition, OffsetAndMetadata> currentOffsets =
+    // All is safe to commit. Bulk requests execute asynchronously, so wait for the
+    // responses to be processed.
+    final Map<TopicPartition, OffsetAndMetadata> allOffsets =
             ImmutableMap.of(tp, new OffsetAndMetadata(3));
-    assertThat(task.preCommit(currentOffsets))
-            .isEqualTo(currentOffsets);
+    await().untilAsserted(() -> assertThat(task.preCommit(allOffsets))
+            .isEqualTo(allOffsets));
 
     // Now check that we actually fail and offsets are not past the failed record
     props.put(BEHAVIOR_ON_NULL_VALUES_CONFIG, "fail");
@@ -301,8 +313,9 @@ public class ElasticsearchSinkTaskIT {
     assertThatThrownBy(() -> task.put(records))
             .isInstanceOf(DataException.class)
             .hasMessageContaining("has a null value ");
-    currentOffsets = ImmutableMap.of(tp, new OffsetAndMetadata(0));
-    assertThat(task.preCommit(currentOffsets).get(tp).offset())
+    Map<TopicPartition, OffsetAndMetadata> currentOffsets =
+            ImmutableMap.of(tp, new OffsetAndMetadata(0));
+    assertThat(getOffsetOrZero(task.preCommit(currentOffsets), tp))
             .isLessThanOrEqualTo(1);
   }
 
@@ -318,7 +331,7 @@ public class ElasticsearchSinkTaskIT {
 
     wireMockRule.stubFor(post(urlPathEqualTo("/_bulk"))
             .withRequestBody(WireMock.containing("{\"doc_num\":1}"))
-            .willReturn(aResponse().withFixedDelay(60_000)));
+            .willReturn(addMinimalHeaders(aResponse().withFixedDelay(60_000))));
 
     Map<String, String> props = createProps();
     props.put(READ_TIMEOUT_MS_CONFIG, "1000");
@@ -420,7 +433,7 @@ public class ElasticsearchSinkTaskIT {
 
     wireMockRule.stubFor(post(urlPathEqualTo("/_bulk"))
             .withRequestBody(WireMock.containing("{\"doc_num\":1}"))
-            .willReturn(aResponse().withFixedDelay(60_000)));
+            .willReturn(addMinimalHeaders(aResponse().withFixedDelay(60_000))));
 
     Map<String, String> props = createProps();
     props.put(READ_TIMEOUT_MS_CONFIG, "1000");

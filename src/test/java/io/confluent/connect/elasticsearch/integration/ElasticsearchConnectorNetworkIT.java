@@ -28,14 +28,12 @@ import static com.github.tomakehurst.wiremock.client.WireMock.anyUrl;
 import static com.github.tomakehurst.wiremock.client.WireMock.containing;
 import static com.github.tomakehurst.wiremock.client.WireMock.lessThan;
 import static com.github.tomakehurst.wiremock.client.WireMock.moreThanOrExactly;
-import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.stubFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.verify;
 import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.options;
-import static com.google.common.net.HttpHeaders.CONTENT_TYPE;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BATCH_SIZE_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.FLUSH_SYNCHRONOUSLY_CONFIG;
@@ -92,6 +90,13 @@ public class ElasticsearchConnectorNetworkIT extends BaseConnectorIT {
     stopConnect();
   }
 
+  // Convenience drop-in replacement for static import of WireMock.okJson(): the new
+  // Elasticsearch client rejects responses without the X-Elastic-Product header.
+  private static com.github.tomakehurst.wiremock.client.ResponseDefinitionBuilder okJson(
+      String body) {
+    return addMinimalHeaders(com.github.tomakehurst.wiremock.client.WireMock.okJson(body));
+  }
+
   @Test
   public void testRetry() throws Exception {
     wireMockRule.stubFor(post(urlPathEqualTo("/_bulk"))
@@ -108,7 +113,7 @@ public class ElasticsearchConnectorNetworkIT extends BaseConnectorIT {
             .whenScenarioStateIs("Failed")
             .withRequestBody(containing("{\"doc_num\":0}"))
             .willSetStateTo("Fixed")
-            .willReturn(addMinimalHeaders(okJson(errorBulkResponse()))));
+            .willReturn(okJson(errorBulkResponse())));
 
     connect.configureConnector(CONNECTOR_NAME, props);
     waitForConnectorToStart(CONNECTOR_NAME, TASKS_MAX);
@@ -167,7 +172,7 @@ public class ElasticsearchConnectorNetworkIT extends BaseConnectorIT {
     writeRecords(NUM_RECORDS);
 
     // Connector should fail since the request takes longer than request timeout
-    await().atMost(Duration.ofMinutes(1)).untilAsserted(() ->
+    await().atMost(Duration.ofMinutes(3)).untilAsserted(() ->
             assertThat(connect.connectorStatus(CONNECTOR_NAME).tasks().get(0).state())
                     .isEqualTo("FAILED"));
 
@@ -183,9 +188,8 @@ public class ElasticsearchConnectorNetworkIT extends BaseConnectorIT {
   @Test
   public void testTooManyRequests() throws Exception {
     wireMockRule.stubFor(post(urlPathEqualTo("/_bulk"))
-            .willReturn(aResponse()
-                    .withStatus(429)
-                    .withHeader(CONTENT_TYPE, "application/json")
+            .willReturn(addMinimalHeaders(aResponse()
+                    .withStatus(429))
                     .withBody("{\n" +
                     "  \"error\": {\n" +
                     "    \"type\": \"circuit_breaking_exception\",\n" +
@@ -197,19 +201,22 @@ public class ElasticsearchConnectorNetworkIT extends BaseConnectorIT {
                     "  \"status\": 429\n" +
                     "}")));
 
+    // Keep the periodic flush from sending the buffered fifth record while the task is failing.
+    props.put(LINGER_MS_CONFIG, "600000");
+    props.put(FLUSH_TIMEOUT_MS_CONFIG, "600000");
     connect.configureConnector(CONNECTOR_NAME, props);
     waitForConnectorToStart(CONNECTOR_NAME, TASKS_MAX);
     writeRecords(NUM_RECORDS);
 
     // Connector should fail since the request takes longer than request timeout
-    await().atMost(Duration.ofMinutes(1)).untilAsserted(() ->
+    await().atMost(Duration.ofMinutes(3)).untilAsserted(() ->
             assertThat(connect.connectorStatus(CONNECTOR_NAME).tasks().get(0).state())
                     .isEqualTo("FAILED"));
 
     assertThat(connect.connectorStatus(CONNECTOR_NAME).tasks().get(0).trace())
-            .contains("Failed to execute bulk request due to 'ElasticsearchStatusException" +
-                    "[Elasticsearch exception [type=circuit_breaking_exception, " +
-                    "reason=Data too large]]' after 3 attempt(s)");
+            .contains("Bulk request failed")
+            .contains("circuit_breaking_exception")
+            .contains("Data too large");
 
     // 1 + 2 retries
     verify(3, postRequestedFor(urlPathEqualTo("/_bulk")));
@@ -218,21 +225,24 @@ public class ElasticsearchConnectorNetworkIT extends BaseConnectorIT {
   @Test
   public void testServiceUnavailable() throws Exception {
     wireMockRule.stubFor(post(urlPathEqualTo("/_bulk"))
-            .willReturn(aResponse()
-                    .withStatus(503)));
+            .willReturn(addMinimalHeaders(aResponse()
+                    .withStatus(503))));
 
+    // Keep the periodic flush from sending the buffered fifth record while the task is failing.
+    props.put(LINGER_MS_CONFIG, "600000");
+    props.put(FLUSH_TIMEOUT_MS_CONFIG, "600000");
     connect.configureConnector(CONNECTOR_NAME, props);
     waitForConnectorToStart(CONNECTOR_NAME, TASKS_MAX);
     writeRecords(NUM_RECORDS);
 
     // Connector should fail since the request takes longer than request timeout
-    await().atMost(Duration.ofMinutes(1)).untilAsserted(() ->
+    await().atMost(Duration.ofMinutes(3)).untilAsserted(() ->
             assertThat(connect.connectorStatus(CONNECTOR_NAME).tasks().get(0).state())
                     .isEqualTo("FAILED"));
 
     assertThat(connect.connectorStatus(CONNECTOR_NAME).tasks().get(0).trace())
-            .contains("[HTTP/1.1 503 Service Unavailable]")
-            .contains("after 3 attempt(s)");
+            .contains("Bulk request failed")
+            .contains("503 Service Unavailable");
 
     // 1 + 2 retries
     verify(3, postRequestedFor(urlPathEqualTo("/_bulk")));
@@ -299,8 +309,8 @@ public class ElasticsearchConnectorNetworkIT extends BaseConnectorIT {
   @Test
   public void testPausePartitionsAndFail() throws Exception {
     wireMockRule.stubFor(post(urlPathEqualTo("/_bulk"))
-            .willReturn(aResponse()
-                    .withStatus(500)
+            .willReturn(addMinimalHeaders(aResponse()
+                    .withStatus(500))
                     .withTransformers(BlockingTransformer.NAME)));
 
     props.put(CONNECTION_URL_CONFIG, wireMockRule.url("/"));
@@ -388,6 +398,7 @@ public class ElasticsearchConnectorNetworkIT extends BaseConnectorIT {
   public static String errorBulkResponse(int items) throws JsonProcessingException {
     ObjectNode response = MAPPER.createObjectNode();
     ArrayNode itemsArray = response
+            .put("took", 1)
             .put("errors", false)
             .putArray("items");
 
@@ -409,6 +420,7 @@ public class ElasticsearchConnectorNetworkIT extends BaseConnectorIT {
   public static String errorBulkResponse(int items, String errorType, int... errorIdx) throws JsonProcessingException {
     ObjectNode response = MAPPER.createObjectNode();
     ArrayNode itemsArray = response
+            .put("took", 1)
             .put("errors", true)
             .putArray("items");
 

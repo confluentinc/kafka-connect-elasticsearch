@@ -22,20 +22,19 @@ public class ElasticSearchMockUtil {
    */
   static public ObjectNode addStandardVersionInfo(ObjectNode response) {
     // Note that "version.number" is somewhat arbitrary for our testing purposes,
-    // although for some version (i.e. [7.0,7.14]) it checks for other fields,
-    // so the mock might fail in that case.
+    // but it should be at least 8.0 since the connector requires ES 8+.
     response.put("name", "KafkaESClusterNodeold_1")
         .put("cluster_name", "KafkaESCluster")
         .put("cluster_uuid", "83EJmDNrRVirBWcZDgs9ew")
         .put("tagline", "You Know, for Search")
         .putObject("version")
-        .put("number", "7.16.3")
+        .put("number", "8.19.19")
         .put("build_hash", "83EJmDNrRVirBWcZDgs9ew")
         .put("build_date", "2018-04-12T16:25:14.838Z")
         .put("build_snapshot", "false")
-        .put("lucene_version", "6.6.1")
-        .put("minimum_wire_compatibility_version", "1.1.1")
-        .put("minimum_index_compatibility_version", "2.2.2");
+        .put("lucene_version", "9.12.0")
+        .put("minimum_wire_compatibility_version", "7.17.0")
+        .put("minimum_index_compatibility_version", "7.0.0");
     return response;
   }
 
