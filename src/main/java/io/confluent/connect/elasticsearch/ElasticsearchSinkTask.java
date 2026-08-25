@@ -144,7 +144,9 @@ public class ElasticsearchSinkTask extends SinkTask {
   @Override
   public void stop() {
     log.debug("Stopping Elasticsearch client.");
-    client.close();
+    if (client != null) {
+      client.close();
+    }
   }
 
   @Override
