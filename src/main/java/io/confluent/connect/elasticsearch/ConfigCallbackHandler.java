@@ -151,6 +151,20 @@ public class ConfigCallbackHandler implements HttpClientConfigCallback {
   }
 
   /**
+   * Parses {@code url} into an {@link HttpHost}, redacting any embedded {@code user:password@}
+   * credential from the thrown exception's message if parsing fails. {@link HttpHost#create}
+   * otherwise echoes the raw url verbatim in a malformed-url {@link IllegalArgumentException}.
+   */
+  static HttpHost createRedactedHttpHost(String url) {
+    try {
+      return HttpHost.create(url);
+    } catch (IllegalArgumentException e) {
+      throw new IllegalArgumentException(
+          "Invalid Elasticsearch connection URL: " + redactUserInfo(url));
+    }
+  }
+
+  /**
    * Configures HTTP authentication and proxy authentication according to the client configuration.
    *
    * @param builder the HttpAsyncClientBuilder
@@ -159,7 +173,7 @@ public class ConfigCallbackHandler implements HttpClientConfigCallback {
     CredentialsProvider credentialsProvider = new BasicCredentialsProvider();
     if (config.isAuthenticatedConnection()) {
       config.connectionUrls().forEach(url -> credentialsProvider.setCredentials(
-              new AuthScope(HttpHost.create(url)),
+              new AuthScope(createRedactedHttpHost(url)),
               new UsernamePasswordCredentials(config.username(), config.password().value())
           )
       );
