@@ -5,17 +5,24 @@ import static org.apache.kafka.common.config.SslConfigs.SSL_ENDPOINT_IDENTIFICAT
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.SecurityProtocol;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.config.SslConfigs;
 import org.apache.kafka.common.config.types.Password;
+import org.apache.log4j.AppenderSkeleton;
+import org.apache.log4j.Level;
+import org.apache.log4j.spi.LoggingEvent;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -205,6 +212,58 @@ public class ElasticsearchSinkConnectorConfigTest {
   public void shouldNotAllowInvalidUrl() {
     props.put(CONNECTION_URL_CONFIG, ".com:/bbb/dfs,http://valid.com");
     new ElasticsearchSinkConnectorConfig(props);
+  }
+
+  @Test
+  public void shouldRedactCredentialFromInvalidUrlErrorMessage() {
+    // A space is illegal in a URI authority and forces new URI(url) to throw; the raw credential
+    // must not survive into the ConfigException's own message or its `value` field, since Kafka's
+    // own config-validation machinery renders that value verbatim in its generated message too.
+    props.put(CONNECTION_URL_CONFIG, "https://user:p@ssw0rd@bad host.com");
+    ConfigException e = assertThrows(
+        ConfigException.class,
+        () -> new ElasticsearchSinkConnectorConfig(props)
+    );
+    assertFalse(e.getMessage().contains("p@ssw0rd"));
+  }
+
+  @Test
+  public void shouldRedactConnectionUrlCredentialsFromConfigLog() {
+    // The inherited AbstractConfig config dump prints connection.url verbatim; an embedded
+    // credential must not appear in it. Capture the dump (emitted under the AbstractConfig logger)
+    // and assert the credential is gone while the host survives.
+    org.apache.log4j.Logger configLogger =
+        org.apache.log4j.Logger.getLogger(AbstractConfig.class.getName());
+    Level previousLevel = configLogger.getLevel();
+    List<String> messages = new ArrayList<>();
+    AppenderSkeleton appender = new AppenderSkeleton() {
+      @Override
+      protected void append(LoggingEvent event) {
+        messages.add(String.valueOf(event.getMessage()));
+      }
+
+      @Override
+      public void close() {
+      }
+
+      @Override
+      public boolean requiresLayout() {
+        return false;
+      }
+    };
+    configLogger.addAppender(appender);
+    configLogger.setLevel(Level.INFO);
+    try {
+      props.put(CONNECTION_URL_CONFIG, "https://user:CANARY_PW@es-host:9243");
+      new ElasticsearchSinkConnectorConfig(props);
+    } finally {
+      configLogger.removeAppender(appender);
+      configLogger.setLevel(previousLevel);
+    }
+    String dump = String.join("\n", messages);
+    assertTrue(dump.contains("ElasticsearchSinkConnectorConfig values"));
+    assertFalse(dump.contains("CANARY_PW"));
+    assertTrue(dump.contains("es-host:9243"));
   }
 
   @Test(expected = ConfigException.class)

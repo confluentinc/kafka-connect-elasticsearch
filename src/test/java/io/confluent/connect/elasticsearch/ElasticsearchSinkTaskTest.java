@@ -17,6 +17,7 @@ package io.confluent.connect.elasticsearch;
 
 import java.util.Arrays;
 import java.util.Collection;
+import java.lang.reflect.Field;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
@@ -50,7 +51,9 @@ import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfi
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_KEY_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_SCHEMA_CONFIG;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assume.assumeFalse;
@@ -313,6 +316,36 @@ public class ElasticsearchSinkTaskTest {
     SinkRecord invalidRecord = record();
     when(assignment.contains(eq(new TopicPartition(TOPIC, 1)))).thenReturn(true);
     task.put(Collections.singletonList(invalidRecord));
+  }
+
+  @Test
+  public void putRethrowsSanitizedConversionExceptionWithoutRecordContent() throws Exception {
+    props.put(DROP_INVALID_MESSAGE_CONFIG, "false");
+    setUpTask();
+
+    // A third-party converter (e.g. JsonConverter) may echo the offending record's field value in
+    // its exception message and cause. Simulate that and prove the framework rethrow carries none
+    // of it — only Kafka coordinates and the failure type.
+    String canary = "SECRET_FIELD_VALUE_9f3a2b";
+    DataConverter failing = mock(DataConverter.class);
+    when(failing.convertRecord(any(), any())).thenThrow(
+        new DataException("boom " + canary, new IllegalStateException("cause " + canary)));
+    Field converterField = ElasticsearchSinkTask.class.getDeclaredField("converter");
+    converterField.setAccessible(true);
+    converterField.set(task, failing);
+
+    SinkRecord record = record();
+    when(assignment.contains(eq(new TopicPartition(TOPIC, 1)))).thenReturn(true);
+
+    DataException thrown = assertThrows(
+        DataException.class, () -> task.put(Collections.singletonList(record)));
+
+    // Sanitised: fixed prefix, no cause, and no record-derived canary anywhere in the chain.
+    assertTrue(thrown.getMessage().startsWith("Can't convert"));
+    assertNull(thrown.getCause());
+    for (Throwable t = thrown; t != null; t = t.getCause()) {
+      assertFalse(t.getMessage() != null && t.getMessage().contains(canary));
+    }
   }
 
   @Test

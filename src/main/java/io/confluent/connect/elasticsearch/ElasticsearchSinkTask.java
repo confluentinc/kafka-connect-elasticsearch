@@ -297,7 +297,13 @@ public class ElasticsearchSinkTask extends SinkTask {
             recordString(sinkRecord), convertException.getClass().getName());
         offsetState.markProcessed();
       } else {
-        throw convertException;
+        // Don't hand the raw converter exception to the framework: like the sibling log above,
+        // its message may originate from a third-party converter and could echo back raw record
+        // content, which the framework then logs at ERROR and surfaces in the task status. Rethrow
+        // with only the coordinates and failure type; the full exception still reaches the DLQ
+        // above via reportBadRecord.
+        throw new DataException(String.format("Can't convert %s. Failure type: %s",
+            recordString(sinkRecord), convertException.getClass().getName()));
       }
     }
 
