@@ -36,6 +36,7 @@ import io.confluent.common.utils.IntegrationTest;
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig;
 import io.confluent.connect.elasticsearch.helper.ElasticsearchContainer;
 
+import static io.confluent.connect.elasticsearch.helper.ElasticsearchHelperClient.sourceAsMap;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.*;
 import static org.apache.kafka.connect.runtime.ConnectorConfig.VALUE_CONVERTER_CLASS_CONFIG;
 import static org.apache.kafka.connect.runtime.SinkConnectorConfig.TOPICS_CONFIG;

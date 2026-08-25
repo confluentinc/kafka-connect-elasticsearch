@@ -102,6 +102,20 @@
             <groupId>co.elastic.clients</groupId>
             <artifactId>elasticsearch-java</artifactId>
             <version>${es.version}</version>
+            <exclusions>
+                <!-- Jackson 3 is only used by the client's opt-in Jackson3JsonpMapper; the
+                     connector uses the Jackson 2 JacksonJsonpMapper, so keep the tools.jackson
+                     lineage out of the packaged plugin. opentelemetry-api must NOT be excluded:
+                     the transport loads it unconditionally at construction. -->
+                <exclusion>
+                    <groupId>tools.jackson.core</groupId>
+                    <artifactId>jackson-databind</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>tools.jackson.core</groupId>
+                    <artifactId>jackson-core</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
         <dependency>
             <groupId>org.eclipse.parsson</groupId>

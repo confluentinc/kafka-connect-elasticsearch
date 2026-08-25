@@ -21,6 +21,7 @@ import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfi
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.DATA_STREAM_DATASET_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.DATA_STREAM_TYPE_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.FLUSH_TIMEOUT_MS_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_KEY_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BULK_SIZE_BYTES_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.LINGER_MS_CONFIG;
@@ -29,6 +30,7 @@ import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfi
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.MAX_RETRIES_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.RETRY_BACKOFF_MS_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.WRITE_METHOD_CONFIG;
+import static io.confluent.connect.elasticsearch.helper.ElasticsearchHelperClient.sourceAsMap;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -49,6 +51,7 @@ import io.confluent.connect.elasticsearch.helper.ElasticsearchContainer;
 import io.confluent.connect.elasticsearch.helper.ElasticsearchHelperClient;
 import io.confluent.connect.elasticsearch.helper.NetworkErrorContainer;
 import java.io.IOException;
+import java.net.ServerSocket;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
@@ -62,10 +65,13 @@ import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.sink.ErrantRecordReporter;
 import org.apache.kafka.connect.sink.SinkRecord;
+import co.elastic.clients.elasticsearch._types.ErrorCause;
 import co.elastic.clients.elasticsearch._types.mapping.Property;
 import co.elastic.clients.elasticsearch._types.mapping.TypeMapping;
 import co.elastic.clients.elasticsearch.core.bulk.BulkOperation;
 import co.elastic.clients.elasticsearch.core.bulk.BulkResponseItem;
+import co.elastic.clients.elasticsearch.core.bulk.OperationType;
+import org.mockito.ArgumentCaptor;
 import co.elastic.clients.elasticsearch.core.search.Hit;
 import co.elastic.clients.json.JsonData;
 import org.junit.After;
@@ -102,10 +108,6 @@ public class ElasticsearchClientTest extends ElasticsearchClientTestBase {
     }
   }
 
-  @SuppressWarnings("unchecked")
-  private static Map<String, Object> sourceAsMap(Hit<JsonData> hit) {
-    return hit.source() == null ? new HashMap<>() : hit.source().to(Map.class);
-  }
 
   @Test
   public void testClose() {
@@ -134,6 +136,57 @@ public class ElasticsearchClientTest extends ElasticsearchClientTestBase {
         () -> client.close()
     );
     waitUntilRecordsInES(1);
+  }
+
+  @Test(timeout = 60_000)
+  public void testCloseWithStuckRecordsTerminates() throws Exception {
+    // An endpoint that accepts connections but never responds: the record cannot be
+    // delivered, so close() hits the flush timeout with the record still buffered and
+    // takes the skip-ingester-close path in closeResources().
+    try (ServerSocket blackhole = new ServerSocket(0)) {
+      props.put(CONNECTION_URL_CONFIG, "http://localhost:" + blackhole.getLocalPort());
+      props.put(BATCH_SIZE_CONFIG, "1");
+      props.put(LINGER_MS_CONFIG, "10");
+      props.put(FLUSH_TIMEOUT_MS_CONFIG, "1000");
+      config = new ElasticsearchSinkConnectorConfig(props);
+      converter = new DataConverter(config);
+      ElasticsearchClient client = new ElasticsearchClient(config, null, () -> offsetTracker.updateOffsets(), 1, "elasticsearch-sink");
+
+      writeRecord(sinkRecord(0), client);
+
+      // close() must throw the flush-timeout error and return: the transport is closed
+      // while the dispatcher executor is still alive, so the aborted bulk's completion
+      // has a live executor to land on instead of running the ingester's lock-taking
+      // continuation on the I/O reactor thread.
+      assertThrows(ConnectException.class, client::close);
+    }
+  }
+
+  @Test(timeout = 20_000)
+  public void testCloseWithStuckRecordsHonorsInterrupt() throws Exception {
+    // Task cancellation interrupts the task thread while close() waits for the buffer to
+    // drain. The wait loop must abort immediately: Time.SYSTEM's sleep swallows the
+    // interrupt and re-sets the flag, which would otherwise busy-spin for the whole
+    // flush timeout (60s here, past the test timeout).
+    try (ServerSocket blackhole = new ServerSocket(0)) {
+      props.put(CONNECTION_URL_CONFIG, "http://localhost:" + blackhole.getLocalPort());
+      props.put(BATCH_SIZE_CONFIG, "1");
+      props.put(LINGER_MS_CONFIG, "10");
+      props.put(FLUSH_TIMEOUT_MS_CONFIG, "60000");
+      config = new ElasticsearchSinkConnectorConfig(props);
+      converter = new DataConverter(config);
+      ElasticsearchClient client = new ElasticsearchClient(config, null, () -> offsetTracker.updateOffsets(), 1, "elasticsearch-sink");
+
+      writeRecord(sinkRecord(0), client);
+      try {
+        Thread.currentThread().interrupt();
+        ConnectException e = assertThrows(ConnectException.class, client::close);
+        assertTrue(e.getMessage().contains("Interrupted"));
+      } finally {
+        // Clear the flag so test teardown is not poisoned.
+        Thread.interrupted();
+      }
+    }
   }
 
   @Test
@@ -745,6 +798,67 @@ public class ElasticsearchClientTest extends ElasticsearchClientTestBase {
   }
 
   @Test
+  public void testDlqMessageIncludesCausedByChain() throws Exception {
+    ErrantRecordReporter reporter = mock(ErrantRecordReporter.class);
+    ElasticsearchClient client = new ElasticsearchClient(config, reporter, () -> offsetTracker.updateOffsets(), 1, "elasticsearch-sink");
+
+    SinkRecord record = sinkRecord(0);
+    ElasticsearchClient.BulkOpContext context = new ElasticsearchClient.BulkOpContext(
+        record,
+        new AsyncOffsetTracker.AsyncOffsetState(record.kafkaOffset()),
+        converter.convertRecord(record, index));
+    // The actionable detail of a mapping failure lives in the caused_by chain.
+    BulkResponseItem item = BulkResponseItem.of(b -> b
+        .operationType(OperationType.Index)
+        .index(index)
+        .status(400)
+        .error(e -> e
+            .type("mapper_parsing_exception")
+            .reason("failed to parse field [price]")
+            .causedBy(c -> c
+                .type("illegal_argument_exception")
+                .reason("For input string: \"abc\""))));
+
+    assertTrue(client.handleResponse(item, context));
+
+    ArgumentCaptor<Throwable> reported = ArgumentCaptor.forClass(Throwable.class);
+    verify(reporter).report(eq(record), reported.capture());
+    String message = reported.getValue().getMessage();
+    assertTrue(message,
+        message.contains("[mapper_parsing_exception] failed to parse field [price]"));
+    assertTrue(message,
+        message.contains("nested: [illegal_argument_exception] For input string: \"abc\""));
+    client.close();
+  }
+
+  @Test
+  public void testDlqMessageWithNullErrorFieldsDoesNotPrintNull() throws Exception {
+    ErrantRecordReporter reporter = mock(ErrantRecordReporter.class);
+    ElasticsearchClient client = new ElasticsearchClient(config, reporter, () -> offsetTracker.updateOffsets(), 1, "elasticsearch-sink");
+
+    SinkRecord record = sinkRecord(0);
+    ElasticsearchClient.BulkOpContext context = new ElasticsearchClient.BulkOpContext(
+        record,
+        new AsyncOffsetTracker.AsyncOffsetState(record.kafkaOffset()),
+        converter.convertRecord(record, index));
+    // Both type and reason are optional in the response model.
+    BulkResponseItem item = BulkResponseItem.of(b -> b
+        .operationType(OperationType.Index)
+        .index(index)
+        .status(400)
+        .error(ErrorCause.of(e -> e.stackTrace("redacted"))));
+
+    assertTrue(client.handleResponse(item, context));
+
+    ArgumentCaptor<Throwable> reported = ArgumentCaptor.forClass(Throwable.class);
+    verify(reporter).report(eq(record), reported.capture());
+    String message = reported.getValue().getMessage();
+    assertTrue(message, message.contains("[unknown] unknown reason"));
+    assertFalse(message, message.contains("null"));
+    client.close();
+  }
+
+  @Test
   public void testNoVersionConflict() throws Exception {
     props.put(IGNORE_KEY_CONFIG, "false");
     props.put(WRITE_METHOD_CONFIG, WriteMethod.UPSERT.name());
@@ -795,6 +909,32 @@ public class ElasticsearchClientTest extends ElasticsearchClientTestBase {
   }
 
   @Test
+  public void testWriteDataStreamDeduplicatesRedeliveredRecords() throws Exception {
+    props.put(DATA_STREAM_TYPE_CONFIG, DATA_STREAM_TYPE);
+    props.put(DATA_STREAM_DATASET_CONFIG, DATA_STREAM_DATASET);
+    config = new ElasticsearchSinkConnectorConfig(props);
+    converter = new DataConverter(config);
+    ElasticsearchClient client = new ElasticsearchClient(config, null, () -> offsetTracker.updateOffsets(), 1, "elasticsearch-sink");
+    index = createIndexName(TOPIC);
+    assertTrue(client.createIndexOrDataStream(index));
+
+    writeRecord(sinkRecord(0), client);
+    client.flush();
+    client.waitForInFlightRequests();
+    waitUntilRecordsInES(1);
+
+    // Redelivering the same offset must version-conflict on the explicit document id and
+    // be ignored, not create a duplicate document.
+    writeRecord(sinkRecord(0), client);
+    client.flush();
+    client.waitForInFlightRequests();
+
+    assertEquals(1, helperClient.getDocCount(index));
+    assertFalse(client.isFailed());
+    client.close();
+  }
+
+  @Test
   public void testConnectionUrlExtraSlash() {
     props.put(CONNECTION_URL_CONFIG, container.getConnectionUrl() + "/");
     config = new ElasticsearchSinkConnectorConfig(props);
@@ -822,18 +962,20 @@ public class ElasticsearchClientTest extends ElasticsearchClientTestBase {
     waitUntilRecordsInES(10);
 
     // Bulk requests are executed by the BulkIngester on the low-level rest client's
-    // I/O threads; the connector-owned named thread is the bulk retry scheduler:
-    // {connectorName}-{taskId}-elasticsearch-bulk-retry
-    String expectedName = "elasticsearch-sink-1-elasticsearch-bulk-retry";
+    // I/O threads; the connector-owned named pools are the transport-retry executor
+    // ({connectorName}-{taskId}-elasticsearch-bulk-retry-N) and the ingester's
+    // flush/listener scheduler ({connectorName}-{taskId}-elasticsearch-bulk-ingester-N).
+    String retryPrefix = "elasticsearch-sink-1-elasticsearch-bulk-retry-";
+    String ingesterPrefix = "elasticsearch-sink-1-elasticsearch-bulk-ingester-";
 
-    // Check that a thread with the expected name exists
     Set<String> threadNames = Thread.getAllStackTraces().keySet().stream()
             .map(Thread::getName)
-            .filter(name -> name.equals(expectedName))
             .collect(java.util.stream.Collectors.toSet());
 
-    assertTrue("Expected thread named " + expectedName + " to exist",
-            !threadNames.isEmpty());
+    assertTrue("Expected a thread named " + retryPrefix + "* to exist, found: " + threadNames,
+            threadNames.stream().anyMatch(name -> name.startsWith(retryPrefix)));
+    assertTrue("Expected a thread named " + ingesterPrefix + "* to exist, found: " + threadNames,
+            threadNames.stream().anyMatch(name -> name.startsWith(ingesterPrefix)));
 
     client.close();
   }

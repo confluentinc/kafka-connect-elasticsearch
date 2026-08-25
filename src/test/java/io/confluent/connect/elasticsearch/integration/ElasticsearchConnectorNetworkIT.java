@@ -7,6 +7,7 @@ import com.github.tomakehurst.wiremock.junit.WireMockRule;
 import com.github.tomakehurst.wiremock.stubbing.Scenario;
 import io.confluent.common.utils.IntegrationTest;
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnector;
+import io.confluent.connect.elasticsearch.helper.ElasticProductHeaderTransformer;
 import org.apache.kafka.connect.json.JsonConverter;
 import org.apache.kafka.connect.storage.StringConverter;
 import org.junit.After;
@@ -28,6 +29,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.anyUrl;
 import static com.github.tomakehurst.wiremock.client.WireMock.containing;
 import static com.github.tomakehurst.wiremock.client.WireMock.lessThan;
 import static com.github.tomakehurst.wiremock.client.WireMock.moreThanOrExactly;
+import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.stubFor;
@@ -66,7 +68,8 @@ public class ElasticsearchConnectorNetworkIT extends BaseConnectorIT {
   @Rule
   public WireMockRule wireMockRule = new WireMockRule(options()
           .dynamicPort()
-          .extensions(BlockingTransformer.class.getName()), false);
+          .extensions(BlockingTransformer.class.getName(),
+              ElasticProductHeaderTransformer.class.getName()), false);
 
   private static final int NUM_RECORDS = 5;
   private static final int TASKS_MAX = 1;
@@ -88,13 +91,6 @@ public class ElasticsearchConnectorNetworkIT extends BaseConnectorIT {
   @After
   public void cleanup() {
     stopConnect();
-  }
-
-  // Convenience drop-in replacement for static import of WireMock.okJson(): the new
-  // Elasticsearch client rejects responses without the X-Elastic-Product header.
-  private static com.github.tomakehurst.wiremock.client.ResponseDefinitionBuilder okJson(
-      String body) {
-    return addMinimalHeaders(com.github.tomakehurst.wiremock.client.WireMock.okJson(body));
   }
 
   @Test
@@ -217,8 +213,38 @@ public class ElasticsearchConnectorNetworkIT extends BaseConnectorIT {
             .contains("circuit_breaking_exception")
             .contains("Data too large");
 
-    // 1 + 2 retries
-    verify(3, postRequestedFor(urlPathEqualTo("/_bulk")));
+    // Each record is attempted at most 1 + 2 retries times, but retried operations are
+    // re-added to the shared buffer, so a retried batch can split across bulk requests
+    // (and pull in buffered records) — the request count exceeds the retry rounds while
+    // staying strictly bounded (5 with these batch sizes).
+    verify(moreThanOrExactly(3), postRequestedFor(urlPathEqualTo("/_bulk")));
+    verify(lessThan(6), postRequestedFor(urlPathEqualTo("/_bulk")));
+  }
+
+  @Test
+  public void testTooManyRequestsPerItemWithNoRetries() throws Exception {
+    // A well-formed bulk response whose items carry status 429. With max.retries=0 the
+    // ingester's backoff policy must be noBackoff(): an exponential backoff with zero
+    // retries has an empty iterator, and the ingester's retry selection calls next() on
+    // it inside a discarded future — silently leaking the in-flight slot per bulk and
+    // wedging the ingester instead of failing the task.
+    wireMockRule.stubFor(post(urlPathEqualTo("/_bulk"))
+            .willReturn(okJson(
+                errorBulkResponse(4, 429, "es_rejected_execution_exception", 0, 1, 2, 3))));
+
+    props.put(MAX_RETRIES_CONFIG, "0");
+    connect.configureConnector(CONNECTOR_NAME, props);
+    waitForConnectorToStart(CONNECTOR_NAME, TASKS_MAX);
+    writeRecords(NUM_RECORDS);
+
+    // With no retries the 429 items reach the listener as ordinary failures and the
+    // task fails cleanly.
+    await().atMost(Duration.ofMinutes(3)).untilAsserted(() ->
+            assertThat(connect.connectorStatus(CONNECTOR_NAME).tasks().get(0).state())
+                    .isEqualTo("FAILED"));
+
+    assertThat(connect.connectorStatus(CONNECTOR_NAME).tasks().get(0).trace())
+            .contains("Indexing record failed");
   }
 
   @Test
@@ -243,8 +269,10 @@ public class ElasticsearchConnectorNetworkIT extends BaseConnectorIT {
             .contains("Bulk request failed")
             .contains("503 Service Unavailable");
 
-    // 1 + 2 retries
-    verify(3, postRequestedFor(urlPathEqualTo("/_bulk")));
+    // Each record is attempted at most 1 + 2 retries times; see testTooManyRequests for
+    // why the request count exceeds the retry rounds while staying bounded.
+    verify(moreThanOrExactly(3), postRequestedFor(urlPathEqualTo("/_bulk")));
+    verify(lessThan(6), postRequestedFor(urlPathEqualTo("/_bulk")));
   }
 
   /**
@@ -417,6 +445,10 @@ public class ElasticsearchConnectorNetworkIT extends BaseConnectorIT {
   }
 
   public static String errorBulkResponse(int items, String errorType, int... errorIdx) throws JsonProcessingException {
+    return errorBulkResponse(items, 400, errorType, errorIdx);
+  }
+
+  public static String errorBulkResponse(int items, int errorStatus, String errorType, int... errorIdx) throws JsonProcessingException {
     ObjectNode response = MAPPER.createObjectNode();
     ArrayNode itemsArray = response
             .put("took", 1)
@@ -435,7 +467,7 @@ public class ElasticsearchConnectorNetworkIT extends BaseConnectorIT {
                 .put("_seq_no", 0);
       if (errorIndexes.contains(i)) {
         arrayObject
-                .put("status", 400)
+                .put("status", errorStatus)
                 .putObject("error")
                   .put("type", errorType)
                   .put("reason", "Reason for " + errorType);

@@ -28,6 +28,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.github.tomakehurst.wiremock.client.ResponseDefinitionBuilder;
 import com.github.tomakehurst.wiremock.client.WireMock;
 import com.github.tomakehurst.wiremock.junit.WireMockRule;
+import com.github.tomakehurst.wiremock.stubbing.Scenario;
 import io.confluent.connect.elasticsearch.ElasticsearchSinkTaskConfig;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
@@ -50,12 +51,15 @@ import org.testcontainers.shaded.com.google.common.collect.ImmutableSet;
 import io.confluent.common.utils.IntegrationTest;
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnector;
 import io.confluent.connect.elasticsearch.ElasticsearchSinkTask;
+import io.confluent.connect.elasticsearch.helper.ElasticProductHeaderTransformer;
 
 
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.any;
 import static com.github.tomakehurst.wiremock.client.WireMock.anyUrl;
+import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
+import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.stubFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.options;
@@ -72,6 +76,7 @@ import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfi
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.*;
 import static io.confluent.connect.elasticsearch.helper.ElasticSearchMockUtil.addMinimalHeaders;
 import static io.confluent.connect.elasticsearch.helper.ElasticSearchMockUtil.basicEmptyOk;
+import static io.confluent.connect.elasticsearch.helper.ElasticSearchMockUtil.minimumResponseJson;
 import static io.confluent.connect.elasticsearch.integration.ElasticsearchConnectorNetworkIT.errorBulkResponse;
 import static java.util.stream.Collectors.toList;
 import static org.apache.kafka.connect.json.JsonConverterConfig.SCHEMAS_ENABLE_CONFIG;
@@ -102,7 +107,8 @@ public class ElasticsearchSinkTaskIT {
   @Rule
   public WireMockRule wireMockRule = new WireMockRule(options()
           .dynamicPort()
-          .extensions(BlockingTransformer.class.getName()), false);
+          .extensions(BlockingTransformer.class.getName(),
+              ElasticProductHeaderTransformer.class.getName()), false);
 
   protected static final String TOPIC = "test";
   protected static final int TASKS_MAX = 1;
@@ -113,15 +119,10 @@ public class ElasticsearchSinkTaskIT {
     this.synchronousFlush = synchronousFlush;
   }
 
-  // Convenience drop-in replacement for static import of WireMock.ok()
+  // Convenience drop-in replacement for static import of WireMock.ok(): responses to
+  // version/ping calls need the standard version-info body, not just a 200.
   private static ResponseDefinitionBuilder ok() {
     return basicEmptyOk();
-  }
-
-  // Convenience drop-in replacement for static import of WireMock.okJson(): the new
-  // Elasticsearch client rejects responses without the X-Elastic-Product header.
-  private static ResponseDefinitionBuilder okJson(String body) {
-    return addMinimalHeaders(com.github.tomakehurst.wiremock.client.WireMock.okJson(body));
   }
 
   @Before
@@ -368,6 +369,50 @@ public class ElasticsearchSinkTaskIT {
     await().untilAsserted(() ->
             assertThat(task.preCommit(currentOffsets))
                     .isEqualTo(currentOffsets));
+  }
+
+  @Test(timeout = 60_000)
+  public void testTransportRetryIsFlushedImmediately() throws Exception {
+    // Whole-request transport failure once, then success.
+    wireMockRule.stubFor(post(urlPathEqualTo("/_bulk"))
+            .inScenario("transportRetryFlush")
+            .whenScenarioStateIs(Scenario.STARTED)
+            .willReturn(addMinimalHeaders(
+                aResponse().withStatus(500).withBody(minimumResponseJson())))
+            .willSetStateTo("recovered"));
+    wireMockRule.stubFor(post(urlPathEqualTo("/_bulk"))
+            .inScenario("transportRetryFlush")
+            .whenScenarioStateIs("recovered")
+            .willReturn(okJson(ElasticsearchConnectorNetworkIT.errorBulkResponse())));
+
+    Map<String, String> props = createProps();
+    props.put(READ_TIMEOUT_MS_CONFIG, "1000");
+    props.put(MAX_RETRIES_CONFIG, "2");
+    props.put(RETRY_BACKOFF_MS_CONFIG, "10");
+    // The retried batch (1 op) stays below batch.size and linger never fires: only the
+    // explicit flush after the retry re-add can send it again.
+    props.put(BATCH_SIZE_CONFIG, "2");
+    props.put(LINGER_MS_CONFIG, "600000");
+
+    ElasticsearchSinkTask task = new ElasticsearchSinkTask();
+    TopicPartition tp = new TopicPartition(TOPIC, 0);
+    SinkTaskContext context = mock(SinkTaskContext.class);
+    when(context.assignment()).thenReturn(ImmutableSet.of(tp));
+    task.initialize(context);
+    task.start(props);
+    task.open(ImmutableList.of(tp));
+
+    task.put(ImmutableList.of(sinkRecord(tp, 0)));
+    // Sends the single buffered record (below batch.size, linger is 10 minutes). In
+    // synchronous mode this call also blocks until the retried record completes.
+    task.preCommit(ImmutableMap.of(tp, new OffsetAndMetadata(1)));
+
+    // The retried operation must be resent promptly by the flush after the re-add; the
+    // next linger tick is 10 minutes away and no further flush happens on its behalf.
+    await().untilAsserted(() ->
+            wireMockRule.verify(2, postRequestedFor(urlPathEqualTo("/_bulk"))));
+
+    task.stop();
   }
 
   /**

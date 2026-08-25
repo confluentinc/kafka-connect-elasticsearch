@@ -35,7 +35,9 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.io.StringReader;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import io.confluent.connect.elasticsearch.ConfigCallbackHandler;
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig;
@@ -136,6 +138,11 @@ public class ElasticsearchHelperClient {
 
   public List<Hit<JsonData>> search(String index) throws IOException {
     return client.search(s -> s.index(index), JsonData.class).hits().hits();
+  }
+
+  @SuppressWarnings("unchecked")
+  public static Map<String, Object> sourceAsMap(Hit<JsonData> hit) {
+    return hit.source() == null ? new HashMap<>() : hit.source().to(Map.class);
   }
 
   public void createRole(PutRoleRequest roleRequest) throws IOException {

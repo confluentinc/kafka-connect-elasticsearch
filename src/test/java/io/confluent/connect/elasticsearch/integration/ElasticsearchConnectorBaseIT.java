@@ -48,6 +48,7 @@ import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfi
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.DATA_STREAM_TYPE_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_KEY_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_SCHEMA_CONFIG;
+import static io.confluent.connect.elasticsearch.helper.ElasticsearchHelperClient.sourceAsMap;
 import static org.apache.kafka.connect.json.JsonConverterConfig.SCHEMAS_ENABLE_CONFIG;
 import static org.apache.kafka.connect.runtime.ConnectorConfig.CONNECTOR_CLASS_CONFIG;
 import static org.apache.kafka.connect.runtime.ConnectorConfig.KEY_CONVERTER_CLASS_CONFIG;
@@ -202,10 +203,6 @@ public class ElasticsearchConnectorBaseIT extends BaseConnectorIT {
     }
   }
 
-  @SuppressWarnings("unchecked")
-  protected static Map<String, Object> sourceAsMap(Hit<JsonData> hit) {
-    return hit.source() == null ? new HashMap<>() : hit.source().to(Map.class);
-  }
 
   protected void waitForRecords(int numRecords) throws InterruptedException {
     TestUtils.waitForCondition(
