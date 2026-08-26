@@ -89,10 +89,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   public static final String MAX_IN_FLIGHT_REQUESTS_CONFIG = "max.in.flight.requests";
   private static final String MAX_IN_FLIGHT_REQUESTS_DOC =
       "The maximum number of indexing requests that can be in-flight to Elasticsearch before "
-      + "blocking further requests. A request being retried after a failure keeps occupying "
-      + "its in-flight slot through the retry backoff, so ingestion pauses when every slot "
-      + "is waiting on a retry; this backpressure also preserves record order during "
-      + "retries when set to 1.";
+      + "blocking further requests.";
   private static final String MAX_IN_FLIGHT_REQUESTS_DISPLAY = "Max In-flight Requests";
   private static final int MAX_IN_FLIGHT_REQUESTS_DEFAULT = 5;
 

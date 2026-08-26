@@ -28,31 +28,21 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * An {@link ElasticsearchAsyncClient} whose {@link #bulk(BulkRequest)} future does not
- * complete until the request has either succeeded or exhausted its retry budget.
+ * Retries whole-request bulk failures (transport errors, non-2xx responses incl. a
+ * whole-response 429) with jittered backoff, resending the same {@code BulkRequest}
+ * verbatim. Item-level failures, 429s included, are not retried here — terminal,
+ * handled by the listener.
  *
- * <p>Keeping the future incomplete across retries is what preserves record ordering: the
- * {@code BulkIngester} counts a request as in flight until this future completes, so at
- * {@code max.in.flight.requests=1} nothing buffered during a backoff can be sent before
- * the failed request is retried. That reproduces the pre-migration behavior, where
- * transport failures were retried while the BulkProcessor's concurrency permit was still
- * held; the previous approach of re-queuing the operations into the ingester released the
- * slot and let newer records overtake a retried (possibly stale) write.
+ * <p>The {@link #bulk(BulkRequest)} future stays incomplete until success or
+ * exhausted retries, so {@code BulkIngester} holds its in-flight slot through every
+ * backoff. At {@code max.in.flight.requests=1} this preserves record order across
+ * retries.
  *
- * <p>Only whole-request failures are retried here — transport errors and non-2xx bulk
- * responses such as an HTTP 429 from the coordinating node, which reach this client as an
- * exceptionally completed future. The same {@code BulkRequest} is re-sent verbatim; its
- * payloads are byte-array backed, so re-serialization is repeatable. This matches master,
- * which wrapped only the whole {@code client.bulk(...)} call in retries and left per-item
- * failures (including item-level 429s inside a 200 response) terminal, handled by the
- * listener. The low-level RestClient already fails over across configured nodes within a
- * single attempt, so one attempt here can mean several node tries below.
+ * <p>Completion always hops through {@code dispatcherExecutor}, off the transport's
+ * I/O reactor threads (see the deadlock note at this client's construction site).
  *
- * <p>Every completion path hops through the dispatcher executor so the ingester's
- * lock-taking continuation never runs on the transport's I/O reactor threads (see the
- * deadlock note where this client is constructed). When upgrading to elasticsearch-java
- * 9.5+, its transport-level retry (RetryingHttpClient, elasticsearch-java#954) can
- * replace this class entirely.
+ * <p>Superseded by elasticsearch-java 9.5+'s {@code RetryingHttpClient}
+ * (elasticsearch-java#954) at that upgrade.
  */
 class RetryingElasticsearchAsyncClient extends ElasticsearchAsyncClient {
 
@@ -100,12 +90,6 @@ class RetryingElasticsearchAsyncClient extends ElasticsearchAsyncClient {
       int attempt,
       CompletableFuture<BulkResponse> result
   ) {
-    // handleAsync (not whenCompleteAsync): it runs the callback on the dispatcher for
-    // both outcomes — keeping the failure path off the transport's I/O reactor threads —
-    // and completes its own stage with the callback's return value, swallowing the
-    // upstream exception. The trailing exceptionally therefore fires only when the
-    // callback never ran (the dispatcher rejected the hop during shutdown) or threw,
-    // never for an ordinary transport failure the callback already scheduled a retry for.
     sendBulk(request).handleAsync((response, failure) -> {
       if (failure == null) {
         result.complete(response);
@@ -128,9 +112,7 @@ class RetryingElasticsearchAsyncClient extends ElasticsearchAsyncClient {
       }
       return null;
     }, dispatcherExecutor).exceptionally(e -> {
-      // The dispatcher rejected the hop (a race with executor shutdown), so the retry
-      // decision never ran: complete the future the BulkIngester holds so its in-flight
-      // slot is released.
+      // Dispatcher hop rejected (shutdown race) — release the ingester's slot.
       result.completeExceptionally(e);
       return null;
     });
