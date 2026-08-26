@@ -180,10 +180,6 @@ public class DataConverter {
     }
   }
 
-  private static BinaryData binaryJson(String json) {
-    return BinaryData.of(json.getBytes(StandardCharsets.UTF_8), ContentType.APPLICATION_JSON);
-  }
-
   private BulkOperation buildDeleteOperation(String resourceName, String id, SinkRecord record) {
     if (!config.isDataStream() && !config.shouldIgnoreKey(record.topic())) {
       final long externalVersion = resolveExternalVersion(record);
@@ -206,6 +202,10 @@ public class DataConverter {
     ));
   }
 
+  private static BinaryData binaryJson(String json) {
+    return BinaryData.of(json.getBytes(StandardCharsets.UTF_8), ContentType.APPLICATION_JSON);
+  }
+
   private BulkOperation buildInsertOperation(
       String resourceName,
       String id,
@@ -213,9 +213,6 @@ public class DataConverter {
       SinkRecord record
   ) {
     if (config.isDataStream()) {
-      // Data streams only accept the create operation (previously OpType.CREATE). The
-      // explicit id makes redelivered records fail with a version conflict, which is
-      // ignored, instead of creating duplicate documents.
       return buildDataStreamCreateOperation(resourceName, id, document);
     }
     return buildIndexOperation(resourceName, id, document, record);
