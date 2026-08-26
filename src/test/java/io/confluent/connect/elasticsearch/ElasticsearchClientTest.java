@@ -31,6 +31,9 @@ import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfi
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.RETRY_BACKOFF_MS_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.WRITE_METHOD_CONFIG;
 import static io.confluent.connect.elasticsearch.helper.ElasticsearchHelperClient.sourceAsMap;
+import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
+import static com.github.tomakehurst.wiremock.client.WireMock.post;
+import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -44,15 +47,19 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.github.tomakehurst.wiremock.WireMockServer;
+import com.github.tomakehurst.wiremock.core.WireMockConfiguration;
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BehaviorOnMalformedDoc;
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BehaviorOnNullValues;
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.WriteMethod;
+import io.confluent.connect.elasticsearch.helper.ElasticProductHeaderTransformer;
 import io.confluent.connect.elasticsearch.helper.ElasticsearchContainer;
 import io.confluent.connect.elasticsearch.helper.ElasticsearchHelperClient;
 import io.confluent.connect.elasticsearch.helper.NetworkErrorContainer;
 import java.io.IOException;
 import java.net.ServerSocket;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -159,6 +166,71 @@ public class ElasticsearchClientTest extends ElasticsearchClientTestBase {
       // has a live executor to land on instead of running the ingester's lock-taking
       // continuation on the I/O reactor thread.
       assertThrows(ConnectException.class, client::close);
+    }
+  }
+
+  @Test(timeout = 60_000)
+  public void testItemLevel429NeverCreatesIngesterInternalRetryPool() throws Exception {
+    // Contract test for the retry design: no backoffPolicy is set on the BulkIngester,
+    // so its internal 429-retry pool ("bulk-ingester-retry#N") must never be created.
+    // That pool re-queued rejected operations at the tail of the buffer (reordering
+    // records) and leaked its threads past a timed-out close() because closeResources()
+    // skips bulkIngester.close() when records are stuck. Item-level 429s must instead
+    // reach the listener and be handled terminally, matching the pre-migration client.
+    WireMockServer wireMockServer = new WireMockServer(WireMockConfiguration.options()
+        .dynamicPort()
+        .extensions(ElasticProductHeaderTransformer.class.getName()));
+    wireMockServer.start();
+    try {
+      wireMockServer.stubFor(post(urlPathEqualTo("/_bulk")).willReturn(okJson(
+          "{\"took\":1,\"errors\":true,\"items\":[{\"index\":{\"_index\":\"test\","
+              + "\"_id\":\"1\",\"_version\":1,\"_seq_no\":0,\"status\":429,"
+              + "\"error\":{\"type\":\"es_rejected_execution_exception\","
+              + "\"reason\":\"rejected execution\"}}}]}")));
+
+      props.put(CONNECTION_URL_CONFIG, wireMockServer.baseUrl());
+      props.put(BATCH_SIZE_CONFIG, "1");
+      props.put(LINGER_MS_CONFIG, "10");
+      props.put(MAX_RETRIES_CONFIG, "5");
+      config = new ElasticsearchSinkConnectorConfig(props);
+      converter = new DataConverter(config);
+
+      ElasticsearchClient client = new ElasticsearchClient(config, null, () -> offsetTracker.updateOffsets(), 1, "elasticsearch-sink");
+      try {
+        writeRecord(sinkRecord(0), client);
+
+        // Wait until the item-level 429 response has been delivered to the client.
+        long deadline = System.currentTimeMillis() + 10_000;
+        while (wireMockServer.getAllServeEvents().isEmpty()
+            && System.currentTimeMillis() < deadline) {
+          Thread.sleep(50);
+        }
+        assertTrue("the bulk request was never sent",
+            !wireMockServer.getAllServeEvents().isEmpty());
+        // Let any (erroneously created) internal retry pool thread appear.
+        Thread.sleep(500);
+
+        Set<String> retryPoolThreads = new HashSet<>();
+        for (Thread t : Thread.getAllStackTraces().keySet()) {
+          if (t.getName().startsWith("bulk-ingester-retry#")) {
+            retryPoolThreads.add(t.getName());
+          }
+        }
+        assertTrue("BulkIngester's internal retry pool must never be created: "
+            + retryPoolThreads, retryPoolThreads.isEmpty());
+
+        // Item-level 429 is terminal: the failure is latched and surfaced on the next
+        // operation, exactly as the pre-migration client did (no item-level retry).
+        assertThrows(ConnectException.class, () -> writeRecord(sinkRecord(1), client));
+      } finally {
+        try {
+          client.close();
+        } catch (ConnectException expected) {
+          // close() re-throws the latched failure; irrelevant to this test.
+        }
+      }
+    } finally {
+      wireMockServer.stop();
     }
   }
 
