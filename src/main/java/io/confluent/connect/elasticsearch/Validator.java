@@ -15,16 +15,17 @@
 
 package io.confluent.connect.elasticsearch;
 
+import co.elastic.clients.elasticsearch.ElasticsearchClient;
+import co.elastic.clients.elasticsearch._types.ElasticsearchException;
+import co.elastic.clients.json.jackson.JacksonJsonpMapper;
+import co.elastic.clients.transport.TransportException;
+import co.elastic.clients.transport.rest_client.RestClientTransport;
 import org.apache.http.HttpHost;
 import org.apache.kafka.common.config.Config;
 import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.config.ConfigValue;
 import org.apache.kafka.common.config.SslConfigs;
-import org.elasticsearch.ElasticsearchStatusException;
-import org.elasticsearch.client.core.MainResponse;
-import org.elasticsearch.client.RequestOptions;
 import org.elasticsearch.client.RestClient;
-import org.elasticsearch.client.RestHighLevelClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -75,8 +76,8 @@ public class Validator {
 
   private static final Logger log = LoggerFactory.getLogger(Validator.class);
 
-  private static final String CONNECTOR_V11_COMPATIBLE_ES_VERSION = "7.0.0";
-  private static final String DATA_STREAM_COMPATIBLE_ES_VERSION = "7.9.0";
+  // The 8.x Java API Client cannot talk to Elasticsearch 7.x and earlier servers.
+  private static final String MINIMUM_SUPPORTED_ES_VERSION = "8.0.0";
 
   public static final String EXTERNAL_RESOURCE_CONFIG_TOGETHER_ERROR =
           String.format("Invalid configuration:"
@@ -163,12 +164,12 @@ public class Validator {
 
     if (!hasErrors()) {
       // no point in connection validation if previous ones fails
-      try (RestHighLevelClient client = clientFactory.client()) {
+      ElasticsearchClient client = null;
+      try {
+        client = clientFactory.client();
         validateConnection(client);
         validateVersion(client);
         validateResourceExists(client);
-      } catch (IOException e) {
-        log.warn("Closing the client failed.", e);
       } catch (ConfigException e) {
         log.error("Invalid configuration encountered while building Elasticsearch client.", e);
         addErrorMessage(CONNECTION_URL_CONFIG,
@@ -182,6 +183,15 @@ public class Validator {
         addErrorMessage(CONNECTION_URL_CONFIG,
             "Could not initialize the Elasticsearch client. This may indicate the cluster is "
                 + "unreachable or there is a transient infrastructure issue: " + e.getMessage());
+      } finally {
+        if (client != null) {
+          try {
+            // Closing the transport also closes the underlying low-level RestClient.
+            client._transport().close();
+          } catch (IOException e) {
+            log.warn("Closing the client failed.", e);
+          }
+        }
       }
     }
 
@@ -458,36 +468,24 @@ public class Validator {
     }
   }
 
-  private void validateVersion(RestHighLevelClient client) {
-    MainResponse response;
+  private void validateVersion(ElasticsearchClient client) {
+    String esVersionNumber;
     try {
-      response = client.info(RequestOptions.DEFAULT);
-    } catch (IOException | ElasticsearchStatusException e) {
+      esVersionNumber = client.info().version().number();
+    } catch (IOException | ElasticsearchException e) {
       // Same error messages as from validating the connection for IOException.
       // Insufficient privileges to validate the version number if caught
-      // ElasticsearchStatusException.
+      // ElasticsearchException.
       return;
     }
-    String esVersionNumber = response.getVersion().getNumber();
-    if (config.isDataStream()
-        && compareVersions(esVersionNumber, DATA_STREAM_COMPATIBLE_ES_VERSION) < 0) {
+    if (compareVersions(esVersionNumber, MINIMUM_SUPPORTED_ES_VERSION) < 0) {
       String errorMessage = String.format(
-          "Elasticsearch version %s is not compatible with data streams. Elasticsearch"
-              + "version must be at least %s.",
+          "Elasticsearch version %s is not supported by connector version %s. This connector "
+              + "requires Elasticsearch %s or later. For Elasticsearch 7.x and earlier, use "
+              + "the 15.x versions of this connector.",
           esVersionNumber,
-          DATA_STREAM_COMPATIBLE_ES_VERSION
-      );
-      addErrorMessage(CONNECTION_URL_CONFIG, errorMessage);
-      addErrorMessage(DATA_STREAM_TYPE_CONFIG, errorMessage);
-      addErrorMessage(DATA_STREAM_DATASET_CONFIG, errorMessage);
-    }
-    if (compareVersions(esVersionNumber, CONNECTOR_V11_COMPATIBLE_ES_VERSION) < 0) {
-      String errorMessage = String.format(
-          "Connector version %s is not compatible with Elasticsearch version %s. Elasticsearch "
-              + "version must be at least %s.",
           Version.getVersion(),
-          esVersionNumber,
-          CONNECTOR_V11_COMPATIBLE_ES_VERSION
+          MINIMUM_SUPPORTED_ES_VERSION
       );
       addErrorMessage(CONNECTION_URL_CONFIG, errorMessage);
     }
@@ -498,7 +496,7 @@ public class Validator {
    * Checks resource existence based on the configured external resource type.
    * Only validates when external resource usage is enabled.
    */
-  private void validateResourceExists(RestHighLevelClient client) {
+  private void validateResourceExists(ElasticsearchClient client) {
     if (!config.isExternalResourceUsageEnabled()) {
       return;
     }
@@ -518,7 +516,7 @@ public class Validator {
           addErrorMessage(TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_CONFIG, errorMessage);
           return;
         }
-      } catch (IOException | ElasticsearchStatusException e) {
+      } catch (IOException | ElasticsearchException e) {
         String errorMessage = String.format(
                 RESOURCE_EXISTENCE_CHECK_FAILED_ERROR_FORMAT,
                 config.externalResourceUsage().name().toLowerCase(),
@@ -556,25 +554,9 @@ public class Validator {
     return versionSplit.length - compatibleSplit.length;
   }
 
-  private void validateConnection(RestHighLevelClient client) {
-    boolean successful;
-    String exceptionMessage = "";
-    try {
-      successful = client.ping(RequestOptions.DEFAULT);
-    } catch (ElasticsearchStatusException e) {
-      switch (e.status()) {
-        case FORBIDDEN:
-          // ES is up, but user is not authorized to ping server
-          successful = true;
-          break;
-        default:
-          successful = false;
-          exceptionMessage = String.format("Error message: %s", e.getMessage());
-      }
-    } catch (Exception e) {
-      successful = false;
-      exceptionMessage = String.format("Error message: %s", e.getMessage());
-    }
+  private void validateConnection(ElasticsearchClient client) {
+    String exceptionMessage = pingErrorMessage(client);
+    boolean successful = exceptionMessage == null;
     if (!successful) {
       String errorMessage = String.format(
           "Could not connect to Elasticsearch. %s",
@@ -628,23 +610,46 @@ public class Validator {
     }
   }
 
+  /**
+   * Pings Elasticsearch and classifies the outcome.
+   *
+   * @param client the client to ping with
+   * @return null if Elasticsearch is reachable, an error message for validation otherwise
+   */
+  private String pingErrorMessage(ElasticsearchClient client) {
+    try {
+      return client.ping().value() ? null : "";
+    } catch (TransportException e) {
+      // The ping is a HEAD request; the low-level client passes 4xx statuses through, and
+      // because a HEAD response has no body the transport surfaces them as a
+      // TransportException instead of an ElasticsearchException. A 403 means Elasticsearch
+      // is up but the user is not authorized to ping it, which is fine for a sink principal.
+      return e.statusCode() == 403 ? null : String.format("Error message: %s", e.getMessage());
+    } catch (ElasticsearchException e) {
+      // ES is up, but user is not authorized to ping server
+      return e.status() == 403 ? null : String.format("Error message: %s", e.getMessage());
+    } catch (Exception e) {
+      return String.format("Error message: %s", e.getMessage());
+    }
+  }
+
   private void addErrorMessage(String property, String error) {
     values.get(property).addErrorMessage(error);
   }
 
-  private RestHighLevelClient createClient() {
+  private ElasticsearchClient createClient() {
     ConfigCallbackHandler configCallbackHandler = new ConfigCallbackHandler(config);
-    return new RestHighLevelClient(
-        RestClient
-            .builder(
-                config.connectionUrls()
-                    .stream()
-                    .map(HttpHost::create)
-                    .collect(Collectors.toList())
-                    .toArray(new HttpHost[config.connectionUrls().size()])
-            )
-            .setHttpClientConfigCallback(configCallbackHandler)
-    );
+    RestClient restClient = RestClient
+        .builder(
+            config.connectionUrls()
+                .stream()
+                .map(HttpHost::create)
+                .collect(Collectors.toList())
+                .toArray(new HttpHost[config.connectionUrls().size()])
+        )
+        .setHttpClientConfigCallback(configCallbackHandler)
+        .build();
+    return new ElasticsearchClient(new RestClientTransport(restClient, new JacksonJsonpMapper()));
   }
 
   private boolean hasErrors() {
@@ -658,6 +663,6 @@ public class Validator {
   }
 
   interface ClientFactory {
-    RestHighLevelClient client();
+    ElasticsearchClient client();
   }
 }
