@@ -125,15 +125,39 @@ public class ElasticsearchClient {
       int taskId,
       String connectorName
   ) {
+    String threadPrefix = connectorName + "-" + taskId + "-elasticsearch-";
+    ScheduledThreadPoolExecutor retryExecutor = new ScheduledThreadPoolExecutor(
+        1, namedDaemonThreadFactory(threadPrefix + "bulk-retry-"));
+    retryExecutor.setExecuteExistingDelayedTasksAfterShutdownPolicy(false);
+    retryExecutor.setRemoveOnCancelPolicy(true);
+    this.bulkRetryExecutor = retryExecutor;
+
+    this.bulkIngesterScheduler = Executors.newScheduledThreadPool(
+        config.maxInFlightRequests() + 1,
+        namedDaemonThreadFactory(threadPrefix + "bulk-ingester-"));
+    this.bulkDispatcherExecutor = Executors.newFixedThreadPool(
+        config.maxInFlightRequests(),
+        namedDaemonThreadFactory(threadPrefix + "bulk-dispatcher-"));
     this.numBufferedRecords = new AtomicInteger(0);
     this.error = new AtomicReference<>();
     this.config = config;
     this.reporter = reporter;
     this.clock = Time.SYSTEM;
+    long lingerMs = config.lingerMs();
+    if (lingerMs == 0) {
+      log.warn("{}=0 is treated as 1 ms (flush immediately); the Elasticsearch BulkIngester"
+              + " does not support a zero flush interval.", LINGER_MS_CONFIG);
+      lingerMs = 1;
+    }
+    long bulkSize = config.bulkSize();
+    if (bulkSize == 0) {
+      log.warn("{}=0 is treated as 1 byte (flush every record); the Elasticsearch BulkIngester"
+              + " does not support a zero bulk size.", BULK_SIZE_BYTES_CONFIG);
+      bulkSize = 1;
+    }
+    final long flushIntervalMs = lingerMs;
+    final long maxBulkSizeBytes = bulkSize;
 
-    // Build the transport before creating any executor: constructing the RestClient
-    // throws for bad SSL/keystore/Kerberos config, and a task restart loop must not
-    // leak one live thread per failed constructor.
     ConfigCallbackHandler configCallbackHandler = new ConfigCallbackHandler(config);
     RestClient restClient = RestClient
         .builder(
@@ -150,59 +174,6 @@ public class ElasticsearchClient {
 
     esVersion = getServerVersion();
 
-    String threadPrefix = connectorName + "-" + taskId + "-elasticsearch-";
-    // Retry tasks only fire an asynchronous re-send and return, so one thread paces
-    // every retry chain. A retry pending at shutdown must not fire against a closed
-    // transport, hence the shutdown/cancellation policies.
-    ScheduledThreadPoolExecutor retryExecutor = new ScheduledThreadPoolExecutor(
-        1, namedDaemonThreadFactory(threadPrefix + "bulk-retry-"));
-    retryExecutor.setExecuteExistingDelayedTasksAfterShutdownPolicy(false);
-    retryExecutor.setRemoveOnCancelPolicy(true);
-    // Start the thread eagerly so it is visible in thread dumps with its connector/task
-    // name.
-    retryExecutor.prestartCoreThread();
-    this.bulkRetryExecutor = retryExecutor;
-
-    // The BulkIngester's flush timer and listener callbacks run on this scheduler.
-    // Passing our own (instead of letting the ingester create an internal one) puts the
-    // connector/task name on those threads, and lets closeResources() reclaim them even
-    // when the ingester close is skipped for stuck records — which also stops the leaked
-    // flush timer's "Error in background flush" logging. Sized like the ingester's own
-    // default: the flush timer plus one listener callback per in-flight request.
-    this.bulkIngesterScheduler = Executors.newScheduledThreadPool(
-        config.maxInFlightRequests() + 1,
-        namedDaemonThreadFactory(threadPrefix + "bulk-ingester-"));
-    this.bulkDispatcherExecutor = Executors.newFixedThreadPool(
-        config.maxInFlightRequests(), namedDaemonThreadFactory(threadPrefix + "bulk-dispatcher-"));
-
-    long lingerMs = config.lingerMs();
-    if (lingerMs == 0) {
-      // BulkIngester schedules its flush timer with scheduleWithFixedDelay, which rejects a
-      // period <= 0. linger.ms=0 is a valid config that used to mean "flush immediately", so
-      // treat it as a 1 ms flush interval instead of failing the task at startup.
-      log.warn("{}=0 is treated as 1 ms (flush immediately); the Elasticsearch BulkIngester"
-              + " does not support a zero flush interval.", LINGER_MS_CONFIG);
-      lingerMs = 1;
-    }
-    long bulkSize = config.bulkSize();
-    if (bulkSize == 0) {
-      // BulkIngester treats only a negative max size as "unlimited"; a value of 0 would make
-      // every add() wait forever for buffer space. bulk.size.bytes=0 used to flush on every
-      // record, so treat it as 1 byte (every operation fills the batch) instead.
-      log.warn("{}=0 is treated as 1 byte (flush every record); the Elasticsearch BulkIngester"
-              + " does not support a zero bulk size.", BULK_SIZE_BYTES_CONFIG);
-      bulkSize = 1;
-    }
-    final long flushIntervalMs = lingerMs;
-    final long maxBulkSizeBytes = bulkSize;
-
-    // All retries (whole-request transport failures and per-item 429s) happen inside
-    // this client, below the ingester, so the in-flight slot stays held across backoffs
-    // and record order survives retries at max.in.flight.requests=1. It also hops every
-    // bulk completion onto a connector-owned dispatcher thread: the low-level rest
-    // client's I/O reactor threads can hold the http connection pool lock while the
-    // ingester's own lock is held by a thread waiting for a pooled connection, which
-    // deadlocks if the ingester's lock-taking continuation runs on the I/O thread.
     RetryingElasticsearchAsyncClient retryingClient = new RetryingElasticsearchAsyncClient(
         transport,
         config.maxRetries(),
@@ -210,47 +181,14 @@ public class ElasticsearchClient {
         bulkRetryExecutor,
         bulkDispatcherExecutor);
 
-    // No backoffPolicy is set on the ingester — deliberately. The ingester's own 429
-    // retry re-queues rejected operations at the tail of its buffer, letting newer
-    // records overtake them (an ordering violation for upserts), and merely passing
-    // noBackoff() still makes the ingester create its internal retry scheduler, which
-    // leaks when a timed-out close skips ingester.close(). Leaving the policy unset
-    // routes full responses (429 items included) to the listener, and the retrying
-    // client above has already retried everything retriable by then.
     this.bulkIngester = BulkIngester.of(builder -> builder
         .client(retryingClient)
         .maxOperations(config.batchSize())
         .maxSize(maxBulkSizeBytes)
-        // Direct total cap on concurrent bulk requests. Before 16.0 the connector passed
-        // maxInFlightRequests - 1 to BulkProcessor (whose parameter counted requests beyond
-        // the one being built), so max.in.flight.requests=N effectively allowed N-1 requests;
-        // as of 16.0 the config means what it says.
         .maxConcurrentRequests(config.maxInFlightRequests())
         .flushInterval(flushIntervalMs, TimeUnit.MILLISECONDS)
-        // Connector-owned and named; the ingester will not close an external scheduler,
-        // so closeResources() must (and does) shut it down.
         .scheduler(bulkIngesterScheduler)
         .listener(buildListener(afterBulkCallback)));
-  }
-
-  /**
-   * A factory for daemon threads named {@code namePrefix1}, {@code namePrefix2}, ... so
-   * every connector-owned pool is attributable to its connector and task in thread dumps.
-   *
-   * @param namePrefix the thread-name prefix, including a trailing separator
-   * @return the thread factory
-   */
-  private static ThreadFactory namedDaemonThreadFactory(String namePrefix) {
-    return new ThreadFactory() {
-      private final AtomicInteger threadNumber = new AtomicInteger(1);
-      @Override
-      public Thread newThread(Runnable r) {
-        Thread thread = Executors.defaultThreadFactory().newThread(r);
-        thread.setName(namePrefix + threadNumber.getAndIncrement());
-        thread.setDaemon(true);
-        return thread;
-      }
-    };
   }
 
   private String getServerVersion() {
@@ -274,16 +212,10 @@ public class ElasticsearchClient {
   public void close() {
     try {
       if (isFailed()) {
-        // The task is failing: buffered records will not be committed, so don't send them.
         log.debug("Not flushing buffered records because the client has already failed.");
         return;
       }
       try {
-        // Flush asynchronously: a manual flush parks uninterruptibly until an in-flight
-        // slot frees, which during a retry backoff can exceed the close budget.
-        // awaitBufferDrain below is the single bounded, interrupt-aware wait; a flush
-        // still parked when the timeout expires is reclaimed at executor shutdown or
-        // abandoned as a daemon thread, like the skipped ingester close below.
         bulkIngesterScheduler.submit(() -> {
           try {
             bulkIngester.flush();
@@ -300,8 +232,6 @@ public class ElasticsearchClient {
         );
       }
       if (isFailed()) {
-        // The buffer can drain because the last in-flight request exhausted its retries
-        // and failed; surface that instead of reporting a clean close.
         throw error.get();
       }
     } finally {
@@ -319,10 +249,6 @@ public class ElasticsearchClient {
     long maxWaitTime = clock.milliseconds() + timeoutMs;
     while (numBufferedRecords.get() > 0) {
       if (Thread.currentThread().isInterrupted()) {
-        // Task cancellation interrupts this thread, but Time.SYSTEM's sleep swallows the
-        // InterruptedException and re-sets the flag, so every further sleep returns
-        // immediately and this loop busy-spins until the flush timeout. Abort right away
-        // instead, like BulkProcessor.awaitClose used to; the flag stays set for callers.
         throw new ConnectException(
             "Interrupted while processing all in-flight requests on ElasticsearchClient close."
         );
@@ -398,10 +324,6 @@ public class ElasticsearchClient {
    */
   public boolean hasMapping(String resourceName) {
     TypeMapping mapping = mapping(resourceName);
-    // TypeMapping.properties() is empty for mappings that only define dynamic settings,
-    // dynamic_templates or _meta, but such mappings must still count as existing so the
-    // connector does not overwrite them. Serialize the mapping and compare against the empty
-    // object, which matches what the old high-level client's sourceAsMap() check saw.
     return mapping != null && !"{}".equals(JsonpUtils.toJsonString(mapping, jsonpMapper));
   }
 
@@ -521,12 +443,6 @@ public class ElasticsearchClient {
         bulkFinished(contexts);
       }
 
-      // The RetryingElasticsearchAsyncClient has already exhausted the retry budget by
-      // the time a failure reaches this listener (the ingester holds its future across
-      // every retry), so a failure here is terminal. Client 9.5.0+ can take over the
-      // whole-request half of that retry via the transport's retry config
-      // (RetryingHttpClient, elasticsearch-java#954); the item-429 half must stay in
-      // RetryingElasticsearchAsyncClient either way.
       @Override
       public void afterBulk(long executionId, BulkRequest request,
                             List<BulkOpContext> contexts, Throwable failure) {
@@ -576,23 +492,11 @@ public class ElasticsearchClient {
         log.warn("Failed to close bulk ingester.", e);
       }
     } else {
-      // BulkIngester.close() waits with no timeout for in-flight requests and buffered
-      // operations. Buffered records here mean a request is still in flight (possibly a
-      // retry chain waiting out a backoff, which deliberately holds its slot), so skip
-      // the ingester close and let closing the transport below abort the in-flight
-      // request; a pending backoff is cancelled at retry-executor shutdown, and the
-      // ingester threads are daemons on connector-owned pools that closeResources shuts
-      // down regardless.
       log.warn("Skipping bulk ingester close because {} records are still buffered; closing the "
               + "underlying transport will abort them.", numBufferedRecords.get());
     }
 
     try {
-      // Closing the transport also closes the underlying low-level RestClient, aborting any
-      // still-pending bulk requests. It must be closed while the dispatcher executor is still
-      // alive: a bulk completing after the dispatcher is shut down has its async hop rejected,
-      // so the ingester's lock-taking completion runs inline on the I/O reactor thread, which
-      // recreates the reactor/ingester lock-order deadlock and hangs this method.
       transport.close();
     } catch (IOException e) {
       log.warn("Failed to close Elasticsearch client.", e);
@@ -600,7 +504,6 @@ public class ElasticsearchClient {
 
     bulkRetryExecutor.shutdown();
     bulkDispatcherExecutor.shutdown();
-    // Also stops the ingester's flush timer when the ingester close was skipped above.
     bulkIngesterScheduler.shutdown();
     try {
       if (!bulkRetryExecutor.awaitTermination(CLOSE_WAIT_TIME_MS, TimeUnit.MILLISECONDS)) {
@@ -668,26 +571,9 @@ public class ElasticsearchClient {
   }
 
   private static boolean isResourceAlreadyExists(ElasticsearchException e) {
-    return containsErrorType(e.error(), RESOURCE_ALREADY_EXISTS_EXCEPTION)
+    ErrorCause cause = e.error();
+    return (cause != null && RESOURCE_ALREADY_EXISTS_EXCEPTION.equals(cause.type()))
         || (e.getMessage() != null && e.getMessage().contains(RESOURCE_ALREADY_EXISTS_EXCEPTION));
-  }
-
-  /**
-   * Checks whether the given error, or any error in its causal chain, matches the given
-   * Elasticsearch error type, either structurally (error type) or in the error reason.
-   *
-   * @param cause the error cause returned by Elasticsearch, may be null
-   * @param errorType the Elasticsearch error type to look for
-   * @return true if the error matches the type
-   */
-  private static boolean containsErrorType(ErrorCause cause, String errorType) {
-    for (ErrorCause current = cause; current != null; current = current.causedBy()) {
-      if (errorType.equals(current.type())
-          || (current.reason() != null && current.reason().contains(errorType))) {
-        return true;
-      }
-    }
-    return false;
   }
 
   private static VersionType operationVersionType(BulkOperation operation) {
@@ -723,13 +609,12 @@ public class ElasticsearchClient {
     if (item.error() == null) {
       return false;
     }
-    for (String error : MALFORMED_DOC_ERRORS) {
-      if (containsErrorType(item.error(), error)) {
-        reportBadRecordAndError(item, context);
-        return handleMalformedDocResponse();
-      }
+    String errorType = item.error().type();
+    if (MALFORMED_DOC_ERRORS.contains(errorType)) {
+      reportBadRecordAndError(item, context);
+      return handleMalformedDocResponse();
     }
-    if (containsErrorType(item.error(), VERSION_CONFLICT_EXCEPTION)) {
+    if (VERSION_CONFLICT_EXCEPTION.equals(errorType)) {
       // Now check if this version conflict is caused by external version number
       // which was set by us (set explicitly to the topic's offset), in which case
       // the version conflict is due to a repeated or out-of-order message offset
@@ -851,8 +736,8 @@ public class ElasticsearchClient {
   private synchronized void reportBadRecordAndError(BulkResponseItem item, BulkOpContext context) {
 
     // RCCA-7507 : Don't push to DLQ if we receive Internal version conflict on data streams
-    if (containsErrorType(item.error(), VERSION_CONFLICT_EXCEPTION)
-            && config.isDataStream()) {
+    ErrorCause cause = item.error();
+    if (cause != null && VERSION_CONFLICT_EXCEPTION.equals(cause.type()) && config.isDataStream()) {
       log.debug("Skipping DLQ insertion for DataStream type.");
       return;
     }
@@ -889,6 +774,27 @@ public class ElasticsearchClient {
     }
     return message.toString();
   }
+
+  /**
+   * A factory for daemon threads named {@code namePrefix1}, {@code namePrefix2}, ... so
+   * every connector-owned pool is attributable to its connector and task in thread dumps.
+   *
+   * @param namePrefix the thread-name prefix, including a trailing separator
+   * @return the thread factory
+   */
+  private static ThreadFactory namedDaemonThreadFactory(String namePrefix) {
+    return new ThreadFactory() {
+      private final AtomicInteger threadNumber = new AtomicInteger(1);
+      @Override
+      public Thread newThread(Runnable r) {
+        Thread thread = Executors.defaultThreadFactory().newThread(r);
+        thread.setName(namePrefix + threadNumber.getAndIncrement());
+        thread.setDaemon(true);
+        return thread;
+      }
+    };
+  }
+
 
   /**
    * Exception that swallows the stack trace used for reporting errors from Elasticsearch
