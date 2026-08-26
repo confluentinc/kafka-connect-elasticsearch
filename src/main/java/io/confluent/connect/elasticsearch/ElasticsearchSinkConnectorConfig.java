@@ -33,7 +33,6 @@ import org.apache.kafka.common.config.ConfigDef.Type;
 import org.apache.kafka.common.config.ConfigDef.Validator;
 import org.apache.kafka.common.config.ConfigDef.Width;
 import org.apache.kafka.common.config.types.Password;
-import org.elasticsearch.common.unit.ByteSizeValue;
 
 import static org.apache.kafka.common.config.ConfigDef.Range.between;
 import static org.apache.kafka.common.config.SslConfigs.SSL_ENDPOINT_IDENTIFICATION_ALGORITHM_CONFIG;
@@ -90,7 +89,10 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   public static final String MAX_IN_FLIGHT_REQUESTS_CONFIG = "max.in.flight.requests";
   private static final String MAX_IN_FLIGHT_REQUESTS_DOC =
       "The maximum number of indexing requests that can be in-flight to Elasticsearch before "
-      + "blocking further requests.";
+      + "blocking further requests. A request being retried after a failure keeps occupying "
+      + "its in-flight slot through the retry backoff, so ingestion pauses when every slot "
+      + "is waiting on a retry; this backpressure also preserves record order during "
+      + "retries when set to 1.";
   private static final String MAX_IN_FLIGHT_REQUESTS_DISPLAY = "Max In-flight Requests";
   private static final int MAX_IN_FLIGHT_REQUESTS_DEFAULT = 5;
 
@@ -1130,8 +1132,8 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
     return BehaviorOnNullValues.valueOf(getString(BEHAVIOR_ON_NULL_VALUES_CONFIG).toUpperCase());
   }
 
-  public ByteSizeValue bulkSize() {
-    return new ByteSizeValue(getLong(BULK_SIZE_BYTES_CONFIG));
+  public long bulkSize() {
+    return getLong(BULK_SIZE_BYTES_CONFIG);
   }
 
   public boolean compression() {
