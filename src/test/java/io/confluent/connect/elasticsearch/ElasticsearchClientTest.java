@@ -123,6 +123,69 @@ public class ElasticsearchClientTest extends ElasticsearchClientTestBase {
     client.close();
   }
 
+  @Test(timeout = 30_000)
+  public void testConstructorFailureClosesTransport() throws Exception {
+    // A reachable socket so RestClient.builder().build() actually starts its (non-daemon)
+    // I/O reactor threads; the overridden getServerVersion then throws right after, in the
+    // constructor's guarded region. The reactor threads must be closed, not leaked.
+    try (ServerSocket socket = new ServerSocket(0)) {
+      props.put(CONNECTION_URL_CONFIG, "http://localhost:" + socket.getLocalPort());
+      config = new ElasticsearchSinkConnectorConfig(props);
+
+      int baseline = countRestClientThreads();
+
+      assertThrows(RuntimeException.class, () ->
+          new ElasticsearchClient(config, null, () -> offsetTracker.updateOffsets(), 1,
+              "elasticsearch-sink") {
+            @Override
+            String getServerVersion(co.elastic.clients.elasticsearch.ElasticsearchClient c) {
+              throw new RuntimeException("boom during construction");
+            }
+          });
+
+      // The failed construction must leave no net reactor threads behind.
+      long deadline = System.currentTimeMillis() + 10_000;
+      while (countRestClientThreads() > baseline && System.currentTimeMillis() < deadline) {
+        Thread.sleep(50);
+      }
+      assertEquals("elasticsearch-rest-client threads leaked after failed construction",
+          baseline, countRestClientThreads());
+    }
+  }
+
+  private static int countRestClientThreads() {
+    int count = 0;
+    for (Thread t : Thread.getAllStackTraces().keySet()) {
+      if (t.isAlive() && t.getName().startsWith("elasticsearch-rest-client")) {
+        count++;
+      }
+    }
+    return count;
+  }
+
+  @Test
+  public void testCloseIsIdempotent() {
+    ElasticsearchClient client = new ElasticsearchClient(config, null, () -> offsetTracker.updateOffsets(), 1, "elasticsearch-sink");
+
+    SinkRecord record = sinkRecord(0);
+    ElasticsearchClient.BulkOpContext context = new ElasticsearchClient.BulkOpContext(
+        record,
+        new AsyncOffsetTracker.AsyncOffsetState(record.kafkaOffset()),
+        converter.convertRecord(record, index));
+    BulkResponseItem failedItem = BulkResponseItem.of(b -> b
+        .operationType(OperationType.Index)
+        .index(index)
+        .status(400)
+        .error(e -> e.type("some_terminal_exception").reason("boom")));
+    client.handleResponse(failedItem, context);
+
+    // The first close drains and re-throws the latched failure; the second must be a
+    // no-op — re-running the teardown after the ingester scheduler is terminated would
+    // park forever inside bulkIngester.close().
+    assertThrows(ConnectException.class, client::close);
+    client.close();
+  }
+
   @Test
   public void testCloseFails() throws Exception {
     props.put(BATCH_SIZE_CONFIG, "1");
@@ -254,6 +317,9 @@ public class ElasticsearchClientTest extends ElasticsearchClientTestBase {
         Thread.currentThread().interrupt();
         ConnectException e = assertThrows(ConnectException.class, client::close);
         assertTrue(e.getMessage().contains("Interrupted"));
+        // The interrupt must be preserved as the cause for diagnosability (master's
+        // contract); clock.sleep swallows the InterruptedException, so it is synthesized.
+        assertTrue(String.valueOf(e.getCause()), e.getCause() instanceof InterruptedException);
       } finally {
         // Clear the flag so test teardown is not poisoned.
         Thread.interrupted();
@@ -900,7 +966,8 @@ public class ElasticsearchClientTest extends ElasticsearchClientTestBase {
         message.contains("[mapper_parsing_exception] failed to parse field [price]"));
     assertTrue(message,
         message.contains("nested: [illegal_argument_exception] For input string: \"abc\""));
-    client.close();
+    // close() drains and then re-throws the latched indexing failure.
+    assertThrows(ConnectException.class, client::close);
   }
 
   @Test
@@ -927,7 +994,8 @@ public class ElasticsearchClientTest extends ElasticsearchClientTestBase {
     String message = reported.getValue().getMessage();
     assertTrue(message, message.contains("[unknown] unknown reason"));
     assertFalse(message, message.contains("null"));
-    client.close();
+    // close() drains and then re-throws the latched indexing failure.
+    assertThrows(ConnectException.class, client::close);
   }
 
   @Test

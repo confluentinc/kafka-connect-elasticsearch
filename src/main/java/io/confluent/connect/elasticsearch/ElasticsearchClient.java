@@ -29,6 +29,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.Condition;
@@ -73,10 +74,12 @@ import static java.util.stream.Collectors.toList;
  * (max number of in-flight requests).
  *
  * <p>Batch processing is asynchronous. The BulkIngester executes bulk requests through a
- * {@link RetryingElasticsearchAsyncClient}, which retries transport-level failures and
- * per-item HTTP 429 rejections with a jittered, capped exponential backoff while the
- * ingester's in-flight slot stays held — preserving record order during retries at
- * max.in.flight.requests=1 (see that class for the full design).
+ * {@link RetryingElasticsearchAsyncClient}, which retries whole-request failures (transport
+ * errors and non-2xx responses, including a whole-response 429) with a jittered, capped
+ * exponential backoff while the ingester's in-flight slot stays held — preserving record
+ * order during retries at max.in.flight.requests=1 (see that class for the full design).
+ * Item-level failures (including per-item 429s) are not retried here; they are terminal and
+ * handled by the listener.
  *
  * <p>If all the retries fail, the exception is reported via an atomic reference to an error,
  * which is checked and thrown from a subsequent call to the task's put method and that results
@@ -103,11 +106,13 @@ public class ElasticsearchClient {
   );
   private static final String UNKNOWN_VERSION_TAG = "Unknown";
   protected final AtomicInteger numBufferedRecords;
+  private final AtomicBoolean closed = new AtomicBoolean(false);
   private final AtomicReference<ConnectException> error;
   protected final BulkIngester<BulkOpContext> bulkIngester;
   private final ElasticsearchSinkConnectorConfig config;
   private final ErrantRecordReporter reporter;
   private final co.elastic.clients.elasticsearch.ElasticsearchClient client;
+  private final RetryingElasticsearchAsyncClient retryingClient;
   private final JacksonJsonpMapper jsonpMapper;
   private final RestClientTransport transport;
   private final ScheduledExecutorService bulkRetryExecutor;
@@ -159,42 +164,82 @@ public class ElasticsearchClient {
     final long maxBulkSizeBytes = bulkSize;
 
     ConfigCallbackHandler configCallbackHandler = new ConfigCallbackHandler(config);
-    RestClient restClient = RestClient
-        .builder(
-            config.connectionUrls()
-                .stream()
-                .map(HttpHost::create)
-                .collect(toList())
-                .toArray(new HttpHost[config.connectionUrls().size()])
-        ).setHttpClientConfigCallback(configCallbackHandler).build();
-
-    this.jsonpMapper = new JacksonJsonpMapper();
-    this.transport = new RestClientTransport(restClient, jsonpMapper);
-    this.client = new co.elastic.clients.elasticsearch.ElasticsearchClient(transport);
-
-    esVersion = getServerVersion();
-
-    RetryingElasticsearchAsyncClient retryingClient = new RetryingElasticsearchAsyncClient(
-        transport,
-        config.maxRetries(),
-        config.retryBackoffMs(),
-        bulkRetryExecutor,
-        bulkDispatcherExecutor);
-
-    this.bulkIngester = BulkIngester.of(builder -> builder
-        .client(retryingClient)
-        .maxOperations(config.batchSize())
-        .maxSize(maxBulkSizeBytes)
-        .maxConcurrentRequests(config.maxInFlightRequests())
-        .flushInterval(flushIntervalMs, TimeUnit.MILLISECONDS)
-        .scheduler(bulkIngesterScheduler)
-        .listener(buildListener(afterBulkCallback)));
+    JacksonJsonpMapper mapper = new JacksonJsonpMapper();
+    RestClient restClient = null;
+    RestClientTransport clientTransport = null;
+    co.elastic.clients.elasticsearch.ElasticsearchClient syncClient;
+    String serverVersion;
+    RetryingElasticsearchAsyncClient asyncClient;
+    BulkIngester<BulkOpContext> ingester;
+    try {
+      restClient = RestClient
+          .builder(
+              config.connectionUrls()
+                  .stream()
+                  .map(HttpHost::create)
+                  .collect(toList())
+                  .toArray(new HttpHost[config.connectionUrls().size()])
+          ).setHttpClientConfigCallback(configCallbackHandler).build();
+      clientTransport = new RestClientTransport(restClient, mapper);
+      syncClient = new co.elastic.clients.elasticsearch.ElasticsearchClient(clientTransport);
+      serverVersion = getServerVersion(syncClient);
+      asyncClient = new RetryingElasticsearchAsyncClient(
+          clientTransport,
+          config.maxRetries(),
+          config.retryBackoffMs(),
+          bulkRetryExecutor,
+          bulkDispatcherExecutor);
+      final RetryingElasticsearchAsyncClient ingesterClient = asyncClient;
+      ingester = BulkIngester.of(builder -> builder
+          .client(ingesterClient)
+          .maxOperations(config.batchSize())
+          .maxSize(maxBulkSizeBytes)
+          .maxConcurrentRequests(config.maxInFlightRequests())
+          .flushInterval(flushIntervalMs, TimeUnit.MILLISECONDS)
+          .scheduler(bulkIngesterScheduler)
+          .listener(buildListener(afterBulkCallback)));
+    } catch (RuntimeException | Error e) {
+      // RestClient.builder().build() starts the HTTP client's non-daemon I/O reactor
+      // threads immediately; a task restart loop must not leak them (or the executors)
+      // when construction fails past that point — stop() is never called on a task
+      // whose constructor threw.
+      closeQuietly(clientTransport, restClient);
+      bulkRetryExecutor.shutdownNow();
+      bulkDispatcherExecutor.shutdownNow();
+      bulkIngesterScheduler.shutdownNow();
+      throw e;
+    }
+    this.jsonpMapper = mapper;
+    this.transport = clientTransport;
+    this.client = syncClient;
+    this.esVersion = serverVersion;
+    this.retryingClient = asyncClient;
+    this.bulkIngester = ingester;
   }
 
-  private String getServerVersion() {
+  /**
+   * Best-effort close of a partially constructed transport. Closing the transport also
+   * closes the RestClient beneath it; a bare RestClient is closed directly.
+   */
+  private static void closeQuietly(RestClientTransport transport, RestClient restClient) {
+    try {
+      if (transport != null) {
+        transport.close();
+      } else if (restClient != null) {
+        restClient.close();
+      }
+    } catch (Exception e) {
+      log.warn("Failed to close the Elasticsearch transport after failed construction.", e);
+    }
+  }
+
+  // Package-private and overridable so a test can force a failure after the transport
+  // (and its live I/O reactor threads) is built, exercising the constructor's cleanup.
+  String getServerVersion(
+      co.elastic.clients.elasticsearch.ElasticsearchClient esClient) {
     String esVersionNumber = UNKNOWN_VERSION_TAG;
     try {
-      esVersionNumber = client.info().version().number();
+      esVersionNumber = esClient.info().version().number();
     } catch (Exception e) {
       // Same error messages as from validating the connection for IOException.
       // Insufficient privileges to validate the version number if caught
@@ -210,11 +255,19 @@ public class ElasticsearchClient {
    * @throws ConnectException if all the records fail to flush before the timeout.
    */
   public void close() {
+    // close() is reachable twice on one task (throwIfFailed() from put, then the
+    // framework's stop()), always on the task thread. The second call must be a no-op:
+    // re-running bulkIngester.close() after closeResources() terminated its scheduler
+    // would park forever (its close waits on listener tasks that scheduler must run).
+    if (!closed.compareAndSet(false, true)) {
+      log.debug("The ElasticsearchClient is already closed.");
+      return;
+    }
     try {
-      if (isFailed()) {
-        log.debug("Not flushing buffered records because the client has already failed.");
-        return;
-      }
+      // Flush and drain even when a batch has already failed: sibling batches may still
+      // be in flight carrying good records, and master's awaitClose gave them the
+      // flush-timeout window to finish and mark their offsets. Aborting their live HTTP
+      // exchanges instead would redeliver records Elasticsearch already indexed.
       try {
         bulkIngesterScheduler.submit(() -> {
           try {
@@ -249,8 +302,11 @@ public class ElasticsearchClient {
     long maxWaitTime = clock.milliseconds() + timeoutMs;
     while (numBufferedRecords.get() > 0) {
       if (Thread.currentThread().isInterrupted()) {
+        // clock.sleep swallows the InterruptedException and re-sets the flag, so there is
+        // no caught exception to chain; attach a fresh one to keep master's cause contract.
         throw new ConnectException(
-            "Interrupted while processing all in-flight requests on ElasticsearchClient close."
+            "Interrupted while processing all in-flight requests on ElasticsearchClient close.",
+            new InterruptedException()
         );
       }
       if (clock.milliseconds() > maxWaitTime) {
@@ -502,25 +558,49 @@ public class ElasticsearchClient {
       log.warn("Failed to close Elasticsearch client.", e);
     }
 
+    // Stop the retry ladder before anything else: shutdown() discards a retry queued
+    // mid-backoff without running it, which would leave its bulk future incomplete
+    // forever — the ingester's in-flight slot held and the listener's buffer accounting
+    // never run, hanging any later waitForInFlightRequests(). Fail those futures
+    // explicitly while the ingester scheduler is still accepting the listener callbacks
+    // that do that accounting.
     bulkRetryExecutor.shutdown();
+    retryingClient.failAllPending(
+        new ConnectException("Bulk request aborted: the Elasticsearch client is closing"));
     bulkDispatcherExecutor.shutdown();
     bulkIngesterScheduler.shutdown();
     try {
-      if (!bulkRetryExecutor.awaitTermination(CLOSE_WAIT_TIME_MS, TimeUnit.MILLISECONDS)) {
-        bulkRetryExecutor.shutdownNow();
-      }
-      if (!bulkDispatcherExecutor.awaitTermination(CLOSE_WAIT_TIME_MS, TimeUnit.MILLISECONDS)) {
-        bulkDispatcherExecutor.shutdownNow();
-      }
-      if (!bulkIngesterScheduler.awaitTermination(CLOSE_WAIT_TIME_MS, TimeUnit.MILLISECONDS)) {
-        bulkIngesterScheduler.shutdownNow();
-      }
+      awaitTerminationWithin(
+          Arrays.asList(bulkRetryExecutor, bulkDispatcherExecutor, bulkIngesterScheduler),
+          CLOSE_WAIT_TIME_MS);
     } catch (InterruptedException e) {
       bulkRetryExecutor.shutdownNow();
       bulkDispatcherExecutor.shutdownNow();
       bulkIngesterScheduler.shutdownNow();
       Thread.currentThread().interrupt();
       log.warn("Interrupted while awaiting for executor service shutdown.", e);
+    }
+  }
+
+  /**
+   * Awaits termination of all the given executors against one shared deadline, so the
+   * caller waits at most {@code totalTimeoutMs} in total rather than that per executor
+   * (the pools wind down concurrently). Any executor not terminated by the deadline is
+   * forced down with {@code shutdownNow()}. Callers must have already called
+   * {@code shutdown()} on each.
+   *
+   * @param executors the executors to await, in the order to check them
+   * @param totalTimeoutMs the total budget shared across all of them
+   * @throws InterruptedException if the calling thread is interrupted while waiting
+   */
+  static void awaitTerminationWithin(List<ExecutorService> executors, long totalTimeoutMs)
+      throws InterruptedException {
+    long deadlineNanos = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(totalTimeoutMs);
+    for (ExecutorService executor : executors) {
+      long remainingNanos = deadlineNanos - System.nanoTime();
+      if (!executor.awaitTermination(Math.max(0, remainingNanos), TimeUnit.NANOSECONDS)) {
+        executor.shutdownNow();
+      }
     }
   }
 

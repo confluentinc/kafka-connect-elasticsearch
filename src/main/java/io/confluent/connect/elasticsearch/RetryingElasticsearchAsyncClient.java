@@ -19,7 +19,9 @@ import co.elastic.clients.elasticsearch.ElasticsearchAsyncClient;
 import co.elastic.clients.elasticsearch.core.BulkRequest;
 import co.elastic.clients.elasticsearch.core.BulkResponse;
 import co.elastic.clients.transport.ElasticsearchTransport;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
@@ -53,6 +55,8 @@ class RetryingElasticsearchAsyncClient extends ElasticsearchAsyncClient {
   private final long retryBackoffMs;
   private final ScheduledExecutorService retryExecutor;
   private final Executor dispatcherExecutor;
+  private final Set<CompletableFuture<BulkResponse>> pendingFutures =
+      ConcurrentHashMap.newKeySet();
 
   RetryingElasticsearchAsyncClient(
       ElasticsearchTransport transport,
@@ -71,8 +75,24 @@ class RetryingElasticsearchAsyncClient extends ElasticsearchAsyncClient {
   @Override
   public CompletableFuture<BulkResponse> bulk(BulkRequest request) {
     CompletableFuture<BulkResponse> result = new CompletableFuture<>();
+    pendingFutures.add(result);
+    result.whenComplete((response, failure) -> pendingFutures.remove(result));
     attemptBulk(request, 1, result);
     return result;
+  }
+
+  /**
+   * Completes every still-pending bulk future exceptionally with the given cause.
+   *
+   * <p>Called during close, after the retry executor is shut down: that shutdown discards
+   * a retry queued mid-backoff without ever running it, which would otherwise leave its
+   * future incomplete forever — the ingester's in-flight slot held and the listener's
+   * buffer accounting never run. Completing a future that already completed is a no-op.
+   */
+  void failAllPending(Exception cause) {
+    for (CompletableFuture<BulkResponse> pending : pendingFutures) {
+      pending.completeExceptionally(cause);
+    }
   }
 
   /**

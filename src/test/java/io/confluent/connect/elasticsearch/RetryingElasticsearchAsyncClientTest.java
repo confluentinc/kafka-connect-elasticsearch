@@ -156,6 +156,40 @@ public class RetryingElasticsearchAsyncClientTest {
   }
 
   @Test
+  public void testFailAllPendingCompletesPendingFuture() throws Exception {
+    ScriptedClient client = client(2);
+    // A future that never completes on its own: the same shape as a request stuck
+    // in flight or a retry parked mid-backoff when close() discards it.
+    client.will(CompletableFuture::new);
+
+    CompletableFuture<BulkResponse> result = client.bulk(request(indexOp("a")));
+    assertTrue(!result.isDone());
+
+    IOException cause = new IOException("client is closing");
+    client.failAllPending(cause);
+
+    ExecutionException e =
+        assertThrows(ExecutionException.class, () -> result.get(10, TimeUnit.SECONDS));
+    assertSame(cause, e.getCause());
+  }
+
+  @Test
+  public void testFailAllPendingLeavesCompletedFuturesUntouched() throws Exception {
+    ScriptedClient client = client(2);
+    BulkResponse original = response(okItem("a"));
+    client.will(() -> CompletableFuture.completedFuture(original));
+
+    CompletableFuture<BulkResponse> result = client.bulk(request(indexOp("a")));
+    BulkResponse response = result.get(10, TimeUnit.SECONDS);
+    assertSame(original, response);
+
+    client.failAllPending(new IOException("client is closing"));
+
+    // The completed future keeps its successful result.
+    assertSame(original, result.get(10, TimeUnit.SECONDS));
+  }
+
+  @Test
   public void testDispatcherRejectionCompletesFuture() throws Exception {
     ScriptedClient client = client(2);
     client.willRespond(okItem("a"));
