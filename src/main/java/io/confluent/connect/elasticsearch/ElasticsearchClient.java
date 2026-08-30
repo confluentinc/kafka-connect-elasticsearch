@@ -300,22 +300,25 @@ public class ElasticsearchClient {
    * @return true if the buffer was drained, false if the timeout expired first
    */
   private boolean awaitBufferDrain(long timeoutMs) {
-    long maxWaitTime = clock.milliseconds() + timeoutMs;
-    while (numBufferedRecords.get() > 0) {
-      if (Thread.currentThread().isInterrupted()) {
-        // clock.sleep swallows the InterruptedException and re-sets the flag, so there is
-        // no caught exception to chain; attach a fresh one to keep master's cause contract.
-        throw new ConnectException(
-            "Interrupted while processing all in-flight requests on ElasticsearchClient close.",
-            new InterruptedException()
-        );
+    inFlightRequestLock.lock();
+    try {
+      long remainingNanos = TimeUnit.MILLISECONDS.toNanos(timeoutMs);
+      while (numBufferedRecords.get() > 0) {
+        if (remainingNanos <= 0) {
+          return false;
+        }
+        remainingNanos = inFlightRequestsUpdated.awaitNanos(remainingNanos);
       }
-      if (clock.milliseconds() > maxWaitTime) {
-        return false;
-      }
-      clock.sleep(WAIT_TIME_MS);
+      return true;
+    } catch (InterruptedException e) {
+      // Re-set the flag so closeResources()'s awaitTerminationWithin still sees the
+      // interrupt and force-shuts the executors instead of waiting out its full budget.
+      Thread.currentThread().interrupt();
+      throw new ConnectException(
+          "Interrupted while processing all in-flight requests on ElasticsearchClient close.", e);
+    } finally {
+      inFlightRequestLock.unlock();
     }
-    return true;
   }
 
   /**
