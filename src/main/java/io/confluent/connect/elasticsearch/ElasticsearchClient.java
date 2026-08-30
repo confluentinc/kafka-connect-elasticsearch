@@ -18,6 +18,7 @@ package io.confluent.connect.elasticsearch;
 import java.io.IOException;
 import java.io.StringReader;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -677,6 +678,28 @@ public class ElasticsearchClient {
   }
 
   /**
+   * Checks whether any error in the {@code causedBy} chain has one of the given types.
+   * Bulk item failures are frequently wrapped (e.g. a mapper_parsing_exception nested under
+   * an outer exception type), so the marker can appear below the top-level error.
+   *
+   * @param error the top-level error cause returned by Elasticsearch, may be null
+   * @param types the error types to search for
+   * @return true if any error in the chain has one of the given types
+   */
+  private static boolean chainContainsType(ErrorCause error, Set<String> types) {
+    for (ErrorCause current = error; current != null; current = current.causedBy()) {
+      if (types.contains(current.type())) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private static boolean chainContainsType(ErrorCause error, String type) {
+    return chainContainsType(error, Collections.singleton(type));
+  }
+
+  /**
    * Processes an item of a bulk response.
    * Successful responses are ignored. Failed responses are reported to the DLQ and handled
    * according to configuration (ignore or fail). Version conflicts are ignored.
@@ -689,12 +712,11 @@ public class ElasticsearchClient {
     if (item.error() == null) {
       return false;
     }
-    String errorType = item.error().type();
-    if (MALFORMED_DOC_ERRORS.contains(errorType)) {
+    if (chainContainsType(item.error(), MALFORMED_DOC_ERRORS)) {
       reportBadRecordAndError(item, context);
       return handleMalformedDocResponse();
     }
-    if (VERSION_CONFLICT_EXCEPTION.equals(errorType)) {
+    if (chainContainsType(item.error(), VERSION_CONFLICT_EXCEPTION)) {
       // Now check if this version conflict is caused by external version number
       // which was set by us (set explicitly to the topic's offset), in which case
       // the version conflict is due to a repeated or out-of-order message offset
@@ -817,7 +839,7 @@ public class ElasticsearchClient {
 
     // RCCA-7507 : Don't push to DLQ if we receive Internal version conflict on data streams
     ErrorCause cause = item.error();
-    if (cause != null && VERSION_CONFLICT_EXCEPTION.equals(cause.type()) && config.isDataStream()) {
+    if (chainContainsType(cause, VERSION_CONFLICT_EXCEPTION) && config.isDataStream()) {
       log.debug("Skipping DLQ insertion for DataStream type.");
       return;
     }
