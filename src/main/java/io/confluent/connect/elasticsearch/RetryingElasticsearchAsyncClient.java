@@ -44,6 +44,13 @@ import org.slf4j.LoggerFactory;
  * <p>Completion always hops through {@code dispatcherExecutor}, off the transport's
  * I/O reactor threads (see the deadlock note at this client's construction site).
  *
+ * <p>Only {@link #bulk(BulkRequest)} carries this retry-and-dispatch contract. This class
+ * extends the full generated {@code ElasticsearchAsyncClient} because {@code BulkIngester}'s
+ * builder only accepts that concrete type, but every other inherited method (search, get,
+ * ping, etc.) falls through to the default implementation with no retry and no dispatcher
+ * hop. Do not call anything but {@code bulk()} on this instance — use the plain sync or
+ * async client for anything else.
+ *
  * <p>Superseded by elasticsearch-java 9.5+'s {@code RetryingHttpClient}
  * (elasticsearch-java#954) at that upgrade.
  */
