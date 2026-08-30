@@ -209,7 +209,7 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
             .isEqualTo("FAILED"));
 
     assertThat(connect.connectorStatus(CONNECTOR_NAME).tasks().get(0).trace())
-        .contains("Bulk request failed")
+        .contains("Bulk request failed after 3 attempt(s)")
         .contains("Connection refused");
   }
 

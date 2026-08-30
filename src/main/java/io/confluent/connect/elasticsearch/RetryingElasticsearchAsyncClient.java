@@ -26,6 +26,7 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import org.apache.kafka.connect.errors.ConnectException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -116,7 +117,8 @@ class RetryingElasticsearchAsyncClient extends ElasticsearchAsyncClient {
         return null;
       }
       if (attempt > maxRetries) {
-        result.completeExceptionally(failure);
+        result.completeExceptionally(new ConnectException(
+            String.format("Bulk request failed after %d attempt(s)", attempt), failure));
         return null;
       }
       long backoffMs = RetryUtil.computeRandomRetryWaitTimeInMillis(attempt, retryBackoffMs);

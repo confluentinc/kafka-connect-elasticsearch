@@ -45,6 +45,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
+import org.apache.kafka.connect.errors.ConnectException;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -95,8 +96,11 @@ public class RetryingElasticsearchAsyncClientTest {
 
     ExecutionException e =
         assertThrows(ExecutionException.class, () -> result.get(10, TimeUnit.SECONDS));
-    assertTrue(String.valueOf(e.getCause()), e.getCause() instanceof IOException);
-    assertEquals("failure 3", e.getCause().getMessage());
+    assertTrue(String.valueOf(e.getCause()), e.getCause() instanceof ConnectException);
+    assertEquals("Bulk request failed after 3 attempt(s)", e.getCause().getMessage());
+    assertTrue(String.valueOf(e.getCause().getCause()),
+        e.getCause().getCause() instanceof IOException);
+    assertEquals("failure 3", e.getCause().getCause().getMessage());
     // 1 initial attempt + 2 retries.
     assertEquals(3, client.sends.size());
   }

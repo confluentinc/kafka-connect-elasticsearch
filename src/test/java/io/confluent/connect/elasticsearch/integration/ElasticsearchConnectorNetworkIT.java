@@ -296,7 +296,7 @@ public class ElasticsearchConnectorNetworkIT extends BaseConnectorIT {
                     .isEqualTo("FAILED"));
 
     assertThat(connect.connectorStatus(CONNECTOR_NAME).tasks().get(0).trace())
-            .contains("Bulk request failed")
+            .contains("Bulk request failed after 3 attempt(s)")
             .contains("circuit_breaking_exception")
             .contains("Data too large");
 
@@ -348,7 +348,7 @@ public class ElasticsearchConnectorNetworkIT extends BaseConnectorIT {
                     .isEqualTo("FAILED"));
 
     assertThat(connect.connectorStatus(CONNECTOR_NAME).tasks().get(0).trace())
-            .contains("Bulk request failed")
+            .contains("Bulk request failed after 3 attempt(s)")
             .contains("503 Service Unavailable");
 
     // The failed request is re-sent verbatim while its in-flight slot stays held, so
