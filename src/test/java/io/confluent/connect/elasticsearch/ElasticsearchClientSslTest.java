@@ -62,8 +62,7 @@ public class ElasticsearchClientSslTest extends ElasticsearchClientTestBase {
     props.put(SSL_CONFIG_PREFIX + SslConfigs.SSL_KEY_PASSWORD_CONFIG, container.getKeyPassword());
     config = new ElasticsearchSinkConnectorConfig(props);
     converter = new DataConverter(config);
-    helperClient = new ElasticsearchHelperClient(address, config,
-        container.shouldStartClientInCompatibilityMode());
+    helperClient = new ElasticsearchHelperClient(address, config);
     helperClient.waitForConnection(30000);
     offsetTracker = mock(OffsetTracker.class);
   }
