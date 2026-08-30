@@ -639,17 +639,25 @@ public class Validator {
 
   private ElasticsearchClient createClient() {
     ConfigCallbackHandler configCallbackHandler = new ConfigCallbackHandler(config);
-    RestClient restClient = RestClient
-        .builder(
-            config.connectionUrls()
-                .stream()
-                .map(HttpHost::create)
-                .collect(Collectors.toList())
-                .toArray(new HttpHost[config.connectionUrls().size()])
-        )
-        .setHttpClientConfigCallback(configCallbackHandler)
-        .build();
-    return new ElasticsearchClient(new RestClientTransport(restClient, new JacksonJsonpMapper()));
+    RestClient restClient = null;
+    RestClientTransport transport = null;
+    try {
+      restClient = RestClient
+          .builder(
+              config.connectionUrls()
+                  .stream()
+                  .map(HttpHost::create)
+                  .collect(Collectors.toList())
+                  .toArray(new HttpHost[config.connectionUrls().size()])
+          )
+          .setHttpClientConfigCallback(configCallbackHandler)
+          .build();
+      transport = new RestClientTransport(restClient, new JacksonJsonpMapper());
+      return new ElasticsearchClient(transport);
+    } catch (RuntimeException | Error e) {
+      io.confluent.connect.elasticsearch.ElasticsearchClient.closeQuietly(transport, restClient);
+      throw e;
+    }
   }
 
   private boolean hasErrors() {

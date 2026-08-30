@@ -222,7 +222,7 @@ public class ElasticsearchClient {
    * Best-effort close of a partially constructed transport. Closing the transport also
    * closes the RestClient beneath it; a bare RestClient is closed directly.
    */
-  private static void closeQuietly(RestClientTransport transport, RestClient restClient) {
+  static void closeQuietly(RestClientTransport transport, RestClient restClient) {
     try {
       if (transport != null) {
         transport.close();
