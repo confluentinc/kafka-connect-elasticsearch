@@ -5,6 +5,12 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.github.tomakehurst.wiremock.client.ResponseDefinitionBuilder;
 import com.github.tomakehurst.wiremock.client.WireMock;
+import com.github.tomakehurst.wiremock.common.FileSource;
+import com.github.tomakehurst.wiremock.extension.Parameters;
+import com.github.tomakehurst.wiremock.extension.ResponseDefinitionTransformer;
+import com.github.tomakehurst.wiremock.http.HttpHeaders;
+import com.github.tomakehurst.wiremock.http.Request;
+import com.github.tomakehurst.wiremock.http.ResponseDefinition;
 
 import static com.google.common.net.HttpHeaders.CONTENT_TYPE;
 
@@ -13,6 +19,41 @@ import static com.google.common.net.HttpHeaders.CONTENT_TYPE;
  */
 public class ElasticSearchMockUtil {
   public static final ObjectMapper MAPPER = new ObjectMapper();
+
+  private static final String PRODUCT_HEADER = "X-Elastic-Product";
+
+  /**
+   * Stamps {@code X-Elastic-Product: Elasticsearch} on every WireMock response that does
+   * not already carry one. The Elasticsearch client rejects responses without this header,
+   * surfacing them as transport failures, so a stub written with a plain
+   * {@code aResponse()}/{@code okJson()} would silently shift its test onto the
+   * transport-failure path. Registering this transformer on the mock server makes the
+   * header a property of the server rather than a convention each stub must remember.
+   */
+  public static final ResponseDefinitionTransformer PRODUCT_HEADER_TRANSFORMER =
+      new ResponseDefinitionTransformer() {
+        @Override
+        public String getName() {
+          return "elastic-product-header";
+        }
+
+        @Override
+        public boolean applyGlobally() {
+          return true;
+        }
+
+        @Override
+        public ResponseDefinition transform(Request request, ResponseDefinition response,
+            FileSource files, Parameters parameters) {
+          HttpHeaders headers = response.getHeaders();
+          if (headers != null && headers.getHeader(PRODUCT_HEADER).isPresent()) {
+            return response;
+          }
+          return ResponseDefinitionBuilder.like(response).but()
+              .withHeader(PRODUCT_HEADER, "Elasticsearch")
+              .build();
+        }
+      };
 
   /**
    * Add standard ElasticSearch version info to a JSON object
@@ -44,9 +85,8 @@ public class ElasticSearchMockUtil {
    * @return Updated ResponseBuilder
    */
   static public ResponseDefinitionBuilder addMinimalHeaders(ResponseDefinitionBuilder builder) {
-    // Now header [X-Elastic-Product]
     return builder
-        .withHeader("X-Elastic-Product", "Elasticsearch")
+        .withHeader(PRODUCT_HEADER, "Elasticsearch")
         .withHeader(CONTENT_TYPE, "application/json");
   }
 

@@ -7,7 +7,7 @@ import com.github.tomakehurst.wiremock.junit.WireMockRule;
 import com.github.tomakehurst.wiremock.stubbing.Scenario;
 import io.confluent.common.utils.IntegrationTest;
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnector;
-import io.confluent.connect.elasticsearch.helper.ElasticProductHeaderTransformer;
+import io.confluent.connect.elasticsearch.helper.ElasticSearchMockUtil;
 import org.apache.kafka.connect.json.JsonConverter;
 import org.apache.kafka.connect.storage.StringConverter;
 import org.junit.After;
@@ -69,10 +69,11 @@ public class ElasticsearchConnectorNetworkIT extends BaseConnectorIT {
   @Rule
   public WireMockRule wireMockRule = new WireMockRule(options()
           .dynamicPort()
-          .extensions(BlockingTransformer.class.getName(),
-              ElasticProductHeaderTransformer.class.getName()), false);
+          .extensions(BlockingTransformer.class.getName())
+          .extensions(ElasticSearchMockUtil.PRODUCT_HEADER_TRANSFORMER), false);
 
   private static final int NUM_RECORDS = 5;
+  private static final int BATCH_SIZE = 4;
   private static final int TASKS_MAX = 1;
 
   private static final String CONNECTOR_NAME = "es-connector";
@@ -283,12 +284,12 @@ public class ElasticsearchConnectorNetworkIT extends BaseConnectorIT {
                     "  \"status\": 429\n" +
                     "}")));
 
-    // Keep the periodic flush from sending the buffered fifth record while the task is failing.
-    props.put(LINGER_MS_CONFIG, "600000");
-    props.put(FLUSH_TIMEOUT_MS_CONFIG, "600000");
     connect.configureConnector(CONNECTOR_NAME, props);
     waitForConnectorToStart(CONNECTOR_NAME, TASKS_MAX);
-    writeRecords(NUM_RECORDS);
+    // Write exactly one batch (batch.size records): a record left buffered behind the
+    // failing batch would be flushed by close() with its own retry budget, adding bulk
+    // requests beyond the exact count this test asserts.
+    writeRecords(BATCH_SIZE);
 
     // Connector should fail since the request takes longer than request timeout
     await().atMost(Duration.ofMinutes(3)).untilAsserted(() ->
@@ -335,12 +336,12 @@ public class ElasticsearchConnectorNetworkIT extends BaseConnectorIT {
             .willReturn(addMinimalHeaders(aResponse()
                     .withStatus(503))));
 
-    // Keep the periodic flush from sending the buffered fifth record while the task is failing.
-    props.put(LINGER_MS_CONFIG, "600000");
-    props.put(FLUSH_TIMEOUT_MS_CONFIG, "600000");
     connect.configureConnector(CONNECTOR_NAME, props);
     waitForConnectorToStart(CONNECTOR_NAME, TASKS_MAX);
-    writeRecords(NUM_RECORDS);
+    // Write exactly one batch (batch.size records): a record left buffered behind the
+    // failing batch would be flushed by close() with its own retry budget, adding bulk
+    // requests beyond the exact count this test asserts.
+    writeRecords(BATCH_SIZE);
 
     // Connector should fail since the request takes longer than request timeout
     await().atMost(Duration.ofMinutes(3)).untilAsserted(() ->
@@ -487,7 +488,7 @@ public class ElasticsearchConnectorNetworkIT extends BaseConnectorIT {
     props.put(MAX_RETRIES_CONFIG, "2");
     props.put(RETRY_BACKOFF_MS_CONFIG, "10");
     props.put(LINGER_MS_CONFIG, "60000");
-    props.put(BATCH_SIZE_CONFIG, "4");
+    props.put(BATCH_SIZE_CONFIG, Integer.toString(BATCH_SIZE));
     props.put(MAX_IN_FLIGHT_REQUESTS_CONFIG, "1");
 
     return props;

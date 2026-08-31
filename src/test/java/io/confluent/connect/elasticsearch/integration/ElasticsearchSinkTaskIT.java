@@ -51,7 +51,7 @@ import org.testcontainers.shaded.com.google.common.collect.ImmutableSet;
 import io.confluent.common.utils.IntegrationTest;
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnector;
 import io.confluent.connect.elasticsearch.ElasticsearchSinkTask;
-import io.confluent.connect.elasticsearch.helper.ElasticProductHeaderTransformer;
+import io.confluent.connect.elasticsearch.helper.ElasticSearchMockUtil;
 
 
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
@@ -107,8 +107,8 @@ public class ElasticsearchSinkTaskIT {
   @Rule
   public WireMockRule wireMockRule = new WireMockRule(options()
           .dynamicPort()
-          .extensions(BlockingTransformer.class.getName(),
-              ElasticProductHeaderTransformer.class.getName()), false);
+          .extensions(BlockingTransformer.class.getName())
+          .extensions(ElasticSearchMockUtil.PRODUCT_HEADER_TRANSFORMER), false);
 
   protected static final String TOPIC = "test";
   protected static final int TASKS_MAX = 1;

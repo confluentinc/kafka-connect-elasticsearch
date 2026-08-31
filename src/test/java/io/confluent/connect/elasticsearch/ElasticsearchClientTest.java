@@ -52,7 +52,7 @@ import com.github.tomakehurst.wiremock.core.WireMockConfiguration;
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BehaviorOnMalformedDoc;
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BehaviorOnNullValues;
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.WriteMethod;
-import io.confluent.connect.elasticsearch.helper.ElasticProductHeaderTransformer;
+import io.confluent.connect.elasticsearch.helper.ElasticSearchMockUtil;
 import io.confluent.connect.elasticsearch.helper.ElasticsearchContainer;
 import io.confluent.connect.elasticsearch.helper.ElasticsearchHelperClient;
 import io.confluent.connect.elasticsearch.helper.NetworkErrorContainer;
@@ -242,7 +242,7 @@ public class ElasticsearchClientTest extends ElasticsearchClientTestBase {
     // reach the listener and be handled terminally, matching the pre-migration client.
     WireMockServer wireMockServer = new WireMockServer(WireMockConfiguration.options()
         .dynamicPort()
-        .extensions(ElasticProductHeaderTransformer.class.getName()));
+        .extensions(ElasticSearchMockUtil.PRODUCT_HEADER_TRANSFORMER));
     wireMockServer.start();
     try {
       wireMockServer.stubFor(post(urlPathEqualTo("/_bulk")).willReturn(okJson(
