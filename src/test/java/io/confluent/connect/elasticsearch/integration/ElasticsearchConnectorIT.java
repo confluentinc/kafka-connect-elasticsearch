@@ -149,7 +149,7 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
     connect.kafka().produce(TOPIC, "key3", "{\"any-prop\":1}");
     connect.kafka().produce(TOPIC, "key4", "{\"any-prop\":1}");
 
-    await().atMost(Duration.ofMinutes(3)).untilAsserted(() ->
+    await().atMost(Duration.ofMinutes(1)).untilAsserted(() ->
         assertThat(connect.connectorStatus(CONNECTOR_NAME).tasks().get(0).state())
             .isEqualTo("FAILED"));
 
@@ -204,7 +204,7 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
     writeRecords(NUM_RECORDS);
 
     // Connector should fail since the server is down
-    await().atMost(Duration.ofMinutes(3)).untilAsserted(() ->
+    await().atMost(Duration.ofMinutes(1)).untilAsserted(() ->
         assertThat(connect.connectorStatus(CONNECTOR_NAME).tasks().get(0).state())
             .isEqualTo("FAILED"));
 
