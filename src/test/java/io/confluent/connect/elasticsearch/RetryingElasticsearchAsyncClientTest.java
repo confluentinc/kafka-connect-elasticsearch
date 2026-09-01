@@ -116,6 +116,39 @@ public class RetryingElasticsearchAsyncClientTest {
     assertEquals(1, client.sends.size());
   }
 
+  // The transport converts Exceptions to failed futures, but an Error escapes sendBulk
+  // synchronously; it must complete the future, not propagate out of bulk().
+  @Test
+  public void testSynchronousErrorOnFirstAttemptCompletesFuture() throws Exception {
+    ScriptedClient client = client(2);
+    LinkageError error = new LinkageError("boom");
+    client.willThrow(error);
+
+    CompletableFuture<BulkResponse> result = client.bulk(request(indexOp("a")));
+
+    ExecutionException e =
+        assertThrows(ExecutionException.class, () -> result.get(10, TimeUnit.SECONDS));
+    assertSame(error, e.getCause());
+    assertEquals(1, client.sends.size());
+  }
+
+  // A synchronous Error inside a scheduled retry dies in the discarded ScheduledFuture;
+  // without containment the bulk future never completes and the ingester's slot leaks.
+  @Test
+  public void testSynchronousErrorDuringRetryCompletesFuture() throws Exception {
+    ScriptedClient client = client(2);
+    client.willFail("transient failure");
+    LinkageError error = new LinkageError("boom on retry");
+    client.willThrow(error);
+
+    CompletableFuture<BulkResponse> result = client.bulk(request(indexOp("a")));
+
+    ExecutionException e =
+        assertThrows(ExecutionException.class, () -> result.get(10, TimeUnit.SECONDS));
+    assertSame(error, e.getCause());
+    assertEquals(2, client.sends.size());
+  }
+
   // A 200 response carrying per-item errors (including item-level 429s) is a success
   // at the transport level: it is returned to the ingester's listener verbatim, which
   // handles item failures terminally. It must not be retried here.
@@ -236,6 +269,12 @@ public class RetryingElasticsearchAsyncClientTest {
 
     void willRespond(BulkResponseItem... items) {
       will(() -> CompletableFuture.completedFuture(response(items)));
+    }
+
+    void willThrow(Error error) {
+      will(() -> {
+        throw error;
+      });
     }
   }
 

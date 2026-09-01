@@ -118,7 +118,16 @@ class RetryingElasticsearchAsyncClient extends ElasticsearchAsyncClient {
       int attempt,
       CompletableFuture<BulkResponse> result
   ) {
-    sendBulk(request).handleAsync((response, failure) -> {
+    CompletableFuture<BulkResponse> sendFuture;
+    try {
+      sendFuture = sendBulk(request);
+    } catch (Throwable t) {
+      // The transport turns Exceptions into failed futures, but an Error escapes
+      // synchronously; complete the future or the ingester's in-flight slot leaks.
+      result.completeExceptionally(t);
+      return;
+    }
+    sendFuture.handleAsync((response, failure) -> {
       if (failure == null) {
         result.complete(response);
         return null;
