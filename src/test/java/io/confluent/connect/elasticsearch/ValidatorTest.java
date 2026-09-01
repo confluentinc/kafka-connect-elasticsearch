@@ -844,10 +844,10 @@ public class ValidatorTest {
     assertNoErrors(result);
   }
 
+  // A principal with index privileges but no cluster monitor privilege gets a 403 on ping;
+  // Elasticsearch is up, so validation must pass.
   @Test
   public void testForbiddenPingIsTreatedAsReachable() throws IOException {
-    // A principal with index privileges but no cluster monitor privilege gets a 403 on ping;
-    // Elasticsearch is up, so validation must pass.
     TransportException forbidden = transportException(403);
     when(mockClient.ping()).thenThrow(forbidden);
     validator = new Validator(props, () -> mockClient);
@@ -865,9 +865,9 @@ public class ValidatorTest {
     assertNoErrors(result);
   }
 
+  // Bad credentials (401) must still fail validation, unlike the 403 case.
   @Test
   public void testUnauthorizedPingFailsValidation() throws IOException {
-    // Bad credentials (401) must still fail validation, unlike the 403 case.
     props.put(CONNECTION_USERNAME_CONFIG, "sinkuser");
     props.put(CONNECTION_PASSWORD_CONFIG, "password");
     TransportException unauthorized = transportException(401);
@@ -885,9 +885,9 @@ public class ValidatorTest {
         .status(status)));
   }
 
+  // The ping is a body-less HEAD request, so error statuses surface as a TransportException
+  // built from the raw http response rather than as an ElasticsearchException.
   private static TransportException transportException(int status) {
-    // The ping is a body-less HEAD request, so error statuses surface as a TransportException
-    // built from the raw http response rather than as an ElasticsearchException.
     TransportHttpClient.Response response = mock(TransportHttpClient.Response.class);
     when(response.statusCode()).thenReturn(status);
     return new TransportException(
