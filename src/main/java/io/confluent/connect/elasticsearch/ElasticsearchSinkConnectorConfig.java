@@ -18,12 +18,12 @@ package io.confluent.connect.elasticsearch;
 import java.io.File;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.TreeMap;
 import java.util.stream.Collectors;
 import java.util.concurrent.TimeUnit;
 import org.apache.kafka.common.config.AbstractConfig;
@@ -35,8 +35,6 @@ import org.apache.kafka.common.config.ConfigDef.Validator;
 import org.apache.kafka.common.config.ConfigDef.Width;
 import org.apache.kafka.common.config.types.Password;
 import org.elasticsearch.common.unit.ByteSizeValue;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import static org.apache.kafka.common.config.ConfigDef.Range.between;
 import static org.apache.kafka.common.config.SslConfigs.SSL_ENDPOINT_IDENTIFICATION_ALGORITHM_CONFIG;
@@ -963,46 +961,46 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
 
   public static final ConfigDef CONFIG = baseConfigDef();
 
-  // connection.url is a Type.LIST, so the inherited AbstractConfig.logAll() would print it verbatim
-  // (unlike Type.PASSWORD keys, which render "[hidden]"). A user who embeds credentials directly in
-  // the URL would leak them into the config dump. We suppress the automatic logAll() (doLog=false
-  // in the super(...) calls) and re-emit the same dump with the connection URLs redacted, under
-  // the same AbstractConfig logger so existing log tooling and dashboards are unaffected.
-  private static final Logger CONFIG_LOG = LoggerFactory.getLogger(AbstractConfig.class);
-
   protected ElasticsearchSinkConnectorConfig(ConfigDef config, Map<String, String> properties) {
-    super(config, properties, false);
+    super(config, sanitizeConnectionUrl(properties));
     this.kafkaTopics = getTopicArray(properties);
-    logConfigWithRedactedConnectionUrls();
   }
 
   public ElasticsearchSinkConnectorConfig(Map<String, String> props) {
-    super(CONFIG, props, false);
+    super(CONFIG, sanitizeConnectionUrl(props));
     this.kafkaTopics = getTopicArray(props);
-    logConfigWithRedactedConnectionUrls();
   }
 
   /**
-   * Mirrors {@link AbstractConfig}'s own {@code logAll()} config dump, but redacts any embedded
-   * user-info from the {@code connection.url} values so credentials mistakenly placed in the URL
-   * are not written to the log. Password-typed values still render as {@code [hidden]} because
-   * their stored value is a {@link Password} whose {@code toString()} masks it.
+   * Returns a copy of {@code properties} with any embedded {@code user:password@} credentials
+   * stripped from the {@code connection.url} value(s). Credentials are supplied via the dedicated
+   * {@code connection.username}/{@code connection.password} configs; the client authenticates with
+   * those and never with URL user-info (an {@link org.apache.http.HttpHost} carries none), so this
+   * is functionally a no-op for a correctly configured connector.
+   *
+   * <p>Sanitizing at the source keeps credentials out of the parsed config, so the inherited
+   * {@link AbstractConfig} config dump (and every other consumer of {@code connection.url}) is
+   * safe without having to suppress the framework's automatic {@code logAll()}.
+   * {@code connection.url} is a {@code Type.LIST} — a comma-separated string in the raw
+   * properties — so each element is redacted independently.
    */
-  private void logConfigWithRedactedConnectionUrls() {
-    StringBuilder b = new StringBuilder();
-    b.append(getClass().getSimpleName()).append(" values: ").append(System.lineSeparator());
-    for (Map.Entry<String, ?> entry : new TreeMap<String, Object>(values()).entrySet()) {
-      Object value = entry.getValue();
-      if (CONNECTION_URL_CONFIG.equals(entry.getKey()) && value instanceof List) {
-        value = ((List<?>) value).stream()
-            .map(String::valueOf)
-            .map(ConfigCallbackHandler::redactUserInfo)
-            .collect(Collectors.toList());
-      }
-      b.append('\t').append(entry.getKey()).append(" = ").append(value)
-          .append(System.lineSeparator());
+  private static Map<String, String> sanitizeConnectionUrl(Map<String, String> properties) {
+    if (properties == null) {
+      return properties;
     }
-    CONFIG_LOG.info(b.toString());
+    String rawUrls = properties.get(CONNECTION_URL_CONFIG);
+    if (rawUrls == null || rawUrls.isEmpty()) {
+      return properties;
+    }
+    String sanitized = Arrays.stream(rawUrls.split(","))
+        .map(ConfigCallbackHandler::redactUserInfo)
+        .collect(Collectors.joining(","));
+    if (sanitized.equals(rawUrls)) {
+      return properties;
+    }
+    Map<String, String> copy = new HashMap<>(properties);
+    copy.put(CONNECTION_URL_CONFIG, sanitized);
+    return copy;
   }
 
   private String[] getTopicArray(Map<?, ?> config) {

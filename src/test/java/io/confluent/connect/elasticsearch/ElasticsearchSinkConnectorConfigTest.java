@@ -16,7 +16,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.config.SslConfigs;
 import org.apache.kafka.common.config.types.Password;
@@ -229,11 +228,12 @@ public class ElasticsearchSinkConnectorConfigTest {
 
   @Test
   public void shouldRedactConnectionUrlCredentialsFromConfigLog() {
-    // The inherited AbstractConfig config dump prints connection.url verbatim; an embedded
-    // credential must not appear in it. Capture the dump (emitted under the AbstractConfig logger)
-    // and assert the credential is gone while the host survives.
+    // The inherited AbstractConfig config dump would print connection.url verbatim; an embedded
+    // credential must not appear in it. AbstractConfig logs the dump via getLogger(getClass()), so
+    // it is emitted under this config class's own logger. Capture that logger and assert the
+    // credential (sanitized at the source before super()) is gone while the host survives.
     org.apache.log4j.Logger configLogger =
-        org.apache.log4j.Logger.getLogger(AbstractConfig.class.getName());
+        org.apache.log4j.Logger.getLogger(ElasticsearchSinkConnectorConfig.class.getName());
     Level previousLevel = configLogger.getLevel();
     List<String> messages = new ArrayList<>();
     AppenderSkeleton appender = new AppenderSkeleton() {
