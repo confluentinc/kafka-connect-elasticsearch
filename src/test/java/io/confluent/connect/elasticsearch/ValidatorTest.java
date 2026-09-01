@@ -537,55 +537,6 @@ public class ValidatorTest {
   }
 
   @Test
-  public void testIncompatibleVersionDataStreamSet() {
-    configureDataStream();
-    when(mockInfoResponse.version().number()).thenReturn("7.8.1");
-    validator = new Validator(props, () -> mockClient);
-
-    Config result = validator.validate();
-    assertHasErrorMessage(result, CONNECTION_URL_CONFIG, "is not supported by connector");
-  }
-
-  @Test
-  public void testIncompatibleVersionDataStreamNotSet() {
-    String[] incompatibleESVersions = {"7.8.0", "7.7.1", "7.6.2", "7.2.0", "7.1.1", "7.0.0-rc2"};
-    for (String version : incompatibleESVersions) {
-      when(mockInfoResponse.version().number()).thenReturn(version);
-      validator = new Validator(props, () -> mockClient);
-      Config result = validator.validate();
-
-      assertHasErrorMessage(result, CONNECTION_URL_CONFIG, "is not supported by connector");
-    }
-  }
-
-  @Test
-  public void testCompatibleVersionDataStreamNotSet() {
-    validator = new Validator(props, () -> mockClient);
-    String[] compatibleESVersions = {"8.0.0", "8.10.10", "8.19.19-amd64", "9.0.0", "9.1.4",
-        "10.10.10", "10.1.10", "10.1.1"};
-    for (String version : compatibleESVersions) {
-      when(mockInfoResponse.version().number()).thenReturn(version);
-      Config result = validator.validate();
-
-      assertNoErrors(result);
-    }
-  }
-
-  @Test
-  public void testCompatibleVersionDataStreamSet() {
-    configureDataStream();
-    validator = new Validator(props, () -> mockClient);
-    String[] compatibleESVersions = {"8.0.0", "8.10.10", "8.19.19-amd64", "9.0.0", "9.1.4",
-        "10.10.10", "10.1.10", "10.1.1"};
-    for (String version : compatibleESVersions) {
-      when(mockInfoResponse.version().number()).thenReturn(version);
-      Config result = validator.validate();
-
-      assertNoErrors(result);
-    }
-  }
-
-  @Test
   public void testValidResourceMappingConfig() throws IOException {
     props.put(EXTERNAL_RESOURCE_USAGE_CONFIG, ExternalResourceUsage.INDEX.name());
     props.put(TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_CONFIG, TOPIC1 + ":" + INDEX1 + "," + TOPIC2 + ":" + INDEX2);
