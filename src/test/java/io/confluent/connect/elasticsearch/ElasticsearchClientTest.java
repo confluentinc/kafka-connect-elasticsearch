@@ -737,6 +737,8 @@ public class ElasticsearchClientTest extends ElasticsearchClientTestBase {
     ElasticsearchClient client = new ElasticsearchClient(config, null, () -> offsetTracker.updateOffsets(), 1, "elasticsearch-sink");
     client.close();
   }
+  // Connector-owned pools carry the {connectorName}-{taskId} prefix; bulk I/O itself
+  // runs on the rest client's own threads.
   @Test
   public void testThreadNamingWithConnectorNameAndTaskId() throws Exception {
     props.put(MAX_IN_FLIGHT_REQUESTS_CONFIG, "2");
@@ -757,10 +759,6 @@ public class ElasticsearchClientTest extends ElasticsearchClientTestBase {
     client.flush();
     waitUntilRecordsInES(10);
 
-    // Bulk requests are executed by the BulkIngester on the low-level rest client's
-    // I/O threads; the connector-owned named pools are the transport-retry executor
-    // ({connectorName}-{taskId}-elasticsearch-bulk-retry-N) and the ingester's
-    // flush/listener scheduler ({connectorName}-{taskId}-elasticsearch-bulk-ingester-N).
     String retryPrefix = "elasticsearch-sink-1-elasticsearch-bulk-retry-";
     String ingesterPrefix = "elasticsearch-sink-1-elasticsearch-bulk-ingester-";
 
@@ -776,9 +774,8 @@ public class ElasticsearchClientTest extends ElasticsearchClientTestBase {
     client.close();
   }
 
-  // A reachable socket so RestClient.builder().build() actually starts its (non-daemon)
-  // I/O reactor threads; the overridden getServerVersion then throws right after, in the
-  // constructor's guarded region. The reactor threads must be closed, not leaked.
+  // A constructor failure after the RestClient has started its non-daemon I/O reactor
+  // threads must close the transport rather than leak the threads.
   @Test(timeout = 30_000)
   public void testConstructorFailureClosesTransport() throws Exception {
     try (ServerSocket socket = new ServerSocket(0)) {
@@ -796,7 +793,6 @@ public class ElasticsearchClientTest extends ElasticsearchClientTestBase {
             }
           });
 
-      // The failed construction must leave no net reactor threads behind.
       long deadline = System.currentTimeMillis() + 10_000;
       while (countRestClientThreads() > baseline && System.currentTimeMillis() < deadline) {
         Thread.sleep(50);
@@ -806,10 +802,8 @@ public class ElasticsearchClientTest extends ElasticsearchClientTestBase {
     }
   }
 
-  // A failed task closes twice: throwIfFailed() calls close() before throwing the latched
-  // error out of put(), then the framework's stop() closes the same client again. The
-  // second close must be a no-op — re-running the teardown after the ingester scheduler
-  // is terminated would park forever inside bulkIngester.close().
+  // A failed task closes twice (throwIfFailed() closes before put() throws, then the
+  // framework's stop() closes again), so the second close must be a no-op.
   @Test
   public void testCloseIsIdempotent() {
     ElasticsearchClient client = new ElasticsearchClient(config, null, () -> offsetTracker.updateOffsets(), 1, "elasticsearch-sink");
@@ -844,14 +838,15 @@ public class ElasticsearchClientTest extends ElasticsearchClientTestBase {
 
       writeRecord(sinkRecord(0), client);
 
-      assertThrows(ConnectException.class, client::close);
+      ConnectException e = assertThrows(ConnectException.class, client::close);
+      assertTrue(e.getMessage(), e.getMessage().contains(
+          "Failed to process outstanding requests in time while closing"));
     }
   }
 
-  // Task cancellation interrupts the task thread while close() waits for the buffer to
-  // drain. The wait loop must abort immediately: Time.SYSTEM's sleep swallows the
-  // interrupt and re-sets the flag, which would otherwise busy-spin for the whole
-  // flush timeout (60s here, past the test timeout).
+  // A task-cancellation interrupt during close()'s buffer drain must abort the wait
+  // immediately, preserving the interrupt as the synthesized cause (clock.sleep swallows
+  // the original InterruptedException).
   @Test(timeout = 20_000)
   public void testCloseWithStuckRecordsHonorsInterrupt() throws Exception {
     try (ServerSocket blackhole = new ServerSocket(0)) {
@@ -868,8 +863,6 @@ public class ElasticsearchClientTest extends ElasticsearchClientTestBase {
         Thread.currentThread().interrupt();
         ConnectException e = assertThrows(ConnectException.class, client::close);
         assertTrue(e.getMessage().contains("Interrupted"));
-        // The interrupt must be preserved as the cause for diagnosability (master's
-        // contract); clock.sleep swallows the InterruptedException, so it is synthesized.
         assertTrue(String.valueOf(e.getCause()), e.getCause() instanceof InterruptedException);
       } finally {
         // Clear the flag so test teardown is not poisoned.
@@ -878,8 +871,8 @@ public class ElasticsearchClientTest extends ElasticsearchClientTestBase {
     }
   }
 
-  // A pre-created mapping that only sets dynamic behavior has no properties, but must still
-  // count as existing so the connector does not overwrite it.
+  // A mapping with only dynamic settings and no properties must still count as existing
+  // so the connector does not overwrite it.
   @Test
   public void testHasMappingWithoutProperties() throws Exception {
     helperClient.createIndex(index, "{\"dynamic\": \"strict\"}");
@@ -889,8 +882,8 @@ public class ElasticsearchClientTest extends ElasticsearchClientTestBase {
     client.close();
   }
 
-  // linger.ms=0 is valid and used to mean "flush immediately"; the BulkIngester flush timer
-  // does not accept 0, so the client clamps it instead of failing at construction time.
+  // linger.ms=0 ("flush immediately") must be clamped rather than fail construction,
+  // since the BulkIngester flush timer rejects a zero interval.
   @Test
   public void testWritesWithZeroLingerMs() throws Exception {
     props.put(LINGER_MS_CONFIG, "0");
@@ -905,8 +898,8 @@ public class ElasticsearchClientTest extends ElasticsearchClientTestBase {
     client.close();
   }
 
-  // bulk.size.bytes=0 is valid and used to flush on every record; the BulkIngester treats
-  // only negative sizes as unlimited, so the client clamps 0 instead of blocking every add.
+  // bulk.size.bytes=0 ("flush every record") must be clamped rather than become a size
+  // limit every record exceeds, which would block each add forever.
   @Test
   public void testWritesWithZeroBulkSizeBytes() throws Exception {
     props.put(BULK_SIZE_BYTES_CONFIG, "0");
@@ -956,8 +949,8 @@ public class ElasticsearchClientTest extends ElasticsearchClientTestBase {
     assertThrows(ConnectException.class, client::close);
   }
 
-  // Redelivering the same offset must version-conflict on the explicit document id and
-  // be ignored, not create a duplicate document.
+  // A redelivered record must version-conflict on its explicit document id and be
+  // ignored, not create a duplicate document in the data stream.
   @Test
   public void testWriteDataStreamDeduplicatesRedeliveredRecords() throws Exception {
     props.put(DATA_STREAM_TYPE_CONFIG, DATA_STREAM_TYPE);
