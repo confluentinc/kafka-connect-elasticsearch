@@ -52,12 +52,15 @@ import io.confluent.connect.elasticsearch.helper.ElasticsearchHelperClient;
 import io.confluent.connect.elasticsearch.helper.NetworkErrorContainer;
 import java.io.IOException;
 import java.net.ServerSocket;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaBuilder;
@@ -759,7 +762,7 @@ public class ElasticsearchClientTest extends ElasticsearchClientTestBase {
     client.flush();
     waitUntilRecordsInES(10);
 
-    List<String> poolPrefixes = java.util.Arrays.asList(
+    List<String> poolPrefixes = Arrays.asList(
             "elasticsearch-sink-1-elasticsearch-bulk-retry-",
             "elasticsearch-sink-1-elasticsearch-bulk-ingester-",
             "elasticsearch-sink-1-elasticsearch-bulk-dispatcher-");
@@ -878,6 +881,40 @@ public class ElasticsearchClientTest extends ElasticsearchClientTestBase {
         // Clear the flag so test teardown is not poisoned.
         Thread.interrupted();
       }
+    }
+  }
+
+  // Three pools that will not drain within the budget: each holds a task sleeping well
+  // past it. With one shared deadline the caller waits ~budget once; awaiting each pool
+  // for the full budget in turn would cost ~budget * poolCount.
+  @Test(timeout = 30_000)
+  public void awaitTerminationWithinSharesOneDeadlineAcrossPools() throws Exception {
+    List<ExecutorService> pools = Arrays.asList(
+        Executors.newSingleThreadExecutor(),
+        Executors.newSingleThreadExecutor(),
+        Executors.newSingleThreadExecutor());
+    for (ExecutorService pool : pools) {
+      pool.submit(() -> {
+        try {
+          Thread.sleep(30_000);
+        } catch (InterruptedException e) {
+          Thread.currentThread().interrupt();
+        }
+      });
+      pool.shutdown();
+    }
+
+    long budgetMs = 2_000;
+    long start = System.nanoTime();
+    ElasticsearchClient.awaitTerminationWithin(pools, budgetMs);
+    long elapsedMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start);
+
+    // Shared deadline: ~budget total. Sequential-per-pool would be ~3 * budget.
+    assertTrue("awaitTerminationWithin took " + elapsedMs + "ms; expected ~" + budgetMs + "ms",
+        elapsedMs < budgetMs * 2);
+    for (ExecutorService pool : pools) {
+      assertTrue("pool was not forced down", pool.isShutdown());
+      assertTrue("pool tasks did not terminate", pool.awaitTermination(5, TimeUnit.SECONDS));
     }
   }
 
