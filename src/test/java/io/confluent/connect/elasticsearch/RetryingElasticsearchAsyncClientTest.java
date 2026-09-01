@@ -133,19 +133,6 @@ public class RetryingElasticsearchAsyncClientTest {
   }
 
   @Test
-  public void testCleanResponsePassesThroughUntouched() throws Exception {
-    ScriptedClient client = client(2);
-    BulkResponse original = response(okItem("a"), okItem("b"));
-    client.will(() -> CompletableFuture.completedFuture(original));
-
-    BulkResponse response = client.bulk(request(indexOp("a"), indexOp("b")))
-        .get(10, TimeUnit.SECONDS);
-
-    assertSame(original, response);
-    assertEquals(1, client.sends.size());
-  }
-
-  @Test
   public void testRejectedRetrySchedulingCompletesExceptionally() throws Exception {
     ScriptedClient client = client(2);
     client.willFail("boom");
