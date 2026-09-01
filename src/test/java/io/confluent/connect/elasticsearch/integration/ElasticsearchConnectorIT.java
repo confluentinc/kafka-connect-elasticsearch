@@ -19,17 +19,15 @@ import java.io.IOException;
 import java.text.SimpleDateFormat;
 import java.time.Duration;
 import java.util.Date;
-import java.util.List;
 import java.util.Map;
 
+import co.elastic.clients.elasticsearch.core.search.Hit;
+import co.elastic.clients.json.JsonData;
 import org.apache.kafka.clients.admin.ListConsumerGroupOffsetsResult;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.connect.storage.StringConverter;
 import org.apache.kafka.test.TestUtils;
-import org.elasticsearch.client.security.user.User;
-import org.elasticsearch.client.security.user.privileges.Role;
-import org.elasticsearch.search.SearchHit;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -38,6 +36,7 @@ import io.confluent.common.utils.IntegrationTest;
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig;
 import io.confluent.connect.elasticsearch.helper.ElasticsearchContainer;
 
+import static io.confluent.connect.elasticsearch.helper.ElasticsearchHelperClient.sourceAsMap;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.*;
 import static org.apache.kafka.connect.runtime.ConnectorConfig.VALUE_CONVERTER_CLASS_CONFIG;
 import static org.apache.kafka.connect.runtime.SinkConnectorConfig.TOPICS_CONFIG;
@@ -74,9 +73,8 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
 
   @BeforeClass
   public static void setupBeforeAll() {
-    Map<User, String> users = getUsers();
-    List<Role> roles = getRoles();
-    container = ElasticsearchContainer.fromSystemProperties().withBasicAuth(users, roles);
+    container = ElasticsearchContainer.fromSystemProperties()
+        .withBasicAuth(getUsers(), getRoles());
     container.start();
   }
 
@@ -211,7 +209,8 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
             .isEqualTo("FAILED"));
 
     assertThat(connect.connectorStatus(CONNECTOR_NAME).tasks().get(0).trace())
-        .contains("'java.net.ConnectException: Connection refused' after 3 attempt(s)");
+        .contains("Bulk request failed after 3 attempt(s)")
+        .contains("Connection refused");
   }
 
   @Test
@@ -255,11 +254,7 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
 
     runSimpleTest(props);
 
-    if (container.esMajorVersion() == 8) {
-      assertEquals(index, helperClient.getDataStreamWithJavaAPIClient(index).name());
-    } else {
-      assertEquals(index, helperClient.getDataStream(index).getName());
-    }
+    assertEquals(index, helperClient.getDataStream(index).name());
   }
 
   @Test
@@ -309,10 +304,10 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
     // should have double number of records
     verifySearchResults(NUM_RECORDS * 2);
 
-    for (SearchHit hit : helperClient.search(TOPIC)) {
-      if (Integer.parseInt(hit.getId()) == lastRecord) {
+    for (Hit<JsonData> hit : helperClient.search(TOPIC)) {
+      if (Integer.parseInt(hit.id()) == lastRecord) {
         // last record should be updated
-        int docNum = (Integer) hit.getSourceAsMap().get("doc_num");
+        int docNum = (Integer) sourceAsMap(hit).get("doc_num");
         assertEquals(0, docNum);
       }
     }
