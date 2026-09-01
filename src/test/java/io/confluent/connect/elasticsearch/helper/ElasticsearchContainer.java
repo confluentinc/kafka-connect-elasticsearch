@@ -15,12 +15,9 @@
 
 package io.confluent.connect.elasticsearch.helper;
 
-import io.confluent.connect.elasticsearch.ElasticsearchClient;
-import io.confluent.connect.elasticsearch.RetryUtil;
+import co.elastic.clients.elasticsearch.security.PutRoleRequest;
+import co.elastic.clients.elasticsearch.security.PutUserRequest;
 import org.apache.kafka.common.config.SslConfigs;
-import org.apache.kafka.test.TestUtils;
-import org.elasticsearch.client.security.user.User;
-import org.elasticsearch.client.security.user.privileges.Role;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.testcontainers.containers.ContainerLaunchException;
@@ -72,7 +69,7 @@ public class ElasticsearchContainer
   /**
    * Default Elasticsearch version.
    */
-  public static final String DEFAULT_ES_VERSION = "8.15.2";
+  public static final String DEFAULT_ES_VERSION = "8.19.19";
 
   /**
    * Default Elasticsearch port.
@@ -143,8 +140,8 @@ public class ElasticsearchContainer
   private final String imageName;
   private boolean enableSsl = false;
   private String keytabPath;
-  private List<Role> rolesToCreate;
-  private Map<User, String> usersToCreate;
+  private List<PutRoleRequest> rolesToCreate;
+  private List<PutUserRequest> usersToCreate;
   private String localKeystorePath;
   private String localTruststorePath;
 
@@ -193,11 +190,11 @@ public class ElasticsearchContainer
 
   private void createUsersAndRoles(ElasticsearchHelperClient helperClient ) {
     try {
-      for (Role role: this.rolesToCreate) {
+      for (PutRoleRequest role: this.rolesToCreate) {
         helperClient.createRole(role);
       }
-      for (Map.Entry<User,String> userToPassword: this.usersToCreate.entrySet()) {
-        helperClient.createUser(userToPassword);
+      for (PutUserRequest user: this.usersToCreate) {
+        helperClient.createUser(user);
       }
     } catch (IOException e) {
       throw new ContainerLaunchException("Container startup failed", e);
@@ -214,7 +211,8 @@ public class ElasticsearchContainer
     return this;
   }
 
-  public ElasticsearchContainer withBasicAuth(Map<User, String> users, List<Role> roles) {
+  public ElasticsearchContainer withBasicAuth(List<PutUserRequest> users,
+      List<PutRoleRequest> roles) {
     enableBasicAuth(users, roles);
     return this;
   }
@@ -274,7 +272,7 @@ public class ElasticsearchContainer
     return keytabPath != null;
   }
 
-  private void enableBasicAuth(Map<User, String> users, List<Role> roles) {
+  private void enableBasicAuth(List<PutUserRequest> users, List<PutRoleRequest> roles) {
     if (isCreated()) {
       throw new IllegalStateException(
           "enableBasicAuth can only be used before the container is created."
@@ -443,7 +441,7 @@ public class ElasticsearchContainer
     return String.format(
         "%s://%s:%d",
         protocol,
-        useContainerIpAddress ? getContainerIpAddress() : hostMachineIpAddress(),
+        useContainerIpAddress ? getHost() : hostMachineIpAddress(),
         getMappedPort(ELASTICSEARCH_DEFAULT_PORT)
     );
   }
@@ -584,18 +582,9 @@ public class ElasticsearchContainer
     superUserProps.put(CONNECTION_USERNAME_CONFIG, ELASTIC_SUPERUSER_NAME);
     superUserProps.put(CONNECTION_PASSWORD_CONFIG, ELASTIC_SUPERUSER_PASSWORD);
     ElasticsearchSinkConnectorConfig config = new ElasticsearchSinkConnectorConfig(superUserProps);
-    ElasticsearchHelperClient client = new ElasticsearchHelperClient(props.get(CONNECTION_URL_CONFIG), config,
-        shouldStartClientInCompatibilityMode());
+    ElasticsearchHelperClient client =
+        new ElasticsearchHelperClient(props.get(CONNECTION_URL_CONFIG), config);
     return client;
-  }
-
-  /**
-   * For high level rest client v7.17 api compatibility mode must be turned on for working with
-   * ES 8.
-   * @return true if the major version of image used is 8 i.e (ES 8.x.x)
-   */
-  public boolean shouldStartClientInCompatibilityMode() {
-    return esMajorVersion() == 8;
   }
 
   public int esMajorVersion() {
