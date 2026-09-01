@@ -92,6 +92,14 @@ public class RetryUtilTest {
     verify(mockClock, times(3)).sleep(anyLong());
   }
 
+  @Test
+  public void computeRetryBackoffForZeroBackoff() {
+    // A zero backoff means retry immediately; it must not throw from the random range.
+    assertEquals(0L, RetryUtil.computeRandomRetryWaitTimeInMillis(0, 0L));
+    assertEquals(0L, RetryUtil.computeRandomRetryWaitTimeInMillis(1, 0L));
+    assertEquals(0L, RetryUtil.computeRandomRetryWaitTimeInMillis(10, 0L));
+  }
+
   private boolean testFunction(int timesToThrow) throws IOException {
     if (timesThrown < timesToThrow) {
       timesThrown++;
