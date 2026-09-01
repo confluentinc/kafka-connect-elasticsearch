@@ -371,50 +371,6 @@ public class ElasticsearchSinkTaskIT {
                     .isEqualTo(currentOffsets));
   }
 
-  @Test(timeout = 60_000)
-  public void testTransportRetryIsFlushedImmediately() throws Exception {
-    // Whole-request transport failure once, then success.
-    wireMockRule.stubFor(post(urlPathEqualTo("/_bulk"))
-            .inScenario("transportRetryFlush")
-            .whenScenarioStateIs(Scenario.STARTED)
-            .willReturn(addMinimalHeaders(
-                aResponse().withStatus(500).withBody(minimumResponseJson())))
-            .willSetStateTo("recovered"));
-    wireMockRule.stubFor(post(urlPathEqualTo("/_bulk"))
-            .inScenario("transportRetryFlush")
-            .whenScenarioStateIs("recovered")
-            .willReturn(okJson(ElasticsearchConnectorNetworkIT.errorBulkResponse())));
-
-    Map<String, String> props = createProps();
-    props.put(READ_TIMEOUT_MS_CONFIG, "1000");
-    props.put(MAX_RETRIES_CONFIG, "2");
-    props.put(RETRY_BACKOFF_MS_CONFIG, "10");
-    // The retried batch (1 op) stays below batch.size and linger never fires: only the
-    // explicit flush after the retry re-add can send it again.
-    props.put(BATCH_SIZE_CONFIG, "2");
-    props.put(LINGER_MS_CONFIG, "600000");
-
-    ElasticsearchSinkTask task = new ElasticsearchSinkTask();
-    TopicPartition tp = new TopicPartition(TOPIC, 0);
-    SinkTaskContext context = mock(SinkTaskContext.class);
-    when(context.assignment()).thenReturn(ImmutableSet.of(tp));
-    task.initialize(context);
-    task.start(props);
-    task.open(ImmutableList.of(tp));
-
-    task.put(ImmutableList.of(sinkRecord(tp, 0)));
-    // Sends the single buffered record (below batch.size, linger is 10 minutes). In
-    // synchronous mode this call also blocks until the retried record completes.
-    task.preCommit(ImmutableMap.of(tp, new OffsetAndMetadata(1)));
-
-    // The retried operation must be resent promptly by the flush after the re-add; the
-    // next linger tick is 10 minutes away and no further flush happens on its behalf.
-    await().untilAsserted(() ->
-            wireMockRule.verify(2, postRequestedFor(urlPathEqualTo("/_bulk"))));
-
-    task.stop();
-  }
-
   /**
    * Verify partitions are paused and resumed
    */
@@ -516,6 +472,50 @@ public class ElasticsearchSinkTaskIT {
     await().untilAsserted(() ->
             assertThat(task.preCommit(currentOffsets))
                     .isEqualTo(ImmutableMap.of(tp2, new OffsetAndMetadata(1))));
+  }
+
+  @Test(timeout = 60_000)
+  public void testTransportRetryIsFlushedImmediately() throws Exception {
+    // Whole-request transport failure once, then success.
+    wireMockRule.stubFor(post(urlPathEqualTo("/_bulk"))
+            .inScenario("transportRetryFlush")
+            .whenScenarioStateIs(Scenario.STARTED)
+            .willReturn(addMinimalHeaders(
+                aResponse().withStatus(500).withBody(minimumResponseJson())))
+            .willSetStateTo("recovered"));
+    wireMockRule.stubFor(post(urlPathEqualTo("/_bulk"))
+            .inScenario("transportRetryFlush")
+            .whenScenarioStateIs("recovered")
+            .willReturn(okJson(ElasticsearchConnectorNetworkIT.errorBulkResponse())));
+
+    Map<String, String> props = createProps();
+    props.put(READ_TIMEOUT_MS_CONFIG, "1000");
+    props.put(MAX_RETRIES_CONFIG, "2");
+    props.put(RETRY_BACKOFF_MS_CONFIG, "10");
+    // The retried batch (1 op) stays below batch.size and linger never fires: only the
+    // explicit flush after the retry re-add can send it again.
+    props.put(BATCH_SIZE_CONFIG, "2");
+    props.put(LINGER_MS_CONFIG, "600000");
+
+    ElasticsearchSinkTask task = new ElasticsearchSinkTask();
+    TopicPartition tp = new TopicPartition(TOPIC, 0);
+    SinkTaskContext context = mock(SinkTaskContext.class);
+    when(context.assignment()).thenReturn(ImmutableSet.of(tp));
+    task.initialize(context);
+    task.start(props);
+    task.open(ImmutableList.of(tp));
+
+    task.put(ImmutableList.of(sinkRecord(tp, 0)));
+    // Sends the single buffered record (below batch.size, linger is 10 minutes). In
+    // synchronous mode this call also blocks until the retried record completes.
+    task.preCommit(ImmutableMap.of(tp, new OffsetAndMetadata(1)));
+
+    // The retried operation must be resent promptly by the flush after the re-add; the
+    // next linger tick is 10 minutes away and no further flush happens on its behalf.
+    await().untilAsserted(() ->
+            wireMockRule.verify(2, postRequestedFor(urlPathEqualTo("/_bulk"))));
+
+    task.stop();
   }
 
   private SinkRecord sinkRecord(TopicPartition tp, long offset) {

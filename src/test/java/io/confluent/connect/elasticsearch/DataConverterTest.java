@@ -442,31 +442,6 @@ public class DataConverterTest {
   }
 
   @Test
-  public void externalVersionHeaderMissingThrowsConnectException() {
-    String externalVersionHeader = "version";
-
-    props.put(ElasticsearchSinkConnectorConfig.IGNORE_KEY_CONFIG, "false");
-    props.put(ElasticsearchSinkConnectorConfig.IGNORE_SCHEMA_CONFIG, "false");
-    props.put(
-        ElasticsearchSinkConnectorConfig.EXTERNAL_VERSION_HEADER_CONFIG,
-        externalVersionHeader
-    );
-    converter = new DataConverter(new ElasticsearchSinkConnectorConfig(props));
-
-    Schema preProcessedSchema = converter.preProcessSchema(schema);
-    Struct struct = new Struct(preProcessedSchema).put("string", "myValue");
-    // Record carries no header with the configured name.
-    SinkRecord sinkRecord = createSinkRecordWithValue(struct);
-
-    ConnectException exception = assertThrows(
-        ConnectException.class,
-        () -> converter.convertRecord(sinkRecord, index)
-    );
-
-    assertTrue(exception.getMessage().contains(externalVersionHeader));
-  }
-
-  @Test
   public void ignoreDeleteOnNullValueWithNullKey() {
     props.put(ElasticsearchSinkConnectorConfig.COMPACT_MAP_ENTRIES_CONFIG, "true");
     props.put(ElasticsearchSinkConnectorConfig.IGNORE_KEY_CONFIG, "false");
@@ -534,20 +509,6 @@ public class DataConverterTest {
          recordTimestamp,
          TimestampType.CREATE_TIME
     );
-  }
-
-  private static String binaryDataToString(BinaryData data) throws IOException {
-    ByteArrayOutputStream out = new ByteArrayOutputStream();
-    data.writeTo(out);
-    return new String(out.toByteArray(), StandardCharsets.UTF_8);
-  }
-
-  private static Map<String, Object> operationSourceAsMap(BulkOperation op) throws IOException {
-    BinaryData document = op.isCreate()
-        ? (BinaryData) op.create().document()
-        : (BinaryData) op.index().document();
-    return OBJECT_MAPPER.readValue(
-        binaryDataToString(document), new TypeReference<Map<String, Object>>() { });
   }
 
   @Test
@@ -691,6 +652,31 @@ public class DataConverterTest {
   }
 
   @Test
+  public void externalVersionHeaderMissingThrowsConnectException() {
+    String externalVersionHeader = "version";
+
+    props.put(ElasticsearchSinkConnectorConfig.IGNORE_KEY_CONFIG, "false");
+    props.put(ElasticsearchSinkConnectorConfig.IGNORE_SCHEMA_CONFIG, "false");
+    props.put(
+        ElasticsearchSinkConnectorConfig.EXTERNAL_VERSION_HEADER_CONFIG,
+        externalVersionHeader
+    );
+    converter = new DataConverter(new ElasticsearchSinkConnectorConfig(props));
+
+    Schema preProcessedSchema = converter.preProcessSchema(schema);
+    Struct struct = new Struct(preProcessedSchema).put("string", "myValue");
+    // Record carries no header with the configured name.
+    SinkRecord sinkRecord = createSinkRecordWithValue(struct);
+
+    ConnectException exception = assertThrows(
+        ConnectException.class,
+        () -> converter.convertRecord(sinkRecord, index)
+    );
+
+    assertTrue(exception.getMessage().contains(externalVersionHeader));
+  }
+
+  @Test
   public void testDataStreamCreateOperationCarriesDocumentId() {
     configureDataStream();
     converter = new DataConverter(new ElasticsearchSinkConnectorConfig(props));
@@ -720,6 +706,20 @@ public class DataConverterTest {
 
     assertTrue(actualRecord.isCreate());
     assertNull(actualRecord.create().id());
+  }
+
+  private static String binaryDataToString(BinaryData data) throws IOException {
+    ByteArrayOutputStream out = new ByteArrayOutputStream();
+    data.writeTo(out);
+    return new String(out.toByteArray(), StandardCharsets.UTF_8);
+  }
+
+  private static Map<String, Object> operationSourceAsMap(BulkOperation op) throws IOException {
+    BinaryData document = op.isCreate()
+        ? (BinaryData) op.create().document()
+        : (BinaryData) op.index().document();
+    return OBJECT_MAPPER.readValue(
+        binaryDataToString(document), new TypeReference<Map<String, Object>>() { });
   }
 
   private void configureDataStream() {

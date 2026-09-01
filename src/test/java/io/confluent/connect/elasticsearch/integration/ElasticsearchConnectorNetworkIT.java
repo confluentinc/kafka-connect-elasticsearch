@@ -125,92 +125,6 @@ public class ElasticsearchConnectorNetworkIT extends BaseConnectorIT {
                     .isEqualTo("RUNNING");
   }
 
-  /**
-   * A transport-level failure must not let later records overtake the failed batch's
-   * retry at max.in.flight.requests=1: the retry has to be re-sent while the in-flight
-   * slot is still held, before anything buffered during the backoff goes out. Otherwise
-   * a stale UPSERT for the same key can land after (and permanently shadow) a newer one.
-   */
-  @Test
-  public void testTransportRetryPreservesRecordOrder() throws Exception {
-    // First bulk (the one carrying doc 0) blocks until released, then fails with a 500.
-    // Everything afterwards succeeds.
-    wireMockRule.stubFor(post(urlPathEqualTo("/_bulk"))
-            .inScenario("retryOrder")
-            .whenScenarioStateIs(Scenario.STARTED)
-            .withRequestBody(containing("{\"doc_num\":0}"))
-            .willReturn(addMinimalHeaders(aResponse().withStatus(500))
-                    .withTransformers(BlockingTransformer.NAME))
-            .willSetStateTo("Failed"));
-    wireMockRule.stubFor(post(urlPathEqualTo("/_bulk"))
-            .inScenario("retryOrder")
-            .whenScenarioStateIs("Failed")
-            .willReturn(okJson(errorBulkResponse())));
-
-    props.put(READ_TIMEOUT_MS_CONFIG, "60000");
-    props.put(BATCH_SIZE_CONFIG, "2");
-    props.put(LINGER_MS_CONFIG, "1000");
-    props.put(RETRY_BACKOFF_MS_CONFIG, "10");
-
-    connect.configureConnector(CONNECTOR_NAME, props);
-    waitForConnectorToStart(CONNECTOR_NAME, TASKS_MAX);
-
-    // Record 0 goes out alone and blocks in flight.
-    connect.kafka().produce(TOPIC, "0", "{\"doc_num\":0}");
-    BlockingTransformer blockingTransformer = BlockingTransformer.getInstance(wireMockRule);
-    await().untilAsserted(() -> assertThat(blockingTransformer.queueLength()).isEqualTo(1));
-
-    // Record 1 gets buffered behind the held in-flight slot while record 0 is pending.
-    connect.kafka().produce(TOPIC, "1", "{\"doc_num\":1}");
-    Thread.sleep(5000);
-
-    // Release the 500: record 0 must now be retried before record 1 is sent.
-    blockingTransformer.release(1);
-
-    await().atMost(Duration.ofMinutes(2)).untilAsserted(() -> {
-      List<String> bodies = bulkRequestBodies();
-      assertThat(countBodiesContaining(bodies, "{\"doc_num\":0}")).isGreaterThanOrEqualTo(2);
-      assertThat(countBodiesContaining(bodies, "{\"doc_num\":1}")).isGreaterThanOrEqualTo(1);
-    });
-
-    List<String> bodies = bulkRequestBodies();
-    int retryOfDoc0 = nthIndexOfBodyContaining(bodies, "{\"doc_num\":0}", 2);
-    int firstDoc1 = nthIndexOfBodyContaining(bodies, "{\"doc_num\":1}", 1);
-    assertThat(bodies.get(retryOfDoc0))
-            .as("the retried bulk must not have later records batched in front of it")
-            .doesNotContain("{\"doc_num\":1}");
-    assertThat(retryOfDoc0)
-            .as("doc 0's retry must be dispatched before doc 1, got bodies: " + bodies)
-            .isLessThan(firstDoc1);
-
-    assertThat(connect.connectorStatus(CONNECTOR_NAME).tasks().get(0).state())
-            .isEqualTo("RUNNING");
-  }
-
-  private List<String> bulkRequestBodies() {
-    List<com.github.tomakehurst.wiremock.stubbing.ServeEvent> events =
-            new java.util.ArrayList<>(wireMockRule.getAllServeEvents());
-    java.util.Collections.reverse(events); // getAllServeEvents is most-recent-first
-    return events.stream()
-            .filter(e -> e.getRequest().getUrl().startsWith("/_bulk"))
-            .map(e -> e.getRequest().getBodyAsString())
-            .collect(java.util.stream.Collectors.toList());
-  }
-
-  private static long countBodiesContaining(List<String> bodies, String marker) {
-    return bodies.stream().filter(b -> b.contains(marker)).count();
-  }
-
-  private static int nthIndexOfBodyContaining(List<String> bodies, String marker, int n) {
-    int seen = 0;
-    for (int i = 0; i < bodies.size(); i++) {
-      if (bodies.get(i).contains(marker) && ++seen == n) {
-        return i;
-      }
-    }
-    throw new AssertionError("No " + n + "th body containing " + marker + " in: " + bodies);
-  }
-
   @Test
   public void testConcurrentRequests() throws Exception {
     wireMockRule.stubFor(post(urlPathEqualTo("/_bulk"))
@@ -304,30 +218,6 @@ public class ElasticsearchConnectorNetworkIT extends BaseConnectorIT {
     // The failed request is re-sent verbatim while its in-flight slot stays held, so
     // the batch is attempted exactly 1 + 2 retries times and nothing else goes out.
     verify(3, postRequestedFor(urlPathEqualTo("/_bulk")));
-  }
-
-  @Test
-  public void testTooManyRequestsPerItemWithNoRetries() throws Exception {
-    // A well-formed bulk response whose items carry status 429. With max.retries=0 the
-    // retrying client must not attempt an item-level retry: the 429 items flow to the
-    // listener as ordinary terminal failures and the task fails cleanly.
-    wireMockRule.stubFor(post(urlPathEqualTo("/_bulk"))
-            .willReturn(okJson(
-                errorBulkResponse(4, 429, "es_rejected_execution_exception", 0, 1, 2, 3))));
-
-    props.put(MAX_RETRIES_CONFIG, "0");
-    connect.configureConnector(CONNECTOR_NAME, props);
-    waitForConnectorToStart(CONNECTOR_NAME, TASKS_MAX);
-    writeRecords(NUM_RECORDS);
-
-    // With no retries the 429 items reach the listener as ordinary failures and the
-    // task fails cleanly.
-    await().atMost(Duration.ofMinutes(3)).untilAsserted(() ->
-            assertThat(connect.connectorStatus(CONNECTOR_NAME).tasks().get(0).state())
-                    .isEqualTo("FAILED"));
-
-    assertThat(connect.connectorStatus(CONNECTOR_NAME).tasks().get(0).trace())
-            .contains("Indexing record failed");
   }
 
   @Test
@@ -466,6 +356,116 @@ public class ElasticsearchConnectorNetworkIT extends BaseConnectorIT {
                     .isEqualTo("FAILED"));
     assertThat(connect.connectorStatus(CONNECTOR_NAME).tasks().get(0).trace())
             .contains("status line [HTTP/1.1 500 Server Error]");
+  }
+
+  /**
+   * A transport-level failure must not let later records overtake the failed batch's
+   * retry at max.in.flight.requests=1: the retry has to be re-sent while the in-flight
+   * slot is still held, before anything buffered during the backoff goes out. Otherwise
+   * a stale UPSERT for the same key can land after (and permanently shadow) a newer one.
+   */
+  @Test
+  public void testTransportRetryPreservesRecordOrder() throws Exception {
+    // First bulk (the one carrying doc 0) blocks until released, then fails with a 500.
+    // Everything afterwards succeeds.
+    wireMockRule.stubFor(post(urlPathEqualTo("/_bulk"))
+            .inScenario("retryOrder")
+            .whenScenarioStateIs(Scenario.STARTED)
+            .withRequestBody(containing("{\"doc_num\":0}"))
+            .willReturn(addMinimalHeaders(aResponse().withStatus(500))
+                    .withTransformers(BlockingTransformer.NAME))
+            .willSetStateTo("Failed"));
+    wireMockRule.stubFor(post(urlPathEqualTo("/_bulk"))
+            .inScenario("retryOrder")
+            .whenScenarioStateIs("Failed")
+            .willReturn(okJson(errorBulkResponse())));
+
+    props.put(READ_TIMEOUT_MS_CONFIG, "60000");
+    props.put(BATCH_SIZE_CONFIG, "2");
+    props.put(LINGER_MS_CONFIG, "1000");
+    props.put(RETRY_BACKOFF_MS_CONFIG, "10");
+
+    connect.configureConnector(CONNECTOR_NAME, props);
+    waitForConnectorToStart(CONNECTOR_NAME, TASKS_MAX);
+
+    // Record 0 goes out alone and blocks in flight.
+    connect.kafka().produce(TOPIC, "0", "{\"doc_num\":0}");
+    BlockingTransformer blockingTransformer = BlockingTransformer.getInstance(wireMockRule);
+    await().untilAsserted(() -> assertThat(blockingTransformer.queueLength()).isEqualTo(1));
+
+    // Record 1 gets buffered behind the held in-flight slot while record 0 is pending.
+    connect.kafka().produce(TOPIC, "1", "{\"doc_num\":1}");
+    Thread.sleep(5000);
+
+    // Release the 500: record 0 must now be retried before record 1 is sent.
+    blockingTransformer.release(1);
+
+    await().atMost(Duration.ofMinutes(2)).untilAsserted(() -> {
+      List<String> bodies = bulkRequestBodies();
+      assertThat(countBodiesContaining(bodies, "{\"doc_num\":0}")).isGreaterThanOrEqualTo(2);
+      assertThat(countBodiesContaining(bodies, "{\"doc_num\":1}")).isGreaterThanOrEqualTo(1);
+    });
+
+    List<String> bodies = bulkRequestBodies();
+    int retryOfDoc0 = nthIndexOfBodyContaining(bodies, "{\"doc_num\":0}", 2);
+    int firstDoc1 = nthIndexOfBodyContaining(bodies, "{\"doc_num\":1}", 1);
+    assertThat(bodies.get(retryOfDoc0))
+            .as("the retried bulk must not have later records batched in front of it")
+            .doesNotContain("{\"doc_num\":1}");
+    assertThat(retryOfDoc0)
+            .as("doc 0's retry must be dispatched before doc 1, got bodies: " + bodies)
+            .isLessThan(firstDoc1);
+
+    assertThat(connect.connectorStatus(CONNECTOR_NAME).tasks().get(0).state())
+            .isEqualTo("RUNNING");
+  }
+
+  @Test
+  public void testTooManyRequestsPerItemWithNoRetries() throws Exception {
+    // A well-formed bulk response whose items carry status 429. With max.retries=0 the
+    // retrying client must not attempt an item-level retry: the 429 items flow to the
+    // listener as ordinary terminal failures and the task fails cleanly.
+    wireMockRule.stubFor(post(urlPathEqualTo("/_bulk"))
+            .willReturn(okJson(
+                errorBulkResponse(4, 429, "es_rejected_execution_exception", 0, 1, 2, 3))));
+
+    props.put(MAX_RETRIES_CONFIG, "0");
+    connect.configureConnector(CONNECTOR_NAME, props);
+    waitForConnectorToStart(CONNECTOR_NAME, TASKS_MAX);
+    writeRecords(NUM_RECORDS);
+
+    // With no retries the 429 items reach the listener as ordinary failures and the
+    // task fails cleanly.
+    await().atMost(Duration.ofMinutes(3)).untilAsserted(() ->
+            assertThat(connect.connectorStatus(CONNECTOR_NAME).tasks().get(0).state())
+                    .isEqualTo("FAILED"));
+
+    assertThat(connect.connectorStatus(CONNECTOR_NAME).tasks().get(0).trace())
+            .contains("Indexing record failed");
+  }
+
+  private List<String> bulkRequestBodies() {
+    List<com.github.tomakehurst.wiremock.stubbing.ServeEvent> events =
+            new java.util.ArrayList<>(wireMockRule.getAllServeEvents());
+    java.util.Collections.reverse(events); // getAllServeEvents is most-recent-first
+    return events.stream()
+            .filter(e -> e.getRequest().getUrl().startsWith("/_bulk"))
+            .map(e -> e.getRequest().getBodyAsString())
+            .collect(java.util.stream.Collectors.toList());
+  }
+
+  private static long countBodiesContaining(List<String> bodies, String marker) {
+    return bodies.stream().filter(b -> b.contains(marker)).count();
+  }
+
+  private static int nthIndexOfBodyContaining(List<String> bodies, String marker, int n) {
+    int seen = 0;
+    for (int i = 0; i < bodies.size(); i++) {
+      if (bodies.get(i).contains(marker) && ++seen == n) {
+        return i;
+      }
+    }
+    throw new AssertionError("No " + n + "th body containing " + marker + " in: " + bodies);
   }
 
   protected Map<String, String> createProps() {

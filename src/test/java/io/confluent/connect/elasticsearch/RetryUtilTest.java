@@ -51,14 +51,6 @@ public class RetryUtilTest {
   }
 
   @Test
-  public void computeRetryBackoffForZeroBackoff() {
-    // A zero backoff means retry immediately; it must not throw from the random range.
-    assertEquals(0L, RetryUtil.computeRandomRetryWaitTimeInMillis(0, 0L));
-    assertEquals(0L, RetryUtil.computeRandomRetryWaitTimeInMillis(1, 0L));
-    assertEquals(0L, RetryUtil.computeRandomRetryWaitTimeInMillis(10, 0L));
-  }
-
-  @Test
   public void computeRetryBackoffForNegativeRetryTimes() {
     assertComputeRetryInRange(1, -100L);
     assertComputeRetryInRange(10, -100L);
@@ -98,6 +90,14 @@ public class RetryUtilTest {
 
     assertTrue(RetryUtil.callWithRetries("test", () -> testFunction(4), 3, 100, mockClock));
     verify(mockClock, times(3)).sleep(anyLong());
+  }
+
+  @Test
+  public void computeRetryBackoffForZeroBackoff() {
+    // A zero backoff means retry immediately; it must not throw from the random range.
+    assertEquals(0L, RetryUtil.computeRandomRetryWaitTimeInMillis(0, 0L));
+    assertEquals(0L, RetryUtil.computeRandomRetryWaitTimeInMillis(1, 0L));
+    assertEquals(0L, RetryUtil.computeRandomRetryWaitTimeInMillis(10, 0L));
   }
 
   private boolean testFunction(int timesToThrow) throws IOException {

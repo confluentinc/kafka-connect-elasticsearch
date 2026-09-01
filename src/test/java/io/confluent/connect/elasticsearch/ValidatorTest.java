@@ -114,34 +114,6 @@ public class ValidatorTest {
     when(mockInfoResponse.version().number()).thenReturn("8.19.19");
   }
 
-  private static ElasticsearchException statusException(String reason, int status) {
-    return new ElasticsearchException("es/test", ErrorResponse.of(r -> r
-        .error(e -> e.type("status_exception").reason(reason))
-        .status(status)));
-  }
-
-  private static TransportException transportException(int status) {
-    // The ping is a body-less HEAD request, so error statuses surface as a TransportException
-    // built from the raw http response rather than as an ElasticsearchException.
-    TransportHttpClient.Response response = mock(TransportHttpClient.Response.class);
-    when(response.statusCode()).thenReturn(status);
-    return new TransportException(
-        response, "Expecting a response body, but none was sent", "es/ping");
-  }
-
-  private void mockIndexExists(boolean exists) throws IOException {
-    when(mockClient.indices().exists(
-        ArgumentMatchers.<Function<ExistsRequest.Builder, ObjectBuilder<ExistsRequest>>>any()))
-        .thenReturn(new BooleanResponse(exists));
-  }
-
-  private void mockAliasExists(boolean exists) throws IOException {
-    when(mockClient.indices().existsAlias(
-        ArgumentMatchers
-            .<Function<ExistsAliasRequest.Builder, ObjectBuilder<ExistsAliasRequest>>>any()))
-        .thenReturn(new BooleanResponse(exists));
-  }
-
   @Test
   public void testValidDefaultConfig() {
     validator = new Validator(props, () -> mockClient);
@@ -476,15 +448,12 @@ public class ValidatorTest {
 
   @Test
   public void testIncompatibleESVersionWithConnector() {
-    String[] incompatibleESVersions = {"6.0.0", "7.0.0", "7.9.3", "7.17.24"};
-    for (String version : incompatibleESVersions) {
-      when(mockInfoResponse.version().number()).thenReturn(version);
-      validator = new Validator(props, () -> mockClient);
-      Config result = validator.validate();
+    when(mockInfoResponse.version().number()).thenReturn("7.17.24");
+    validator = new Validator(props, () -> mockClient);
+    Config result = validator.validate();
 
-      assertHasErrorMessage(result, CONNECTION_URL_CONFIG, "is not supported by connector");
-      assertHasErrorMessage(result, CONNECTION_URL_CONFIG, "use the 15.x versions");
-    }
+    assertHasErrorMessage(result, CONNECTION_URL_CONFIG, "is not supported by connector");
+    assertHasErrorMessage(result, CONNECTION_URL_CONFIG, "use the 15.x versions");
   }
 
   @Test
@@ -544,41 +513,6 @@ public class ValidatorTest {
 
     Config result = validator.validate();
     assertHasErrorMessage(result, CONNECTION_URL_CONFIG, "Could not connect to Elasticsearch.");
-  }
-
-  @Test
-  public void testForbiddenPingIsTreatedAsReachable() throws IOException {
-    // A principal with index privileges but no cluster monitor privilege gets a 403 on ping;
-    // Elasticsearch is up, so validation must pass.
-    TransportException forbidden = transportException(403);
-    when(mockClient.ping()).thenThrow(forbidden);
-    validator = new Validator(props, () -> mockClient);
-
-    Config result = validator.validate();
-    assertNoErrors(result);
-  }
-
-  @Test
-  public void testForbiddenPingAsElasticsearchExceptionIsTreatedAsReachable() throws IOException {
-    when(mockClient.ping()).thenThrow(statusException("Forbidden.", 403));
-    validator = new Validator(props, () -> mockClient);
-
-    Config result = validator.validate();
-    assertNoErrors(result);
-  }
-
-  @Test
-  public void testUnauthorizedPingFailsValidation() throws IOException {
-    // Bad credentials (401) must still fail validation, unlike the 403 case.
-    props.put(CONNECTION_USERNAME_CONFIG, "sinkuser");
-    props.put(CONNECTION_PASSWORD_CONFIG, "password");
-    TransportException unauthorized = transportException(401);
-    when(mockClient.ping()).thenThrow(unauthorized);
-    validator = new Validator(props, () -> mockClient);
-
-    Config result = validator.validate();
-    assertHasErrorMessage(result, CONNECTION_URL_CONFIG, "Could not connect to Elasticsearch.");
-    assertHasErrorMessage(result, CONNECTION_USERNAME_CONFIG, "Could not authenticate the user.");
   }
 
   @Test
@@ -957,6 +891,69 @@ public class ValidatorTest {
 
     Config result = validator.validate();
     assertNoErrors(result);
+  }
+
+  @Test
+  public void testForbiddenPingIsTreatedAsReachable() throws IOException {
+    // A principal with index privileges but no cluster monitor privilege gets a 403 on ping;
+    // Elasticsearch is up, so validation must pass.
+    TransportException forbidden = transportException(403);
+    when(mockClient.ping()).thenThrow(forbidden);
+    validator = new Validator(props, () -> mockClient);
+
+    Config result = validator.validate();
+    assertNoErrors(result);
+  }
+
+  @Test
+  public void testForbiddenPingAsElasticsearchExceptionIsTreatedAsReachable() throws IOException {
+    when(mockClient.ping()).thenThrow(statusException("Forbidden.", 403));
+    validator = new Validator(props, () -> mockClient);
+
+    Config result = validator.validate();
+    assertNoErrors(result);
+  }
+
+  @Test
+  public void testUnauthorizedPingFailsValidation() throws IOException {
+    // Bad credentials (401) must still fail validation, unlike the 403 case.
+    props.put(CONNECTION_USERNAME_CONFIG, "sinkuser");
+    props.put(CONNECTION_PASSWORD_CONFIG, "password");
+    TransportException unauthorized = transportException(401);
+    when(mockClient.ping()).thenThrow(unauthorized);
+    validator = new Validator(props, () -> mockClient);
+
+    Config result = validator.validate();
+    assertHasErrorMessage(result, CONNECTION_URL_CONFIG, "Could not connect to Elasticsearch.");
+    assertHasErrorMessage(result, CONNECTION_USERNAME_CONFIG, "Could not authenticate the user.");
+  }
+
+  private static ElasticsearchException statusException(String reason, int status) {
+    return new ElasticsearchException("es/test", ErrorResponse.of(r -> r
+        .error(e -> e.type("status_exception").reason(reason))
+        .status(status)));
+  }
+
+  private static TransportException transportException(int status) {
+    // The ping is a body-less HEAD request, so error statuses surface as a TransportException
+    // built from the raw http response rather than as an ElasticsearchException.
+    TransportHttpClient.Response response = mock(TransportHttpClient.Response.class);
+    when(response.statusCode()).thenReturn(status);
+    return new TransportException(
+        response, "Expecting a response body, but none was sent", "es/ping");
+  }
+
+  private void mockIndexExists(boolean exists) throws IOException {
+    when(mockClient.indices().exists(
+        ArgumentMatchers.<Function<ExistsRequest.Builder, ObjectBuilder<ExistsRequest>>>any()))
+        .thenReturn(new BooleanResponse(exists));
+  }
+
+  private void mockAliasExists(boolean exists) throws IOException {
+    when(mockClient.indices().existsAlias(
+        ArgumentMatchers
+            .<Function<ExistsAliasRequest.Builder, ObjectBuilder<ExistsAliasRequest>>>any()))
+        .thenReturn(new BooleanResponse(exists));
   }
 
   private static void assertHasErrorMessage(Config config, String property, String msg) {

@@ -341,14 +341,6 @@ public class ElasticsearchSinkTaskTest {
   }
 
   @Test
-  public void testStopBeforeStartDoesNotThrow() {
-    // Connect's framework can call stop() on a task whose start() never ran or never
-    // completed (e.g. a sibling task's startup failure aborts the whole connector).
-    task = new ElasticsearchSinkTask();
-    task.stop();
-  }
-
-  @Test
   public void testVersion() {
     setUpTask();
     assertNotEquals("0.0.0.0", task.version());
@@ -497,6 +489,14 @@ public class ElasticsearchSinkTaskTest {
         () -> task.put(Collections.singletonList(record)));
     assertEquals(String.format("Found a topic name '%s' that doesn't match assigned partitions."
         + " Connector doesn't support topic mutating SMTs", record.topic()), connectException.getMessage());
+  }
+
+  @Test
+  public void testStopBeforeStartDoesNotThrow() {
+    // Connect's framework can call stop() on a task whose start() never ran or never
+    // completed (e.g. a sibling task's startup failure aborts the whole connector).
+    task = new ElasticsearchSinkTask();
+    task.stop();
   }
 
   private String dataStreamName(String type, String dataset, String namespace) {
