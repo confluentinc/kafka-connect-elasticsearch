@@ -57,6 +57,7 @@ import co.elastic.clients.elasticsearch.core.BulkRequest;
 import co.elastic.clients.elasticsearch.core.BulkResponse;
 import co.elastic.clients.elasticsearch.core.bulk.BulkOperation;
 import co.elastic.clients.elasticsearch.core.bulk.BulkResponseItem;
+import co.elastic.clients.elasticsearch.indices.get_mapping.IndexMappingRecord;
 import co.elastic.clients.json.JsonpUtils;
 import co.elastic.clients.json.jackson.JacksonJsonpMapper;
 import co.elastic.clients.transport.rest_client.RestClientTransport;
@@ -825,7 +826,7 @@ public class ElasticsearchClient {
     return callWithRetries(
         "get mapping for index " + index,
         () -> {
-          co.elastic.clients.elasticsearch.indices.get_mapping.IndexMappingRecord record =
+          IndexMappingRecord record =
               client.indices().getMapping(g -> g.index(index)).result().get(index);
           return record == null ? null : record.mappings();
         }

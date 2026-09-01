@@ -41,6 +41,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
+import static java.util.stream.Collectors.toSet;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -762,19 +763,20 @@ public class ElasticsearchClientTest extends ElasticsearchClientTestBase {
     client.flush();
     waitUntilRecordsInES(10);
 
+    // The bulk-retry pool is not asserted: its single thread starts lazily on the first
+    // scheduled retry (4c5dd88b), so it never exists on a healthy path.
     List<String> poolPrefixes = Arrays.asList(
-            "elasticsearch-sink-1-elasticsearch-bulk-retry-",
             "elasticsearch-sink-1-elasticsearch-bulk-ingester-",
             "elasticsearch-sink-1-elasticsearch-bulk-dispatcher-");
 
     Set<String> threadNames = Thread.getAllStackTraces().keySet().stream()
             .map(Thread::getName)
-            .collect(java.util.stream.Collectors.toSet());
+            .collect(toSet());
 
     for (String prefix : poolPrefixes) {
       Set<String> poolThreads = threadNames.stream()
               .filter(name -> name.startsWith(prefix))
-              .collect(java.util.stream.Collectors.toSet());
+              .collect(toSet());
       assertTrue("Expected a thread named " + prefix + "* to exist, found: " + threadNames,
               !poolThreads.isEmpty());
       for (String threadName : poolThreads) {

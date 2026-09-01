@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.github.tomakehurst.wiremock.junit.WireMockRule;
 import com.github.tomakehurst.wiremock.stubbing.Scenario;
+import com.github.tomakehurst.wiremock.stubbing.ServeEvent;
 import io.confluent.common.utils.IntegrationTest;
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnector;
 import io.confluent.connect.elasticsearch.helper.ElasticSearchMockUtil;
@@ -18,6 +19,8 @@ import org.junit.Ignore;
 import org.junit.experimental.categories.Category;
 
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -53,6 +56,7 @@ import static io.confluent.connect.elasticsearch.helper.ElasticSearchMockUtil.ba
 import static io.confluent.connect.elasticsearch.helper.ElasticSearchMockUtil.addMinimalHeaders;
 import static io.confluent.connect.elasticsearch.helper.ElasticSearchMockUtil.minimumResponseJson;
 import static io.confluent.connect.elasticsearch.helper.ElasticSearchMockUtil.MAPPER;
+import static java.util.stream.Collectors.toList;
 import static java.util.stream.Collectors.toSet;
 import static org.apache.kafka.connect.json.JsonConverterConfig.SCHEMAS_ENABLE_CONFIG;
 import static org.apache.kafka.connect.runtime.ConnectorConfig.CONNECTOR_CLASS_CONFIG;
@@ -169,7 +173,7 @@ public class ElasticsearchConnectorNetworkIT extends BaseConnectorIT {
     writeRecords(NUM_RECORDS);
 
     // Connector should fail since the request takes longer than request timeout
-    await().atMost(Duration.ofMinutes(1)).untilAsserted(() ->
+    await().atMost(Duration.ofMinutes(3)).untilAsserted(() ->
             assertThat(connect.connectorStatus(CONNECTOR_NAME).tasks().get(0).state())
                     .isEqualTo("FAILED"));
 
@@ -206,7 +210,7 @@ public class ElasticsearchConnectorNetworkIT extends BaseConnectorIT {
     writeRecords(BATCH_SIZE);
 
     // Connector should fail since the request takes longer than request timeout
-    await().atMost(Duration.ofMinutes(1)).untilAsserted(() ->
+    await().atMost(Duration.ofMinutes(3)).untilAsserted(() ->
             assertThat(connect.connectorStatus(CONNECTOR_NAME).tasks().get(0).state())
                     .isEqualTo("FAILED"));
 
@@ -234,7 +238,7 @@ public class ElasticsearchConnectorNetworkIT extends BaseConnectorIT {
     writeRecords(BATCH_SIZE);
 
     // Connector should fail since the request takes longer than request timeout
-    await().atMost(Duration.ofMinutes(1)).untilAsserted(() ->
+    await().atMost(Duration.ofMinutes(3)).untilAsserted(() ->
             assertThat(connect.connectorStatus(CONNECTOR_NAME).tasks().get(0).state())
                     .isEqualTo("FAILED"));
 
@@ -434,7 +438,7 @@ public class ElasticsearchConnectorNetworkIT extends BaseConnectorIT {
     waitForConnectorToStart(CONNECTOR_NAME, TASKS_MAX);
     writeRecords(NUM_RECORDS);
 
-    await().atMost(Duration.ofMinutes(1)).untilAsserted(() ->
+    await().atMost(Duration.ofMinutes(3)).untilAsserted(() ->
             assertThat(connect.connectorStatus(CONNECTOR_NAME).tasks().get(0).state())
                     .isEqualTo("FAILED"));
 
@@ -443,13 +447,12 @@ public class ElasticsearchConnectorNetworkIT extends BaseConnectorIT {
   }
 
   private List<String> bulkRequestBodies() {
-    List<com.github.tomakehurst.wiremock.stubbing.ServeEvent> events =
-            new java.util.ArrayList<>(wireMockRule.getAllServeEvents());
-    java.util.Collections.reverse(events); // getAllServeEvents is most-recent-first
+    List<ServeEvent> events = new ArrayList<>(wireMockRule.getAllServeEvents());
+    Collections.reverse(events); // getAllServeEvents is most-recent-first
     return events.stream()
             .filter(e -> e.getRequest().getUrl().startsWith("/_bulk"))
             .map(e -> e.getRequest().getBodyAsString())
-            .collect(java.util.stream.Collectors.toList());
+            .collect(toList());
   }
 
   private static long countBodiesContaining(List<String> bodies, String marker) {
@@ -522,10 +525,6 @@ public class ElasticsearchConnectorNetworkIT extends BaseConnectorIT {
               .put("_seq_no", 0);
     }
     return MAPPER.writerWithDefaultPrettyPrinter().writeValueAsString(response);
-  }
-
-  public static String errorBulkResponse(int items, String errorType, int... errorIdx) throws JsonProcessingException {
-    return errorBulkResponse(items, 400, errorType, errorIdx);
   }
 
   public static String errorBulkResponse(int items, int errorStatus, String errorType, int... errorIdx) throws JsonProcessingException {

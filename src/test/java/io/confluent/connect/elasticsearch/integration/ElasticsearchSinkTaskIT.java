@@ -166,7 +166,7 @@ public class ElasticsearchSinkTaskIT {
   @Test
   public void testIndividualFailure() throws JsonProcessingException {
     wireMockRule.stubFor(post(urlPathEqualTo("/_bulk"))
-            .willReturn(okJson(ElasticsearchConnectorNetworkIT.errorBulkResponse(3,
+            .willReturn(okJson(ElasticsearchConnectorNetworkIT.errorBulkResponse(3, 400,
                     "strict_dynamic_mapping_exception", 1))));
 
     Map<String, String> props = createProps();
