@@ -250,9 +250,12 @@ public class ElasticsearchSinkTaskIT {
     task.start(props);
     task.open(ImmutableList.of(tp));
 
+    // The framework rethrow is sanitised (coordinates + failure type only); the original converter
+    // message ("Key is used as document id ...") is no longer echoed to the framework — it still
+    // reaches the DLQ via reportBadRecord.
     assertThatThrownBy(() -> task.put(records))
             .isInstanceOf(DataException.class)
-            .hasMessageContaining("Key is used as document id and can not be null");
+            .hasMessageContaining("Can't convert");
 
     currentOffsets = ImmutableMap.of(tp, new OffsetAndMetadata(0));
     assertThat(task.preCommit(currentOffsets).get(tp).offset())
@@ -298,9 +301,12 @@ public class ElasticsearchSinkTaskIT {
     task.initialize(context);
     task.start(props);
 
+    // The framework rethrow is sanitised (coordinates + failure type only); the original converter
+    // message ("... has a null value ...") is no longer echoed to the framework — it still reaches
+    // the DLQ via reportBadRecord.
     assertThatThrownBy(() -> task.put(records))
             .isInstanceOf(DataException.class)
-            .hasMessageContaining("has a null value ");
+            .hasMessageContaining("Can't convert");
     currentOffsets = ImmutableMap.of(tp, new OffsetAndMetadata(0));
     assertThat(task.preCommit(currentOffsets).get(tp).offset())
             .isLessThanOrEqualTo(1);

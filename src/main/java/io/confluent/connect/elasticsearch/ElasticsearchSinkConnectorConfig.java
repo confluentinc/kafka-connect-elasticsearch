@@ -18,6 +18,7 @@ package io.confluent.connect.elasticsearch;
 import java.io.File;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -961,13 +962,45 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   public static final ConfigDef CONFIG = baseConfigDef();
 
   protected ElasticsearchSinkConnectorConfig(ConfigDef config, Map<String, String> properties) {
-    super(config, properties);
+    super(config, sanitizeConnectionUrl(properties));
     this.kafkaTopics = getTopicArray(properties);
   }
 
   public ElasticsearchSinkConnectorConfig(Map<String, String> props) {
-    super(CONFIG, props);
+    super(CONFIG, sanitizeConnectionUrl(props));
     this.kafkaTopics = getTopicArray(props);
+  }
+
+  /**
+   * Returns a copy of {@code properties} with any embedded {@code user:password@} credentials
+   * stripped from the {@code connection.url} value(s). Credentials are supplied via the dedicated
+   * {@code connection.username}/{@code connection.password} configs; the client authenticates with
+   * those and never with URL user-info (an {@link org.apache.http.HttpHost} carries none), so this
+   * is functionally a no-op for a correctly configured connector.
+   *
+   * <p>Sanitizing at the source keeps credentials out of the parsed config, so the inherited
+   * {@link AbstractConfig} config dump (and every other consumer of {@code connection.url}) is
+   * safe without having to suppress the framework's automatic {@code logAll()}.
+   * {@code connection.url} is a {@code Type.LIST} — a comma-separated string in the raw
+   * properties — so each element is redacted independently.
+   */
+  private static Map<String, String> sanitizeConnectionUrl(Map<String, String> properties) {
+    if (properties == null) {
+      return properties;
+    }
+    String rawUrls = properties.get(CONNECTION_URL_CONFIG);
+    if (rawUrls == null || rawUrls.isEmpty()) {
+      return properties;
+    }
+    String sanitized = Arrays.stream(rawUrls.split(","))
+        .map(ConfigCallbackHandler::redactUserInfo)
+        .collect(Collectors.joining(","));
+    if (sanitized.equals(rawUrls)) {
+      return properties;
+    }
+    Map<String, String> copy = new HashMap<>(properties);
+    copy.put(CONNECTION_URL_CONFIG, sanitized);
+    return copy;
   }
 
   private String[] getTopicArray(Map<?, ?> config) {
@@ -1373,8 +1406,16 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
         try {
           new URI(url);
         } catch (URISyntaxException e) {
+          // Redact any embedded user:password@ credential before it reaches the ConfigException
+          // message (both the custom message below and Kafka's own generated message, which
+          // renders the `value` argument verbatim), including via the Connect config-validate API.
+          List<String> redactedUrls = urls.stream()
+              .map(ConfigCallbackHandler::redactUserInfo)
+              .collect(Collectors.toList());
           throw new ConfigException(
-              name, value, "The provided url '" + url + "' is not a valid url."
+              name, redactedUrls,
+              "The provided url '" + ConfigCallbackHandler.redactUserInfo(url)
+                  + "' is not a valid url."
           );
         }
       }
