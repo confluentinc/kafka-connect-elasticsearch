@@ -26,11 +26,11 @@ import org.junit.Test;
 
 public class ElasticsearchClientCloseTest {
 
+  // Three pools that will not drain within the budget: each holds a task sleeping well
+  // past it. With one shared deadline the caller waits ~budget once; awaiting each pool
+  // for the full budget in turn would cost ~budget * poolCount.
   @Test(timeout = 30_000)
   public void awaitTerminationWithinSharesOneDeadlineAcrossPools() throws Exception {
-    // Three pools that will not drain within the budget: each holds a task sleeping well
-    // past it. With one shared deadline the caller waits ~budget once; awaiting each pool
-    // for the full budget in turn would cost ~budget * poolCount.
     List<ExecutorService> pools = Arrays.asList(
         Executors.newSingleThreadExecutor(),
         Executors.newSingleThreadExecutor(),

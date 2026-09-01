@@ -806,11 +806,11 @@ public class ElasticsearchClientTest extends ElasticsearchClientTestBase {
     client.close();
   }
 
+  // A reachable socket so RestClient.builder().build() actually starts its (non-daemon)
+  // I/O reactor threads; the overridden getServerVersion then throws right after, in the
+  // constructor's guarded region. The reactor threads must be closed, not leaked.
   @Test(timeout = 30_000)
   public void testConstructorFailureClosesTransport() throws Exception {
-    // A reachable socket so RestClient.builder().build() actually starts its (non-daemon)
-    // I/O reactor threads; the overridden getServerVersion then throws right after, in the
-    // constructor's guarded region. The reactor threads must be closed, not leaked.
     try (ServerSocket socket = new ServerSocket(0)) {
       props.put(CONNECTION_URL_CONFIG, "http://localhost:" + socket.getLocalPort());
       config = new ElasticsearchSinkConnectorConfig(props);
@@ -859,11 +859,11 @@ public class ElasticsearchClientTest extends ElasticsearchClientTestBase {
     client.close();
   }
 
+  // An endpoint that accepts connections but never responds: the record cannot be
+  // delivered, so close() hits the flush timeout with the record still buffered and
+  // takes the skip-ingester-close path in closeResources().
   @Test(timeout = 60_000)
   public void testCloseWithStuckRecordsTerminates() throws Exception {
-    // An endpoint that accepts connections but never responds: the record cannot be
-    // delivered, so close() hits the flush timeout with the record still buffered and
-    // takes the skip-ingester-close path in closeResources().
     try (ServerSocket blackhole = new ServerSocket(0)) {
       props.put(CONNECTION_URL_CONFIG, "http://localhost:" + blackhole.getLocalPort());
       props.put(BATCH_SIZE_CONFIG, "1");
@@ -883,14 +883,14 @@ public class ElasticsearchClientTest extends ElasticsearchClientTestBase {
     }
   }
 
+  // Contract test for the retry design: no backoffPolicy is set on the BulkIngester,
+  // so its internal 429-retry pool ("bulk-ingester-retry#N") must never be created.
+  // That pool re-queued rejected operations at the tail of the buffer (reordering
+  // records) and leaked its threads past a timed-out close() because closeResources()
+  // skips bulkIngester.close() when records are stuck. Item-level 429s must instead
+  // reach the listener and be handled terminally, matching the pre-migration client.
   @Test(timeout = 60_000)
   public void testItemLevel429NeverCreatesIngesterInternalRetryPool() throws Exception {
-    // Contract test for the retry design: no backoffPolicy is set on the BulkIngester,
-    // so its internal 429-retry pool ("bulk-ingester-retry#N") must never be created.
-    // That pool re-queued rejected operations at the tail of the buffer (reordering
-    // records) and leaked its threads past a timed-out close() because closeResources()
-    // skips bulkIngester.close() when records are stuck. Item-level 429s must instead
-    // reach the listener and be handled terminally, matching the pre-migration client.
     WireMockServer wireMockServer = new WireMockServer(WireMockConfiguration.options()
         .dynamicPort()
         .extensions(ElasticSearchMockUtil.PRODUCT_HEADER_TRANSFORMER));
@@ -948,12 +948,12 @@ public class ElasticsearchClientTest extends ElasticsearchClientTestBase {
     }
   }
 
+  // Task cancellation interrupts the task thread while close() waits for the buffer to
+  // drain. The wait loop must abort immediately: Time.SYSTEM's sleep swallows the
+  // interrupt and re-sets the flag, which would otherwise busy-spin for the whole
+  // flush timeout (60s here, past the test timeout).
   @Test(timeout = 20_000)
   public void testCloseWithStuckRecordsHonorsInterrupt() throws Exception {
-    // Task cancellation interrupts the task thread while close() waits for the buffer to
-    // drain. The wait loop must abort immediately: Time.SYSTEM's sleep swallows the
-    // interrupt and re-sets the flag, which would otherwise busy-spin for the whole
-    // flush timeout (60s here, past the test timeout).
     try (ServerSocket blackhole = new ServerSocket(0)) {
       props.put(CONNECTION_URL_CONFIG, "http://localhost:" + blackhole.getLocalPort());
       props.put(BATCH_SIZE_CONFIG, "1");
@@ -978,10 +978,10 @@ public class ElasticsearchClientTest extends ElasticsearchClientTestBase {
     }
   }
 
+  // A pre-created mapping that only sets dynamic behavior has no properties, but must still
+  // count as existing so the connector does not overwrite it.
   @Test
   public void testHasMappingWithoutProperties() throws Exception {
-    // A pre-created mapping that only sets dynamic behavior has no properties, but must still
-    // count as existing so the connector does not overwrite it.
     helperClient.createIndex(index, "{\"dynamic\": \"strict\"}");
     ElasticsearchClient client = new ElasticsearchClient(config, null, () -> offsetTracker.updateOffsets(), 1, "elasticsearch-sink");
 
@@ -989,10 +989,10 @@ public class ElasticsearchClientTest extends ElasticsearchClientTestBase {
     client.close();
   }
 
+  // linger.ms=0 is valid and used to mean "flush immediately"; the BulkIngester flush timer
+  // does not accept 0, so the client clamps it instead of failing at construction time.
   @Test
   public void testWritesWithZeroLingerMs() throws Exception {
-    // linger.ms=0 is valid and used to mean "flush immediately"; the BulkIngester flush timer
-    // does not accept 0, so the client clamps it instead of failing at construction time.
     props.put(LINGER_MS_CONFIG, "0");
     config = new ElasticsearchSinkConnectorConfig(props);
     ElasticsearchClient client = new ElasticsearchClient(config, null, () -> offsetTracker.updateOffsets(), 1, "elasticsearch-sink");
@@ -1005,10 +1005,10 @@ public class ElasticsearchClientTest extends ElasticsearchClientTestBase {
     client.close();
   }
 
+  // bulk.size.bytes=0 is valid and used to flush on every record; the BulkIngester treats
+  // only negative sizes as unlimited, so the client clamps 0 instead of blocking every add.
   @Test
   public void testWritesWithZeroBulkSizeBytes() throws Exception {
-    // bulk.size.bytes=0 is valid and used to flush on every record; the BulkIngester treats
-    // only negative sizes as unlimited, so the client clamps 0 instead of blocking every add.
     props.put(BULK_SIZE_BYTES_CONFIG, "0");
     config = new ElasticsearchSinkConnectorConfig(props);
     ElasticsearchClient client = new ElasticsearchClient(config, null, () -> offsetTracker.updateOffsets(), 1, "elasticsearch-sink");

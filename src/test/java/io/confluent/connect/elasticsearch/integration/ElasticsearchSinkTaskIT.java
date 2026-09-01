@@ -474,9 +474,9 @@ public class ElasticsearchSinkTaskIT {
                     .isEqualTo(ImmutableMap.of(tp2, new OffsetAndMetadata(1))));
   }
 
+  // Whole-request transport failure once, then success.
   @Test(timeout = 60_000)
   public void testTransportRetryIsFlushedImmediately() throws Exception {
-    // Whole-request transport failure once, then success.
     wireMockRule.stubFor(post(urlPathEqualTo("/_bulk"))
             .inScenario("transportRetryFlush")
             .whenScenarioStateIs(Scenario.STARTED)

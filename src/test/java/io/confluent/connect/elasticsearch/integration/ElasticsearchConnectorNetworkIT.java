@@ -420,11 +420,11 @@ public class ElasticsearchConnectorNetworkIT extends BaseConnectorIT {
             .isEqualTo("RUNNING");
   }
 
+  // A well-formed bulk response whose items carry status 429. With max.retries=0 the
+  // retrying client must not attempt an item-level retry: the 429 items flow to the
+  // listener as ordinary terminal failures and the task fails cleanly.
   @Test
   public void testTooManyRequestsPerItemWithNoRetries() throws Exception {
-    // A well-formed bulk response whose items carry status 429. With max.retries=0 the
-    // retrying client must not attempt an item-level retry: the 429 items flow to the
-    // listener as ordinary terminal failures and the task fails cleanly.
     wireMockRule.stubFor(post(urlPathEqualTo("/_bulk"))
             .willReturn(okJson(
                 errorBulkResponse(4, 429, "es_rejected_execution_exception", 0, 1, 2, 3))));

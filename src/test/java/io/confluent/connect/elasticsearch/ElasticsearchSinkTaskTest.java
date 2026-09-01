@@ -491,10 +491,10 @@ public class ElasticsearchSinkTaskTest {
         + " Connector doesn't support topic mutating SMTs", record.topic()), connectException.getMessage());
   }
 
+  // Connect's framework can call stop() on a task whose start() never ran or never
+  // completed (e.g. a sibling task's startup failure aborts the whole connector).
   @Test
   public void testStopBeforeStartDoesNotThrow() {
-    // Connect's framework can call stop() on a task whose start() never ran or never
-    // completed (e.g. a sibling task's startup failure aborts the whole connector).
     task = new ElasticsearchSinkTask();
     task.stop();
   }
