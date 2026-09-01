@@ -56,26 +56,31 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import co.elastic.clients.elasticsearch.ElasticsearchClient;
+import co.elastic.clients.elasticsearch._types.ElasticsearchException;
+import co.elastic.clients.elasticsearch._types.ErrorResponse;
+import co.elastic.clients.elasticsearch.core.InfoResponse;
+import co.elastic.clients.elasticsearch.indices.ExistsAliasRequest;
+import co.elastic.clients.elasticsearch.indices.ExistsRequest;
+import co.elastic.clients.transport.TransportException;
+import co.elastic.clients.transport.endpoints.BooleanResponse;
+import co.elastic.clients.transport.http.TransportHttpClient;
+import co.elastic.clients.util.ObjectBuilder;
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.SecurityProtocol;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.function.Function;
 import org.apache.kafka.common.config.Config;
 import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.config.ConfigValue;
 import org.apache.kafka.common.config.SslConfigs;
-import org.elasticsearch.ElasticsearchStatusException;
-import org.elasticsearch.client.RequestOptions;
-import org.elasticsearch.client.RestHighLevelClient;
-import org.elasticsearch.client.core.MainResponse;
-import org.elasticsearch.rest.RestStatus;
 import org.junit.Before;
 import org.junit.Test;
+import org.mockito.ArgumentMatchers;
 import org.mockito.Mockito;
-import org.elasticsearch.client.indices.GetIndexRequest;
-import org.elasticsearch.action.admin.indices.alias.get.GetAliasesRequest;
 
 public class ValidatorTest {
 
@@ -93,20 +98,20 @@ public class ValidatorTest {
   private static final String LOGS_TEST_1 = "logs-test-1";
   private static final String VALID_DATASET = "a_valid_dataset";
 
-  private MainResponse mockInfoResponse;
+  private InfoResponse mockInfoResponse;
   private Map<String, String> props;
-  private RestHighLevelClient mockClient;
+  private ElasticsearchClient mockClient;
   private Validator validator;
 
   @Before
   public void setup() throws IOException {
     props = ElasticsearchSinkConnectorConfigTest.addNecessaryProps(new HashMap<>());
 
-    mockClient = mock(RestHighLevelClient.class, Mockito.RETURNS_DEEP_STUBS);
-    when(mockClient.ping(any(RequestOptions.class))).thenReturn(true);
-    mockInfoResponse = mock(MainResponse.class, Mockito.RETURNS_DEEP_STUBS);
-    when(mockClient.info(any(RequestOptions.class))).thenReturn(mockInfoResponse);
-    when(mockInfoResponse.getVersion().getNumber()).thenReturn("7.9.3");
+    mockClient = mock(ElasticsearchClient.class, Mockito.RETURNS_DEEP_STUBS);
+    when(mockClient.ping()).thenReturn(new BooleanResponse(true));
+    mockInfoResponse = mock(InfoResponse.class, Mockito.RETURNS_DEEP_STUBS);
+    when(mockClient.info()).thenReturn(mockInfoResponse);
+    when(mockInfoResponse.version().number()).thenReturn("8.19.19");
   }
 
   @Test
@@ -151,10 +156,11 @@ public class ValidatorTest {
 
   @Test
   public void testClientThrowsElasticsearchStatusException() throws IOException {
-    when(mockClient.ping(any(RequestOptions.class))).thenThrow(new ElasticsearchStatusException("Deleted resource.", RestStatus.GONE));
+    when(mockClient.ping()).thenThrow(statusException("Deleted resource.", 410));
     validator = new Validator(props, () -> mockClient);
     Config result = validator.validate();
-    assertHasErrorMessage(result, CONNECTION_URL_CONFIG, "Could not connect to Elasticsearch. Error message: Deleted resource.");
+    assertHasErrorMessage(result, CONNECTION_URL_CONFIG, "Could not connect to Elasticsearch.");
+    assertHasErrorMessage(result, CONNECTION_URL_CONFIG, "Deleted resource.");
   }
 
   @Test
@@ -442,18 +448,20 @@ public class ValidatorTest {
 
   @Test
   public void testIncompatibleESVersionWithConnector() {
+    when(mockInfoResponse.version().number()).thenReturn("7.17.24");
     validator = new Validator(props, () -> mockClient);
-    when(mockInfoResponse.getVersion().getNumber()).thenReturn("6.0.0");
     Config result = validator.validate();
-    assertHasErrorMessage(result, CONNECTION_URL_CONFIG, "not compatible with Elasticsearch");
+
+    assertHasErrorMessage(result, CONNECTION_URL_CONFIG, "is not supported by connector");
+    assertHasErrorMessage(result, CONNECTION_URL_CONFIG, "use the 15.x versions");
   }
 
   @Test
   public void testCompatibleESVersionWithConnector() {
     validator = new Validator(props, () -> mockClient);
-    String[] compatibleESVersions = {"7.0.0", "7.9.3", "7.10.0", "7.12.1", "8.0.0", "10.10.10"};
+    String[] compatibleESVersions = {"8.0.0", "8.19.19", "9.0.0", "9.1.4", "10.10.10"};
     for (String version : compatibleESVersions) {
-      when(mockInfoResponse.getVersion().getNumber()).thenReturn(version);
+      when(mockInfoResponse.version().number()).thenReturn(version);
       Config result = validator.validate();
 
       assertNoErrors(result);
@@ -491,7 +499,7 @@ public class ValidatorTest {
 
   @Test
   public void testInvalidConnection() throws IOException {
-    when(mockClient.ping(eq(RequestOptions.DEFAULT))).thenReturn(false);
+    when(mockClient.ping()).thenReturn(new BooleanResponse(false));
     validator = new Validator(props, () -> mockClient);
 
     Config result = validator.validate();
@@ -500,7 +508,7 @@ public class ValidatorTest {
 
   @Test
   public void testInvalidConnectionThrows() throws IOException {
-    when(mockClient.ping(eq(RequestOptions.DEFAULT))).thenThrow(new IOException("i iz fake"));
+    when(mockClient.ping()).thenThrow(new IOException("i iz fake"));
     validator = new Validator(props, () -> mockClient);
 
     Config result = validator.validate();
@@ -531,34 +539,32 @@ public class ValidatorTest {
   @Test
   public void testIncompatibleVersionDataStreamSet() {
     configureDataStream();
+    when(mockInfoResponse.version().number()).thenReturn("7.8.1");
     validator = new Validator(props, () -> mockClient);
-    when(mockInfoResponse.getVersion().getNumber()).thenReturn("7.8.1");
 
     Config result = validator.validate();
-    assertHasErrorMessage(result, CONNECTION_URL_CONFIG, "not compatible with data streams");
-    assertHasErrorMessage(result, DATA_STREAM_TYPE_CONFIG, "not compatible with data streams");
-    assertHasErrorMessage(result, DATA_STREAM_DATASET_CONFIG, "not compatible with data streams");
+    assertHasErrorMessage(result, CONNECTION_URL_CONFIG, "is not supported by connector");
   }
 
   @Test
   public void testIncompatibleVersionDataStreamNotSet() {
-    validator = new Validator(props, () -> mockClient);
     String[] incompatibleESVersions = {"7.8.0", "7.7.1", "7.6.2", "7.2.0", "7.1.1", "7.0.0-rc2"};
     for (String version : incompatibleESVersions) {
-      when(mockInfoResponse.getVersion().getNumber()).thenReturn(version);
+      when(mockInfoResponse.version().number()).thenReturn(version);
+      validator = new Validator(props, () -> mockClient);
       Config result = validator.validate();
 
-      assertNoErrors(result);
+      assertHasErrorMessage(result, CONNECTION_URL_CONFIG, "is not supported by connector");
     }
   }
 
   @Test
   public void testCompatibleVersionDataStreamNotSet() {
     validator = new Validator(props, () -> mockClient);
-    String[] compatibleESVersions = {"7.9.0", "7.9.3", "7.9.3-amd64", "7.10.0", "7.10.2", "7.11.0", "7.11.2", "7.12.0", "7.12.1",
-        "8.0.0", "10.10.10", "10.1.10", "10.1.1", "8.10.10"};
+    String[] compatibleESVersions = {"8.0.0", "8.10.10", "8.19.19-amd64", "9.0.0", "9.1.4",
+        "10.10.10", "10.1.10", "10.1.1"};
     for (String version : compatibleESVersions) {
-      when(mockInfoResponse.getVersion().getNumber()).thenReturn(version);
+      when(mockInfoResponse.version().number()).thenReturn(version);
       Config result = validator.validate();
 
       assertNoErrors(result);
@@ -569,10 +575,10 @@ public class ValidatorTest {
   public void testCompatibleVersionDataStreamSet() {
     configureDataStream();
     validator = new Validator(props, () -> mockClient);
-    String[] compatibleESVersions = {"7.9.0", "7.9.3", "7.9.3-amd64", "7.10.0", "7.10.2", "7.11.0", "7.11.2", "7.12.0", "7.12.1",
-        "8.0.0", "10.10.10", "10.1.10", "10.1.1", "8.10.10"};
+    String[] compatibleESVersions = {"8.0.0", "8.10.10", "8.19.19-amd64", "9.0.0", "9.1.4",
+        "10.10.10", "10.1.10", "10.1.1"};
     for (String version : compatibleESVersions) {
-      when(mockInfoResponse.getVersion().getNumber()).thenReturn(version);
+      when(mockInfoResponse.version().number()).thenReturn(version);
       Config result = validator.validate();
 
       assertNoErrors(result);
@@ -584,8 +590,7 @@ public class ValidatorTest {
     props.put(EXTERNAL_RESOURCE_USAGE_CONFIG, ExternalResourceUsage.INDEX.name());
     props.put(TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_CONFIG, TOPIC1 + ":" + INDEX1 + "," + TOPIC2 + ":" + INDEX2);
     props.put(TOPICS_CONFIG_KEY, TOPIC1 + "," + TOPIC2);
-    when(mockClient.indices().exists(any(GetIndexRequest.class), any(RequestOptions.class)))
-        .thenReturn(true);
+    mockIndexExists(true);
     validator = new Validator(props, () -> mockClient);
 
     Config result = validator.validate();
@@ -694,8 +699,7 @@ public class ValidatorTest {
     props.put(TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_CONFIG, TOPIC1 + ":" + INDEX1 + "," + TOPIC2 + ":" + INDEX2);
     props.put(TOPICS_CONFIG_KEY, TOPIC1 + "," + TOPIC2);
     props.put(MAX_EXTERNAL_RESOURCE_MAPPINGS_CONFIG, "5"); // Set limit higher than number of mappings
-    when(mockClient.indices().exists(any(GetIndexRequest.class), any(RequestOptions.class)))
-            .thenReturn(true);
+    mockIndexExists(true);
     validator = new Validator(props, () -> mockClient);
 
     Config result = validator.validate();
@@ -748,8 +752,7 @@ public class ValidatorTest {
     props.put(DATA_STREAM_TIMESTAMP_CONFIG, "created_at");
 
     // Mock data stream exists call
-    when(mockClient.indices().exists(any(GetIndexRequest.class), any(RequestOptions.class)))
-            .thenReturn(true);
+    mockIndexExists(true);
 
     validator = new Validator(props, () -> mockClient);
     Config result = validator.validate();
@@ -764,8 +767,7 @@ public class ValidatorTest {
     props.put(WRITE_METHOD_CONFIG, UPSERT_METHOD);
 
     // Mock alias exists call
-    when(mockClient.indices().existsAlias(any(GetAliasesRequest.class), any(RequestOptions.class)))
-            .thenReturn(true);
+    mockAliasExists(true);
 
     validator = new Validator(props, () -> mockClient);
     Config result = validator.validate();
@@ -780,8 +782,7 @@ public class ValidatorTest {
     props.put(BEHAVIOR_ON_NULL_VALUES_CONFIG, DELETE_BEHAVIOR);
 
     // Mock data stream exists call
-    when(mockClient.indices().exists(any(GetIndexRequest.class), any(RequestOptions.class)))
-            .thenReturn(true);
+    mockIndexExists(true);
 
     validator = new Validator(props, () -> mockClient);
     Config result = validator.validate();
@@ -796,8 +797,7 @@ public class ValidatorTest {
     props.put(DATA_STREAM_TIMESTAMP_CONFIG, "created_at");
 
     // Mock index exists call
-    when(mockClient.indices().exists(any(GetIndexRequest.class), any(RequestOptions.class)))
-            .thenReturn(true);
+    mockIndexExists(true);
 
     validator = new Validator(props, () -> mockClient);
     Config result = validator.validate();
@@ -811,8 +811,7 @@ public class ValidatorTest {
     props.put(TOPICS_CONFIG_KEY, TOPIC1);
 
     // Mock index exists call on the high-level client
-    when(mockClient.indices().exists(any(GetIndexRequest.class), any(RequestOptions.class)))
-        .thenReturn(true);
+    mockIndexExists(true);
 
     validator = new Validator(props, () -> mockClient);
     Config result = validator.validate();
@@ -826,8 +825,7 @@ public class ValidatorTest {
     props.put(TOPICS_CONFIG_KEY, TOPIC1);
 
     // Mock index does not exist call on the high-level client
-    when(mockClient.indices().exists(any(GetIndexRequest.class), any(RequestOptions.class)))
-        .thenReturn(false);
+    mockIndexExists(false);
 
     validator = new Validator(props, () -> mockClient);
     Config result = validator.validate();
@@ -842,8 +840,7 @@ public class ValidatorTest {
     props.put(TOPICS_CONFIG_KEY, TOPIC1);
 
     // Mock alias exists call on the high-level client
-    when(mockClient.indices().existsAlias(any(GetAliasesRequest.class), any(RequestOptions.class)))
-        .thenReturn(true);
+    mockAliasExists(true);
 
     validator = new Validator(props, () -> mockClient);
     Config result = validator.validate();
@@ -857,8 +854,7 @@ public class ValidatorTest {
     props.put(TOPICS_CONFIG_KEY, TOPIC1);
 
     // Mock alias does not exist call on the high-level client
-    when(mockClient.indices().existsAlias(any(GetAliasesRequest.class), any(RequestOptions.class)))
-        .thenReturn(false);
+    mockAliasExists(false);
 
     validator = new Validator(props, () -> mockClient);
     Config result = validator.validate();
@@ -872,13 +868,16 @@ public class ValidatorTest {
     props.put(TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_CONFIG, TOPIC1 + ":" + INDEX1);
     props.put(TOPICS_CONFIG_KEY, TOPIC1);
 
-    // Mock Elasticsearch exception on the high-level client
-    when(mockClient.indices().exists(any(GetIndexRequest.class), any(RequestOptions.class)))
-        .thenThrow(new ElasticsearchStatusException("Index not found", RestStatus.NOT_FOUND));
+    // Mock Elasticsearch exception on the client
+    ElasticsearchException exception = statusException("Index not found", 404);
+    when(mockClient.indices().exists(
+        ArgumentMatchers.<Function<ExistsRequest.Builder, ObjectBuilder<ExistsRequest>>>any()))
+        .thenThrow(exception);
 
     validator = new Validator(props, () -> mockClient);
     Config result = validator.validate();
-    String expectedMessage = String.format(RESOURCE_EXISTENCE_CHECK_FAILED_ERROR_FORMAT, ExternalResourceUsage.INDEX.name().toLowerCase(), INDEX1, "Index not found");
+    String expectedMessage = String.format(RESOURCE_EXISTENCE_CHECK_FAILED_ERROR_FORMAT,
+        ExternalResourceUsage.INDEX.name().toLowerCase(), INDEX1, exception.getMessage());
     assertHasErrorMessage(result, TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_CONFIG, expectedMessage);
   }
 
@@ -887,12 +886,74 @@ public class ValidatorTest {
     props.put(EXTERNAL_RESOURCE_USAGE_CONFIG, ExternalResourceUsage.INDEX.name());
     props.put(TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_CONFIG, " " + TOPIC1 + " : " + INDEX1 + " , " + TOPIC2 + " : " + INDEX2 + " ");
     props.put(TOPICS_CONFIG_KEY, TOPIC1 + "," + TOPIC2);
-    when(mockClient.indices().exists(any(GetIndexRequest.class), any(RequestOptions.class)))
-        .thenReturn(true);
+    mockIndexExists(true);
     validator = new Validator(props, () -> mockClient);
 
     Config result = validator.validate();
     assertNoErrors(result);
+  }
+
+  @Test
+  public void testForbiddenPingIsTreatedAsReachable() throws IOException {
+    // A principal with index privileges but no cluster monitor privilege gets a 403 on ping;
+    // Elasticsearch is up, so validation must pass.
+    TransportException forbidden = transportException(403);
+    when(mockClient.ping()).thenThrow(forbidden);
+    validator = new Validator(props, () -> mockClient);
+
+    Config result = validator.validate();
+    assertNoErrors(result);
+  }
+
+  @Test
+  public void testForbiddenPingAsElasticsearchExceptionIsTreatedAsReachable() throws IOException {
+    when(mockClient.ping()).thenThrow(statusException("Forbidden.", 403));
+    validator = new Validator(props, () -> mockClient);
+
+    Config result = validator.validate();
+    assertNoErrors(result);
+  }
+
+  @Test
+  public void testUnauthorizedPingFailsValidation() throws IOException {
+    // Bad credentials (401) must still fail validation, unlike the 403 case.
+    props.put(CONNECTION_USERNAME_CONFIG, "sinkuser");
+    props.put(CONNECTION_PASSWORD_CONFIG, "password");
+    TransportException unauthorized = transportException(401);
+    when(mockClient.ping()).thenThrow(unauthorized);
+    validator = new Validator(props, () -> mockClient);
+
+    Config result = validator.validate();
+    assertHasErrorMessage(result, CONNECTION_URL_CONFIG, "Could not connect to Elasticsearch.");
+    assertHasErrorMessage(result, CONNECTION_USERNAME_CONFIG, "Could not authenticate the user.");
+  }
+
+  private static ElasticsearchException statusException(String reason, int status) {
+    return new ElasticsearchException("es/test", ErrorResponse.of(r -> r
+        .error(e -> e.type("status_exception").reason(reason))
+        .status(status)));
+  }
+
+  private static TransportException transportException(int status) {
+    // The ping is a body-less HEAD request, so error statuses surface as a TransportException
+    // built from the raw http response rather than as an ElasticsearchException.
+    TransportHttpClient.Response response = mock(TransportHttpClient.Response.class);
+    when(response.statusCode()).thenReturn(status);
+    return new TransportException(
+        response, "Expecting a response body, but none was sent", "es/ping");
+  }
+
+  private void mockIndexExists(boolean exists) throws IOException {
+    when(mockClient.indices().exists(
+        ArgumentMatchers.<Function<ExistsRequest.Builder, ObjectBuilder<ExistsRequest>>>any()))
+        .thenReturn(new BooleanResponse(exists));
+  }
+
+  private void mockAliasExists(boolean exists) throws IOException {
+    when(mockClient.indices().existsAlias(
+        ArgumentMatchers
+            .<Function<ExistsAliasRequest.Builder, ObjectBuilder<ExistsAliasRequest>>>any()))
+        .thenReturn(new BooleanResponse(exists));
   }
 
   private static void assertHasErrorMessage(Config config, String property, String msg) {
