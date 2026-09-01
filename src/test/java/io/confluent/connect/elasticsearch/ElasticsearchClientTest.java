@@ -759,17 +759,27 @@ public class ElasticsearchClientTest extends ElasticsearchClientTestBase {
     client.flush();
     waitUntilRecordsInES(10);
 
-    String retryPrefix = "elasticsearch-sink-1-elasticsearch-bulk-retry-";
-    String ingesterPrefix = "elasticsearch-sink-1-elasticsearch-bulk-ingester-";
+    List<String> poolPrefixes = java.util.Arrays.asList(
+            "elasticsearch-sink-1-elasticsearch-bulk-retry-",
+            "elasticsearch-sink-1-elasticsearch-bulk-ingester-",
+            "elasticsearch-sink-1-elasticsearch-bulk-dispatcher-");
 
     Set<String> threadNames = Thread.getAllStackTraces().keySet().stream()
             .map(Thread::getName)
             .collect(java.util.stream.Collectors.toSet());
 
-    assertTrue("Expected a thread named " + retryPrefix + "* to exist, found: " + threadNames,
-            threadNames.stream().anyMatch(name -> name.startsWith(retryPrefix)));
-    assertTrue("Expected a thread named " + ingesterPrefix + "* to exist, found: " + threadNames,
-            threadNames.stream().anyMatch(name -> name.startsWith(ingesterPrefix)));
+    for (String prefix : poolPrefixes) {
+      Set<String> poolThreads = threadNames.stream()
+              .filter(name -> name.startsWith(prefix))
+              .collect(java.util.stream.Collectors.toSet());
+      assertTrue("Expected a thread named " + prefix + "* to exist, found: " + threadNames,
+              !poolThreads.isEmpty());
+      for (String threadName : poolThreads) {
+        String suffix = threadName.substring(prefix.length());
+        assertTrue("Thread name should end with a number: " + threadName,
+                suffix.matches("\\d+"));
+      }
+    }
 
     client.close();
   }
