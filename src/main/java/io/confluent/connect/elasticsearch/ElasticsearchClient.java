@@ -191,9 +191,8 @@ public class ElasticsearchClient {
           config.retryBackoffMs(),
           bulkRetryExecutor,
           bulkDispatcherExecutor);
-      final RetryingElasticsearchAsyncClient ingesterClient = asyncClient;
       ingester = BulkIngester.of(builder -> builder
-          .client(ingesterClient)
+          .client(asyncClient)
           .maxOperations(config.batchSize())
           .maxSize(maxBulkSizeBytes)
           .maxConcurrentRequests(config.maxInFlightRequests())
@@ -566,7 +565,7 @@ public class ElasticsearchClient {
       log.warn("Failed to close Elasticsearch client.", e);
     }
 
-    // Stop the retry ladder before anything else: shutdown() discards a retry queued
+    // Stop the retry ladder before the other executors: shutdown() discards a retry queued
     // mid-backoff without running it, which would leave its bulk future incomplete
     // forever — the ingester's in-flight slot held and the listener's buffer accounting
     // never run, hanging any later waitForInFlightRequests(). Fail those futures
@@ -731,20 +730,25 @@ public class ElasticsearchClient {
       // remain the key's value in any case.
       VersionType versionType = operationVersionType(context.operation);
       if (versionType != VersionType.External) {
+        // A null version type means the operation used default (internal) versioning;
+        // failed items carry no version — report -1 as the old client did.
+        VersionType effectiveVersionType =
+            versionType != null ? versionType : VersionType.Internal;
+        long version = item.version() != null ? item.version() : -1;
         log.warn("{} version conflict for operation {} version {}"
                         + " in index '{}'.",
-                versionType != null ? versionType : "UNKNOWN",
+                effectiveVersionType,
                 item.operationType(),
-                item.version(),
+                version,
                 item.index()
         );
 
         log.trace("{} version conflict for operation {} on document '{}' version {}"
                         + " in index '{}'",
-                versionType != null ? versionType : "UNKNOWN",
+                effectiveVersionType,
                 item.operationType(),
                 item.id(),
-                item.version(),
+                version,
                 item.index()
         );
         // Maybe this was a race condition?  Put it in the DLQ in case someone

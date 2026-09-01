@@ -138,9 +138,14 @@ class RetryingElasticsearchAsyncClient extends ElasticsearchAsyncClient {
         return null;
       }
       long backoffMs = RetryUtil.computeRandomRetryWaitTimeInMillis(attempt, retryBackoffMs);
-      log.warn("Bulk request of {} operation(s) failed. Retrying attempt ({}/{}) after"
-          + " backoff of {} ms", request.operations().size(), attempt, maxRetries,
-          backoffMs, failure);
+      // WARN carries only the failure summary (RetryUtil's convention — the message can
+      // embed the HTTP response body); the full stack goes to TRACE here and to the
+      // terminal ConnectException on exhaustion. The denominator counts total attempts,
+      // matching RetryUtil's (attempt/maxTotalAttempts).
+      log.warn("Bulk request of {} operation(s) failed due to {}. Retrying attempt ({}/{})"
+          + " after backoff of {} ms", request.operations().size(), failure, attempt,
+          maxRetries + 1, backoffMs);
+      log.trace("Bulk request failure detail:", failure);
       try {
         retryExecutor.schedule(
             () -> attemptBulk(request, attempt + 1, result), backoffMs, TimeUnit.MILLISECONDS);

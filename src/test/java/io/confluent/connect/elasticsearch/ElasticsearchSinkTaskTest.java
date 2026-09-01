@@ -56,7 +56,6 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assume.assumeFalse;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -318,16 +317,6 @@ public class ElasticsearchSinkTaskTest {
   @Test
   public void testFlush() {
     setUpTask();
-    task.preCommit(null);
-    verify(client, times(1)).flush();
-  }
-
-  @Test
-  public void testFlushDoesNotThrow() {
-    setUpTask();
-    doThrow(new IllegalStateException("already closed")).when(client).flush();
-
-    // should not throw
     task.preCommit(null);
     verify(client, times(1)).flush();
   }

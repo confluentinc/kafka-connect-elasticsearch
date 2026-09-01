@@ -130,12 +130,10 @@ public class ElasticsearchSinkTask extends SinkTask {
   @Override
   public Map<TopicPartition, OffsetAndMetadata> preCommit(
       Map<TopicPartition, OffsetAndMetadata> currentOffsets) {
-    try {
-      // This will just trigger an asynchronous execution of any buffered records
-      client.flush();
-    } catch (IllegalStateException e) {
-      log.debug("Tried to flush data to Elasticsearch, but BulkIngester is already closed.", e);
-    }
+    // Usually dispatches buffered records asynchronously, but under backpressure flush()
+    // can block on a free in-flight slot for the duration of the whole-request retry
+    // ladder; on a closed ingester it is a quiet no-op.
+    client.flush();
     Map<TopicPartition, OffsetAndMetadata> offsets = offsetTracker.offsets(currentOffsets);
     log.debug("preCommitting offsets {}", offsets);
     return offsets;
