@@ -5,8 +5,10 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.github.tomakehurst.wiremock.junit.WireMockRule;
 import com.github.tomakehurst.wiremock.stubbing.Scenario;
+import com.github.tomakehurst.wiremock.stubbing.ServeEvent;
 import io.confluent.common.utils.IntegrationTest;
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnector;
+import io.confluent.connect.elasticsearch.helper.ElasticSearchMockUtil;
 import org.apache.kafka.connect.json.JsonConverter;
 import org.apache.kafka.connect.storage.StringConverter;
 import org.junit.After;
@@ -17,7 +19,10 @@ import org.junit.Ignore;
 import org.junit.experimental.categories.Category;
 
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.IntStream;
@@ -35,7 +40,6 @@ import static com.github.tomakehurst.wiremock.client.WireMock.stubFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.verify;
 import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.options;
-import static com.google.common.net.HttpHeaders.CONTENT_TYPE;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BATCH_SIZE_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.FLUSH_SYNCHRONOUSLY_CONFIG;
@@ -52,6 +56,7 @@ import static io.confluent.connect.elasticsearch.helper.ElasticSearchMockUtil.ba
 import static io.confluent.connect.elasticsearch.helper.ElasticSearchMockUtil.addMinimalHeaders;
 import static io.confluent.connect.elasticsearch.helper.ElasticSearchMockUtil.minimumResponseJson;
 import static io.confluent.connect.elasticsearch.helper.ElasticSearchMockUtil.MAPPER;
+import static java.util.stream.Collectors.toList;
 import static java.util.stream.Collectors.toSet;
 import static org.apache.kafka.connect.json.JsonConverterConfig.SCHEMAS_ENABLE_CONFIG;
 import static org.apache.kafka.connect.runtime.ConnectorConfig.CONNECTOR_CLASS_CONFIG;
@@ -68,9 +73,11 @@ public class ElasticsearchConnectorNetworkIT extends BaseConnectorIT {
   @Rule
   public WireMockRule wireMockRule = new WireMockRule(options()
           .dynamicPort()
-          .extensions(BlockingTransformer.class.getName()), false);
+          .extensions(BlockingTransformer.class.getName())
+          .extensions(ElasticSearchMockUtil.PRODUCT_HEADER_TRANSFORMER), false);
 
   private static final int NUM_RECORDS = 5;
+  private static final int BATCH_SIZE = 4;
   private static final int TASKS_MAX = 1;
 
   private static final String CONNECTOR_NAME = "es-connector";
@@ -108,7 +115,7 @@ public class ElasticsearchConnectorNetworkIT extends BaseConnectorIT {
             .whenScenarioStateIs("Failed")
             .withRequestBody(containing("{\"doc_num\":0}"))
             .willSetStateTo("Fixed")
-            .willReturn(addMinimalHeaders(okJson(errorBulkResponse()))));
+            .willReturn(okJson(errorBulkResponse())));
 
     connect.configureConnector(CONNECTOR_NAME, props);
     waitForConnectorToStart(CONNECTOR_NAME, TASKS_MAX);
@@ -141,11 +148,10 @@ public class ElasticsearchConnectorNetworkIT extends BaseConnectorIT {
 
     BlockingTransformer blockingTransformer = BlockingTransformer.getInstance(wireMockRule);
 
-    // TODO MAX_IN_FLIGHT_REQUESTS_CONFIG is misleading (it allows 1 less concurrent request
-    // than configure), but fixing it would be a breaking change.
-    // Consider allowing 0 (blocking) and removing "-1"
+    // As of 16.0, max.in.flight.requests=N allows exactly N concurrent requests
+    // (pre-16.0 it allowed N-1).
     await().untilAsserted(() -> {
-      assertThat(blockingTransformer.queueLength()).isEqualTo(3);
+      assertThat(blockingTransformer.queueLength()).isEqualTo(4);
     });
 
     blockingTransformer.release(10);
@@ -167,7 +173,7 @@ public class ElasticsearchConnectorNetworkIT extends BaseConnectorIT {
     writeRecords(NUM_RECORDS);
 
     // Connector should fail since the request takes longer than request timeout
-    await().atMost(Duration.ofMinutes(1)).untilAsserted(() ->
+    await().atMost(Duration.ofMinutes(3)).untilAsserted(() ->
             assertThat(connect.connectorStatus(CONNECTOR_NAME).tasks().get(0).state())
                     .isEqualTo("FAILED"));
 
@@ -183,9 +189,8 @@ public class ElasticsearchConnectorNetworkIT extends BaseConnectorIT {
   @Test
   public void testTooManyRequests() throws Exception {
     wireMockRule.stubFor(post(urlPathEqualTo("/_bulk"))
-            .willReturn(aResponse()
-                    .withStatus(429)
-                    .withHeader(CONTENT_TYPE, "application/json")
+            .willReturn(addMinimalHeaders(aResponse()
+                    .withStatus(429))
                     .withBody("{\n" +
                     "  \"error\": {\n" +
                     "    \"type\": \"circuit_breaking_exception\",\n" +
@@ -199,42 +204,50 @@ public class ElasticsearchConnectorNetworkIT extends BaseConnectorIT {
 
     connect.configureConnector(CONNECTOR_NAME, props);
     waitForConnectorToStart(CONNECTOR_NAME, TASKS_MAX);
-    writeRecords(NUM_RECORDS);
+    // Write exactly one batch (batch.size records): a record left buffered behind the
+    // failing batch would be flushed by close() with its own retry budget, adding bulk
+    // requests beyond the exact count this test asserts.
+    writeRecords(BATCH_SIZE);
 
     // Connector should fail since the request takes longer than request timeout
-    await().atMost(Duration.ofMinutes(1)).untilAsserted(() ->
+    await().atMost(Duration.ofMinutes(3)).untilAsserted(() ->
             assertThat(connect.connectorStatus(CONNECTOR_NAME).tasks().get(0).state())
                     .isEqualTo("FAILED"));
 
     assertThat(connect.connectorStatus(CONNECTOR_NAME).tasks().get(0).trace())
-            .contains("Failed to execute bulk request due to 'ElasticsearchStatusException" +
-                    "[Elasticsearch exception [type=circuit_breaking_exception, " +
-                    "reason=Data too large]]' after 3 attempt(s)");
+            .contains("Bulk request failed after 3 attempt(s)")
+            .contains("circuit_breaking_exception")
+            .contains("Data too large");
 
-    // 1 + 2 retries
+    // The failed request is re-sent verbatim while its in-flight slot stays held, so
+    // the batch is attempted exactly 1 + 2 retries times and nothing else goes out.
     verify(3, postRequestedFor(urlPathEqualTo("/_bulk")));
   }
 
   @Test
   public void testServiceUnavailable() throws Exception {
     wireMockRule.stubFor(post(urlPathEqualTo("/_bulk"))
-            .willReturn(aResponse()
-                    .withStatus(503)));
+            .willReturn(addMinimalHeaders(aResponse()
+                    .withStatus(503))));
 
     connect.configureConnector(CONNECTOR_NAME, props);
     waitForConnectorToStart(CONNECTOR_NAME, TASKS_MAX);
-    writeRecords(NUM_RECORDS);
+    // Write exactly one batch (batch.size records): a record left buffered behind the
+    // failing batch would be flushed by close() with its own retry budget, adding bulk
+    // requests beyond the exact count this test asserts.
+    writeRecords(BATCH_SIZE);
 
     // Connector should fail since the request takes longer than request timeout
-    await().atMost(Duration.ofMinutes(1)).untilAsserted(() ->
+    await().atMost(Duration.ofMinutes(3)).untilAsserted(() ->
             assertThat(connect.connectorStatus(CONNECTOR_NAME).tasks().get(0).state())
                     .isEqualTo("FAILED"));
 
     assertThat(connect.connectorStatus(CONNECTOR_NAME).tasks().get(0).trace())
-            .contains("[HTTP/1.1 503 Service Unavailable]")
-            .contains("after 3 attempt(s)");
+            .contains("Bulk request failed after 3 attempt(s)")
+            .contains("503 Service Unavailable");
 
-    // 1 + 2 retries
+    // The failed request is re-sent verbatim while its in-flight slot stays held, so
+    // the batch is attempted exactly 1 + 2 retries times and nothing else goes out.
     verify(3, postRequestedFor(urlPathEqualTo("/_bulk")));
   }
 
@@ -299,8 +312,8 @@ public class ElasticsearchConnectorNetworkIT extends BaseConnectorIT {
   @Test
   public void testPausePartitionsAndFail() throws Exception {
     wireMockRule.stubFor(post(urlPathEqualTo("/_bulk"))
-            .willReturn(aResponse()
-                    .withStatus(500)
+            .willReturn(addMinimalHeaders(aResponse()
+                    .withStatus(500))
                     .withTransformers(BlockingTransformer.NAME)));
 
     props.put(CONNECTION_URL_CONFIG, wireMockRule.url("/"));
@@ -349,6 +362,113 @@ public class ElasticsearchConnectorNetworkIT extends BaseConnectorIT {
             .contains("status line [HTTP/1.1 500 Server Error]");
   }
 
+  /**
+   * A transport-level failure must not let later records overtake the failed batch's
+   * retry at max.in.flight.requests=1: the retry has to be re-sent while the in-flight
+   * slot is still held, before anything buffered during the backoff goes out. Otherwise
+   * a stale UPSERT for the same key can land after (and permanently shadow) a newer one.
+   */
+  @Test
+  public void testTransportRetryPreservesRecordOrder() throws Exception {
+    // First bulk (the one carrying doc 0) blocks until released, then fails with a 500.
+    // Everything afterwards succeeds.
+    wireMockRule.stubFor(post(urlPathEqualTo("/_bulk"))
+            .inScenario("retryOrder")
+            .whenScenarioStateIs(Scenario.STARTED)
+            .withRequestBody(containing("{\"doc_num\":0}"))
+            .willReturn(addMinimalHeaders(aResponse().withStatus(500))
+                    .withTransformers(BlockingTransformer.NAME))
+            .willSetStateTo("Failed"));
+    wireMockRule.stubFor(post(urlPathEqualTo("/_bulk"))
+            .inScenario("retryOrder")
+            .whenScenarioStateIs("Failed")
+            .willReturn(okJson(errorBulkResponse())));
+
+    props.put(READ_TIMEOUT_MS_CONFIG, "60000");
+    props.put(BATCH_SIZE_CONFIG, "2");
+    props.put(LINGER_MS_CONFIG, "1000");
+    props.put(RETRY_BACKOFF_MS_CONFIG, "10");
+
+    connect.configureConnector(CONNECTOR_NAME, props);
+    waitForConnectorToStart(CONNECTOR_NAME, TASKS_MAX);
+
+    // Record 0 goes out alone and blocks in flight.
+    connect.kafka().produce(TOPIC, "0", "{\"doc_num\":0}");
+    BlockingTransformer blockingTransformer = BlockingTransformer.getInstance(wireMockRule);
+    await().untilAsserted(() -> assertThat(blockingTransformer.queueLength()).isEqualTo(1));
+
+    // Record 1 gets buffered behind the held in-flight slot while record 0 is pending.
+    connect.kafka().produce(TOPIC, "1", "{\"doc_num\":1}");
+    Thread.sleep(5000);
+
+    // Release the 500: record 0 must now be retried before record 1 is sent.
+    blockingTransformer.release(1);
+
+    await().atMost(Duration.ofMinutes(2)).untilAsserted(() -> {
+      List<String> bodies = bulkRequestBodies();
+      assertThat(countBodiesContaining(bodies, "{\"doc_num\":0}")).isGreaterThanOrEqualTo(2);
+      assertThat(countBodiesContaining(bodies, "{\"doc_num\":1}")).isGreaterThanOrEqualTo(1);
+    });
+
+    List<String> bodies = bulkRequestBodies();
+    int retryOfDoc0 = nthIndexOfBodyContaining(bodies, "{\"doc_num\":0}", 2);
+    int firstDoc1 = nthIndexOfBodyContaining(bodies, "{\"doc_num\":1}", 1);
+    assertThat(bodies.get(retryOfDoc0))
+            .as("the retried bulk must not have later records batched in front of it")
+            .doesNotContain("{\"doc_num\":1}");
+    assertThat(retryOfDoc0)
+            .as("doc 0's retry must be dispatched before doc 1, got bodies: " + bodies)
+            .isLessThan(firstDoc1);
+
+    assertThat(connect.connectorStatus(CONNECTOR_NAME).tasks().get(0).state())
+            .isEqualTo("RUNNING");
+  }
+
+  // A well-formed bulk response whose items carry status 429. With max.retries=0 the
+  // retrying client must not attempt an item-level retry: the 429 items flow to the
+  // listener as ordinary terminal failures and the task fails cleanly.
+  @Test
+  public void testTooManyRequestsPerItemWithNoRetries() throws Exception {
+    wireMockRule.stubFor(post(urlPathEqualTo("/_bulk"))
+            .willReturn(okJson(
+                errorBulkResponse(4, 429, "es_rejected_execution_exception", 0, 1, 2, 3))));
+
+    props.put(MAX_RETRIES_CONFIG, "0");
+    connect.configureConnector(CONNECTOR_NAME, props);
+    waitForConnectorToStart(CONNECTOR_NAME, TASKS_MAX);
+    writeRecords(NUM_RECORDS);
+
+    await().atMost(Duration.ofMinutes(3)).untilAsserted(() ->
+            assertThat(connect.connectorStatus(CONNECTOR_NAME).tasks().get(0).state())
+                    .isEqualTo("FAILED"));
+
+    assertThat(connect.connectorStatus(CONNECTOR_NAME).tasks().get(0).trace())
+            .contains("Indexing record failed");
+  }
+
+  private List<String> bulkRequestBodies() {
+    List<ServeEvent> events = new ArrayList<>(wireMockRule.getAllServeEvents());
+    Collections.reverse(events); // getAllServeEvents is most-recent-first
+    return events.stream()
+            .filter(e -> e.getRequest().getUrl().startsWith("/_bulk"))
+            .map(e -> e.getRequest().getBodyAsString())
+            .collect(toList());
+  }
+
+  private static long countBodiesContaining(List<String> bodies, String marker) {
+    return bodies.stream().filter(b -> b.contains(marker)).count();
+  }
+
+  private static int nthIndexOfBodyContaining(List<String> bodies, String marker, int n) {
+    int seen = 0;
+    for (int i = 0; i < bodies.size(); i++) {
+      if (bodies.get(i).contains(marker) && ++seen == n) {
+        return i;
+      }
+    }
+    throw new AssertionError("No " + n + "th body containing " + marker + " in: " + bodies);
+  }
+
   protected Map<String, String> createProps() {
     Map<String, String> props = new HashMap<>();
 
@@ -369,7 +489,7 @@ public class ElasticsearchConnectorNetworkIT extends BaseConnectorIT {
     props.put(MAX_RETRIES_CONFIG, "2");
     props.put(RETRY_BACKOFF_MS_CONFIG, "10");
     props.put(LINGER_MS_CONFIG, "60000");
-    props.put(BATCH_SIZE_CONFIG, "4");
+    props.put(BATCH_SIZE_CONFIG, Integer.toString(BATCH_SIZE));
     props.put(MAX_IN_FLIGHT_REQUESTS_CONFIG, "1");
 
     return props;
@@ -388,6 +508,7 @@ public class ElasticsearchConnectorNetworkIT extends BaseConnectorIT {
   public static String errorBulkResponse(int items) throws JsonProcessingException {
     ObjectNode response = MAPPER.createObjectNode();
     ArrayNode itemsArray = response
+            .put("took", 1)
             .put("errors", false)
             .putArray("items");
 
@@ -406,9 +527,10 @@ public class ElasticsearchConnectorNetworkIT extends BaseConnectorIT {
     return MAPPER.writerWithDefaultPrettyPrinter().writeValueAsString(response);
   }
 
-  public static String errorBulkResponse(int items, String errorType, int... errorIdx) throws JsonProcessingException {
+  public static String errorBulkResponse(int items, int errorStatus, String errorType, int... errorIdx) throws JsonProcessingException {
     ObjectNode response = MAPPER.createObjectNode();
     ArrayNode itemsArray = response
+            .put("took", 1)
             .put("errors", true)
             .putArray("items");
 
@@ -424,7 +546,7 @@ public class ElasticsearchConnectorNetworkIT extends BaseConnectorIT {
                 .put("_seq_no", 0);
       if (errorIndexes.contains(i)) {
         arrayObject
-                .put("status", 400)
+                .put("status", errorStatus)
                 .putObject("error")
                   .put("type", errorType)
                   .put("reason", "Reason for " + errorType);
