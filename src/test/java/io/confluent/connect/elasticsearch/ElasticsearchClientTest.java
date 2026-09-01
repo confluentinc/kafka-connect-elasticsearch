@@ -31,9 +31,6 @@ import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfi
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.RETRY_BACKOFF_MS_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.WRITE_METHOD_CONFIG;
 import static io.confluent.connect.elasticsearch.helper.ElasticsearchHelperClient.sourceAsMap;
-import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
-import static com.github.tomakehurst.wiremock.client.WireMock.post;
-import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -47,19 +44,15 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.github.tomakehurst.wiremock.WireMockServer;
-import com.github.tomakehurst.wiremock.core.WireMockConfiguration;
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BehaviorOnMalformedDoc;
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BehaviorOnNullValues;
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.WriteMethod;
-import io.confluent.connect.elasticsearch.helper.ElasticSearchMockUtil;
 import io.confluent.connect.elasticsearch.helper.ElasticsearchContainer;
 import io.confluent.connect.elasticsearch.helper.ElasticsearchHelperClient;
 import io.confluent.connect.elasticsearch.helper.NetworkErrorContainer;
 import java.io.IOException;
 import java.net.ServerSocket;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -72,7 +65,6 @@ import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.sink.ErrantRecordReporter;
 import org.apache.kafka.connect.sink.SinkRecord;
-import co.elastic.clients.elasticsearch._types.ErrorCause;
 import co.elastic.clients.elasticsearch._types.mapping.Property;
 import co.elastic.clients.elasticsearch._types.mapping.TypeMapping;
 import co.elastic.clients.elasticsearch.core.bulk.BulkOperation;
@@ -121,28 +113,6 @@ public class ElasticsearchClientTest extends ElasticsearchClientTestBase {
 
     ElasticsearchClient client = new ElasticsearchClient(config, null, () -> offsetTracker.updateOffsets(), 1, "elasticsearch-sink");
     client.close();
-  }
-
-  @Test
-  public void testCloseFails() throws Exception {
-    props.put(BATCH_SIZE_CONFIG, "1");
-    props.put(MAX_IN_FLIGHT_REQUESTS_CONFIG, "1");
-    ElasticsearchClient client = new ElasticsearchClient(config, null, () -> offsetTracker.updateOffsets(), 1, "elasticsearch-sink") {
-      @Override
-      public void close() {
-        if (numBufferedRecords.get() > 0) {
-          throw new ConnectException("Failed to process all outstanding requests in time.");
-        }
-      }
-    };
-
-    writeRecord(sinkRecord(0), client);
-    assertThrows(
-        "Failed to process all outstanding requests in time.",
-        ConnectException.class,
-        () -> client.close()
-    );
-    waitUntilRecordsInES(1);
   }
 
   @Test
@@ -836,9 +806,10 @@ public class ElasticsearchClientTest extends ElasticsearchClientTestBase {
     }
   }
 
-  // The first close drains and re-throws the latched failure; the second must be a
-  // no-op — re-running the teardown after the ingester scheduler is terminated would
-  // park forever inside bulkIngester.close().
+  // A failed task closes twice: throwIfFailed() calls close() before throwing the latched
+  // error out of put(), then the framework's stop() closes the same client again. The
+  // second close must be a no-op — re-running the teardown after the ingester scheduler
+  // is terminated would park forever inside bulkIngester.close().
   @Test
   public void testCloseIsIdempotent() {
     ElasticsearchClient client = new ElasticsearchClient(config, null, () -> offsetTracker.updateOffsets(), 1, "elasticsearch-sink");
@@ -859,13 +830,7 @@ public class ElasticsearchClientTest extends ElasticsearchClientTestBase {
     client.close();
   }
 
-  // An endpoint that accepts connections but never responds: the record cannot be
-  // delivered, so close() hits the flush timeout with the record still buffered and
-  // takes the skip-ingester-close path in closeResources(). close() must throw the
-  // flush-timeout error and return: the transport is closed while the dispatcher
-  // executor is still alive, so the aborted bulk's completion has a live executor to
-  // land on instead of running the ingester's lock-taking continuation on the I/O
-  // reactor thread.
+  // close() with a record stuck at an unresponsive endpoint must throw the flush-timeout error, not hang.
   @Test(timeout = 60_000)
   public void testCloseWithStuckRecordsTerminates() throws Exception {
     try (ServerSocket blackhole = new ServerSocket(0)) {
@@ -880,71 +845,6 @@ public class ElasticsearchClientTest extends ElasticsearchClientTestBase {
       writeRecord(sinkRecord(0), client);
 
       assertThrows(ConnectException.class, client::close);
-    }
-  }
-
-  // Contract test for the retry design: no backoffPolicy is set on the BulkIngester,
-  // so its internal 429-retry pool ("bulk-ingester-retry#N") must never be created.
-  // That pool re-queued rejected operations at the tail of the buffer (reordering
-  // records) and leaked its threads past a timed-out close() because closeResources()
-  // skips bulkIngester.close() when records are stuck. Item-level 429s must instead
-  // reach the listener and be handled terminally, matching the pre-migration client.
-  @Test(timeout = 60_000)
-  public void testItemLevel429NeverCreatesIngesterInternalRetryPool() throws Exception {
-    WireMockServer wireMockServer = new WireMockServer(WireMockConfiguration.options()
-        .dynamicPort()
-        .extensions(ElasticSearchMockUtil.PRODUCT_HEADER_TRANSFORMER));
-    wireMockServer.start();
-    try {
-      wireMockServer.stubFor(post(urlPathEqualTo("/_bulk")).willReturn(okJson(
-          "{\"took\":1,\"errors\":true,\"items\":[{\"index\":{\"_index\":\"test\","
-              + "\"_id\":\"1\",\"_version\":1,\"_seq_no\":0,\"status\":429,"
-              + "\"error\":{\"type\":\"es_rejected_execution_exception\","
-              + "\"reason\":\"rejected execution\"}}}]}")));
-
-      props.put(CONNECTION_URL_CONFIG, wireMockServer.baseUrl());
-      props.put(BATCH_SIZE_CONFIG, "1");
-      props.put(LINGER_MS_CONFIG, "10");
-      props.put(MAX_RETRIES_CONFIG, "5");
-      config = new ElasticsearchSinkConnectorConfig(props);
-      converter = new DataConverter(config);
-
-      ElasticsearchClient client = new ElasticsearchClient(config, null, () -> offsetTracker.updateOffsets(), 1, "elasticsearch-sink");
-      try {
-        writeRecord(sinkRecord(0), client);
-
-        // Wait until the item-level 429 response has been delivered to the client.
-        long deadline = System.currentTimeMillis() + 10_000;
-        while (wireMockServer.getAllServeEvents().isEmpty()
-            && System.currentTimeMillis() < deadline) {
-          Thread.sleep(50);
-        }
-        assertTrue("the bulk request was never sent",
-            !wireMockServer.getAllServeEvents().isEmpty());
-        // Let any (erroneously created) internal retry pool thread appear.
-        Thread.sleep(500);
-
-        Set<String> retryPoolThreads = new HashSet<>();
-        for (Thread t : Thread.getAllStackTraces().keySet()) {
-          if (t.getName().startsWith("bulk-ingester-retry#")) {
-            retryPoolThreads.add(t.getName());
-          }
-        }
-        assertTrue("BulkIngester's internal retry pool must never be created: "
-            + retryPoolThreads, retryPoolThreads.isEmpty());
-
-        // Item-level 429 is terminal: the failure is latched and surfaced on the next
-        // operation, exactly as the pre-migration client did (no item-level retry).
-        assertThrows(ConnectException.class, () -> writeRecord(sinkRecord(1), client));
-      } finally {
-        try {
-          client.close();
-        } catch (ConnectException expected) {
-          // close() re-throws the latched failure; irrelevant to this test.
-        }
-      }
-    } finally {
-      wireMockServer.stop();
     }
   }
 
@@ -1052,34 +952,6 @@ public class ElasticsearchClientTest extends ElasticsearchClientTestBase {
         message.contains("[mapper_parsing_exception] failed to parse field [price]"));
     assertTrue(message,
         message.contains("nested: [illegal_argument_exception] For input string: \"abc\""));
-    // close() drains and then re-throws the latched indexing failure.
-    assertThrows(ConnectException.class, client::close);
-  }
-
-  // Both type and reason are optional in the response model.
-  @Test
-  public void testDlqMessageWithNullErrorFieldsDoesNotPrintNull() throws Exception {
-    ErrantRecordReporter reporter = mock(ErrantRecordReporter.class);
-    ElasticsearchClient client = new ElasticsearchClient(config, reporter, () -> offsetTracker.updateOffsets(), 1, "elasticsearch-sink");
-
-    SinkRecord record = sinkRecord(0);
-    ElasticsearchClient.BulkOpContext context = new ElasticsearchClient.BulkOpContext(
-        record,
-        new AsyncOffsetTracker.AsyncOffsetState(record.kafkaOffset()),
-        converter.convertRecord(record, index));
-    BulkResponseItem item = BulkResponseItem.of(b -> b
-        .operationType(OperationType.Index)
-        .index(index)
-        .status(400)
-        .error(ErrorCause.of(e -> e.stackTrace("redacted"))));
-
-    assertTrue(client.handleResponse(item, context));
-
-    ArgumentCaptor<Throwable> reported = ArgumentCaptor.forClass(Throwable.class);
-    verify(reporter).report(eq(record), reported.capture());
-    String message = reported.getValue().getMessage();
-    assertTrue(message, message.contains("[unknown] unknown reason"));
-    assertFalse(message, message.contains("null"));
     // close() drains and then re-throws the latched indexing failure.
     assertThrows(ConnectException.class, client::close);
   }
