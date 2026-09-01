@@ -169,7 +169,7 @@ public class ElasticsearchConnectorNetworkIT extends BaseConnectorIT {
     writeRecords(NUM_RECORDS);
 
     // Connector should fail since the request takes longer than request timeout
-    await().atMost(Duration.ofMinutes(3)).untilAsserted(() ->
+    await().atMost(Duration.ofMinutes(1)).untilAsserted(() ->
             assertThat(connect.connectorStatus(CONNECTOR_NAME).tasks().get(0).state())
                     .isEqualTo("FAILED"));
 
@@ -206,7 +206,7 @@ public class ElasticsearchConnectorNetworkIT extends BaseConnectorIT {
     writeRecords(BATCH_SIZE);
 
     // Connector should fail since the request takes longer than request timeout
-    await().atMost(Duration.ofMinutes(3)).untilAsserted(() ->
+    await().atMost(Duration.ofMinutes(1)).untilAsserted(() ->
             assertThat(connect.connectorStatus(CONNECTOR_NAME).tasks().get(0).state())
                     .isEqualTo("FAILED"));
 
@@ -234,7 +234,7 @@ public class ElasticsearchConnectorNetworkIT extends BaseConnectorIT {
     writeRecords(BATCH_SIZE);
 
     // Connector should fail since the request takes longer than request timeout
-    await().atMost(Duration.ofMinutes(3)).untilAsserted(() ->
+    await().atMost(Duration.ofMinutes(1)).untilAsserted(() ->
             assertThat(connect.connectorStatus(CONNECTOR_NAME).tasks().get(0).state())
                     .isEqualTo("FAILED"));
 
@@ -434,7 +434,7 @@ public class ElasticsearchConnectorNetworkIT extends BaseConnectorIT {
     waitForConnectorToStart(CONNECTOR_NAME, TASKS_MAX);
     writeRecords(NUM_RECORDS);
 
-    await().atMost(Duration.ofMinutes(3)).untilAsserted(() ->
+    await().atMost(Duration.ofMinutes(1)).untilAsserted(() ->
             assertThat(connect.connectorStatus(CONNECTOR_NAME).tasks().get(0).state())
                     .isEqualTo("FAILED"));
 
