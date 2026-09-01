@@ -418,8 +418,11 @@ public class ElasticsearchClient {
       try {
         close();
       } catch (ConnectException e) {
-        // if close fails, want to still throw the original exception
-        log.warn("Couldn't close elasticsearch client", e);
+        // close() rethrows the latched error after a successful drain (so a graceful
+        // stop() surfaces it); only a different exception is a genuine close failure.
+        if (e != error.get()) {
+          log.warn("Couldn't close elasticsearch client", e);
+        }
       }
       throw error.get();
     }
