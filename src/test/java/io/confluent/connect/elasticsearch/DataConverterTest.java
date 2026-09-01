@@ -676,6 +676,8 @@ public class DataConverterTest {
     assertTrue(exception.getMessage().contains(externalVersionHeader));
   }
 
+  // The explicit id is what makes redelivered records version-conflict instead of
+  // creating duplicate documents in the data stream.
   @Test
   public void testDataStreamCreateOperationCarriesDocumentId() {
     configureDataStream();
@@ -686,8 +688,6 @@ public class DataConverterTest {
 
     BulkOperation actualRecord = converter.convertRecord(sinkRecord, index);
 
-    // The explicit id is what makes redelivered records version-conflict instead of
-    // creating duplicate documents in the data stream.
     assertTrue(actualRecord.isCreate());
     assertEquals(String.format("%s+%d+%d", topic, partition, offset),
         actualRecord.create().id());

@@ -434,8 +434,6 @@ public class ElasticsearchConnectorNetworkIT extends BaseConnectorIT {
     waitForConnectorToStart(CONNECTOR_NAME, TASKS_MAX);
     writeRecords(NUM_RECORDS);
 
-    // With no retries the 429 items reach the listener as ordinary failures and the
-    // task fails cleanly.
     await().atMost(Duration.ofMinutes(3)).untilAsserted(() ->
             assertThat(connect.connectorStatus(CONNECTOR_NAME).tasks().get(0).state())
                     .isEqualTo("FAILED"));

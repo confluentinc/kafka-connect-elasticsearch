@@ -836,6 +836,9 @@ public class ElasticsearchClientTest extends ElasticsearchClientTestBase {
     }
   }
 
+  // The first close drains and re-throws the latched failure; the second must be a
+  // no-op — re-running the teardown after the ingester scheduler is terminated would
+  // park forever inside bulkIngester.close().
   @Test
   public void testCloseIsIdempotent() {
     ElasticsearchClient client = new ElasticsearchClient(config, null, () -> offsetTracker.updateOffsets(), 1, "elasticsearch-sink");
@@ -852,16 +855,17 @@ public class ElasticsearchClientTest extends ElasticsearchClientTestBase {
         .error(e -> e.type("some_terminal_exception").reason("boom")));
     client.handleResponse(failedItem, context);
 
-    // The first close drains and re-throws the latched failure; the second must be a
-    // no-op — re-running the teardown after the ingester scheduler is terminated would
-    // park forever inside bulkIngester.close().
     assertThrows(ConnectException.class, client::close);
     client.close();
   }
 
   // An endpoint that accepts connections but never responds: the record cannot be
   // delivered, so close() hits the flush timeout with the record still buffered and
-  // takes the skip-ingester-close path in closeResources().
+  // takes the skip-ingester-close path in closeResources(). close() must throw the
+  // flush-timeout error and return: the transport is closed while the dispatcher
+  // executor is still alive, so the aborted bulk's completion has a live executor to
+  // land on instead of running the ingester's lock-taking continuation on the I/O
+  // reactor thread.
   @Test(timeout = 60_000)
   public void testCloseWithStuckRecordsTerminates() throws Exception {
     try (ServerSocket blackhole = new ServerSocket(0)) {
@@ -875,10 +879,6 @@ public class ElasticsearchClientTest extends ElasticsearchClientTestBase {
 
       writeRecord(sinkRecord(0), client);
 
-      // close() must throw the flush-timeout error and return: the transport is closed
-      // while the dispatcher executor is still alive, so the aborted bulk's completion
-      // has a live executor to land on instead of running the ingester's lock-taking
-      // continuation on the I/O reactor thread.
       assertThrows(ConnectException.class, client::close);
     }
   }
@@ -1021,6 +1021,7 @@ public class ElasticsearchClientTest extends ElasticsearchClientTestBase {
     client.close();
   }
 
+  // The actionable detail of a mapping failure lives in the caused_by chain.
   @Test
   public void testDlqMessageIncludesCausedByChain() throws Exception {
     ErrantRecordReporter reporter = mock(ErrantRecordReporter.class);
@@ -1031,7 +1032,6 @@ public class ElasticsearchClientTest extends ElasticsearchClientTestBase {
         record,
         new AsyncOffsetTracker.AsyncOffsetState(record.kafkaOffset()),
         converter.convertRecord(record, index));
-    // The actionable detail of a mapping failure lives in the caused_by chain.
     BulkResponseItem item = BulkResponseItem.of(b -> b
         .operationType(OperationType.Index)
         .index(index)
@@ -1056,6 +1056,7 @@ public class ElasticsearchClientTest extends ElasticsearchClientTestBase {
     assertThrows(ConnectException.class, client::close);
   }
 
+  // Both type and reason are optional in the response model.
   @Test
   public void testDlqMessageWithNullErrorFieldsDoesNotPrintNull() throws Exception {
     ErrantRecordReporter reporter = mock(ErrantRecordReporter.class);
@@ -1066,7 +1067,6 @@ public class ElasticsearchClientTest extends ElasticsearchClientTestBase {
         record,
         new AsyncOffsetTracker.AsyncOffsetState(record.kafkaOffset()),
         converter.convertRecord(record, index));
-    // Both type and reason are optional in the response model.
     BulkResponseItem item = BulkResponseItem.of(b -> b
         .operationType(OperationType.Index)
         .index(index)
@@ -1084,6 +1084,8 @@ public class ElasticsearchClientTest extends ElasticsearchClientTestBase {
     assertThrows(ConnectException.class, client::close);
   }
 
+  // Redelivering the same offset must version-conflict on the explicit document id and
+  // be ignored, not create a duplicate document.
   @Test
   public void testWriteDataStreamDeduplicatesRedeliveredRecords() throws Exception {
     props.put(DATA_STREAM_TYPE_CONFIG, DATA_STREAM_TYPE);
@@ -1099,8 +1101,6 @@ public class ElasticsearchClientTest extends ElasticsearchClientTestBase {
     client.waitForInFlightRequests();
     waitUntilRecordsInES(1);
 
-    // Redelivering the same offset must version-conflict on the explicit document id and
-    // be ignored, not create a duplicate document.
     writeRecord(sinkRecord(0), client);
     client.flush();
     client.waitForInFlightRequests();

@@ -67,6 +67,7 @@ public class RetryingElasticsearchAsyncClientTest {
     dispatcherExecutor.shutdownNow();
   }
 
+  // The retry must re-send the identical request object, not a re-buffered copy.
   @Test
   public void testTransportFailureRetriesSameRequestWhileFutureStaysIncomplete()
       throws Exception {
@@ -80,7 +81,6 @@ public class RetryingElasticsearchAsyncClientTest {
     assertEquals(1, response.items().size());
     assertNull(response.items().get(0).error());
     assertEquals(2, client.sends.size());
-    // The retry must re-send the identical request object, not a re-buffered copy.
     assertSame(request, client.sends.get(0));
     assertSame(request, client.sends.get(1));
   }
@@ -116,12 +116,12 @@ public class RetryingElasticsearchAsyncClientTest {
     assertEquals(1, client.sends.size());
   }
 
+  // A 200 response carrying per-item errors (including item-level 429s) is a success
+  // at the transport level: it is returned to the ingester's listener verbatim, which
+  // handles item failures terminally. It must not be retried here.
   @Test
   public void testItemLevelFailuresPassThroughUntouched() throws Exception {
     ScriptedClient client = client(2);
-    // A 200 response carrying per-item errors (including item-level 429s) is a success
-    // at the transport level: it is returned to the ingester's listener verbatim, which
-    // handles item failures terminally. It must not be retried here.
     BulkResponse original = response(okItem("a"), item429("b"), item400("c"));
     client.will(() -> CompletableFuture.completedFuture(original));
 
@@ -146,11 +146,11 @@ public class RetryingElasticsearchAsyncClientTest {
     assertEquals(1, client.sends.size());
   }
 
+  // A future that never completes on its own: the same shape as a request stuck
+  // in flight or a retry parked mid-backoff when close() discards it.
   @Test
   public void testFailAllPendingCompletesPendingFuture() throws Exception {
     ScriptedClient client = client(2);
-    // A future that never completes on its own: the same shape as a request stuck
-    // in flight or a retry parked mid-backoff when close() discards it.
     client.will(CompletableFuture::new);
 
     CompletableFuture<BulkResponse> result = client.bulk(request(indexOp("a")));
@@ -180,6 +180,8 @@ public class RetryingElasticsearchAsyncClientTest {
     assertSame(original, result.get(10, TimeUnit.SECONDS));
   }
 
+  // The response hop is rejected, so the retry decision never runs; the future the
+  // ingester holds must still complete so its in-flight slot is released.
   @Test
   public void testDispatcherRejectionCompletesFuture() throws Exception {
     ScriptedClient client = client(2);
@@ -188,8 +190,6 @@ public class RetryingElasticsearchAsyncClientTest {
 
     CompletableFuture<BulkResponse> result = client.bulk(request(indexOp("a")));
 
-    // The response hop is rejected, so the retry decision never runs; the future the
-    // ingester holds must still complete so its in-flight slot is released.
     assertThrows(ExecutionException.class, () -> result.get(10, TimeUnit.SECONDS));
   }
 
