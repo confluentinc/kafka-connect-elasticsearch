@@ -474,9 +474,11 @@ public class ElasticsearchSinkTaskIT {
                     .isEqualTo(ImmutableMap.of(tp2, new OffsetAndMetadata(1))));
   }
 
-  // Whole-request transport failure once, then success.
+  // One bulk fails with a 500, then the server recovers. Every buffer trigger is dead
+  // (the 1-op batch never fills, linger is 10 minutes away, nothing flushes again), so
+  // the prompt second request on the wire can only come from the retry scheduler.
   @Test(timeout = 60_000)
-  public void testTransportRetryIsFlushedImmediately() throws Exception {
+  public void testFailedBulkIsResentByRetrySchedulerAlone() throws Exception {
     wireMockRule.stubFor(post(urlPathEqualTo("/_bulk"))
             .inScenario("transportRetryFlush")
             .whenScenarioStateIs(Scenario.STARTED)
@@ -492,8 +494,6 @@ public class ElasticsearchSinkTaskIT {
     props.put(READ_TIMEOUT_MS_CONFIG, "1000");
     props.put(MAX_RETRIES_CONFIG, "2");
     props.put(RETRY_BACKOFF_MS_CONFIG, "10");
-    // The retried batch (1 op) stays below batch.size and linger never fires: only the
-    // explicit flush after the retry re-add can send it again.
     props.put(BATCH_SIZE_CONFIG, "2");
     props.put(LINGER_MS_CONFIG, "600000");
 
@@ -506,12 +506,8 @@ public class ElasticsearchSinkTaskIT {
     task.open(ImmutableList.of(tp));
 
     task.put(ImmutableList.of(sinkRecord(tp, 0)));
-    // Sends the single buffered record (below batch.size, linger is 10 minutes). In
-    // synchronous mode this call also blocks until the retried record completes.
     task.preCommit(ImmutableMap.of(tp, new OffsetAndMetadata(1)));
 
-    // The retried operation must be resent promptly by the flush after the re-add; the
-    // next linger tick is 10 minutes away and no further flush happens on its behalf.
     await().untilAsserted(() ->
             wireMockRule.verify(2, postRequestedFor(urlPathEqualTo("/_bulk"))));
 
