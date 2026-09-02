@@ -492,18 +492,24 @@ public class ElasticsearchClient {
       @Override
       public void afterBulk(long executionId, BulkRequest request,
                             List<BulkOpContext> contexts, BulkResponse response) {
-        List<BulkResponseItem> items = response.items();
-        for (int i = 0; i < items.size() && i < contexts.size(); i++) {
-          BulkOpContext context = contexts.get(i);
-          boolean failed = handleResponse(items.get(i), context);
-          if (!failed) {
-            context.offsetState.markProcessed();
+        // BulkIngester discards anything thrown from this callback (e.g. reporter.report()
+        // throwing "Tolerance exceeded"), so latch the error and finish the bulk here.
+        try {
+          List<BulkResponseItem> items = response.items();
+          for (int i = 0; i < items.size() && i < contexts.size(); i++) {
+            BulkOpContext context = contexts.get(i);
+            boolean failed = handleResponse(items.get(i), context);
+            if (!failed) {
+              context.offsetState.markProcessed();
+            }
           }
+          afterBulkCallback.run();
+        } catch (Throwable t) {
+          log.warn("Bulk request {} failed while processing its response", executionId, t);
+          error.compareAndSet(null, new ConnectException("Bulk request failed", t));
+        } finally {
+          bulkFinished(contexts);
         }
-
-        afterBulkCallback.run();
-
-        bulkFinished(contexts);
       }
 
       @Override

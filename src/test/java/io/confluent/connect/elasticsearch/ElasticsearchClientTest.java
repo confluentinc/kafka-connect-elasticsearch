@@ -67,6 +67,7 @@ import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.errors.ConnectException;
+import org.apache.kafka.test.TestUtils;
 import org.apache.kafka.connect.sink.ErrantRecordReporter;
 import org.apache.kafka.connect.sink.SinkRecord;
 import co.elastic.clients.elasticsearch._types.mapping.Property;
@@ -547,6 +548,45 @@ public class ElasticsearchClientTest extends ElasticsearchClientTestBase {
 
     verify(reporter, times(1)).report(eq(badRecord), any(Throwable.class));
     client.close();
+  }
+
+  // With a DLQ topic named but errors.tolerance != all, the framework reporter throws
+  // "Tolerance exceeded" synchronously from report(); the bulk must still latch and drain.
+  @Test
+  public void testReporterThrowingLatchesErrorAndDrainsBuffer() throws Exception {
+    props.put(IGNORE_KEY_CONFIG, "false");
+    config = new ElasticsearchSinkConnectorConfig(props);
+    converter = new DataConverter(config);
+
+    ConnectException toleranceExceeded =
+        new ConnectException("Tolerance exceeded in error handler");
+    ErrantRecordReporter reporter = mock(ErrantRecordReporter.class);
+    when(reporter.report(any(), any())).thenThrow(toleranceExceeded);
+    ElasticsearchClient client = new ElasticsearchClient(config, reporter, () -> offsetTracker.updateOffsets(), 1, "elasticsearch-sink");
+    client.createIndexOrDataStream(index);
+    client.createMapping(index, schema());
+
+    Schema schema = SchemaBuilder
+        .struct()
+        .name("record")
+        .field("offset", SchemaBuilder.bool().defaultValue(false).build())
+        .build();
+    Struct value = new Struct(schema).put("offset", false);
+    SinkRecord badRecord = sinkRecord("key0", schema, value, 1);
+
+    writeRecord(badRecord, client);
+    client.flush();
+
+    TestUtils.waitForCondition(
+        client::isFailed,
+        TimeUnit.SECONDS.toMillis(30),
+        "Reporter throw was swallowed: no error latched."
+    );
+    assertEquals(0, client.numBufferedRecords.get());
+    verify(reporter, times(1)).report(eq(badRecord), any(Throwable.class));
+
+    ConnectException thrown = assertThrows(ConnectException.class, client::close);
+    assertEquals(toleranceExceeded, thrown.getCause());
   }
 
   @Test
