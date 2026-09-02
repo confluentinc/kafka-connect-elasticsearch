@@ -37,7 +37,7 @@ public class NetworkErrorContainer extends GenericContainer<NetworkErrorContaine
     super(dockerImageName);
 
     setCommand(PUMBA_PAUSE_COMMAND + containerToInterrupt);
-    addFileSystemBind(DOCKER_SOCK, DOCKER_SOCK, BindMode.READ_WRITE);
+    withFileSystemBind(DOCKER_SOCK, DOCKER_SOCK, BindMode.READ_WRITE);
     setWaitStrategy(Wait.forLogMessage(".*pausing container.*", 1));
     withLogConsumer(l -> System.out.print(l.getUtf8String()));
   }

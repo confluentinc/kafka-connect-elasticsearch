@@ -30,7 +30,7 @@ import org.apache.kafka.connect.sink.ErrantRecordReporter;
 import org.apache.kafka.connect.sink.SinkRecord;
 import org.apache.kafka.connect.sink.SinkTask;
 import org.apache.kafka.connect.sink.SinkTaskContext;
-import org.elasticsearch.action.DocWriteRequest;
+import co.elastic.clients.elasticsearch.core.bulk.BulkOperation;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -130,12 +130,10 @@ public class ElasticsearchSinkTask extends SinkTask {
   @Override
   public Map<TopicPartition, OffsetAndMetadata> preCommit(
       Map<TopicPartition, OffsetAndMetadata> currentOffsets) {
-    try {
-      // This will just trigger an asynchronous execution of any buffered records
-      client.flush();
-    } catch (IllegalStateException e) {
-      log.debug("Tried to flush data to Elasticsearch, but BulkProcessor is already closed.", e);
-    }
+    // Usually dispatches buffered records asynchronously, but under backpressure flush()
+    // can block on a free in-flight slot for the duration of the whole-request retry
+    // ladder; on a closed ingester it is a quiet no-op.
+    client.flush();
     Map<TopicPartition, OffsetAndMetadata> offsets = offsetTracker.offsets(currentOffsets);
     log.debug("preCommitting offsets {}", offsets);
     return offsets;
@@ -144,7 +142,9 @@ public class ElasticsearchSinkTask extends SinkTask {
   @Override
   public void stop() {
     log.debug("Stopping Elasticsearch client.");
-    client.close();
+    if (client != null) {
+      client.close();
+    }
   }
 
   @Override
@@ -284,9 +284,9 @@ public class ElasticsearchSinkTask extends SinkTask {
     
     checkMapping(resourceName, sinkRecord);
 
-    DocWriteRequest<?> docWriteRequest = null;
+    BulkOperation bulkOperation = null;
     try {
-      docWriteRequest = converter.convertRecord(sinkRecord, resourceName);
+      bulkOperation = converter.convertRecord(sinkRecord, resourceName);
     } catch (DataException convertException) {
       reportBadRecord(sinkRecord, convertException);
 
@@ -301,9 +301,9 @@ public class ElasticsearchSinkTask extends SinkTask {
       }
     }
 
-    if (docWriteRequest != null) {
-      logTrace("Adding {} to bulk processor.", sinkRecord);
-      client.index(sinkRecord, docWriteRequest, offsetState);
+    if (bulkOperation != null) {
+      logTrace("Adding {} to bulk ingester.", sinkRecord);
+      client.index(sinkRecord, bulkOperation, offsetState);
     }
   }
 
