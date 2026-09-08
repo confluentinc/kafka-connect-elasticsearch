@@ -60,7 +60,7 @@ import co.elastic.clients.elasticsearch.core.bulk.BulkResponseItem;
 import co.elastic.clients.elasticsearch.indices.get_mapping.IndexMappingRecord;
 import co.elastic.clients.json.JsonpUtils;
 import co.elastic.clients.json.jackson.JacksonJsonpMapper;
-import co.elastic.clients.transport.rest_client.RestClientTransport;
+import co.elastic.clients.transport.ElasticsearchTransport;
 
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BehaviorOnMalformedDoc;
 
@@ -116,7 +116,7 @@ public class ElasticsearchClient {
   private final co.elastic.clients.elasticsearch.ElasticsearchClient client;
   private final RetryingElasticsearchAsyncClient retryingClient;
   private final JacksonJsonpMapper jsonpMapper;
-  private final RestClientTransport transport;
+  private final ElasticsearchTransport transport;
   private final ScheduledExecutorService bulkRetryExecutor;
   private final ScheduledExecutorService bulkIngesterScheduler;
   private final ExecutorService bulkDispatcherExecutor;
@@ -168,7 +168,7 @@ public class ElasticsearchClient {
     ConfigCallbackHandler configCallbackHandler = new ConfigCallbackHandler(config);
     JacksonJsonpMapper mapper = new JacksonJsonpMapper();
     RestClient restClient = null;
-    RestClientTransport clientTransport = null;
+    ElasticsearchTransport clientTransport = null;
     co.elastic.clients.elasticsearch.ElasticsearchClient syncClient;
     String serverVersion;
     RetryingElasticsearchAsyncClient asyncClient;
@@ -182,7 +182,9 @@ public class ElasticsearchClient {
                   .collect(toList())
                   .toArray(new HttpHost[config.connectionUrls().size()])
           ).setHttpClientConfigCallback(configCallbackHandler).build();
-      clientTransport = new RestClientTransport(restClient, mapper);
+      // The dispatcher pool is created above so the transport can hop response handling
+      // onto it; see CoalescingHttpClient for why the hop lives at the HTTP layer.
+      clientTransport = CoalescingHttpClient.transport(restClient, bulkDispatcherExecutor, mapper);
       syncClient = new co.elastic.clients.elasticsearch.ElasticsearchClient(clientTransport);
       serverVersion = getServerVersion(syncClient);
       asyncClient = new RetryingElasticsearchAsyncClient(
@@ -222,7 +224,7 @@ public class ElasticsearchClient {
    * Best-effort close of a partially constructed transport. Closing the transport also
    * closes the RestClient beneath it; a bare RestClient is closed directly.
    */
-  static void closeQuietly(RestClientTransport transport, RestClient restClient) {
+  static void closeQuietly(ElasticsearchTransport transport, RestClient restClient) {
     try {
       if (transport != null) {
         transport.close();
