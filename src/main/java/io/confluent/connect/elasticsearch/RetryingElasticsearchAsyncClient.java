@@ -42,7 +42,7 @@ import org.slf4j.LoggerFactory;
  * retries.
  *
  * <p>Completion always hops through {@code dispatcherExecutor}, off the transport's
- * I/O reactor threads (see the deadlock note at this client's construction site).
+ * I/O reactor threads ({@link CoalescingHttpClient} does the same one layer down).
  *
  * <p>Only {@link #bulk(BulkRequest)} carries this retry-and-dispatch contract. This class
  * extends the full generated {@code ElasticsearchAsyncClient} because {@code BulkIngester}'s
