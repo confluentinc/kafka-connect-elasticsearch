@@ -182,8 +182,6 @@ public class ElasticsearchClient {
                   .collect(toList())
                   .toArray(new HttpHost[config.connectionUrls().size()])
           ).setHttpClientConfigCallback(configCallbackHandler).build();
-      // The dispatcher pool is created above so the transport can hop response handling
-      // onto it; see CoalescingHttpClient for why the hop lives at the HTTP layer.
       clientTransport = CoalescingHttpClient.transport(restClient, bulkDispatcherExecutor, mapper);
       syncClient = new co.elastic.clients.elasticsearch.ElasticsearchClient(clientTransport);
       serverVersion = getServerVersion(syncClient);

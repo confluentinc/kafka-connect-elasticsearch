@@ -41,11 +41,8 @@ import org.slf4j.LoggerFactory;
  * backoff. At {@code max.in.flight.requests=1} this preserves record order across
  * retries.
  *
- * <p>Completion always hops through {@code dispatcherExecutor}. The transport itself already
- * completes off the I/O reactor threads ({@link CoalescingHttpClient}); this second hop keeps
- * the retry ladder off whichever thread completes a future synchronously (a transport that
- * fails before sending, cancellation, {@link #failAllPending}) and is cheap insurance for
- * the deadlock rule documented there.
+ * <p>Completion always hops through {@code dispatcherExecutor}, off the transport's
+ * I/O reactor threads ({@link CoalescingHttpClient} does the same one layer down).
  *
  * <p>Only {@link #bulk(BulkRequest)} carries this retry-and-dispatch contract. This class
  * extends the full generated {@code ElasticsearchAsyncClient} because {@code BulkIngester}'s
