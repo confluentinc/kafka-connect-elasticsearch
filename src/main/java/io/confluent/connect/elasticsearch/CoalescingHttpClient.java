@@ -31,35 +31,18 @@ import java.util.concurrent.Executor;
 import org.elasticsearch.client.RestClient;
 
 /**
- * Decorates the Java API client's HTTP layer at the {@link TransportHttpClient} seam, the
- * boundary between the typed transport ({@link ElasticsearchTransportBase}: JSON encode and
- * decode) and the byte-level {@link RestClientHttpClient}. It does two things there.
+ * Wraps the client's HTTP layer to fix two things the stock {@code RestClientTransport} gets
+ * wrong for this connector.
  *
- * <p><b>Outbound: coalesce the request body into one buffer.</b> The transport hands a
- * bulk request down as one {@code ByteBuffer} per NDJSON line plus a shared one-byte
- * separator, four buffers per index operation. {@code RestClientHttpClient} wraps that
- * iterable in a chunked {@code MultiBufferEntity} that writes exactly one buffer per
- * {@code produceContent} call, and httpcore-nio makes one such call per writable event.
- * Each buffer therefore becomes its own HTTP chunk, TLS record and {@code write()} syscall:
- * thousands per bulk instead of the ~20 the High Level REST Client produced from a single
- * byte-array entity. Measured on a 3-core worker this pinned the four I/O reactor threads
- * at ~2.5 cores and capped throughput at half of the old client's. With one merged buffer the
- * chunk encoder fills its session buffer per event and the reactor cost returns to parity.
- * The copy costs one extra pass over the body on the calling thread. Bodies of zero or one
- * buffer (every non-bulk request) pass through untouched.
+ * <p>Outbound, the transport hands a bulk body down as one {@code ByteBuffer} per NDJSON line,
+ * and {@code RestClientHttpClient} writes each buffer as its own HTTP chunk, TLS record and
+ * syscall (thousands per bulk). That pinned the I/O reactor threads at ~2.5 cores and halved
+ * throughput against the High Level REST Client. Merging the body into one buffer restores
+ * the old framing.
  *
- * <p><b>Inbound: complete the response future on the connector's dispatcher pool.</b> The
- * delegate completes its future on an I/O reactor thread, and the transport's own
- * continuation decodes the JSON response right there, before any connector code runs.
- * Re-completing on {@code dispatcher} moves that decode, and everything downstream of it
- * (listener callbacks, retry scheduling, offset bookkeeping), off the reactor for every
- * async endpoint. This is the deadlock guard described at the connector's dispatcher pool:
- * connector callbacks must never run on a thread that the HTTP client needs to make
- * progress, and must not share a pool with the ingester's flush scheduler either
- * ({@link RetryingElasticsearchAsyncClient} keeps its own hop as a second line of defence).
- * Success and failure both hop; a dispatcher that rejects the hop (shutdown race) fails the
- * future rather than leaving it incomplete, and cancelling the returned future cancels the
- * in-flight HTTP request as the {@link TransportHttpClient} contract requires.
+ * <p>Inbound, the delegate completes its future on an I/O reactor thread and the transport
+ * decodes the response right there. Re-completing on the connector's dispatcher pool keeps
+ * response handling off the threads the HTTP client needs to make progress.
  */
 final class CoalescingHttpClient implements TransportHttpClient {
 
@@ -72,9 +55,7 @@ final class CoalescingHttpClient implements TransportHttpClient {
   }
 
   /**
-   * Builds the connector's transport: the stock REST client HTTP layer wrapped by this
-   * decorator, beneath the stock typed transport. Closing the transport closes the
-   * {@code RestClient} beneath it, as with {@code RestClientTransport}.
+   * Builds the connector's transport; closing it closes the {@code RestClient} beneath.
    */
   static ElasticsearchTransport transport(
       RestClient restClient,
@@ -85,14 +66,12 @@ final class CoalescingHttpClient implements TransportHttpClient {
         new CoalescingHttpClient(new RestClientHttpClient(restClient), dispatcher), mapper);
   }
 
-  /** Named rather than anonymous so stack traces and thread dumps identify it. */
   static final class Transport extends ElasticsearchTransportBase {
     Transport(TransportHttpClient httpClient, JsonpMapper mapper) {
       super(httpClient, null, mapper);
     }
   }
 
-  // Must forward: RestClientHttpClient's options carry the client's default headers.
   @Override
   public TransportOptions createOptions(TransportOptions options) {
     return delegate.createOptions(options);
@@ -127,8 +106,7 @@ final class CoalescingHttpClient implements TransportHttpClient {
         return cancelled;
       }
     };
-    // whenCompleteAsync (not thenApplyAsync): an exceptional upstream must hop too, or the
-    // failure path would run the transport's continuation on the reactor thread.
+    // whenCompleteAsync, not thenApplyAsync: a failed upstream must hop too.
     upstream.whenCompleteAsync((response, failure) -> {
       if (failure != null) {
         result.completeExceptionally(failure);
@@ -136,9 +114,7 @@ final class CoalescingHttpClient implements TransportHttpClient {
         result.complete(response);
       }
     }, dispatcher).exceptionally(hopFailure -> {
-      // Reached for an upstream failure (result already completed: no-op) and for a
-      // rejected hop (dispatcher shut down): fail the future so no slot leaks, and release
-      // the response the transport will now never consume.
+      // Dispatcher rejected the hop (shutdown): fail the future rather than leave it hanging.
       if (result.completeExceptionally(hopFailure)) {
         closeQuietly(upstream);
       }
@@ -159,15 +135,13 @@ final class CoalescingHttpClient implements TransportHttpClient {
         response.close();
       }
     } catch (Exception ignored) {
-      // The future failed or the body was already released; nothing to free.
+      // Nothing to free.
     }
   }
 
   /**
-   * Returns a request whose body is a single buffer holding the same bytes, or the request
-   * itself when the body is absent or already a single buffer. The source buffers are read
-   * through duplicates: the transport's NDJSON separator is one shared buffer, and advancing
-   * it would corrupt every later request.
+   * Merges a multi-buffer body into one buffer. Reads through duplicates: the transport's
+   * NDJSON separator is a shared buffer and must not be advanced.
    */
   static Request coalesce(Request request) {
     Iterable<ByteBuffer> body = request.body();
