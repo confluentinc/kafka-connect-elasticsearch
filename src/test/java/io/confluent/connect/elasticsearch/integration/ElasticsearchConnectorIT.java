@@ -27,9 +27,9 @@ import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.connect.storage.StringConverter;
 import org.apache.kafka.test.TestUtils;
-import org.elasticsearch.client.security.user.User;
-import org.elasticsearch.client.security.user.privileges.Role;
-import org.elasticsearch.search.SearchHit;
+import co.elastic.clients.elasticsearch.core.search.Hit;
+import co.elastic.clients.elasticsearch.security.RoleDescriptor;
+import co.elastic.clients.elasticsearch.security.User;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -75,7 +75,7 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
   @BeforeClass
   public static void setupBeforeAll() {
     Map<User, String> users = getUsers();
-    List<Role> roles = getRoles();
+    Map<String, RoleDescriptor> roles = getRoles();
     container = ElasticsearchContainer.fromSystemProperties().withBasicAuth(users, roles);
     container.start();
   }
@@ -151,7 +151,12 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
     connect.kafka().produce(TOPIC, "key3", "{\"any-prop\":1}");
     connect.kafka().produce(TOPIC, "key4", "{\"any-prop\":1}");
 
-    await().atMost(Duration.ofMinutes(1)).untilAsserted(() ->
+    // Two minutes, not one: the bulk error is latched by the listener after put() returns, so
+    // throwIfFailed() surfaces it on the *next* put() -- which Connect only issues on its next
+    // poll/offset-commit cycle (offset.flush.interval.ms, 60s by default). A one-minute wait
+    // races that cadence. Pre-migration the batch executed on the calling thread, so the error
+    // was latched before put() returned.
+    await().atMost(Duration.ofMinutes(2)).untilAsserted(() ->
         assertThat(connect.connectorStatus(CONNECTOR_NAME).tasks().get(0).state())
             .isEqualTo("FAILED"));
 
@@ -206,12 +211,23 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
     writeRecords(NUM_RECORDS);
 
     // Connector should fail since the server is down
-    await().atMost(Duration.ofMinutes(1)).untilAsserted(() ->
+    // Two minutes, not one: the bulk error is latched by the listener after put() returns, so
+    // throwIfFailed() surfaces it on the *next* put() -- which Connect only issues on its next
+    // poll/offset-commit cycle (offset.flush.interval.ms, 60s by default). A one-minute wait
+    // races that cadence. Pre-migration the batch executed on the calling thread, so the error
+    // was latched before put() returned.
+    await().atMost(Duration.ofMinutes(2)).untilAsserted(() ->
         assertThat(connect.connectorStatus(CONNECTOR_NAME).tasks().get(0).state())
             .isEqualTo("FAILED"));
 
+    // The "after N attempt(s)" wording came from RetryUtil.callWithRetries, which wrapped the
+    // synchronous bulk call pre-migration. Async bulk retries now happen inside RetryingTransport,
+    // which propagates the original exception undecorated, so the trace is the listener's message
+    // with the transport failure chained as the cause. Same intent asserted: the task failed, and
+    // it failed because the connection was refused.
     assertThat(connect.connectorStatus(CONNECTOR_NAME).tasks().get(0).trace())
-        .contains("'java.net.ConnectException: Connection refused' after 3 attempt(s)");
+        .contains("Bulk request failed")
+        .contains("java.net.ConnectException: Connection refused");
   }
 
   @Test
@@ -255,11 +271,11 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
 
     runSimpleTest(props);
 
-    if (container.esMajorVersion() == 8) {
-      assertEquals(index, helperClient.getDataStreamWithJavaAPIClient(index).name());
-    } else {
-      assertEquals(index, helperClient.getDataStream(index).getName());
-    }
+    // Single assertion now: this used to branch on the server major version because ES 8 was
+    // queried with the new Java API Client (DataStream.name()) while ES 7 used the high level REST
+    // client (DataStream.getName()). The helper client speaks only the new client, so both arms
+    // collapse to one -- and the connector supports 8.x only regardless.
+    assertEquals(index, helperClient.getDataStream(index).name());
   }
 
   @Test
@@ -309,10 +325,10 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
     // should have double number of records
     verifySearchResults(NUM_RECORDS * 2);
 
-    for (SearchHit hit : helperClient.search(TOPIC)) {
-      if (Integer.parseInt(hit.getId()) == lastRecord) {
+    for (Hit<Map> hit : helperClient.search(TOPIC)) {
+      if (Integer.parseInt(hit.id()) == lastRecord) {
         // last record should be updated
-        int docNum = (Integer) hit.getSourceAsMap().get("doc_num");
+        int docNum = (Integer) hit.source().get("doc_num");
         assertEquals(0, docNum);
       }
     }

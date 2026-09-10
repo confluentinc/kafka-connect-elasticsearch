@@ -51,6 +51,15 @@ public class RetryUtilTest {
   }
 
   @Test
+  public void computeRetryBackoffForZeroBackoff() {
+    // retry.backoff.ms=0 is legal (range floor) and means retry immediately; this used to
+    // throw IllegalArgumentException from ThreadLocalRandom.nextLong(0, 0) for attempts >= 1
+    for (int attempt = 0; attempt <= 5; attempt++) {
+      assertEquals(0L, RetryUtil.computeRandomRetryWaitTimeInMillis(attempt, 0L));
+    }
+  }
+
+  @Test
   public void computeRetryBackoffForNegativeRetryTimes() {
     assertComputeRetryInRange(1, -100L);
     assertComputeRetryInRange(10, -100L);

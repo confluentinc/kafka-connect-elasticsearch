@@ -15,6 +15,7 @@
 
 package io.confluent.connect.elasticsearch.integration;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -52,10 +53,8 @@ import io.confluent.connect.elasticsearch.ElasticsearchSinkConnector;
 import io.confluent.connect.elasticsearch.ElasticsearchSinkTask;
 
 
-import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.any;
 import static com.github.tomakehurst.wiremock.client.WireMock.anyUrl;
-import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.stubFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
@@ -71,6 +70,8 @@ import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfi
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.WRITE_METHOD_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.WriteMethod;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.*;
+import static io.confluent.connect.elasticsearch.helper.ElasticSearchMockUtil.addMinimalHeaders;
+import static io.confluent.connect.elasticsearch.helper.ElasticSearchMockUtil.basicBulkOk;
 import static io.confluent.connect.elasticsearch.helper.ElasticSearchMockUtil.basicEmptyOk;
 import static io.confluent.connect.elasticsearch.integration.ElasticsearchConnectorNetworkIT.errorBulkResponse;
 import static java.util.stream.Collectors.toList;
@@ -118,9 +119,28 @@ public class ElasticsearchSinkTaskIT {
     return basicEmptyOk();
   }
 
+  // Drop-in replacements for WireMock.okJson()/aResponse() that add the response headers the
+  // Elasticsearch client requires. The Java API Client verifies X-Elastic-Product on *every*
+  // response (ElasticsearchTransportBase.checkProductHeader) and raises
+  // "Missing [X-Elastic-Product] header" even for a 200, whereas the high level REST client did
+  // not enforce it. Stubs that omit the header therefore fail the bulk request outright, the
+  // listener takes the afterBulk(Throwable) path, markProcessed() never runs and preCommit()
+  // returns no offsets.
+  private static ResponseDefinitionBuilder okJson(String body) {
+    return addMinimalHeaders(WireMock.okJson(body));
+  }
+
+  private static ResponseDefinitionBuilder aResponse() {
+    return addMinimalHeaders(WireMock.aResponse());
+  }
+
   @Before
   public void setup() {
     stubFor(any(anyUrl()).atPriority(10).willReturn(ok()));
+    // /_bulk needs a bulk-shaped body, not the info-shaped one the catch-all serves: the Java API
+    // Client requires BulkResponse.took and .errors. Priority 9 beats the catch-all (10) while
+    // still losing to the per-test stubs, which use WireMock's default priority of 5.
+    stubFor(post(urlPathEqualTo("/_bulk")).atPriority(9).willReturn(basicBulkOk()));
   }
 
   @Test
@@ -184,21 +204,29 @@ public class ElasticsearchSinkTaskIT {
             .collect(toList());
     task.put(records);
 
-    // All is safe to commit
-    Map<TopicPartition, OffsetAndMetadata> currentOffsets =
+    // All is safe to commit -- polled, because the bulk request now completes asynchronously.
+    // See the note in testConvertDataException.
+    Map<TopicPartition, OffsetAndMetadata> committedOffsets =
             ImmutableMap.of(tp, new OffsetAndMetadata(6));
-    assertThat(task.preCommit(currentOffsets))
-            .isEqualTo(currentOffsets);
+    await().atMost(Duration.ofSeconds(30)).untilAsserted(() ->
+            assertThat(task.preCommit(committedOffsets)).isEqualTo(committedOffsets));
 
     // Now check that we actually fail and offsets are not past the failed record
     props.put(BEHAVIOR_ON_MALFORMED_DOCS_CONFIG, "fail");
     task.initialize(context);
     task.start(props);
 
-    assertThatThrownBy(() -> task.put(records))
-            .isInstanceOf(ConnectException.class)
-            .hasMessageContaining("Indexing record failed");
-    currentOffsets = ImmutableMap.of(tp, new OffsetAndMetadata(0));
+    // The malformed-document error is latched by the bulk listener, which now runs after put()
+    // returns rather than inside it (pre-migration the batch executed on the calling thread, so
+    // the same put() that filled the batch also threw). throwIfFailed() still surfaces it on the
+    // next put(), so poll for that instead of asserting the first put() throws.
+    task.put(records);
+    await().atMost(Duration.ofSeconds(30)).untilAsserted(() ->
+            assertThatThrownBy(() -> task.put(Collections.emptyList()))
+                    .isInstanceOf(ConnectException.class)
+                    .hasMessageContaining("Indexing record failed"));
+    Map<TopicPartition, OffsetAndMetadata> currentOffsets =
+            ImmutableMap.of(tp, new OffsetAndMetadata(0));
     assertThat(getOffsetOrZero(task.preCommit(currentOffsets), tp))
             .isLessThanOrEqualTo(1);
   }
@@ -238,11 +266,15 @@ public class ElasticsearchSinkTaskIT {
             sinkRecord(tp, 2));
     task.put(records);
 
-    // All is safe to commit
-    Map<TopicPartition, OffsetAndMetadata> currentOffsets =
+    // All is safe to commit -- but poll for it rather than asserting immediately.
+    // Pre-migration, max.in.flight.requests=1 mapped to BulkProcessor.setConcurrentRequests(0),
+    // which executed the batch on the calling thread via a CountDownLatch, so the offsets were
+    // already marked by the time put() returned. BulkIngester has no synchronous mode, so they
+    // become visible a moment later. Use flush.synchronously=true for a blocking preCommit.
+    Map<TopicPartition, OffsetAndMetadata> committedOffsets =
             ImmutableMap.of(tp, new OffsetAndMetadata(3));
-    assertThat(task.preCommit(currentOffsets))
-            .isEqualTo(currentOffsets);
+    await().atMost(Duration.ofSeconds(30)).untilAsserted(() ->
+            assertThat(task.preCommit(committedOffsets)).isEqualTo(committedOffsets));
 
     // Now check that we actually fail and offsets are not past the failed record
     props.put(DROP_INVALID_MESSAGE_CONFIG, "false");
@@ -254,8 +286,12 @@ public class ElasticsearchSinkTaskIT {
             .isInstanceOf(DataException.class)
             .hasMessageContaining("Key is used as document id and can not be null");
 
-    currentOffsets = ImmutableMap.of(tp, new OffsetAndMetadata(0));
-    assertThat(task.preCommit(currentOffsets).get(tp).offset())
+    Map<TopicPartition, OffsetAndMetadata> currentOffsets =
+            ImmutableMap.of(tp, new OffsetAndMetadata(0));
+    // getOffsetOrZero rather than .get(tp).offset(): the surviving record from the throwing put()
+    // is flushed asynchronously now, so preCommit() may legitimately return no offset yet for this
+    // partition. "Did not advance past the failed record" is satisfied by absence too.
+    assertThat(getOffsetOrZero(task.preCommit(currentOffsets), tp))
             .isLessThanOrEqualTo(1);
   }
 
@@ -287,11 +323,12 @@ public class ElasticsearchSinkTaskIT {
             sinkRecord(tp, 2));
     task.put(records);
 
-    // All is safe to commit
-    Map<TopicPartition, OffsetAndMetadata> currentOffsets =
+    // All is safe to commit -- polled, because the bulk request now completes asynchronously.
+    // See the note in testConvertDataException.
+    Map<TopicPartition, OffsetAndMetadata> committedOffsets =
             ImmutableMap.of(tp, new OffsetAndMetadata(3));
-    assertThat(task.preCommit(currentOffsets))
-            .isEqualTo(currentOffsets);
+    await().atMost(Duration.ofSeconds(30)).untilAsserted(() ->
+            assertThat(task.preCommit(committedOffsets)).isEqualTo(committedOffsets));
 
     // Now check that we actually fail and offsets are not past the failed record
     props.put(BEHAVIOR_ON_NULL_VALUES_CONFIG, "fail");
@@ -301,8 +338,12 @@ public class ElasticsearchSinkTaskIT {
     assertThatThrownBy(() -> task.put(records))
             .isInstanceOf(DataException.class)
             .hasMessageContaining("has a null value ");
-    currentOffsets = ImmutableMap.of(tp, new OffsetAndMetadata(0));
-    assertThat(task.preCommit(currentOffsets).get(tp).offset())
+    Map<TopicPartition, OffsetAndMetadata> currentOffsets =
+            ImmutableMap.of(tp, new OffsetAndMetadata(0));
+    // getOffsetOrZero rather than .get(tp).offset(): the surviving record from the throwing put()
+    // is flushed asynchronously now, so preCommit() may legitimately return no offset yet for this
+    // partition. "Did not advance past the failed record" is satisfied by absence too.
+    assertThat(getOffsetOrZero(task.preCommit(currentOffsets), tp))
             .isLessThanOrEqualTo(1);
   }
 

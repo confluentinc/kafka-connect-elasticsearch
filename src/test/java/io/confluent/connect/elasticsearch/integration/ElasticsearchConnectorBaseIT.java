@@ -26,13 +26,11 @@ import java.util.Map;
 import org.apache.kafka.connect.json.JsonConverter;
 import org.apache.kafka.connect.storage.StringConverter;
 import org.apache.kafka.test.TestUtils;
-import org.elasticsearch.ElasticsearchStatusException;
-import org.elasticsearch.client.security.user.User;
-import org.elasticsearch.client.security.user.privileges.IndicesPrivileges;
-import org.elasticsearch.client.security.user.privileges.Role;
-import org.elasticsearch.client.security.user.privileges.Role.Builder;
-import org.elasticsearch.rest.RestStatus;
-import org.elasticsearch.search.SearchHit;
+import co.elastic.clients.elasticsearch._types.ElasticsearchException;
+import co.elastic.clients.elasticsearch.core.search.Hit;
+import co.elastic.clients.elasticsearch.security.IndicesPrivileges;
+import co.elastic.clients.elasticsearch.security.RoleDescriptor;
+import co.elastic.clients.elasticsearch.security.User;
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Before;
@@ -117,12 +115,12 @@ public class ElasticsearchConnectorBaseIT extends BaseConnectorIT {
           helperClient.close();
         } catch (ConnectException e) {
           // Server is already down. No need to close
-        } catch (ElasticsearchStatusException e) {
-          if (RestStatus.NOT_FOUND.equals(e.status())) {
-            // index wasn't created, nothing to clean
-          } else {
+        } catch (ElasticsearchException e) {
+          // status() is a plain int on the new client, not a RestStatus enum
+          if (e.status() != 404) {
             throw e;
           }
+          // index wasn't created, nothing to clean
         }
       }
     }
@@ -183,23 +181,22 @@ public class ElasticsearchConnectorBaseIT extends BaseConnectorIT {
     props.put(CONNECTION_URL_CONFIG, address);
     helperClient = new ElasticsearchHelperClient(
         props.get(CONNECTION_URL_CONFIG),
-        new ElasticsearchSinkConnectorConfig(props),
-        container.shouldStartClientInCompatibilityMode()
+        new ElasticsearchSinkConnectorConfig(props)
     );
   }
 
   protected void verifySearchResults(int numRecords) throws Exception {
     waitForRecords(numRecords);
 
-    for (SearchHit hit : helperClient.search(index)) {
-      int id = (Integer) hit.getSourceAsMap().get("doc_num");
+    for (Hit<Map> hit : helperClient.search(index)) {
+      int id = (Integer) hit.source().get("doc_num");
       assertNotNull(id);
       assertTrue(id < numRecords);
 
       if (isDataStream) {
-        assertTrue(hit.getIndex().contains(index));
+        assertTrue(hit.index().contains(index));
       } else {
-        assertEquals(index, hit.getIndex());
+        assertEquals(index, hit.index());
       }
     }
   }
@@ -209,8 +206,10 @@ public class ElasticsearchConnectorBaseIT extends BaseConnectorIT {
         () -> {
           try {
             return helperClient.getDocCount(index) == numRecords;
-          } catch (ElasticsearchStatusException e) {
-            if (e.getMessage().contains("index_not_found_exception")) {
+          } catch (ElasticsearchException e) {
+            // Exact match on the structured error type rather than a substring test on
+            // getMessage(), which the new client may leave null.
+            if (e.error() != null && "index_not_found_exception".equals(e.error().type())) {
               return false;
             }
 
@@ -236,10 +235,16 @@ public class ElasticsearchConnectorBaseIT extends BaseConnectorIT {
     }
   }
 
-  protected static List<Role> getRoles() {
-    List<Role> roles = new ArrayList<>();
-    roles.add(getMinimalPrivilegesRole(false));
-    roles.add(getMinimalPrivilegesRole(true));
+  /**
+   * Returns the roles to create, keyed by role name.
+   *
+   * <p>Keyed by name because {@link RoleDescriptor} -- unlike the high level REST client's
+   * {@code Role} -- does not carry its own name; the new client takes the name on the request.
+   */
+  protected static Map<String, RoleDescriptor> getRoles() {
+    Map<String, RoleDescriptor> roles = new HashMap<>();
+    roles.put(ES_SINK_CONNECTOR_ROLE, getMinimalPrivilegesRole());
+    roles.put(ES_SINK_CONNECTOR_DS_ROLE, getMinimalPrivilegesRole());
     return roles;
   }
 
@@ -250,25 +255,32 @@ public class ElasticsearchConnectorBaseIT extends BaseConnectorIT {
     return users;
   }
 
-  private static Role getMinimalPrivilegesRole(boolean forDataStream) {
-    IndicesPrivileges.Builder indicesPrivilegesBuilder = IndicesPrivileges.builder();
-    IndicesPrivileges indicesPrivileges = indicesPrivilegesBuilder
-        .indices("*")
-        .privileges("create_index", "read", "write", "view_index_metadata")
-        .build();
+  private static RoleDescriptor getMinimalPrivilegesRole() {
+    IndicesPrivileges indicesPrivileges = IndicesPrivileges.of(p -> p
+        .names("*")
+        .privileges("create_index", "read", "write", "view_index_metadata"));
     // Historically (i.e. ES the previous test base version 7.9.3), ES_SINK_CONNECTOR_ROLE would not require the
     // "monitor" cluster privilege.  However, this has changed for 7.16.3, although leaving the surrounding
     // logic in place in the case that future ES versions or tests wish to diverge the permissions.
-    return Role.builder()
-        .name(forDataStream ? ES_SINK_CONNECTOR_DS_ROLE : ES_SINK_CONNECTOR_ROLE)
-        .indicesPrivileges(indicesPrivileges)
-        .clusterPrivileges("monitor")
+    return new RoleDescriptor.Builder()
+        .indices(indicesPrivileges)
+        .cluster("monitor")
         .build();
   }
 
   private static User getMinimalPrivilegesUser(boolean forDataStream) {
-    return new User(forDataStream ? ELASTIC_DATA_STREAM_MINIMAL_PRIVILEGES_NAME : ELASTIC_MINIMAL_PRIVILEGES_NAME,
-        Collections.singletonList(forDataStream ? ES_SINK_CONNECTOR_DS_ROLE : ES_SINK_CONNECTOR_ROLE));
+    // fullName/email/metadata are required by the generated User builder even though this test
+    // does not care about them; enabled defaults are likewise made explicit.
+    return new User.Builder()
+        .username(forDataStream
+            ? ELASTIC_DATA_STREAM_MINIMAL_PRIVILEGES_NAME : ELASTIC_MINIMAL_PRIVILEGES_NAME)
+        .roles(Collections.singletonList(
+            forDataStream ? ES_SINK_CONNECTOR_DS_ROLE : ES_SINK_CONNECTOR_ROLE))
+        .fullName("")
+        .email("")
+        .metadata(Collections.emptyMap())
+        .enabled(true)
+        .build();
   }
 
   private static String getMinimalPrivilegesPassword(boolean forDataStream) {

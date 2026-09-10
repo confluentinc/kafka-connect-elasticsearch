@@ -64,6 +64,11 @@ public class RetryUtil {
       return initialRetryBackoffMs;
     }
     long maxRetryTime = computeRetryWaitTimeInMillis(retryAttempts, initialRetryBackoffMs);
+    if (maxRetryTime <= 0) {
+      // retry.backoff.ms=0 (legal, range floor) means retry immediately; without this guard
+      // ThreadLocalRandom.nextLong(0, 0) throws IllegalArgumentException.
+      return 0;
+    }
     return ThreadLocalRandom.current().nextLong(0, maxRetryTime);
   }
 
