@@ -341,6 +341,13 @@ public class ElasticsearchSinkTaskTest {
   }
 
   @Test
+  public void testStopBeforeStartDoesNotThrow() {
+    ElasticsearchSinkTask neverStarted = new ElasticsearchSinkTask();
+    neverStarted.initialize(context);
+    neverStarted.stop();
+  }
+
+  @Test
   public void testVersion() {
     setUpTask();
     assertNotEquals("0.0.0.0", task.version());
