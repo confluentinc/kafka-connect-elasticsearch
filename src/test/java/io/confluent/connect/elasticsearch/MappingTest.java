@@ -15,10 +15,8 @@
 
 package io.confluent.connect.elasticsearch;
 
-import com.github.tomakehurst.wiremock.common.Json;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.util.HashMap;
@@ -32,7 +30,6 @@ import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
 import org.apache.kafka.connect.errors.DataException;
-import org.elasticsearch.xcontent.XContentBuilder;
 import org.junit.Test;
 
 import static io.confluent.connect.elasticsearch.Mapping.KEYWORD_TYPE;
@@ -47,7 +44,7 @@ public class MappingTest {
 
   @Test(expected = DataException.class)
   public void testBuildMappingWithNullSchema() {
-    XContentBuilder builder = Mapping.buildMapping(null);
+    Mapping.buildMapping(null);
   }
 
   @Test
@@ -161,10 +158,7 @@ public class MappingTest {
   }
 
   private static JsonObject runTest(Schema schema) throws IOException {
-    XContentBuilder builder = Mapping.buildMapping(schema);
-    builder.flush();
-    ByteArrayOutputStream stream = (ByteArrayOutputStream) builder.getOutputStream();
-    return  (JsonObject) JsonParser.parseString(stream.toString());
+    return (JsonObject) JsonParser.parseString(Mapping.buildMappingJson(schema));
   }
 
   private void verifyMapping(Schema schema, JsonObject mapping) {

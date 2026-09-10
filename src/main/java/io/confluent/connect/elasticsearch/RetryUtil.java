@@ -64,6 +64,9 @@ public class RetryUtil {
       return initialRetryBackoffMs;
     }
     long maxRetryTime = computeRetryWaitTimeInMillis(retryAttempts, initialRetryBackoffMs);
+    if (maxRetryTime <= 0) {
+      return 0;
+    }
     return ThreadLocalRandom.current().nextLong(0, maxRetryTime);
   }
 
