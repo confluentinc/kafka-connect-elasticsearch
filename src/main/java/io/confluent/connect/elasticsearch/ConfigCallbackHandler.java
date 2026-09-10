@@ -135,10 +135,6 @@ public class ConfigCallbackHandler implements HttpClientConfigCallback {
         .collect(Collectors.toCollection(LinkedHashSet::new));
   }
 
-  // Matches the only two ways RFC 3986 introduces an authority component: a real
-  // "scheme://" prefix, or a bare "//" network-path reference. Anything else - including a
-  // malformed single-slash scheme like "https:/host" - does NOT reliably mark where a path
-  // begins, so it must not be trusted as a delimiter (see below).
   private static final Pattern AUTHORITY_PREFIX =
       Pattern.compile("^[A-Za-z][A-Za-z0-9+.-]*://|^//");
 
@@ -147,13 +143,6 @@ public class ConfigCallbackHandler implements HttpClientConfigCallback {
     boolean recognizedPrefix = schemeMatcher.find();
     int authorityStart = recognizedPrefix ? schemeMatcher.end() : 0;
 
-    // '?' and '#' always mark the end of the authority, recognized prefix or not. '/' only
-    // does when we've confirmed a real authority marker above - otherwise a malformed scheme
-    // (or no scheme at all) can put a '/' before the credential that isn't a path separator,
-    // which previously let the credential slip through unredacted (e.g. "//user:pass@host",
-    // "https:/user:pass@host", "user:pass@host" with no scheme at all). When we can't trust
-    // '/' as a boundary, it's safer to search the rest of the string than to risk a false
-    // negative.
     char[] delimiters = recognizedPrefix ? new char[] {'/', '?', '#'} : new char[] {'?', '#'};
     int authorityEnd = url.length();
     for (char delimiter : delimiters) {
