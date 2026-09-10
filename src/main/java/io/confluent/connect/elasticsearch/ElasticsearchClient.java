@@ -151,7 +151,7 @@ public class ElasticsearchClient {
         .builder(
             config.connectionUrls()
                 .stream()
-                .map(HttpHost::create)
+                .map(ConfigCallbackHandler::createRedactedHttpHost)
                 .collect(toList())
                 .toArray(new HttpHost[config.connectionUrls().size()])
         ).setHttpClientConfigCallback(configCallbackHandler).build();
