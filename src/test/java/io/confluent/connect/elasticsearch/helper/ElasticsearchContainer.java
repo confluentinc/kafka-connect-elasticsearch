@@ -40,6 +40,7 @@ import java.io.InputStream;
 import java.net.InetAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.nio.file.Files;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -532,7 +533,7 @@ public class ElasticsearchContainer
   }
 
   protected String generateTemporaryFile(InputStream inputStream) throws IOException {
-    File file = File.createTempFile("ElasticsearchTestContainer", "jks");
+    File file = Files.createTempFile("ElasticsearchTestContainer", "jks").toFile();
     try (FileOutputStream outputStream = new FileOutputStream(file)) {
       IOUtils.copy(inputStream, outputStream);
     }
