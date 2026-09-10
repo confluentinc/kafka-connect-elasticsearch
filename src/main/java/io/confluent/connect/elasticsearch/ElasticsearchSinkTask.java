@@ -299,7 +299,10 @@ public class ElasticsearchSinkTask extends SinkTask {
             recordString(sinkRecord), convertException.getClass().getName());
         offsetState.markProcessed();
       } else {
-        throw convertException;
+        log.trace("Can't convert {}. Failure type: {}",
+            recordString(sinkRecord), convertException.getClass().getName(), convertException);
+        throw new DataException(String.format("Can't convert %s. Failure type: %s",
+            recordString(sinkRecord), convertException.getClass().getName()));
       }
     }
 
