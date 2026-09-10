@@ -972,17 +972,10 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   }
 
   /**
-   * Returns a copy of {@code properties} with any embedded {@code user:password@} credentials
-   * stripped from the {@code connection.url} value(s). Credentials are supplied via the dedicated
-   * {@code connection.username}/{@code connection.password} configs; the client authenticates with
-   * those and never with URL user-info (an {@link org.apache.http.HttpHost} carries none), so this
-   * is functionally a no-op for a correctly configured connector.
-   *
-   * <p>Sanitizing at the source keeps credentials out of the parsed config, so the inherited
-   * {@link AbstractConfig} config dump (and every other consumer of {@code connection.url}) is
-   * safe without having to suppress the framework's automatic {@code logAll()}.
-   * {@code connection.url} is a {@code Type.LIST} — a comma-separated string in the raw
-   * properties — so each element is redacted independently.
+   * Strips any embedded {@code user:password@} from {@code connection.url} before the config is
+   * parsed, so it never reaches the config dump or any other consumer. No-op for a correctly
+   * configured connector, which authenticates via {@code connection.username}/
+   * {@code connection.password} instead.
    */
   private static Map<String, String> sanitizeConnectionUrl(Map<String, String> properties) {
     if (properties == null) {
