@@ -96,4 +96,39 @@ public class ConfigCallbackHandlerTest {
     assertFalse(e.getMessage().contains("p@ssw0rd"));
     assertTrue(e.getMessage().contains("host name:9243"));
   }
+
+  @Test
+  public void createRedactedHttpHostRedactsCredentialWhenUnderlyingExceptionEchoesIt() {
+    // Unlike the space case above, HttpHost.create() rejects a URL with any path component
+    // by echoing the *entire* authority - including the credential - verbatim in its message.
+    // This is the failure mode that actually motivated redacting the caught exception at all.
+    IllegalArgumentException e = assertThrows(
+        IllegalArgumentException.class,
+        () -> ConfigCallbackHandler.createRedactedHttpHost(
+            "https://user:p@ssw0rd@host:9243/")
+    );
+    assertFalse(e.getMessage().contains("p@ssw0rd"));
+    assertTrue(e.getMessage().contains("host:9243"));
+  }
+
+  @Test
+  public void redactUserInfoStripsCredentialsFromSchemeRelativeUrl() {
+    // No "scheme://" prefix, just a bare network-path reference - the leading "//" must not
+    // be mistaken for a path separator, which previously let the credential through unredacted.
+    assertEquals(
+        "//host:9243",
+        ConfigCallbackHandler.redactUserInfo("//user:password@host:9243")
+    );
+  }
+
+  @Test
+  public void redactUserInfoStripsCredentialsFromMalformedSingleSlashScheme() {
+    // A single slash after the scheme colon is not a valid "://" authority marker, but
+    // HttpHost.create() accepts it anyway and treats the whole string as the hostname - so it
+    // must still be redacted even though it isn't a well-formed URL.
+    assertEquals(
+        "host:9243",
+        ConfigCallbackHandler.redactUserInfo("https:/user:password@host:9243")
+    );
+  }
 }
