@@ -302,6 +302,8 @@ public class ElasticsearchSinkTask extends SinkTask {
         // content, which the framework then logs at ERROR and surfaces in the task status. Rethrow
         // with only the coordinates and failure type; the full exception still reaches the DLQ
         // above via reportBadRecord.
+        log.trace("Can't convert {}. Failure type: {}",
+            recordString(sinkRecord), convertException.getClass().getName(), convertException);
         throw new DataException(String.format("Can't convert %s. Failure type: %s",
             recordString(sinkRecord), convertException.getClass().getName()));
       }
