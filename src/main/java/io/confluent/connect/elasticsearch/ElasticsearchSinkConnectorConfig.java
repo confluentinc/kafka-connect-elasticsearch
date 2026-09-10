@@ -1399,9 +1399,6 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
         try {
           new URI(url);
         } catch (URISyntaxException e) {
-          // Redact any embedded user:password@ credential before it reaches the ConfigException
-          // message (both the custom message below and Kafka's own generated message, which
-          // renders the `value` argument verbatim), including via the Connect config-validate API.
           List<String> redactedUrls = urls.stream()
               .map(ConfigCallbackHandler::redactUserInfo)
               .collect(Collectors.toList());
