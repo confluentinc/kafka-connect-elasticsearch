@@ -182,7 +182,7 @@ public class ElasticsearchClient {
                   .collect(toList())
                   .toArray(new HttpHost[config.connectionUrls().size()])
           ).setHttpClientConfigCallback(configCallbackHandler).build();
-      clientTransport = CoalescingHttpClient.transport(restClient, bulkDispatcherExecutor, mapper);
+      clientTransport = CoalescingHttpClient.transport(restClient, mapper);
       syncClient = new co.elastic.clients.elasticsearch.ElasticsearchClient(clientTransport);
       serverVersion = getServerVersion(syncClient);
       asyncClient = new RetryingElasticsearchAsyncClient(
