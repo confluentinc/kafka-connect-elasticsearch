@@ -115,16 +115,11 @@
                 </exclusion>
             </exclusions>
         </dependency>
-        <dependency>
-            <groupId>org.eclipse.parsson</groupId>
-            <artifactId>parsson</artifactId>
-            <version>1.0.5</version>
-        </dependency>
         <!-- pin httpclient for CVE -->
         <dependency>
             <groupId>org.apache.httpcomponents</groupId>
             <artifactId>httpclient</artifactId>
-            <version>4.5.13</version>
+            <version>4.5.14</version>
         </dependency>
         <!-- pin lz4-java for CVE-2025-12183 - use actively maintained fork -->
         <dependency>
