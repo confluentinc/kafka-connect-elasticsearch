@@ -115,6 +115,13 @@
                 </exclusion>
             </exclusions>
         </dependency>
+        <!-- elasticsearch-java declares parsson 1.1.x (needs the JSON-P 2.1 API) but pins
+             jakarta.json-api at 2.0.1; without this, JsonObjectBuilderImpl fails to load. -->
+        <dependency>
+            <groupId>jakarta.json</groupId>
+            <artifactId>jakarta.json-api</artifactId>
+            <version>2.1.3</version>
+        </dependency>
         <!-- pin httpclient for CVE -->
         <dependency>
             <groupId>org.apache.httpcomponents</groupId>
