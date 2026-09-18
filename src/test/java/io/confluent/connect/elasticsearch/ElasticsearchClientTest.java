@@ -896,6 +896,14 @@ public class ElasticsearchClientTest extends ElasticsearchClientTestBase {
       ConnectException e = assertThrows(ConnectException.class, client::close);
       assertTrue(e.getMessage(), e.getMessage().contains(
           "Failed to process outstanding requests in time while closing"));
+
+      Thread.sleep(6_000);
+      List<String> leaked = Thread.getAllStackTraces().keySet().stream()
+          .filter(Thread::isAlive)
+          .map(Thread::getName)
+          .filter(name -> name.startsWith("elasticsearch-sink-1-elasticsearch-"))
+          .collect(java.util.stream.Collectors.toList());
+      assertTrue("threads still alive after close: " + leaked, leaked.isEmpty());
     }
   }
 
