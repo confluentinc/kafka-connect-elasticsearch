@@ -37,11 +37,11 @@
     </scm>
 
     <properties>
-        <es.version>7.17.24</es.version>
+        <es.version>8.19.19</es.version>
         <lz4.version>1.10.1</lz4.version>
         <hamcrest.version>1.3</hamcrest.version>
         <gson.version>2.9.0</gson.version>
-        <test.containers.version>1.16.3</test.containers.version>
+        <test.containers.version>1.21.4</test.containers.version>
         <kafka.connect.maven.plugin.version>0.11.1</kafka.connect.maven.plugin.version>
         <maven.release.plugin.version>2.5.3</maven.release.plugin.version>
         <hadoop.version>3.3.1</hadoop.version>
@@ -85,23 +85,8 @@
         </dependency>
         <dependency>
             <groupId>org.elasticsearch.client</groupId>
-            <artifactId>elasticsearch-rest-high-level-client</artifactId>
+            <artifactId>elasticsearch-rest-client</artifactId>
             <version>${es.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>org.elasticsearch</groupId>
-            <artifactId>elasticsearch</artifactId>
-            <version>${es.version}</version>
-            <exclusions>
-                <exclusion>
-                    <groupId>org.yaml</groupId>
-                    <artifactId>snakeyaml</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>org.lz4</groupId>
-                    <artifactId>lz4-java</artifactId>
-                </exclusion>
-            </exclusions>
         </dependency>
         <dependency>
             <groupId>org.apache.logging.log4j</groupId>
@@ -116,18 +101,32 @@
         <dependency>
             <groupId>co.elastic.clients</groupId>
             <artifactId>elasticsearch-java</artifactId>
-            <version>8.2.2</version>
+            <version>${es.version}</version>
+            <exclusions>
+                <!-- We use the Jackson 2 JacksonJsonpMapper, not the client's opt-in
+                     Jackson3JsonpMapper, so exclude the unused tools.jackson lineage. -->
+                <exclusion>
+                    <groupId>tools.jackson.core</groupId>
+                    <artifactId>jackson-databind</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>tools.jackson.core</groupId>
+                    <artifactId>jackson-core</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
+        <!-- elasticsearch-java declares parsson 1.1.x (needs the JSON-P 2.1 API) but pins
+             jakarta.json-api at 2.0.1; without this, JsonObjectBuilderImpl fails to load. -->
         <dependency>
-            <groupId>org.eclipse.parsson</groupId>
-            <artifactId>parsson</artifactId>
-            <version>1.0.5</version>
+            <groupId>jakarta.json</groupId>
+            <artifactId>jakarta.json-api</artifactId>
+            <version>2.1.3</version>
         </dependency>
         <!-- pin httpclient for CVE -->
         <dependency>
             <groupId>org.apache.httpcomponents</groupId>
             <artifactId>httpclient</artifactId>
-            <version>4.5.13</version>
+            <version>4.5.14</version>
         </dependency>
         <!-- pin lz4-java for CVE-2025-12183 - use actively maintained fork -->
         <dependency>
@@ -514,7 +513,7 @@
                             </tags>
 
                             <requirements>
-                                <requirement>Elasticsearch 7.x</requirement>
+                                <requirement>Elasticsearch 8.x or 9.x</requirement>
                             </requirements>
 
                             <deliveryGuarantee>
@@ -533,8 +532,7 @@
                 <configuration>
                     <compilerArgs>
                         <arg>-Xlint:all,-try</arg>
-                        <!-- migrate to the new Java Client and uncomment -->
-                        <!--<arg>-Werror</arg>-->
+                        <arg>-Werror</arg>
                     </compilerArgs>
                 </configuration>
             </plugin>
