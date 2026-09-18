@@ -24,6 +24,7 @@ import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import org.junit.Test;
 
 public class CoalescingHttpClientTest {
@@ -47,18 +48,41 @@ public class CoalescingHttpClientTest {
   public void testCoalescePassesThroughBodiesThatNeedNoMerging() {
     Request single = request(Collections.singletonList(ByteBuffer.wrap("x".getBytes(UTF_8))));
     Request bodiless = request(null);
+    Request empty = request(Collections.emptyList());
 
     assertSame(single, CoalescingHttpClient.coalesce(single));
     assertSame(bodiless, CoalescingHttpClient.coalesce(bodiless));
+    assertSame(empty, CoalescingHttpClient.coalesce(empty));
+  }
+
+  // Merging must only replace the body — a refactor that drags the wrong field into the new
+  // Request would otherwise silently drop the bulk's method, path, params, or headers.
+  @Test
+  public void testCoalescePreservesMethodPathParamsAndHeaders() {
+    Map<String, String> queryParams = Collections.singletonMap("refresh", "true");
+    Map<String, String> headers = Collections.singletonMap("Content-Type", "application/json");
+    Request original = new Request(
+        "PUT", "/custom/_bulk", queryParams, headers, ndjsonBody("{\"a\":1}", "{\"b\":2}"));
+
+    Request merged = CoalescingHttpClient.coalesce(original);
+
+    assertEquals("PUT", merged.method());
+    assertEquals("/custom/_bulk", merged.path());
+    assertEquals(queryParams, merged.queryParams());
+    assertEquals(headers, merged.headers());
   }
 
   private static Request ndjson(String... lines) {
+    return request(ndjsonBody(lines));
+  }
+
+  private static List<ByteBuffer> ndjsonBody(String... lines) {
     List<ByteBuffer> body = new ArrayList<>();
     for (String line : lines) {
       body.add(ByteBuffer.wrap(line.getBytes(UTF_8)));
       body.add(SEPARATOR);
     }
-    return request(body);
+    return body;
   }
 
   private static Request request(Iterable<ByteBuffer> body) {
