@@ -367,6 +367,14 @@ public class ElasticsearchClient {
     inFlightRequestLock.lock();
     try {
       while (numBufferedRecords.get() > 0) {
+        // Once close() has torn the pools down, a record that was buffered but never
+        // dispatched has no path left to decrement the count. The error is latched on
+        // that path, so SyncOffsetTracker commits nothing and the records are redelivered.
+        if (closed.get()) {
+          log.warn("Client is closed with {} records still unaccounted for; not waiting.",
+              numBufferedRecords.get());
+          return;
+        }
         inFlightRequestsUpdated.await();
       }
     } catch (InterruptedException e) {

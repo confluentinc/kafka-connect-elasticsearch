@@ -36,6 +36,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -889,7 +890,9 @@ public class ElasticsearchClientTest extends ElasticsearchClientTestBase {
       props.put(FLUSH_TIMEOUT_MS_CONFIG, "1000");
       config = new ElasticsearchSinkConnectorConfig(props);
       converter = new DataConverter(config);
-      ElasticsearchClient client = new ElasticsearchClient(config, null, () -> offsetTracker.updateOffsets(), 1, "elasticsearch-sink");
+      // Unique connector name: every test in this class shares "elasticsearch-sink"/task 1,
+      // so a shared prefix would pick up other tests' still-alive pool threads.
+      ElasticsearchClient client = new ElasticsearchClient(config, null, () -> offsetTracker.updateOffsets(), 1, "stuck-close-sink");
 
       writeRecord(sinkRecord(0), client);
 
@@ -901,7 +904,7 @@ public class ElasticsearchClientTest extends ElasticsearchClientTestBase {
       List<String> leaked = Thread.getAllStackTraces().keySet().stream()
           .filter(Thread::isAlive)
           .map(Thread::getName)
-          .filter(name -> name.startsWith("elasticsearch-sink-1-elasticsearch-"))
+          .filter(name -> name.startsWith("stuck-close-sink-1-elasticsearch-"))
           .collect(java.util.stream.Collectors.toList());
       assertTrue("threads still alive after close: " + leaked, leaked.isEmpty());
     }
@@ -931,6 +934,82 @@ public class ElasticsearchClientTest extends ElasticsearchClientTestBase {
         // Clear the flag so test teardown is not poisoned.
         Thread.interrupted();
       }
+    }
+  }
+
+  // A record buffered but never dispatched (the sole in-flight slot is held by a request
+  // stuck on an unresponsive endpoint) has no path left to decrement numBufferedRecords
+  // once close() tears the client down without calling bulkIngester.close(). The
+  // framework still runs preCommit() after put() throws (closeAllPartitions() is a
+  // try-with-resources close action), and under flush.synchronously=true that is
+  // flush() then waitForInFlightRequests() -- which must return, not park forever.
+  @Test(timeout = 30_000)
+  public void testPreCommitReturnsAfterCloseOrphansUnsentRecord() throws Exception {
+    try (ServerSocket blackhole = new ServerSocket(0)) {
+      props.put(CONNECTION_URL_CONFIG, "http://localhost:" + blackhole.getLocalPort());
+      props.put(BATCH_SIZE_CONFIG, "2");
+      props.put(MAX_IN_FLIGHT_REQUESTS_CONFIG, "1");
+      props.put(LINGER_MS_CONFIG, "600000");
+      props.put(FLUSH_TIMEOUT_MS_CONFIG, "1000");
+      config = new ElasticsearchSinkConnectorConfig(props);
+      converter = new DataConverter(config);
+      // Unique connector name so the leak check below only sees this client's pool threads.
+      ElasticsearchClient client = new ElasticsearchClient(config, null, () -> offsetTracker.updateOffsets(), 1, "orphaned-record-sink");
+
+      // A, B fill the only batch and get sent for real against the blackhole -- stuck
+      // forever, holding the sole in-flight slot (max.in.flight.requests=1).
+      writeRecord(sinkRecord(0), client);
+      writeRecord(sinkRecord(1), client);
+
+      // C doesn't fill a batch on its own and the in-flight slot is taken, so it just
+      // sits in BulkIngester's own internal queue -- added, but never sent.
+      writeRecord(sinkRecord(2), client);
+
+      // Simulate a separate, already-completed bulk (X) whose response latched a
+      // terminal failure -- independent of A/B/C, this is what makes isFailed() true.
+      SinkRecord recordX = sinkRecord(3);
+      ElasticsearchClient.BulkOpContext contextX = new ElasticsearchClient.BulkOpContext(
+          recordX, new AsyncOffsetTracker.AsyncOffsetState(recordX.kafkaOffset()),
+          converter.convertRecord(recordX, index));
+      BulkResponseItem failedItem = BulkResponseItem.of(b -> b
+          .operationType(OperationType.Index)
+          .index(index)
+          .status(400)
+          .error(e -> e.type("some_terminal_exception").reason("boom")));
+      client.handleResponse(failedItem, contextX);
+
+      // index() on a failed client closes it internally (throwIfFailed()) and rethrows
+      // the latched error -- the same double-close path testCloseIsIdempotent exercises.
+      assertThrows(ConnectException.class, () -> writeRecord(sinkRecord(4), client));
+
+      // preCommit() under flush.synchronously=true calls flush() then
+      // waitForInFlightRequests() -- run that exact sequence on its own thread so a
+      // regression parks the probe, not the test runner.
+      Thread preCommit = new Thread(() -> {
+        client.flush();
+        client.waitForInFlightRequests();
+      }, "precommit-probe");
+      preCommit.setDaemon(true);
+      preCommit.start();
+      preCommit.join(10_000);
+      if (preCommit.isAlive()) {
+        StringBuilder stack = new StringBuilder();
+        for (StackTraceElement frame : preCommit.getStackTrace()) {
+          stack.append("\n\tat ").append(frame);
+        }
+        fail("preCommit() sequence never returned after close() orphaned record C; "
+            + "parked at:" + stack);
+      }
+      // The error is latched, so SyncOffsetTracker.offsets() commits nothing for these
+      // records and they are redelivered on restart.
+      assertTrue(client.isFailed());
+
+      List<String> leaked = Thread.getAllStackTraces().keySet().stream()
+          .filter(Thread::isAlive)
+          .map(Thread::getName)
+          .filter(name -> name.startsWith("orphaned-record-sink-1-elasticsearch-"))
+          .collect(java.util.stream.Collectors.toList());
+      assertTrue("threads still alive after close: " + leaked, leaked.isEmpty());
     }
   }
 
