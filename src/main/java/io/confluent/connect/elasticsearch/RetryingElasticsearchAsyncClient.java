@@ -42,7 +42,10 @@ import org.slf4j.LoggerFactory;
  * retries.
  *
  * <p>Completion always hops through {@code dispatcherExecutor}, off the transport's
- * I/O reactor threads.
+ * I/O reactor threads: {@code BulkIngester} runs its lock-taking continuation on whichever
+ * thread completes the future, and a reactor thread holds the HTTP connection-pool lock
+ * that the task thread (holding the ingester lock) is waiting for. See the thread-model
+ * note on {@link ElasticsearchClient} for why that executor is a pool of its own.
  *
  * <p>Only {@link #bulk(BulkRequest)} carries this retry-and-dispatch contract. This class
  * extends the full generated {@code ElasticsearchAsyncClient} because {@code BulkIngester}'s
@@ -127,6 +130,10 @@ class RetryingElasticsearchAsyncClient extends ElasticsearchAsyncClient {
       result.completeExceptionally(t);
       return;
     }
+    // handleAsync is load-bearing. whenCompleteAsync would re-propagate the failure into
+    // its stage, so the trailing exceptionally() would fire on every ordinary failure and
+    // defeat the retry; thenApplyAsync runs its failure path on the completing (reactor)
+    // thread, skipping the executor entirely.
     sendFuture.handleAsync((response, failure) -> {
       if (failure == null) {
         result.complete(response);

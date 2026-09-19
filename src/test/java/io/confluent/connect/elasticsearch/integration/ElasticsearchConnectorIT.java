@@ -329,7 +329,8 @@ public class ElasticsearchConnectorIT extends ElasticsearchConnectorBaseIT {
     setupBeforeAll();
   }
 
-  // Disabled backward compatibility tests due to cgroupv2 issues with older ES versions
+  // Disabled: these target Elasticsearch 7.x servers, which the 8.x client cannot talk to
+  // (the connector requires 8.0+ since 16.0), so they can no longer run.
   //  @Test
   public void testBackwardsCompatibilityDataStream() throws Exception {
     testBackwardsCompatibilityDataStreamVersionHelper("7.0.1");

@@ -105,6 +105,8 @@
             <exclusions>
                 <!-- We use the Jackson 2 JacksonJsonpMapper, not the client's opt-in
                      Jackson3JsonpMapper, so exclude the unused tools.jackson lineage. -->
+                <!-- Do NOT exclude io.opentelemetry:opentelemetry-api: the transport loads it
+                     unconditionally at construction; excluding it fails every task at start. -->
                 <exclusion>
                     <groupId>tools.jackson.core</groupId>
                     <artifactId>jackson-databind</artifactId>
