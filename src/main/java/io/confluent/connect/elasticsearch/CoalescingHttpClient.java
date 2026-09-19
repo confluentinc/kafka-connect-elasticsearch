@@ -37,6 +37,12 @@ import org.elasticsearch.client.RestClient;
  * {@code RestClientHttpClient} writes each buffer as its own HTTP chunk, TLS record and syscall
  * (thousands per bulk). That pinned the I/O reactor threads at ~2.5 cores and halved throughput
  * against the High Level REST Client. Merging the body into one buffer restores the old framing.
+ *
+ * <p>This is the only connector-controllable seam where the body is still an
+ * {@code Iterable<ByteBuffer>}; {@code RestClientHttpClient} wraps it in the chunk-per-buffer
+ * entity one call later. One buffer yields ~20 chunks per bulk (HLRC parity, still chunked
+ * transfer encoding) at the cost of one extra body copy on the calling thread. Reported
+ * upstream as elastic/elasticsearch-java#1339; delete this class once that fix ships.
  */
 final class CoalescingHttpClient implements TransportHttpClient {
 
@@ -53,6 +59,10 @@ final class CoalescingHttpClient implements TransportHttpClient {
     return new Transport(new CoalescingHttpClient(new RestClientHttpClient(restClient)), mapper);
   }
 
+  /**
+   * {@code RestClientTransport} hard-wires its own HTTP client, so the wrapped one is
+   * installed through the base class instead.
+   */
   static final class Transport extends ElasticsearchTransportBase {
     Transport(TransportHttpClient httpClient, JsonpMapper mapper) {
       super(httpClient, null, mapper);
