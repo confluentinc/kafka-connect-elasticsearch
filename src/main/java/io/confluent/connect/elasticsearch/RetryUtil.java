@@ -64,6 +64,7 @@ public class RetryUtil {
       return initialRetryBackoffMs;
     }
     long maxRetryTime = computeRetryWaitTimeInMillis(retryAttempts, initialRetryBackoffMs);
+    // retry.backoff.ms=0 is a legal setting; nextLong(0, 0) would throw, so retry at once.
     if (maxRetryTime <= 0) {
       return 0;
     }
