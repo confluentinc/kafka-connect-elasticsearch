@@ -436,7 +436,7 @@ public class ElasticsearchClientTest extends ElasticsearchClientTestBase {
     config = new ElasticsearchSinkConnectorConfig(props);
     converter = new DataConverter(config);
 
-    // mock bulk processor to throw errors
+    // Real client; the network fault below makes every bulk request time out
     ElasticsearchClient client = new ElasticsearchClient(config, null, () -> offsetTracker.updateOffsets(), 1, "elasticsearch-sink");
     client.createIndexOrDataStream(index);
 
