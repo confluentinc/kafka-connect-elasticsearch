@@ -268,10 +268,10 @@ public class ElasticsearchClient {
     try {
       esVersionNumber = esClient.info().version().number();
     } catch (Exception e) {
-      // Same error messages as from validating the connection for IOException.
-      // Insufficient privileges to validate the version number if caught
-      // ElasticsearchException.
-      log.warn("Failed to get ES server version", e);
+      log.warn("Could not read the Elasticsearch server version; it cannot be checked against"
+          + " the minimum supported version {}. Earlier releases are unsupported and may fail"
+          + " or misbehave; confirm the cluster version manually. Reading it requires the"
+          + " 'monitor' cluster privilege.", Validator.MINIMUM_SUPPORTED_ES_VERSION, e);
     }
     return esVersionNumber;
   }

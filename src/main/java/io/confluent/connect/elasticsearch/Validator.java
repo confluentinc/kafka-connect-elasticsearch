@@ -76,8 +76,9 @@ public class Validator {
 
   private static final Logger log = LoggerFactory.getLogger(Validator.class);
 
-  // The 8.x Java API Client cannot talk to Elasticsearch 7.x and earlier servers.
-  private static final String MINIMUM_SUPPORTED_ES_VERSION = "8.0.0";
+  // Elasticsearch 7.x and earlier are unsupported: the 8.x Java API Client is not tested
+  // against them, and the 15.x connector line remains available for those servers.
+  static final String MINIMUM_SUPPORTED_ES_VERSION = "8.0.0";
 
   public static final String EXTERNAL_RESOURCE_CONFIG_TOGETHER_ERROR =
           String.format("Invalid configuration:"
@@ -473,9 +474,12 @@ public class Validator {
     try {
       esVersionNumber = client.info().version().number();
     } catch (IOException | ElasticsearchException e) {
-      // Same error messages as from validating the connection for IOException.
-      // Insufficient privileges to validate the version number if caught
-      // ElasticsearchException.
+      // Not blocking: an IOException was already reported by validateConnection, and a 403
+      // means the principal lacks the 'monitor' cluster privilege.
+      log.warn("Could not read the Elasticsearch server version during validation; it cannot"
+          + " be checked against the minimum supported version {}. Earlier releases are"
+          + " unsupported and may fail or misbehave. Reading it requires the 'monitor' cluster"
+          + " privilege.", MINIMUM_SUPPORTED_ES_VERSION, e);
       return;
     }
     if (compareVersions(esVersionNumber, MINIMUM_SUPPORTED_ES_VERSION) < 0) {
