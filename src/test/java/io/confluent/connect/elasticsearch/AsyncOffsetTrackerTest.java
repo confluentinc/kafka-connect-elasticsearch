@@ -196,6 +196,22 @@ public class AsyncOffsetTrackerTest {
     assertThat(offsetTracker.offsets(frameworkOffsets(tp, 10)).get(tp).offset()).isEqualTo(10);
   }
 
+  // Records dropped inside put() (null values, DLQ'd conversions) are marked processed without
+  // any bulk completing afterwards, so the commit must not depend on updateOffsets() having run.
+  @Test
+  public void testTrailingInPutDropsCommitWithoutBulkCallback() {
+    AsyncOffsetTracker offsetTracker = new AsyncOffsetTracker(context);
+    TopicPartition tp = new TopicPartition("t1", 0);
+    when(context.assignment()).thenReturn(Collections.singleton(tp));
+
+    offsetTracker.addPendingRecord(sinkRecord(tp, 0)).markProcessed();
+    offsetTracker.updateOffsets();
+    offsetTracker.addPendingRecord(sinkRecord(tp, 1)).markProcessed();
+    offsetTracker.addPendingRecord(sinkRecord(tp, 2)).markProcessed();
+
+    assertThat(offsetTracker.offsets(frameworkOffsets(tp, 3)).get(tp).offset()).isEqualTo(3);
+  }
+
   // A record still in flight pins the commit at its own offset even when later records are
   // already processed, so a restart redelivers it and nothing below it is redelivered.
   @Test
