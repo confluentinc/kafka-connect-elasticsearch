@@ -26,6 +26,13 @@ import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
 import org.apache.kafka.connect.errors.DataException;
 
+/**
+ * Infers an Elasticsearch mapping from a Connect schema. Built as a Jackson tree rather than
+ * with the client's typed {@code TypeMapping}/{@code Property} builders: the inference
+ * recurses over an arbitrary schema, the output must stay byte-compatible with 15.x
+ * ({@code text} plus a {@code keyword}/{@code ignore_above} sub-field, per-type
+ * {@code null_value}), and the JSON is handed to {@code putMapping(...).withJson(...)} anyway.
+ */
 public class Mapping {
 
   // Elasticsearch types

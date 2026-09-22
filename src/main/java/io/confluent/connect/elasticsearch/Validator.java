@@ -652,6 +652,9 @@ public class Validator {
           )
           .setHttpClientConfigCallback(configCallbackHandler)
           .build();
+      // Plain transport and client on purpose: validation only pings, reads the version and
+      // checks resource existence. The task-side coalescing transport and retrying client
+      // are bulk-only and must not be wired in here.
       transport = new RestClientTransport(restClient, new JacksonJsonpMapper());
       return new ElasticsearchClient(transport);
     } catch (RuntimeException | Error e) {
