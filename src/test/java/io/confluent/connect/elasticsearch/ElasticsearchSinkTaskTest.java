@@ -350,7 +350,7 @@ public class ElasticsearchSinkTaskTest {
   @Test
   public void testFlush() {
     setUpTask();
-    task.preCommit(null);
+    task.preCommit(Collections.emptyMap());
     verify(client, times(1)).flush();
   }
 
