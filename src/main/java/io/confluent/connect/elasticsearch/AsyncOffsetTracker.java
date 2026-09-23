@@ -30,15 +30,13 @@ import org.apache.kafka.connect.sink.SinkTaskContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import static java.util.stream.Collectors.toMap;
-
 /**
  * It's an asynchronous implementation of <code>OffsetTracker</code>
  *
  * <p>Since ElasticsearchClient can potentially process multiple batches asynchronously for the same
  * partition, if we don't want to wait for all in-flight batches at the end of the put call
  * (or flush/preCommit) we need to keep track of what's the highest offset that is safe to commit.
- * For now, we do that at the individual record level because batching is handled by BulkProcessor,
+ * For now, we do that at the individual record level because batching is handled by BulkIngester,
  * and we don't have control over grouping/ordering.
  */
 class AsyncOffsetTracker implements OffsetTracker {
@@ -164,18 +162,42 @@ class AsyncOffsetTracker implements OffsetTracker {
   }
 
   /**
-   * @param currentOffsets current offsets from a task
-   * @return offsets to commit
+   * Computes the offset to commit for every partition the framework asks about.
+   *
+   * <p>Records that never reach {@code put()} (dropped by an SMT, or failed conversion under
+   * {@code errors.tolerance=all}) are still consumed by the framework and covered by
+   * {@code currentOffsets}, but this tracker never sees them. Every record that does reach
+   * {@code put()} is registered here on receipt and leaves only through
+   * {@link OffsetState#markProcessed()}, so the only thing that can hold a commit back is a
+   * received record that is not yet processed. The commit for a partition is therefore the
+   * lowest such offset, or the framework's own position when there is none: everything below
+   * it was either processed or never handed to this task. Committing only what was processed
+   * would freeze the offset on a partition where nothing reaches {@code put()}.
+   *
+   * @param currentOffsets the framework's consumed position per partition
+   * @return offsets to commit, one entry per requested partition
    */
   @Override
   public synchronized Map<TopicPartition, OffsetAndMetadata> offsets(
       Map<TopicPartition, OffsetAndMetadata> currentOffsets
   ) {
-    return maxOffsetByPartition.entrySet().stream()
-        .collect(toMap(
-            Map.Entry::getKey,
-            // The offsets you commit are the offsets of the messages you want to read next
-            // (not the offsets of the messages you did read last)
-            e -> new OffsetAndMetadata(e.getValue() + 1)));
+    Map<TopicPartition, OffsetAndMetadata> result = new HashMap<>();
+    currentOffsets.forEach((tp, consumed) -> {
+      // Never exceed the framework's position: the runtime discards a higher offset as
+      // "not yet consumed".
+      long frontier = consumed.offset();
+      Map<Long, OffsetState> tracked = offsetsByPartition.get(tp);
+      if (tracked != null) {
+        for (OffsetState state : tracked.values()) {
+          if (!state.isProcessed()) {
+            // The offsets you commit are the offsets of the messages you want to read next,
+            // so an unprocessed record pins the commit at its own offset.
+            frontier = Math.min(frontier, state.offset());
+          }
+        }
+      }
+      result.put(tp, new OffsetAndMetadata(frontier));
+    });
+    return result;
   }
 }
