@@ -28,6 +28,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.github.tomakehurst.wiremock.client.ResponseDefinitionBuilder;
 import com.github.tomakehurst.wiremock.client.WireMock;
 import com.github.tomakehurst.wiremock.junit.WireMockRule;
+import com.github.tomakehurst.wiremock.stubbing.Scenario;
 import io.confluent.connect.elasticsearch.ElasticsearchSinkTaskConfig;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
@@ -50,6 +51,7 @@ import org.testcontainers.shaded.com.google.common.collect.ImmutableSet;
 import io.confluent.common.utils.IntegrationTest;
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnector;
 import io.confluent.connect.elasticsearch.ElasticsearchSinkTask;
+import io.confluent.connect.elasticsearch.helper.ElasticSearchMockUtil;
 
 
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
@@ -57,6 +59,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.any;
 import static com.github.tomakehurst.wiremock.client.WireMock.anyUrl;
 import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
+import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.stubFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.options;
@@ -71,7 +74,9 @@ import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfi
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.WRITE_METHOD_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.WriteMethod;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.*;
+import static io.confluent.connect.elasticsearch.helper.ElasticSearchMockUtil.addMinimalHeaders;
 import static io.confluent.connect.elasticsearch.helper.ElasticSearchMockUtil.basicEmptyOk;
+import static io.confluent.connect.elasticsearch.helper.ElasticSearchMockUtil.minimumResponseJson;
 import static io.confluent.connect.elasticsearch.integration.ElasticsearchConnectorNetworkIT.errorBulkResponse;
 import static java.util.stream.Collectors.toList;
 import static org.apache.kafka.connect.json.JsonConverterConfig.SCHEMAS_ENABLE_CONFIG;
@@ -102,7 +107,8 @@ public class ElasticsearchSinkTaskIT {
   @Rule
   public WireMockRule wireMockRule = new WireMockRule(options()
           .dynamicPort()
-          .extensions(BlockingTransformer.class.getName()), false);
+          .extensions(BlockingTransformer.class.getName())
+          .extensions(ElasticSearchMockUtil.PRODUCT_HEADER_TRANSFORMER), false);
 
   protected static final String TOPIC = "test";
   protected static final int TASKS_MAX = 1;
@@ -113,7 +119,8 @@ public class ElasticsearchSinkTaskIT {
     this.synchronousFlush = synchronousFlush;
   }
 
-  // Convenience drop-in replacement for static import of WireMock.ok()
+  // Convenience drop-in replacement for static import of WireMock.ok(): responses to
+  // version/ping calls need the standard version-info body, not just a 200.
   private static ResponseDefinitionBuilder ok() {
     return basicEmptyOk();
   }
@@ -150,16 +157,21 @@ public class ElasticsearchSinkTaskIT {
             sinkRecord(tp, 1));
     task.put(records);
 
-    // Nothing should be committed at this point
     Map<TopicPartition, OffsetAndMetadata> currentOffsets =
             ImmutableMap.of(tp, new OffsetAndMetadata(2));
-    assertThat(task.preCommit(currentOffsets)).isEmpty();
+    if (synchronousFlush) {
+      // The blocking flush waits out the failed request and then commits nothing.
+      assertThat(task.preCommit(currentOffsets)).isEmpty();
+    } else {
+      // Both records are still in flight, so the commit is pinned at the first of them.
+      assertThat(task.preCommit(currentOffsets)).containsEntry(tp, new OffsetAndMetadata(0));
+    }
   }
 
   @Test
   public void testIndividualFailure() throws JsonProcessingException {
     wireMockRule.stubFor(post(urlPathEqualTo("/_bulk"))
-            .willReturn(okJson(ElasticsearchConnectorNetworkIT.errorBulkResponse(3,
+            .willReturn(okJson(ElasticsearchConnectorNetworkIT.errorBulkResponse(3, 400,
                     "strict_dynamic_mapping_exception", 1))));
 
     Map<String, String> props = createProps();
@@ -184,21 +196,24 @@ public class ElasticsearchSinkTaskIT {
             .collect(toList());
     task.put(records);
 
-    // All is safe to commit
-    Map<TopicPartition, OffsetAndMetadata> currentOffsets =
+    // All is safe to commit. Bulk requests execute asynchronously, so wait for the
+    // responses to be processed.
+    final Map<TopicPartition, OffsetAndMetadata> allOffsets =
             ImmutableMap.of(tp, new OffsetAndMetadata(6));
-    assertThat(task.preCommit(currentOffsets))
-            .isEqualTo(currentOffsets);
+    await().untilAsserted(() -> assertThat(task.preCommit(allOffsets))
+            .isEqualTo(allOffsets));
 
-    // Now check that we actually fail and offsets are not past the failed record
+    // Now check that we actually fail and offsets are not past the failed record.
+    // The failure is detected asynchronously and thrown from a subsequent put call.
     props.put(BEHAVIOR_ON_MALFORMED_DOCS_CONFIG, "fail");
     task.initialize(context);
     task.start(props);
 
-    assertThatThrownBy(() -> task.put(records))
+    await().untilAsserted(() -> assertThatThrownBy(() -> task.put(records))
             .isInstanceOf(ConnectException.class)
-            .hasMessageContaining("Indexing record failed");
-    currentOffsets = ImmutableMap.of(tp, new OffsetAndMetadata(0));
+            .hasMessageContaining("Indexing record failed"));
+    Map<TopicPartition, OffsetAndMetadata> currentOffsets =
+            ImmutableMap.of(tp, new OffsetAndMetadata(0));
     assertThat(getOffsetOrZero(task.preCommit(currentOffsets), tp))
             .isLessThanOrEqualTo(1);
   }
@@ -238,11 +253,12 @@ public class ElasticsearchSinkTaskIT {
             sinkRecord(tp, 2));
     task.put(records);
 
-    // All is safe to commit
-    Map<TopicPartition, OffsetAndMetadata> currentOffsets =
+    // All is safe to commit. Bulk requests execute asynchronously, so wait for the
+    // responses to be processed.
+    final Map<TopicPartition, OffsetAndMetadata> allOffsets =
             ImmutableMap.of(tp, new OffsetAndMetadata(3));
-    assertThat(task.preCommit(currentOffsets))
-            .isEqualTo(currentOffsets);
+    await().untilAsserted(() -> assertThat(task.preCommit(allOffsets))
+            .isEqualTo(allOffsets));
 
     // Now check that we actually fail and offsets are not past the failed record
     props.put(DROP_INVALID_MESSAGE_CONFIG, "false");
@@ -257,8 +273,9 @@ public class ElasticsearchSinkTaskIT {
             .isInstanceOf(DataException.class)
             .hasMessageContaining("Can't convert");
 
-    currentOffsets = ImmutableMap.of(tp, new OffsetAndMetadata(0));
-    assertThat(task.preCommit(currentOffsets).get(tp).offset())
+    Map<TopicPartition, OffsetAndMetadata> currentOffsets =
+            ImmutableMap.of(tp, new OffsetAndMetadata(0));
+    assertThat(getOffsetOrZero(task.preCommit(currentOffsets), tp))
             .isLessThanOrEqualTo(1);
   }
 
@@ -290,11 +307,12 @@ public class ElasticsearchSinkTaskIT {
             sinkRecord(tp, 2));
     task.put(records);
 
-    // All is safe to commit
-    Map<TopicPartition, OffsetAndMetadata> currentOffsets =
+    // All is safe to commit. Bulk requests execute asynchronously, so wait for the
+    // responses to be processed.
+    final Map<TopicPartition, OffsetAndMetadata> allOffsets =
             ImmutableMap.of(tp, new OffsetAndMetadata(3));
-    assertThat(task.preCommit(currentOffsets))
-            .isEqualTo(currentOffsets);
+    await().untilAsserted(() -> assertThat(task.preCommit(allOffsets))
+            .isEqualTo(allOffsets));
 
     // Now check that we actually fail and offsets are not past the failed record
     props.put(BEHAVIOR_ON_NULL_VALUES_CONFIG, "fail");
@@ -307,8 +325,9 @@ public class ElasticsearchSinkTaskIT {
     assertThatThrownBy(() -> task.put(records))
             .isInstanceOf(DataException.class)
             .hasMessageContaining("Can't convert");
-    currentOffsets = ImmutableMap.of(tp, new OffsetAndMetadata(0));
-    assertThat(task.preCommit(currentOffsets).get(tp).offset())
+    Map<TopicPartition, OffsetAndMetadata> currentOffsets =
+            ImmutableMap.of(tp, new OffsetAndMetadata(0));
+    assertThat(getOffsetOrZero(task.preCommit(currentOffsets), tp))
             .isLessThanOrEqualTo(1);
   }
 
@@ -324,7 +343,7 @@ public class ElasticsearchSinkTaskIT {
 
     wireMockRule.stubFor(post(urlPathEqualTo("/_bulk"))
             .withRequestBody(WireMock.containing("{\"doc_num\":1}"))
-            .willReturn(aResponse().withFixedDelay(60_000)));
+            .willReturn(addMinimalHeaders(aResponse().withFixedDelay(60_000))));
 
     Map<String, String> props = createProps();
     props.put(READ_TIMEOUT_MS_CONFIG, "1000");
@@ -426,7 +445,7 @@ public class ElasticsearchSinkTaskIT {
 
     wireMockRule.stubFor(post(urlPathEqualTo("/_bulk"))
             .withRequestBody(WireMock.containing("{\"doc_num\":1}"))
-            .willReturn(aResponse().withFixedDelay(60_000)));
+            .willReturn(addMinimalHeaders(aResponse().withFixedDelay(60_000))));
 
     Map<String, String> props = createProps();
     props.put(READ_TIMEOUT_MS_CONFIG, "1000");
@@ -461,9 +480,52 @@ public class ElasticsearchSinkTaskIT {
     task.close(ImmutableList.of(tp1));
     task.open(ImmutableList.of(new TopicPartition(TOPIC, 2)));
     when(context.assignment()).thenReturn(ImmutableSet.of(tp2));
+    // The runtime drops a closed partition from the offsets it passes to preCommit.
+    Map<TopicPartition, OffsetAndMetadata> remainingOffsets =
+            ImmutableMap.of(tp2, new OffsetAndMetadata(1));
     await().untilAsserted(() ->
-            assertThat(task.preCommit(currentOffsets))
+            assertThat(task.preCommit(remainingOffsets))
                     .isEqualTo(ImmutableMap.of(tp2, new OffsetAndMetadata(1))));
+  }
+
+  // One bulk fails with a 500, then the server recovers. Every buffer trigger is dead
+  // (the 1-op batch never fills, linger is 10 minutes away, nothing flushes again), so
+  // the prompt second request on the wire can only come from the retry scheduler.
+  @Test(timeout = 60_000)
+  public void testFailedBulkIsResentByRetrySchedulerAlone() throws Exception {
+    wireMockRule.stubFor(post(urlPathEqualTo("/_bulk"))
+            .inScenario("transportRetryFlush")
+            .whenScenarioStateIs(Scenario.STARTED)
+            .willReturn(addMinimalHeaders(
+                aResponse().withStatus(500).withBody(minimumResponseJson())))
+            .willSetStateTo("recovered"));
+    wireMockRule.stubFor(post(urlPathEqualTo("/_bulk"))
+            .inScenario("transportRetryFlush")
+            .whenScenarioStateIs("recovered")
+            .willReturn(okJson(ElasticsearchConnectorNetworkIT.errorBulkResponse())));
+
+    Map<String, String> props = createProps();
+    props.put(READ_TIMEOUT_MS_CONFIG, "1000");
+    props.put(MAX_RETRIES_CONFIG, "2");
+    props.put(RETRY_BACKOFF_MS_CONFIG, "10");
+    props.put(BATCH_SIZE_CONFIG, "2");
+    props.put(LINGER_MS_CONFIG, "600000");
+
+    ElasticsearchSinkTask task = new ElasticsearchSinkTask();
+    TopicPartition tp = new TopicPartition(TOPIC, 0);
+    SinkTaskContext context = mock(SinkTaskContext.class);
+    when(context.assignment()).thenReturn(ImmutableSet.of(tp));
+    task.initialize(context);
+    task.start(props);
+    task.open(ImmutableList.of(tp));
+
+    task.put(ImmutableList.of(sinkRecord(tp, 0)));
+    task.preCommit(ImmutableMap.of(tp, new OffsetAndMetadata(1)));
+
+    await().untilAsserted(() ->
+            wireMockRule.verify(2, postRequestedFor(urlPathEqualTo("/_bulk"))));
+
+    task.stop();
   }
 
   private SinkRecord sinkRecord(TopicPartition tp, long offset) {
