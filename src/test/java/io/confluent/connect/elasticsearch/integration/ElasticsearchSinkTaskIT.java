@@ -157,10 +157,15 @@ public class ElasticsearchSinkTaskIT {
             sinkRecord(tp, 1));
     task.put(records);
 
-    // Nothing should be committed at this point
     Map<TopicPartition, OffsetAndMetadata> currentOffsets =
             ImmutableMap.of(tp, new OffsetAndMetadata(2));
-    assertThat(task.preCommit(currentOffsets)).isEmpty();
+    if (synchronousFlush) {
+      // The blocking flush waits out the failed request and then commits nothing.
+      assertThat(task.preCommit(currentOffsets)).isEmpty();
+    } else {
+      // Both records are still in flight, so the commit is pinned at the first of them.
+      assertThat(task.preCommit(currentOffsets)).containsEntry(tp, new OffsetAndMetadata(0));
+    }
   }
 
   @Test
@@ -475,8 +480,11 @@ public class ElasticsearchSinkTaskIT {
     task.close(ImmutableList.of(tp1));
     task.open(ImmutableList.of(new TopicPartition(TOPIC, 2)));
     when(context.assignment()).thenReturn(ImmutableSet.of(tp2));
+    // The runtime drops a closed partition from the offsets it passes to preCommit.
+    Map<TopicPartition, OffsetAndMetadata> remainingOffsets =
+            ImmutableMap.of(tp2, new OffsetAndMetadata(1));
     await().untilAsserted(() ->
-            assertThat(task.preCommit(currentOffsets))
+            assertThat(task.preCommit(remainingOffsets))
                     .isEqualTo(ImmutableMap.of(tp2, new OffsetAndMetadata(1))));
   }
 
