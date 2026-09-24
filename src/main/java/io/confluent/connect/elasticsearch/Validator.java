@@ -639,7 +639,7 @@ public class Validator {
             .builder(
                 config.connectionUrls()
                     .stream()
-                    .map(HttpHost::create)
+                    .map(ConfigCallbackHandler::createRedactedHttpHost)
                     .collect(Collectors.toList())
                     .toArray(new HttpHost[config.connectionUrls().size()])
             )
