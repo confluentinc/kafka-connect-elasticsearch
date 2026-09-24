@@ -307,6 +307,10 @@ public class ElasticsearchSinkTask extends SinkTask {
     if (bulkOperation != null) {
       logTrace("Adding {} to bulk ingester.", sinkRecord);
       client.index(sinkRecord, bulkOperation, offsetState);
+    } else {
+      // Nothing to index: a tombstone with a null key has no document to delete. Mark it
+      // processed (idempotent after a dropped invalid record) so the commit can move past it.
+      offsetState.markProcessed();
     }
   }
 

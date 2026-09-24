@@ -23,6 +23,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 
+import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.record.TimestampType;
 import org.apache.kafka.connect.data.Schema;
@@ -519,6 +520,25 @@ public class ElasticsearchSinkTaskTest {
   public void testStopBeforeStartDoesNotThrow() {
     task = new ElasticsearchSinkTask();
     task.stop();
+  }
+
+  // behavior.on.null.values=delete drops a null-key tombstone without indexing it, so the task
+  // must still mark it processed or the async tracker pins the commit at its offset forever.
+  @Test
+  public void testNullKeyTombstoneDoesNotPinCommit() {
+    props.put(BEHAVIOR_ON_NULL_VALUES_CONFIG, BehaviorOnNullValues.DELETE.name());
+    props.put(IGNORE_KEY_CONFIG, "false");
+    setUpTask();
+
+    TopicPartition tp = new TopicPartition(TOPIC, 1);
+    when(assignment.contains(eq(tp))).thenReturn(true);
+    SinkRecord tombstone = record(true, true, 0);
+    task.put(Collections.singletonList(tombstone));
+    verify(client, never()).index(eq(tombstone), any(), any());
+
+    Map<TopicPartition, OffsetAndMetadata> offsets =
+        task.preCommit(Collections.singletonMap(tp, new OffsetAndMetadata(1)));
+    assertEquals(1, offsets.get(tp).offset());
   }
 
   private String dataStreamName(String type, String dataset, String namespace) {
