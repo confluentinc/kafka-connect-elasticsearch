@@ -15,12 +15,26 @@
 
 package io.confluent.connect.elasticsearch;
 
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_API_KEY_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
+import com.sun.net.httpserver.HttpServer;
+import java.net.InetSocketAddress;
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.CopyOnWriteArrayList;
+import org.apache.http.HttpHeaders;
 import org.apache.http.HttpHost;
+import org.elasticsearch.client.Request;
+import org.elasticsearch.client.RestClient;
 import org.junit.Test;
 
 public class ConfigCallbackHandlerTest {
@@ -122,5 +136,64 @@ public class ConfigCallbackHandlerTest {
         "host:9243",
         ConfigCallbackHandler.redactUserInfo("https:/user:password@host:9243")
     );
+  }
+
+  @Test
+  public void encodedApiKeyIsSentAsApiKeyAuthorizationHeader() throws Exception {
+    String encoded = base64("id1:secret1");
+    assertEquals(
+        Collections.singletonList("ApiKey " + encoded),
+        authorizationHeadersSent(Collections.singletonMap(CONNECTION_API_KEY_CONFIG, encoded)));
+  }
+
+  @Test
+  public void rawIdAndSecretApiKeyIsBase64EncodedIntoHeader() throws Exception {
+    assertEquals(
+        Collections.singletonList("ApiKey " + base64("id1:secret1")),
+        authorizationHeadersSent(
+            Collections.singletonMap(CONNECTION_API_KEY_CONFIG, "  id1:secret1  ")));
+  }
+
+  @Test
+  public void noAuthorizationHeaderWithoutApiKey() throws Exception {
+    assertEquals(Collections.emptyList(), authorizationHeadersSent(Collections.emptyMap()));
+  }
+
+  // Sends one request through a RestClient built exactly as the connector builds it, against a
+  // local server, and returns the Authorization header values the server received.
+  private static List<String> authorizationHeadersSent(Map<String, String> extraProps)
+      throws Exception {
+    List<String> received = new CopyOnWriteArrayList<>();
+    HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+    server.createContext("/", exchange -> {
+      List<String> auth = exchange.getRequestHeaders().get(HttpHeaders.AUTHORIZATION);
+      if (auth != null) {
+        received.addAll(auth);
+      }
+      byte[] body = "{}".getBytes(StandardCharsets.UTF_8);
+      exchange.getResponseHeaders().add("Content-Type", "application/json");
+      exchange.sendResponseHeaders(200, body.length);
+      exchange.getResponseBody().write(body);
+      exchange.close();
+    });
+    server.start();
+    try {
+      String url = "http://127.0.0.1:" + server.getAddress().getPort();
+      Map<String, String> props = new HashMap<>(extraProps);
+      props.put(CONNECTION_URL_CONFIG, url);
+      ElasticsearchSinkConnectorConfig config = new ElasticsearchSinkConnectorConfig(props);
+      try (RestClient client = RestClient.builder(HttpHost.create(url))
+          .setHttpClientConfigCallback(new ConfigCallbackHandler(config))
+          .build()) {
+        client.performRequest(new Request("GET", "/"));
+      }
+      return received;
+    } finally {
+      server.stop(0);
+    }
+  }
+
+  private static String base64(String s) {
+    return Base64.getEncoder().encodeToString(s.getBytes(StandardCharsets.UTF_8));
   }
 }

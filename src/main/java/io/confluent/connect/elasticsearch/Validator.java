@@ -30,6 +30,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
@@ -43,6 +45,7 @@ import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.Secur
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BATCH_SIZE_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BEHAVIOR_ON_NULL_VALUES_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BehaviorOnNullValues;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_API_KEY_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_PASSWORD_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_USERNAME_CONFIG;
@@ -123,6 +126,26 @@ public class Validator {
           BEHAVIOR_ON_NULL_VALUES_CONFIG, BehaviorOnNullValues.DELETE
   );
 
+  public static final String API_KEY_WITH_BASIC_AUTH_ERROR = String.format(
+      "'%s' cannot be combined with '%s' or '%s'. Configure only one authentication method.",
+      CONNECTION_API_KEY_CONFIG, CONNECTION_USERNAME_CONFIG, CONNECTION_PASSWORD_CONFIG);
+
+  public static final String API_KEY_WITH_KERBEROS_ERROR = String.format(
+      "'%s' cannot be combined with Kerberos (%s, %s). Configure only one authentication method.",
+      CONNECTION_API_KEY_CONFIG, KERBEROS_PRINCIPAL_CONFIG, KERBEROS_KEYTAB_PATH_CONFIG);
+
+  public static final String API_KEY_BLANK_ERROR =
+      String.format("'%s' must not be blank.", CONNECTION_API_KEY_CONFIG);
+
+  public static final String API_KEY_PREFIX_ERROR = String.format(
+      "'%s' must not include the 'ApiKey ' prefix; set only the key itself.",
+      CONNECTION_API_KEY_CONFIG);
+
+  public static final String API_KEY_MALFORMED_ERROR = String.format(
+      "'%s' is not a valid Elasticsearch API key. Use the Base64-encoded key (the 'encoded' "
+          + "value returned when the key is created) or the 'id:api_key' pair.",
+      CONNECTION_API_KEY_CONFIG);
+
   private ElasticsearchSinkConnectorConfig config;
   private Map<String, ConfigValue> values;
   private List<ConfigValue> validations;
@@ -153,6 +176,7 @@ public class Validator {
     }
 
     validateCredentials();
+    validateApiKey();
     validateResourceConfigs();
     validateDataStreamConfigs();
     validateDataStreamCompatibility();
@@ -197,6 +221,59 @@ public class Validator {
     }
 
     return new Config(validations);
+  }
+
+  private void validateApiKey() {
+    if (!config.isApiKeyAuthConfigured()) {
+      return;
+    }
+
+    if (config.username() != null || config.password() != null) {
+      addErrorMessage(CONNECTION_API_KEY_CONFIG, API_KEY_WITH_BASIC_AUTH_ERROR);
+      if (config.username() != null) {
+        addErrorMessage(CONNECTION_USERNAME_CONFIG, API_KEY_WITH_BASIC_AUTH_ERROR);
+      }
+      if (config.password() != null) {
+        addErrorMessage(CONNECTION_PASSWORD_CONFIG, API_KEY_WITH_BASIC_AUTH_ERROR);
+      }
+    }
+
+    if (config.isKerberosEnabled()) {
+      addErrorMessage(CONNECTION_API_KEY_CONFIG, API_KEY_WITH_KERBEROS_ERROR);
+      if (config.kerberosUserPrincipal() != null) {
+        addErrorMessage(KERBEROS_PRINCIPAL_CONFIG, API_KEY_WITH_KERBEROS_ERROR);
+      }
+      if (config.keytabPath() != null) {
+        addErrorMessage(KERBEROS_KEYTAB_PATH_CONFIG, API_KEY_WITH_KERBEROS_ERROR);
+      }
+    }
+
+    String formatError = apiKeyFormatError(config.apiKey().value().trim());
+    if (formatError != null) {
+      addErrorMessage(CONNECTION_API_KEY_CONFIG, formatError);
+    }
+  }
+
+  // Error messages must never echo the key itself.
+  static String apiKeyFormatError(String key) {
+    if (key.isEmpty()) {
+      return API_KEY_BLANK_ERROR;
+    }
+    if (key.regionMatches(true, 0, "ApiKey ", 0, "ApiKey ".length())) {
+      return API_KEY_PREFIX_ERROR;
+    }
+    String idAndSecret;
+    if (key.indexOf(':') >= 0) {
+      idAndSecret = key;
+    } else {
+      try {
+        idAndSecret = new String(Base64.getDecoder().decode(key), StandardCharsets.UTF_8);
+      } catch (IllegalArgumentException e) {
+        return API_KEY_MALFORMED_ERROR;
+      }
+    }
+    int colon = idAndSecret.indexOf(':');
+    return colon > 0 && colon < idAndSecret.length() - 1 ? null : API_KEY_MALFORMED_ERROR;
   }
 
   private void validateCredentials() {
@@ -577,6 +654,15 @@ public class Validator {
         );
         addErrorMessage(CONNECTION_USERNAME_CONFIG, errorMessage);
         addErrorMessage(CONNECTION_PASSWORD_CONFIG, errorMessage);
+      }
+
+      if (config.isApiKeyAuthConfigured()) {
+        errorMessage = String.format(
+            "Could not authenticate with the API key. Check the '%s'. %s",
+            CONNECTION_API_KEY_CONFIG,
+            exceptionMessage
+        );
+        addErrorMessage(CONNECTION_API_KEY_CONFIG, errorMessage);
       }
 
       if (config.isSslEnabled()) {

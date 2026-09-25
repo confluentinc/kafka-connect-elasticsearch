@@ -232,6 +232,43 @@ public class ElasticsearchSinkConnectorConfigTest {
     // credential must not appear in it. AbstractConfig logs the dump via getLogger(getClass()), so
     // it is emitted under this config class's own logger. Capture that logger and assert the
     // credential (sanitized at the source before super()) is gone while the host survives.
+    props.put(CONNECTION_URL_CONFIG, "https://user:CANARY_PW@es-host:9243");
+    String dump = configDump(props);
+    assertTrue(dump.contains("ElasticsearchSinkConnectorConfig values"));
+    assertFalse(dump.contains("CANARY_PW"));
+    assertTrue(dump.contains("es-host:9243"));
+  }
+
+  @Test
+  public void shouldHideApiKeyInConfigLog() {
+    props.put(CONNECTION_API_KEY_CONFIG, "CANARY_ID:CANARY_SECRET");
+    String dump = configDump(props);
+    assertTrue(dump.contains(CONNECTION_API_KEY_CONFIG + " = [hidden]"));
+    assertFalse(dump.contains("CANARY_SECRET"));
+  }
+
+  @Test
+  public void shouldPassEncodedApiKeyThroughTrimmed() {
+    props.put(CONNECTION_API_KEY_CONFIG, "  aWQxOnNlY3JldDE=  ");
+    ElasticsearchSinkConnectorConfig config = new ElasticsearchSinkConnectorConfig(props);
+    assertTrue(config.isApiKeyAuthConfigured());
+    assertEquals("aWQxOnNlY3JldDE=", config.encodedApiKey());
+  }
+
+  @Test
+  public void shouldBase64EncodeIdAndSecretApiKey() {
+    props.put(CONNECTION_API_KEY_CONFIG, "id1:secret1");
+    assertEquals("aWQxOnNlY3JldDE=",
+        new ElasticsearchSinkConnectorConfig(props).encodedApiKey());
+  }
+
+  @Test
+  public void shouldNotConfigureApiKeyByDefault() {
+    assertFalse(new ElasticsearchSinkConnectorConfig(props).isApiKeyAuthConfigured());
+  }
+
+  // AbstractConfig logs its value dump via getLogger(getClass()), so capture that logger.
+  private static String configDump(Map<String, String> props) {
     org.apache.log4j.Logger configLogger =
         org.apache.log4j.Logger.getLogger(ElasticsearchSinkConnectorConfig.class.getName());
     Level previousLevel = configLogger.getLevel();
@@ -254,16 +291,12 @@ public class ElasticsearchSinkConnectorConfigTest {
     configLogger.addAppender(appender);
     configLogger.setLevel(Level.INFO);
     try {
-      props.put(CONNECTION_URL_CONFIG, "https://user:CANARY_PW@es-host:9243");
       new ElasticsearchSinkConnectorConfig(props);
     } finally {
       configLogger.removeAppender(appender);
       configLogger.setLevel(previousLevel);
     }
-    String dump = String.join("\n", messages);
-    assertTrue(dump.contains("ElasticsearchSinkConnectorConfig values"));
-    assertFalse(dump.contains("CANARY_PW"));
-    assertTrue(dump.contains("es-host:9243"));
+    return String.join("\n", messages);
   }
 
   @Test(expected = ConfigException.class)

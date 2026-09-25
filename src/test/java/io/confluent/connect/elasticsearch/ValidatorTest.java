@@ -18,6 +18,7 @@ package io.confluent.connect.elasticsearch;
 
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BATCH_SIZE_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BEHAVIOR_ON_NULL_VALUES_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_API_KEY_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_PASSWORD_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_URL_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_USERNAME_CONFIG;
@@ -69,7 +70,10 @@ import co.elastic.clients.util.ObjectBuilder;
 import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.SecurityProtocol;
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
+import java.util.Arrays;
+import java.util.Base64;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.function.Function;
@@ -97,6 +101,10 @@ public class ValidatorTest {
   private static final String ALIAS1 = "alias1";
   private static final String LOGS_TEST_1 = "logs-test-1";
   private static final String VALID_DATASET = "a_valid_dataset";
+
+  private static final String RAW_API_KEY = "VuaCfGcBCdbkQm-e5aOx:ui2lp2axTNmsyakw9tvNnw";
+  private static final String ENCODED_API_KEY =
+      Base64.getEncoder().encodeToString(RAW_API_KEY.getBytes(StandardCharsets.UTF_8));
 
   private InfoResponse mockInfoResponse;
   private Map<String, String> props;
@@ -877,6 +885,103 @@ public class ValidatorTest {
     Config result = validator.validate();
     assertHasErrorMessage(result, CONNECTION_URL_CONFIG, "Could not connect to Elasticsearch.");
     assertHasErrorMessage(result, CONNECTION_USERNAME_CONFIG, "Could not authenticate the user.");
+  }
+
+  // Both key forms Elastic hands out (encoded, and Beats/Logstash id:key) must validate.
+  @Test
+  public void testValidApiKeyForms() {
+    props.put(CONNECTION_API_KEY_CONFIG, ENCODED_API_KEY);
+    assertNoErrors(new Validator(props, () -> mockClient).validate());
+
+    props.put(CONNECTION_API_KEY_CONFIG, RAW_API_KEY);
+    assertNoErrors(new Validator(props, () -> mockClient).validate());
+  }
+
+  @Test
+  public void testApiKeyWithBasicCredentialsFails() {
+    props.put(CONNECTION_API_KEY_CONFIG, ENCODED_API_KEY);
+    props.put(CONNECTION_USERNAME_CONFIG, "username");
+    props.put(CONNECTION_PASSWORD_CONFIG, "password");
+
+    Config result = new Validator(props, () -> mockClient).validate();
+    assertHasErrorMessage(result, CONNECTION_API_KEY_CONFIG, API_KEY_WITH_BASIC_AUTH_ERROR);
+    assertHasErrorMessage(result, CONNECTION_USERNAME_CONFIG, API_KEY_WITH_BASIC_AUTH_ERROR);
+    assertHasErrorMessage(result, CONNECTION_PASSWORD_CONFIG, API_KEY_WITH_BASIC_AUTH_ERROR);
+  }
+
+  // A lone username alongside a key is ambiguous, so it is rejected as mixing auth methods.
+  @Test
+  public void testApiKeyWithOnlyUsernameFails() {
+    props.put(CONNECTION_API_KEY_CONFIG, ENCODED_API_KEY);
+    props.put(CONNECTION_USERNAME_CONFIG, "username");
+
+    Config result = new Validator(props, () -> mockClient).validate();
+    assertHasErrorMessage(result, CONNECTION_API_KEY_CONFIG, API_KEY_WITH_BASIC_AUTH_ERROR);
+  }
+
+  @Test
+  public void testApiKeyWithKerberosFails() throws IOException {
+    Path keytab = Files.createTempFile("es", ".keytab");
+    try {
+      props.put(CONNECTION_API_KEY_CONFIG, ENCODED_API_KEY);
+      props.put(KERBEROS_PRINCIPAL_CONFIG, "principal");
+      props.put(KERBEROS_KEYTAB_PATH_CONFIG, keytab.toString());
+
+      Config result = new Validator(props, () -> mockClient).validate();
+      assertHasErrorMessage(result, CONNECTION_API_KEY_CONFIG, API_KEY_WITH_KERBEROS_ERROR);
+      assertHasErrorMessage(result, KERBEROS_PRINCIPAL_CONFIG, API_KEY_WITH_KERBEROS_ERROR);
+      assertHasErrorMessage(result, KERBEROS_KEYTAB_PATH_CONFIG, API_KEY_WITH_KERBEROS_ERROR);
+    } finally {
+      keytab.toFile().delete();
+    }
+  }
+
+  @Test
+  public void testBlankApiKeyFails() {
+    props.put(CONNECTION_API_KEY_CONFIG, "   ");
+    Config result = new Validator(props, () -> mockClient).validate();
+    assertHasErrorMessage(result, CONNECTION_API_KEY_CONFIG, API_KEY_BLANK_ERROR);
+  }
+
+  // Users often paste the whole header value; the connector adds the prefix itself.
+  @Test
+  public void testApiKeyWithHeaderPrefixFails() {
+    props.put(CONNECTION_API_KEY_CONFIG, "ApiKey " + ENCODED_API_KEY);
+    Config result = new Validator(props, () -> mockClient).validate();
+    assertHasErrorMessage(result, CONNECTION_API_KEY_CONFIG, API_KEY_PREFIX_ERROR);
+    assertKeyNotEchoed(result, ENCODED_API_KEY);
+  }
+
+  @Test
+  public void testMalformedApiKeysFail() {
+    String notBase64 = "CANARY*notbase64!";
+    String base64WithoutColon =
+        Base64.getEncoder().encodeToString("CANARYNOCOLON".getBytes(StandardCharsets.UTF_8));
+    for (String key : Arrays.asList(notBase64, base64WithoutColon, ":CANARYSECRET", "CANARYID:")) {
+      props.put(CONNECTION_API_KEY_CONFIG, key);
+      Config result = new Validator(props, () -> mockClient).validate();
+      assertHasErrorMessage(result, CONNECTION_API_KEY_CONFIG, API_KEY_MALFORMED_ERROR);
+      assertKeyNotEchoed(result, key);
+    }
+  }
+
+  // A 401 on ping with a well-formed key means the key itself was rejected by Elasticsearch.
+  @Test
+  public void testUnauthorizedPingWithApiKeyFlagsApiKey() throws IOException {
+    props.put(CONNECTION_API_KEY_CONFIG, ENCODED_API_KEY);
+    TransportException unauthorized = transportException(401);
+    when(mockClient.ping()).thenThrow(unauthorized);
+
+    Config result = new Validator(props, () -> mockClient).validate();
+    assertHasErrorMessage(result, CONNECTION_URL_CONFIG, "Could not connect to Elasticsearch.");
+    assertHasErrorMessage(result, CONNECTION_API_KEY_CONFIG,
+        "Could not authenticate with the API key.");
+    assertKeyNotEchoed(result, ENCODED_API_KEY);
+  }
+
+  private static void assertKeyNotEchoed(Config config, String key) {
+    config.configValues().forEach(c -> c.errorMessages()
+        .forEach(m -> assertFalse(m, m.contains(key))));
   }
 
   private static ElasticsearchException statusException(String reason, int status) {

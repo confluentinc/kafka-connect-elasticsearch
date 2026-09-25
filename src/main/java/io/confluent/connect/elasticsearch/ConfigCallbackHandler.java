@@ -35,6 +35,7 @@ import javax.security.auth.kerberos.KerberosPrincipal;
 import javax.security.auth.login.AppConfigurationEntry;
 import javax.security.auth.login.Configuration;
 import javax.security.auth.login.LoginContext;
+import org.apache.http.HttpHeaders;
 import org.apache.http.HttpHost;
 import org.apache.http.auth.AuthSchemeProvider;
 import org.apache.http.auth.AuthScope;
@@ -50,6 +51,7 @@ import org.apache.http.conn.ssl.NoopHostnameVerifier;
 import org.apache.http.conn.ssl.SSLConnectionSocketFactory;
 import org.apache.http.impl.auth.SPNegoSchemeFactory;
 import org.apache.http.impl.client.BasicCredentialsProvider;
+import org.apache.http.message.BasicHeader;
 import org.apache.http.impl.nio.client.HttpAsyncClientBuilder;
 import org.apache.http.impl.nio.conn.PoolingNHttpClientConnectionManager;
 import org.apache.http.impl.nio.reactor.DefaultConnectingIOReactor;
@@ -114,6 +116,10 @@ public class ConfigCallbackHandler implements HttpClientConfigCallback {
       log.info("Using Kerberos and SSL connection to {}.", redactedConnectionUrls());
     } else if (config.isKerberosEnabled()) {
       log.info("Using Kerberos connection to {}.", redactedConnectionUrls());
+    } else if (config.isApiKeyAuthConfigured() && config.isSslEnabled()) {
+      log.info("Using API key and SSL connection to {}.", redactedConnectionUrls());
+    } else if (config.isApiKeyAuthConfigured()) {
+      log.info("Using API key connection to {}.", redactedConnectionUrls());
     } else if (config.isSslEnabled()) {
       log.info("Using SSL connection to {}.", redactedConnectionUrls());
     } else {
@@ -179,6 +185,12 @@ public class ConfigCallbackHandler implements HttpClientConfigCallback {
    * @param builder the HttpAsyncClientBuilder
    */
   private void configureAuthentication(HttpAsyncClientBuilder builder) {
+    if (config.isApiKeyAuthConfigured()) {
+      // RequestDefaultHeaders skips CONNECT, so the key is never sent to a tunnelling proxy.
+      builder.setDefaultHeaders(Collections.singletonList(
+          new BasicHeader(HttpHeaders.AUTHORIZATION, "ApiKey " + config.encodedApiKey())));
+    }
+
     CredentialsProvider credentialsProvider = new BasicCredentialsProvider();
     if (config.isAuthenticatedConnection()) {
       config.connectionUrls().forEach(url -> credentialsProvider.setCredentials(

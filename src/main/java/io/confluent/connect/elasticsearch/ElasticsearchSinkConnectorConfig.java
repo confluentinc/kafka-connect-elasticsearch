@@ -18,7 +18,9 @@ package io.confluent.connect.elasticsearch;
 import java.io.File;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
+import java.util.Base64;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -71,6 +73,18 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
       + " both the username and password are non-null.";
   private static final String CONNECTION_PASSWORD_DISPLAY = "Connection Password";
   private static final String CONNECTION_PASSWORD_DEFAULT = null;
+
+  public static final String CONNECTION_API_KEY_CONFIG = "connection.api.key";
+  private static final String CONNECTION_API_KEY_DOC =
+      "The Elasticsearch API key used to authenticate with Elasticsearch, sent as an "
+      + "``Authorization: ApiKey`` header. Accepts either the Base64-encoded key (the "
+      + "``encoded`` value returned when the key is created) or the ``id:api_key`` pair. "
+      + "Required for Elasticsearch Serverless, which does not support basic authentication. "
+      + "Cannot be combined with ``" + CONNECTION_USERNAME_CONFIG + "``/``"
+      + CONNECTION_PASSWORD_CONFIG + "`` or Kerberos. The default is null, meaning API key "
+      + "authentication is not used.";
+  private static final String CONNECTION_API_KEY_DISPLAY = "Connection API Key";
+  private static final String CONNECTION_API_KEY_DEFAULT = null;
 
   public static final String BATCH_SIZE_CONFIG = "batch.size";
   private static final String BATCH_SIZE_DOC =
@@ -545,6 +559,16 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
             ++order,
             Width.SHORT,
             CONNECTION_PASSWORD_DISPLAY
+        ).define(
+            CONNECTION_API_KEY_CONFIG,
+            Type.PASSWORD,
+            CONNECTION_API_KEY_DEFAULT,
+            Importance.MEDIUM,
+            CONNECTION_API_KEY_DOC,
+            CONNECTOR_GROUP,
+            ++order,
+            Width.LONG,
+            CONNECTION_API_KEY_DISPLAY
         ).define(
             EXTERNAL_RESOURCE_USAGE_CONFIG,
             Type.STRING,
@@ -1088,6 +1112,22 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
     return username() != null && password() != null;
   }
 
+  public boolean isApiKeyAuthConfigured() {
+    return apiKey() != null;
+  }
+
+  /**
+   * Returns the API key in the Base64 form Elasticsearch expects after {@code ApiKey }. An
+   * {@code id:api_key} pair is encoded here; the Base64 alphabet has no ':' so the two accepted
+   * forms cannot be confused.
+   */
+  public String encodedApiKey() {
+    String key = apiKey().value().trim();
+    return key.indexOf(':') >= 0
+        ? Base64.getEncoder().encodeToString(key.getBytes(StandardCharsets.UTF_8))
+        : key;
+  }
+
   public boolean isBasicProxyConfigured() {
     return !getString(PROXY_HOST_CONFIG).isEmpty();
   }
@@ -1251,6 +1291,10 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
 
   public Password password() {
     return getPassword(CONNECTION_PASSWORD_CONFIG);
+  }
+
+  public Password apiKey() {
+    return getPassword(CONNECTION_API_KEY_CONFIG);
   }
 
   public String proxyHost() {
