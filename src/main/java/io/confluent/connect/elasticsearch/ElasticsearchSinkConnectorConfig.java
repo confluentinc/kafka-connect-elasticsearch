@@ -18,6 +18,7 @@ package io.confluent.connect.elasticsearch;
 import java.io.File;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -961,13 +962,38 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   public static final ConfigDef CONFIG = baseConfigDef();
 
   protected ElasticsearchSinkConnectorConfig(ConfigDef config, Map<String, String> properties) {
-    super(config, properties);
+    super(config, sanitizeConnectionUrl(properties));
     this.kafkaTopics = getTopicArray(properties);
   }
 
   public ElasticsearchSinkConnectorConfig(Map<String, String> props) {
-    super(CONFIG, props);
+    super(CONFIG, sanitizeConnectionUrl(props));
     this.kafkaTopics = getTopicArray(props);
+  }
+
+  /**
+   * Strips any embedded {@code user:password@} from {@code connection.url} before the config is
+   * parsed, so it never reaches the config dump or any other consumer. No-op for a correctly
+   * configured connector, which authenticates via {@code connection.username}/
+   * {@code connection.password} instead.
+   */
+  private static Map<String, String> sanitizeConnectionUrl(Map<String, String> properties) {
+    if (properties == null) {
+      return properties;
+    }
+    String rawUrls = properties.get(CONNECTION_URL_CONFIG);
+    if (rawUrls == null || rawUrls.isEmpty()) {
+      return properties;
+    }
+    String sanitized = Arrays.stream(rawUrls.split(","))
+        .map(ConfigCallbackHandler::redactUserInfo)
+        .collect(Collectors.joining(","));
+    if (sanitized.equals(rawUrls)) {
+      return properties;
+    }
+    Map<String, String> copy = new HashMap<>(properties);
+    copy.put(CONNECTION_URL_CONFIG, sanitized);
+    return copy;
   }
 
   private String[] getTopicArray(Map<?, ?> config) {
@@ -1373,8 +1399,13 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
         try {
           new URI(url);
         } catch (URISyntaxException e) {
+          List<String> redactedUrls = urls.stream()
+              .map(ConfigCallbackHandler::redactUserInfo)
+              .collect(Collectors.toList());
           throw new ConfigException(
-              name, value, "The provided url '" + url + "' is not a valid url."
+              name, redactedUrls,
+              "The provided url '" + ConfigCallbackHandler.redactUserInfo(url)
+                  + "' is not a valid url."
           );
         }
       }

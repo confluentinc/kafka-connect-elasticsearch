@@ -25,6 +25,8 @@ import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import javax.net.ssl.HostnameVerifier;
 import javax.net.ssl.SSLContext;
@@ -133,10 +135,17 @@ public class ConfigCallbackHandler implements HttpClientConfigCallback {
         .collect(Collectors.toCollection(LinkedHashSet::new));
   }
 
+  private static final Pattern AUTHORITY_PREFIX =
+      Pattern.compile("^[A-Za-z][A-Za-z0-9+.-]*://|^//");
+
   static String redactUserInfo(String url) {
-    int authorityStart = url.indexOf("://") >= 0 ? url.indexOf("://") + 3 : 0;
+    Matcher schemeMatcher = AUTHORITY_PREFIX.matcher(url);
+    boolean recognizedPrefix = schemeMatcher.find();
+    int authorityStart = recognizedPrefix ? schemeMatcher.end() : 0;
+
+    char[] delimiters = recognizedPrefix ? new char[] {'/', '?', '#'} : new char[] {'?', '#'};
     int authorityEnd = url.length();
-    for (char delimiter : new char[] {'/', '?', '#'}) {
+    for (char delimiter : delimiters) {
       int delimiterIndex = url.indexOf(delimiter, authorityStart);
       if (delimiterIndex >= 0) {
         authorityEnd = Math.min(authorityEnd, delimiterIndex);
@@ -151,6 +160,20 @@ public class ConfigCallbackHandler implements HttpClientConfigCallback {
   }
 
   /**
+   * Parses {@code url} into an {@link HttpHost}, redacting any embedded {@code user:password@}
+   * credential from the thrown exception's message if parsing fails. {@link HttpHost#create}
+   * otherwise echoes the raw url verbatim in a malformed-url {@link IllegalArgumentException}.
+   */
+  static HttpHost createRedactedHttpHost(String url) {
+    try {
+      return HttpHost.create(url);
+    } catch (IllegalArgumentException e) {
+      throw new IllegalArgumentException(
+          "Invalid Elasticsearch connection URL: " + redactUserInfo(url));
+    }
+  }
+
+  /**
    * Configures HTTP authentication and proxy authentication according to the client configuration.
    *
    * @param builder the HttpAsyncClientBuilder
@@ -159,7 +182,7 @@ public class ConfigCallbackHandler implements HttpClientConfigCallback {
     CredentialsProvider credentialsProvider = new BasicCredentialsProvider();
     if (config.isAuthenticatedConnection()) {
       config.connectionUrls().forEach(url -> credentialsProvider.setCredentials(
-              new AuthScope(HttpHost.create(url)),
+              new AuthScope(createRedactedHttpHost(url)),
               new UsernamePasswordCredentials(config.username(), config.password().value())
           )
       );
