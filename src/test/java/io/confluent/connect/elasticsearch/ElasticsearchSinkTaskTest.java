@@ -23,6 +23,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 
+import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.record.TimestampType;
 import org.apache.kafka.connect.data.Schema;
@@ -33,7 +34,7 @@ import org.apache.kafka.connect.errors.DataException;
 import org.apache.kafka.connect.sink.ErrantRecordReporter;
 import org.apache.kafka.connect.sink.SinkRecord;
 import org.apache.kafka.connect.sink.SinkTaskContext;
-import org.elasticsearch.action.DocWriteRequest;
+import co.elastic.clients.elasticsearch.core.bulk.BulkOperation;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -59,7 +60,6 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assume.assumeFalse;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -120,7 +120,7 @@ public class ElasticsearchSinkTaskTest {
     SinkRecord nullRecord = record(true, true, 0);
     when(assignment.contains(eq(new TopicPartition(TOPIC, 1)))).thenReturn(true);
     task.put(Collections.singletonList(nullRecord));
-    verify(client, never()).index(eq(nullRecord), any(DocWriteRequest.class), any(AsyncOffsetState.class));
+    verify(client, never()).index(eq(nullRecord), any(BulkOperation.class), any(AsyncOffsetState.class));
 
     // don't skip non-null
     when(context.assignment()).thenReturn(Collections.singleton(new TopicPartition(TOPIC, 1)));
@@ -128,9 +128,9 @@ public class ElasticsearchSinkTaskTest {
     SinkRecord notNullRecord = record(true, false, 1);
     task.put(Collections.singletonList(notNullRecord));
     if (flushSynchronously) {
-      verify(client, times(1)).index(eq(notNullRecord), any(DocWriteRequest.class), any(SyncOffsetTracker.SyncOffsetState.class));
+      verify(client, times(1)).index(eq(notNullRecord), any(BulkOperation.class), any(SyncOffsetTracker.SyncOffsetState.class));
     } else {
-      verify(client, times(1)).index(eq(notNullRecord), any(DocWriteRequest.class), any(AsyncOffsetState.class));
+      verify(client, times(1)).index(eq(notNullRecord), any(BulkOperation.class), any(AsyncOffsetState.class));
     }
   }
 
@@ -351,17 +351,7 @@ public class ElasticsearchSinkTaskTest {
   @Test
   public void testFlush() {
     setUpTask();
-    task.preCommit(null);
-    verify(client, times(1)).flush();
-  }
-
-  @Test
-  public void testFlushDoesNotThrow() {
-    setUpTask();
-    doThrow(new IllegalStateException("already closed")).when(client).flush();
-
-    // should not throw
-    task.preCommit(null);
+    task.preCommit(Collections.emptyMap());
     verify(client, times(1)).flush();
   }
 
@@ -371,13 +361,6 @@ public class ElasticsearchSinkTaskTest {
     task.initialize(context);
     task.start(props);
     task.stop();
-  }
-
-  @Test
-  public void testStopBeforeStartDoesNotThrow() {
-    ElasticsearchSinkTask neverStarted = new ElasticsearchSinkTask();
-    neverStarted.initialize(context);
-    neverStarted.stop();
   }
 
   @Test
@@ -529,6 +512,33 @@ public class ElasticsearchSinkTaskTest {
         () -> task.put(Collections.singletonList(record)));
     assertEquals(String.format("Found a topic name '%s' that doesn't match assigned partitions."
         + " Connector doesn't support topic mutating SMTs", record.topic()), connectException.getMessage());
+  }
+
+  // Connect's framework can call stop() on a task whose start() never ran or never
+  // completed (e.g. a sibling task's startup failure aborts the whole connector).
+  @Test
+  public void testStopBeforeStartDoesNotThrow() {
+    task = new ElasticsearchSinkTask();
+    task.stop();
+  }
+
+  // behavior.on.null.values=delete drops a null-key tombstone without indexing it, so the task
+  // must still mark it processed or the async tracker pins the commit at its offset forever.
+  @Test
+  public void testNullKeyTombstoneDoesNotPinCommit() {
+    props.put(BEHAVIOR_ON_NULL_VALUES_CONFIG, BehaviorOnNullValues.DELETE.name());
+    props.put(IGNORE_KEY_CONFIG, "false");
+    setUpTask();
+
+    TopicPartition tp = new TopicPartition(TOPIC, 1);
+    when(assignment.contains(eq(tp))).thenReturn(true);
+    SinkRecord tombstone = record(true, true, 0);
+    task.put(Collections.singletonList(tombstone));
+    verify(client, never()).index(eq(tombstone), any(), any());
+
+    Map<TopicPartition, OffsetAndMetadata> offsets =
+        task.preCommit(Collections.singletonMap(tp, new OffsetAndMetadata(1)));
+    assertEquals(1, offsets.get(tp).offset());
   }
 
   private String dataStreamName(String type, String dataset, String namespace) {
