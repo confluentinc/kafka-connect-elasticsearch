@@ -137,11 +137,7 @@
             <artifactId>lz4-java</artifactId>
             <version>${lz4.version}</version>
         </dependency>
-        <!-- opentelemetry-api for CVE-2026-45292, used by elasticsearch-java's built-in tracing.
-             From 1.62.0 the API probes for opentelemetry-api-incubator classes at static init; it
-             must be bundled too, or the probe resolves the worker's copy from Connect's shared
-             classpath and fails with a ClassCastException across classloaders. Versions come from
-             the OpenTelemetry BOMs in dependencyManagement so the two stay in lockstep. -->
+        <!-- pin opentelemetry-api for CVE-2026-45292; the matching incubator must be bundled with it -->
         <dependency>
             <groupId>io.opentelemetry</groupId>
             <artifactId>opentelemetry-api</artifactId>
@@ -359,7 +355,6 @@
                 <artifactId>jackson-dataformat-cbor</artifactId>
                 <version>${jackson.version}</version>
             </dependency>
-            <!-- Version-manage every io.opentelemetry artifact (stable + alpha) from one place. -->
             <dependency>
                 <groupId>io.opentelemetry</groupId>
                 <artifactId>opentelemetry-bom</artifactId>
