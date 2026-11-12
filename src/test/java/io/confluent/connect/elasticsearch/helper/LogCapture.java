@@ -25,13 +25,18 @@ import org.apache.log4j.spi.LoggingEvent;
 
 /**
  * Records every event reaching the root logger while open, each rendered the way an appender
- * would print it: level, logger, message and, when one is attached, the full stack trace.
+ * would print it: level, logger, message and, when one is attached, the full stack trace. The
+ * connector's own loggers are raised to TRACE meanwhile, so TRACE output is checked too.
  */
 public class LogCapture extends AppenderSkeleton implements AutoCloseable {
 
+  private static final Logger CONNECTOR = Logger.getLogger("io.confluent.connect.elasticsearch");
+
   private final List<LoggingEvent> events = new CopyOnWriteArrayList<>();
+  private final Level previousLevel = CONNECTOR.getLevel();
 
   public LogCapture() {
+    CONNECTOR.setLevel(Level.TRACE);
     Logger.getRootLogger().addAppender(this);
   }
 
@@ -71,6 +76,7 @@ public class LogCapture extends AppenderSkeleton implements AutoCloseable {
   @Override
   public void close() {
     Logger.getRootLogger().removeAppender(this);
+    CONNECTOR.setLevel(previousLevel);
   }
 
   @Override

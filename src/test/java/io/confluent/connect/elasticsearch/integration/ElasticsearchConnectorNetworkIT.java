@@ -208,8 +208,8 @@ public class ElasticsearchConnectorNetworkIT extends BaseConnectorIT {
 
     assertThat(connect.connectorStatus(CONNECTOR_NAME).tasks().get(0).trace())
             .contains("Failed to execute bulk request due to " +
-                    "'org.elasticsearch.ElasticsearchStatusException: Elasticsearch exception " +
-                    "[type=circuit_breaking_exception, reason=Data too large]' after 3 attempt(s)");
+                    "org.elasticsearch.ElasticsearchStatusException: Elasticsearch exception " +
+                    "[type=circuit_breaking_exception, reason=Data too large] after 3 attempt(s)");
 
     // 1 + 2 retries
     verify(3, postRequestedFor(urlPathEqualTo("/_bulk")));

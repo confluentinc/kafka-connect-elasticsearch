@@ -178,12 +178,16 @@ public class Validator {
         addErrorMessage(CONNECTION_URL_CONFIG,
             "Malformed Elasticsearch connection URL: " + e.getMessage());
       } catch (RuntimeException e) {
-        Throwable redacted = ResponseBodyRedactor.redact(e);
-        log.error("Failed to initialize Elasticsearch client.", redacted);
+        if (ResponseBodyRedactor.mayQuoteResponse(e)) {
+          log.error("Failed to initialize Elasticsearch client due to {}.",
+              ResponseBodyRedactor.describe(e));
+        } else {
+          log.error("Failed to initialize Elasticsearch client.", e);
+        }
         addErrorMessage(CONNECTION_URL_CONFIG,
             "Could not initialize the Elasticsearch client. This may indicate the cluster is "
                 + "unreachable or there is a transient infrastructure issue: "
-                + redacted.getMessage());
+                + ResponseBodyRedactor.safeMessage(e));
       }
     }
 
@@ -525,7 +529,7 @@ public class Validator {
                 RESOURCE_EXISTENCE_CHECK_FAILED_ERROR_FORMAT,
                 config.externalResourceUsage().name().toLowerCase(),
                 resource,
-                e.getMessage()
+                ResponseBodyRedactor.safeMessage(e)
         );
         addErrorMessage(TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_CONFIG, errorMessage);
         return;
@@ -571,12 +575,13 @@ public class Validator {
           break;
         default:
           successful = false;
-          exceptionMessage = String.format("Error message: %s", e.getMessage());
+          exceptionMessage = String.format(
+              "Error message: %s", ResponseBodyRedactor.safeMessage(e));
       }
     } catch (Exception e) {
       successful = false;
       exceptionMessage = String.format(
-          "Error message: %s", ResponseBodyRedactor.redact(e).getMessage());
+          "Error message: %s", ResponseBodyRedactor.safeMessage(e));
     }
     if (!successful) {
       String errorMessage = String.format(

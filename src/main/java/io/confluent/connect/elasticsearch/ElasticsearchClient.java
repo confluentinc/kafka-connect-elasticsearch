@@ -201,7 +201,11 @@ public class ElasticsearchClient {
       // Same error messages as from validating the connection for IOException.
       // Insufficient privileges to validate the version number if caught
       // ElasticsearchStatusException.
-      log.warn("Failed to get ES server version", ResponseBodyRedactor.redact(e));
+      if (ResponseBodyRedactor.mayQuoteResponse(e)) {
+        log.warn("Failed to get ES server version due to {}", ResponseBodyRedactor.describe(e));
+      } else {
+        log.warn("Failed to get ES server version", e);
+      }
     }
     return esVersionNumber;
   }

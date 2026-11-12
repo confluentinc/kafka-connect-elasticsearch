@@ -29,6 +29,7 @@ import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfi
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_KEY_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.IGNORE_SCHEMA_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.MAX_RETRIES_CONFIG;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.READ_TIMEOUT_MS_CONFIG;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.RETRY_BACKOFF_MS_CONFIG;
 import static io.confluent.connect.elasticsearch.helper.ElasticSearchMockUtil.basicEmptyOk;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -41,6 +42,7 @@ import com.github.tomakehurst.wiremock.junit.WireMockRule;
 import io.confluent.connect.elasticsearch.helper.LogCapture;
 import java.io.PrintWriter;
 import java.io.StringWriter;
+import java.net.SocketTimeoutException;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -115,9 +117,20 @@ public class ErrorResponseBodyLoggingTest {
     ConnectException failure = failTaskOnBulkRequest();
 
     assertNoResponseBody(Collections.singletonList(stackTraceOf(failure)));
-    assertThat(stackTraceOf(failure))
-        .contains("Caused by: org.elasticsearch.client.ResponseException: method [POST]")
-        .contains("status line [HTTP/1.1 504 Gateway Time-out]");
+    assertThat(stackTraceOf(failure)).contains("Failed to execute bulk request due to "
+        + "org.elasticsearch.ElasticsearchStatusException: Unable to parse response body; caused by "
+        + "org.elasticsearch.client.ResponseException: method [POST]");
+  }
+
+  // The status line must be in the failure's own message, since the task trace may be all on-call sees.
+  @Test
+  public void failedBulkRequestMessageCarriesTheStatusLine() {
+    wireMock.stubFor(post(urlPathEqualTo("/_bulk")).atPriority(1).willReturn(gatewayEcho()));
+
+    ConnectException failure = failTaskOnBulkRequest();
+
+    assertThat(failure.getCause().getMessage())
+        .contains("status line [HTTP/1.1 504 Gateway Time-out] after 3 attempt(s)");
   }
 
   // The retry warning must keep the response summary on-call searches for, with the body cut off.
@@ -130,8 +143,41 @@ public class ErrorResponseBodyLoggingTest {
     assertThat(logs.messages(Level.WARN, RetryUtil.class))
         .isNotEmpty()
         .allSatisfy(m -> assertThat(m)
-            .contains("bulk request due to org.elasticsearch.client.ResponseException: method [POST]")
+            .contains("bulk request due to org.elasticsearch.ElasticsearchStatusException: Unable to "
+                + "parse response body; caused by org.elasticsearch.client.ResponseException: "
+                + "method [POST]")
             .contains("status line [HTTP/1.1 504 Gateway Time-out]. Retrying attempt"));
+  }
+
+  // A JSON body with an "error" string is parsed onto the first line of the client's exception.
+  @Test
+  public void jsonErrorFieldEchoIsNotLogged() {
+    wireMock.stubFor(post(urlPathEqualTo("/_bulk")).atPriority(1).willReturn(aResponse()
+        .withStatus(504)
+        .withHeader("Content-Type", "application/json")
+        .withBody("{\"error\":\"" + BODY_MARKER + ": Basic " + TOKEN + "\",\"status\":504}")));
+
+    ConnectException failure = failTaskOnBulkRequest();
+
+    assertThat(logs.rendered()).noneSatisfy(e -> assertThat(e).contains(TOKEN));
+    assertThat(stackTraceOf(failure)).doesNotContain(TOKEN);
+  }
+
+  // A failure with no HTTP response, such as a read timeout, keeps its real exception and stack trace.
+  @Test
+  public void transportFailureKeepsItsExceptionAndStackTrace() {
+    wireMock.stubFor(post(urlPathEqualTo("/_bulk")).atPriority(1)
+        .willReturn(basicEmptyOk().withFixedDelay(2_000)));
+    Map<String, String> props = props();
+    props.put(READ_TIMEOUT_MS_CONFIG, "300");
+
+    ConnectException failure = failTaskOnBulkRequest(props);
+
+    assertThat(failure.getCause().getCause()).isInstanceOf(SocketTimeoutException.class);
+    assertThat(logs.rendered()).anySatisfy(e -> assertThat(e)
+        .startsWith("ERROR " + RetryUtil.class.getName())
+        .contains("Caused by: java.net.SocketTimeoutException")
+        .contains("\tat "));
   }
 
   // A gateway that labels the echo as JSON makes the client try to parse it, and parse errors quote input.
@@ -163,6 +209,23 @@ public class ErrorResponseBodyLoggingTest {
 
     assertThat(stackTraceOf(failure))
         .contains("type=circuit_breaking_exception, reason=Data too large");
+  }
+
+  // A parsed error has no cause, so a retry warning that logs only the cause says "due to null".
+  @Test
+  public void parsedElasticsearchErrorRetryWarningShowsTheReason() {
+    wireMock.stubFor(post(urlPathEqualTo("/_bulk")).atPriority(1).willReturn(aResponse()
+        .withStatus(429)
+        .withHeader("Content-Type", "application/json")
+        .withHeader("X-Elastic-Product", "Elasticsearch")
+        .withBody("{\"error\":{\"type\":\"circuit_breaking_exception\","
+            + "\"reason\":\"Data too large\"},\"status\":429}")));
+
+    failTaskOnBulkRequest();
+
+    assertThat(logs.messages(Level.WARN, RetryUtil.class))
+        .isNotEmpty()
+        .allSatisfy(m -> assertThat(m).contains("reason=Data too large"));
   }
 
   // The version probe at client start-up goes through its own catch block, outside RetryUtil.
@@ -228,12 +291,16 @@ public class ErrorResponseBodyLoggingTest {
   // Starts a task, hands it one record and returns the failure it reports once the bulk request
   // has exhausted its retries in the background.
   private ConnectException failTaskOnBulkRequest() {
+    return failTaskOnBulkRequest(props());
+  }
+
+  private ConnectException failTaskOnBulkRequest(Map<String, String> props) {
     TopicPartition tp = new TopicPartition(TOPIC, 0);
     SinkTaskContext context = mock(SinkTaskContext.class);
     when(context.assignment()).thenReturn(Collections.singleton(tp));
     ElasticsearchSinkTask task = new ElasticsearchSinkTask();
     task.initialize(context);
-    task.start(props());
+    task.start(props);
     try {
       task.put(Collections.singletonList(new SinkRecord(TOPIC, 0, null, "key", null,
           Collections.singletonMap("field", "value"), 0)));

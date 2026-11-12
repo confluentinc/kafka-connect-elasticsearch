@@ -158,25 +158,30 @@ public class RetryUtil {
         T call = function.call();
         return call;
       } catch (Exception e) {
-        // Never log or attach e itself: its message can carry an HTTP response body.
-        Throwable redacted = ResponseBodyRedactor.redact(e);
+        // A failure that may quote an HTTP response body is described on one line and not
+        // attached: a proxy in front of Elasticsearch can fill that body with the credentials.
+        boolean quotesResponse = ResponseBodyRedactor.mayQuoteResponse(e);
+        Throwable attached = quotesResponse ? null : e;
         if (attempt >= maxTotalAttempts) {
-          String msg = String.format("Failed to %s due to '%s' after %d attempt(s)",
-                  description, redacted, attempt);
-          log.error(msg, redacted);
-          throw new ConnectException(msg, redacted);
+          String msg = String.format("Failed to %s due to %s after %d attempt(s)", description,
+              quotesResponse ? ResponseBodyRedactor.describe(e) : "'" + e + "'", attempt);
+          log.error(msg, attached);
+          throw new ConnectException(msg, attached);
         }
 
         // Otherwise it is retriable and we should retry
         long backoff = computeRandomRetryWaitTimeInMillis(attempt, initialBackoff);
 
         log.warn("Failed to {} due to {}. Retrying attempt ({}/{}) after backoff of {} ms",
-            description, redacted.getCause(), attempt, maxTotalAttempts, backoff);
-        log.trace("Failed to {} due to exception :: {} and its stacktrace {}  "
-                        + "Retrying attempt ({}/{}) after backoff of {} ms",
-                         description, redacted, redacted.getStackTrace(), attempt,
-                         maxTotalAttempts, backoff);
-        log.trace("exception::", redacted);
+            description, quotesResponse ? ResponseBodyRedactor.describe(e) : e.getCause(),
+            attempt, maxTotalAttempts, backoff);
+        if (attached != null) {
+          log.trace("Failed to {} due to exception :: {} and its stacktrace {}  "
+                          + "Retrying attempt ({}/{}) after backoff of {} ms",
+                           description, e, e.getStackTrace(), attempt,
+                           maxTotalAttempts, backoff);
+          log.trace("exception::", e);
+        }
         clock.sleep(backoff);
       }
     }
