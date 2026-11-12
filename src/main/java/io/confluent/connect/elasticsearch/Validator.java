@@ -178,10 +178,12 @@ public class Validator {
         addErrorMessage(CONNECTION_URL_CONFIG,
             "Malformed Elasticsearch connection URL: " + e.getMessage());
       } catch (RuntimeException e) {
-        log.error("Failed to initialize Elasticsearch client.", e);
+        Throwable redacted = ResponseBodyRedactor.redact(e);
+        log.error("Failed to initialize Elasticsearch client.", redacted);
         addErrorMessage(CONNECTION_URL_CONFIG,
             "Could not initialize the Elasticsearch client. This may indicate the cluster is "
-                + "unreachable or there is a transient infrastructure issue: " + e.getMessage());
+                + "unreachable or there is a transient infrastructure issue: "
+                + redacted.getMessage());
       }
     }
 
@@ -573,7 +575,8 @@ public class Validator {
       }
     } catch (Exception e) {
       successful = false;
-      exceptionMessage = String.format("Error message: %s", e.getMessage());
+      exceptionMessage = String.format(
+          "Error message: %s", ResponseBodyRedactor.redact(e).getMessage());
     }
     if (!successful) {
       String errorMessage = String.format(

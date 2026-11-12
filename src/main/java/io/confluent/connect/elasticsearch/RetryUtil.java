@@ -158,23 +158,25 @@ public class RetryUtil {
         T call = function.call();
         return call;
       } catch (Exception e) {
+        // Never log or attach e itself: its message can carry an HTTP response body.
+        Throwable redacted = ResponseBodyRedactor.redact(e);
         if (attempt >= maxTotalAttempts) {
           String msg = String.format("Failed to %s due to '%s' after %d attempt(s)",
-                  description, e, attempt);
-          log.error(msg, e);
-          throw new ConnectException(msg, e);
+                  description, redacted, attempt);
+          log.error(msg, redacted);
+          throw new ConnectException(msg, redacted);
         }
 
         // Otherwise it is retriable and we should retry
         long backoff = computeRandomRetryWaitTimeInMillis(attempt, initialBackoff);
 
         log.warn("Failed to {} due to {}. Retrying attempt ({}/{}) after backoff of {} ms",
-            description, e.getCause(), attempt, maxTotalAttempts, backoff);
+            description, redacted.getCause(), attempt, maxTotalAttempts, backoff);
         log.trace("Failed to {} due to exception :: {} and its stacktrace {}  "
                         + "Retrying attempt ({}/{}) after backoff of {} ms",
-                         description, e, e.getStackTrace(), attempt,
+                         description, redacted, redacted.getStackTrace(), attempt,
                          maxTotalAttempts, backoff);
-        log.trace("exception::", e);
+        log.trace("exception::", redacted);
         clock.sleep(backoff);
       }
     }
