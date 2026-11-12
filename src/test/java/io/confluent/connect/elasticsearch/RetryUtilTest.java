@@ -15,12 +15,16 @@
 package io.confluent.connect.elasticsearch;
 
 import java.io.IOException;
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import org.apache.kafka.common.utils.MockTime;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.junit.Before;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.spy;
@@ -90,6 +94,25 @@ public class RetryUtilTest {
 
     assertTrue(RetryUtil.callWithRetries("test", () -> testFunction(4), 3, 100, mockClock));
     verify(mockClock, times(3)).sleep(anyLong());
+  }
+
+  // The low-level client appends the response body after the first line of its message.
+  @Test
+  public void exhaustedRetriesKeepFirstLineOfFailureButNotTheRest() {
+    MockTime mockClock = new MockTime();
+
+    ConnectException e = assertThrows(ConnectException.class,
+        () -> RetryUtil.callWithRetries("test", () -> {
+          throw new IOException("status line [HTTP/1.1 504 Gateway Time-out]\n<body>SECRET</body>");
+        }, 3, 100, mockClock));
+
+    assertEquals("Failed to test due to 'java.io.IOException: status line "
+        + "[HTTP/1.1 504 Gateway Time-out]' after 3 attempt(s)", e.getMessage());
+    StringWriter trace = new StringWriter();
+    e.printStackTrace(new PrintWriter(trace));
+    assertTrue(trace.toString(), trace.toString()
+        .contains("Caused by: java.io.IOException: status line [HTTP/1.1 504 Gateway Time-out]"));
+    assertFalse(trace.toString(), trace.toString().contains("SECRET"));
   }
 
   private boolean testFunction(int timesToThrow) throws IOException {
