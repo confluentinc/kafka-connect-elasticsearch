@@ -101,6 +101,11 @@ public class RetryUtil {
    * that summarizes the function, such as "read tables" or "connect to database" or
    * "make remote request". This description will be used within exception and log messages.
    *
+   * <p>This is the one place that logs and rethrows failures of Elasticsearch client calls, which
+   * can quote an HTTP response; see {@link ResponseBodyRedactor}. Every client call goes through
+   * it, except the version probe and {@link Validator}, which use the redactor themselves. Code
+   * that logs or wraps a client exception anywhere else must use the redactor too.
+   *
    * @param description      present tense description of the action, used to create the error
    *                         message; may not be null
    * @param function         the function to call; may not be null
@@ -158,23 +163,30 @@ public class RetryUtil {
         T call = function.call();
         return call;
       } catch (Exception e) {
+        // A failure that may quote an HTTP response body is described on one line and not
+        // attached: a proxy in front of Elasticsearch can fill that body with the credentials.
+        boolean quotesResponse = ResponseBodyRedactor.mayQuoteResponse(e);
+        Throwable attached = quotesResponse ? null : e;
         if (attempt >= maxTotalAttempts) {
-          String msg = String.format("Failed to %s due to '%s' after %d attempt(s)",
-                  description, e, attempt);
-          log.error(msg, e);
-          throw new ConnectException(msg, e);
+          String msg = String.format("Failed to %s due to %s after %d attempt(s)", description,
+              quotesResponse ? ResponseBodyRedactor.describe(e) : "'" + e + "'", attempt);
+          log.error(msg, attached);
+          throw new ConnectException(msg, attached);
         }
 
         // Otherwise it is retriable and we should retry
         long backoff = computeRandomRetryWaitTimeInMillis(attempt, initialBackoff);
 
         log.warn("Failed to {} due to {}. Retrying attempt ({}/{}) after backoff of {} ms",
-            description, e.getCause(), attempt, maxTotalAttempts, backoff);
-        log.trace("Failed to {} due to exception :: {} and its stacktrace {}  "
-                        + "Retrying attempt ({}/{}) after backoff of {} ms",
-                         description, e, e.getStackTrace(), attempt,
-                         maxTotalAttempts, backoff);
-        log.trace("exception::", e);
+            description, quotesResponse ? ResponseBodyRedactor.describe(e) : e,
+            attempt, maxTotalAttempts, backoff);
+        if (attached != null) {
+          log.trace("Failed to {} due to exception :: {} and its stacktrace {}  "
+                          + "Retrying attempt ({}/{}) after backoff of {} ms",
+                           description, e, e.getStackTrace(), attempt,
+                           maxTotalAttempts, backoff);
+          log.trace("exception::", e);
+        }
         clock.sleep(backoff);
       }
     }
