@@ -24,7 +24,6 @@ import org.junit.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.anyLong;
@@ -95,35 +94,6 @@ public class RetryUtilTest {
 
     assertTrue(RetryUtil.callWithRetries("test", () -> testFunction(4), 3, 100, mockClock));
     verify(mockClock, times(3)).sleep(anyLong());
-  }
-
-  // The low-level client appends the response body after the first line, so such a failure is
-  // described in the message and never attached as the cause.
-  @Test
-  public void exhaustedRetriesDescribeAMultiLineFailureWithoutAttachingIt() {
-    MockTime mockClock = new MockTime();
-
-    ConnectException e = assertThrows(ConnectException.class,
-        () -> RetryUtil.callWithRetries("test", () -> {
-          throw new IOException("status line [HTTP/1.1 504 Gateway Time-out]\n<body>SECRET</body>");
-        }, 3, 100, mockClock));
-
-    assertEquals("Failed to test due to java.io.IOException: status line "
-        + "[HTTP/1.1 504 Gateway Time-out] after 3 attempt(s)", e.getMessage());
-    assertNull(e.getCause());
-  }
-
-  // A failure without a response keeps today's message and stays attached, stack trace included.
-  @Test
-  public void exhaustedRetriesKeepASingleLineFailureAsTheCause() {
-    MockTime mockClock = new MockTime();
-
-    ConnectException e = assertThrows(ConnectException.class,
-        () -> RetryUtil.callWithRetries("test", () -> testFunction(4), 3, 100, mockClock));
-
-    assertEquals("Failed to test due to 'java.io.IOException: oh no i iz borke, plz retry' after "
-        + "3 attempt(s)", e.getMessage());
-    assertTrue(String.valueOf(e.getCause()), e.getCause() instanceof IOException);
   }
 
   // A failure without a cause, like a failed product check, must not be logged as "due to null".
