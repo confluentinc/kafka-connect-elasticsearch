@@ -38,20 +38,25 @@ final class ResponseBodyRedactor {
   }
 
   /**
-   * Whether {@code failure} may quote an HTTP response: it, a cause or a suppressed exception is an
-   * {@link ElasticsearchException}, which HLRC builds for every error response, or has a message
-   * of more than one line. Such a failure must be logged through {@link #describe} and never
-   * attached as a throwable.
+   * Whether {@code failure} may quote an HTTP response: it, a cause or a suppressed exception is a
+   * {@link ResponseException}, which carries the response (HLRC keeps it as the cause, or as a
+   * suppressed exception once it has parsed the body), or has a message of more than one line.
+   * Such a failure must be logged through {@link #describe} and never attached as a throwable.
+   * A network error that HLRC's version check wraps in an {@link ElasticsearchException} carries
+   * no response, so it keeps its stack trace.
    */
   static boolean mayQuoteResponse(Throwable failure) {
     return mayQuoteResponse(failure, 0);
   }
 
   private static boolean mayQuoteResponse(Throwable t, int depth) {
-    if (t == null || depth > MAX_DEPTH) {
+    if (t == null) {
       return false;
     }
-    if (t instanceof ElasticsearchException
+    if (depth > MAX_DEPTH) {
+      return true;  // the unexamined rest of the chain may still hold a response
+    }
+    if (t instanceof ResponseException
         || (t.getMessage() != null && t.getMessage().indexOf('\n') >= 0)) {
       return true;
     }

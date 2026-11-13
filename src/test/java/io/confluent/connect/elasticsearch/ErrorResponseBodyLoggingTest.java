@@ -40,8 +40,10 @@ import static org.mockito.Mockito.when;
 import com.github.tomakehurst.wiremock.client.ResponseDefinitionBuilder;
 import com.github.tomakehurst.wiremock.junit.WireMockRule;
 import io.confluent.connect.elasticsearch.helper.LogCapture;
+import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.StringWriter;
+import java.net.ServerSocket;
 import java.net.SocketTimeoutException;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
@@ -161,6 +163,49 @@ public class ErrorResponseBodyLoggingTest {
 
     assertThat(logs.rendered()).noneSatisfy(e -> assertThat(e).contains(TOKEN));
     assertThat(stackTraceOf(failure)).doesNotContain(TOKEN);
+  }
+
+  // HLRC's version check wraps a refused connection in an ElasticsearchException although no response
+  // arrived, so nothing can be quoted and the real exception must stay attached.
+  @Test
+  public void networkErrorAtStartupKeepsItsExceptionAndStackTrace() throws IOException {
+    int closedPort;
+    try (ServerSocket socket = new ServerSocket(0)) {
+      closedPort = socket.getLocalPort();
+    }
+    Map<String, String> props = props();
+    props.put(CONNECTION_URL_CONFIG, "http://localhost:" + closedPort);
+
+    new ElasticsearchClient(new ElasticsearchSinkConnectorConfig(props), null, () -> { }, 0,
+        "test").close();
+
+    assertThat(logs.rendered()).anySatisfy(e -> assertThat(e)
+        .startsWith("WARN " + ElasticsearchClient.class.getName() + " Failed to get ES server version")
+        .contains("Caused by: java.net.ConnectException")
+        .contains("\tat "));
+  }
+
+  // Guards every path that talks to Elasticsearch, so a new log statement that attaches a client
+  // exception fails here: every request gets the echo, then validation, the version probe and the
+  // task's index check all run. The positive checks prove each path really logged.
+  @Test
+  public void noPathLogsTheResponseBody() {
+    wireMock.stubFor(any(anyUrl()).atPriority(1).willReturn(gatewayEcho()));
+
+    List<String> outputs = new ArrayList<>();
+    for (ConfigValue value : new Validator(props()).validate().configValues()) {
+      outputs.addAll(value.errorMessages());
+    }
+    outputs.add(stackTraceOf(failTaskOnBulkRequest()));
+    outputs.addAll(logs.rendered());
+
+    assertNoResponseBody(outputs);
+    assertThat(logs.rendered())
+        .anySatisfy(e -> assertThat(e).startsWith("ERROR " + Validator.class.getName()
+            + " Failed to initialize Elasticsearch client due to"))
+        .anySatisfy(e -> assertThat(e).startsWith("WARN " + ElasticsearchClient.class.getName()
+            + " Failed to get ES server version due to"))
+        .anySatisfy(e -> assertThat(e).startsWith("ERROR " + RetryUtil.class.getName()));
   }
 
   // A failure with no HTTP response, such as a read timeout, keeps its real exception and stack trace.
@@ -288,8 +333,8 @@ public class ErrorResponseBodyLoggingTest {
     return props;
   }
 
-  // Starts a task, hands it one record and returns the failure it reports once the bulk request
-  // has exhausted its retries in the background.
+  // Starts a task, hands it one record and returns the failure it reports: at once when the index
+  // check fails, otherwise once the bulk request has exhausted its retries in the background.
   private ConnectException failTaskOnBulkRequest() {
     return failTaskOnBulkRequest(props());
   }
@@ -302,8 +347,12 @@ public class ErrorResponseBodyLoggingTest {
     task.initialize(context);
     task.start(props);
     try {
-      task.put(Collections.singletonList(new SinkRecord(TOPIC, 0, null, "key", null,
-          Collections.singletonMap("field", "value"), 0)));
+      try {
+        task.put(Collections.singletonList(new SinkRecord(TOPIC, 0, null, "key", null,
+            Collections.singletonMap("field", "value"), 0)));
+      } catch (ConnectException e) {
+        return e;
+      }
       return await().atMost(Duration.ofSeconds(30))
           .until(() -> putFailure(task), Objects::nonNull);
     } finally {
