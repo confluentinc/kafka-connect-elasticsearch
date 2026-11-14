@@ -14,13 +14,17 @@
  */
 package io.confluent.connect.elasticsearch;
 
+import io.confluent.connect.elasticsearch.helper.LogCapture;
 import java.io.IOException;
 import org.apache.kafka.common.utils.MockTime;
 import org.apache.kafka.connect.errors.ConnectException;
+import org.apache.log4j.Level;
 import org.junit.Before;
 import org.junit.Test;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.spy;
@@ -90,6 +94,20 @@ public class RetryUtilTest {
 
     assertTrue(RetryUtil.callWithRetries("test", () -> testFunction(4), 3, 100, mockClock));
     verify(mockClock, times(3)).sleep(anyLong());
+  }
+
+  // A failure without a cause, like a failed product check, must not be logged as "due to null".
+  @Test
+  public void retryWarningNamesAFailureThatHasNoCause() {
+    try (LogCapture logs = new LogCapture()) {
+      assertThrows(ConnectException.class, () -> RetryUtil.callWithRetries("test", () -> {
+        throw new IllegalStateException("Invalid or missing tagline");
+      }, 2, 100, new MockTime()));
+
+      assertThat(logs.messages(Level.WARN, RetryUtil.class)).singleElement().asString()
+          .startsWith("Failed to test due to java.lang.IllegalStateException: Invalid or missing "
+              + "tagline. Retrying attempt (1/2)");
+    }
   }
 
   private boolean testFunction(int timesToThrow) throws IOException {
