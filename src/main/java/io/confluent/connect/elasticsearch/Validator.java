@@ -180,10 +180,16 @@ public class Validator {
         addErrorMessage(CONNECTION_URL_CONFIG,
             "Malformed Elasticsearch connection URL: " + e.getMessage());
       } catch (RuntimeException e) {
-        log.error("Failed to initialize Elasticsearch client.", e);
+        if (ResponseBodyRedactor.mayQuoteResponse(e)) {
+          log.error("Failed to initialize Elasticsearch client due to {}.",
+              ResponseBodyRedactor.describe(e));
+        } else {
+          log.error("Failed to initialize Elasticsearch client.", e);
+        }
         addErrorMessage(CONNECTION_URL_CONFIG,
             "Could not initialize the Elasticsearch client. This may indicate the cluster is "
-                + "unreachable or there is a transient infrastructure issue: " + e.getMessage());
+                + "unreachable or there is a transient infrastructure issue: "
+                + ResponseBodyRedactor.safeMessage(e));
       } finally {
         if (client != null) {
           try {
@@ -476,10 +482,17 @@ public class Validator {
     } catch (IOException | ElasticsearchException e) {
       // Not blocking: an IOException was already reported by validateConnection, and a 403
       // means the principal lacks the 'monitor' cluster privilege.
-      log.warn("Could not read the Elasticsearch server version during validation; it cannot"
+      String msg = "Could not read the Elasticsearch server version during validation; it cannot"
           + " be checked against the minimum supported version {}. Earlier releases are"
           + " unsupported and may fail or misbehave. Reading it requires the 'monitor' cluster"
-          + " privilege.", MINIMUM_SUPPORTED_ES_VERSION, e);
+          + " privilege.";
+      // A failure that may quote the response body is described on one line, not attached.
+      if (ResponseBodyRedactor.mayQuoteResponse(e)) {
+        log.warn(msg + " Failure: {}", MINIMUM_SUPPORTED_ES_VERSION,
+            ResponseBodyRedactor.describe(e));
+      } else {
+        log.warn(msg, MINIMUM_SUPPORTED_ES_VERSION, e);
+      }
       return;
     }
     if (compareVersions(esVersionNumber, MINIMUM_SUPPORTED_ES_VERSION) < 0) {
@@ -525,7 +538,7 @@ public class Validator {
                 RESOURCE_EXISTENCE_CHECK_FAILED_ERROR_FORMAT,
                 config.externalResourceUsage().name().toLowerCase(),
                 resource,
-                e.getMessage()
+                ResponseBodyRedactor.safeMessage(e)
         );
         addErrorMessage(TOPIC_TO_EXTERNAL_RESOURCE_MAPPING_CONFIG, errorMessage);
         return;
@@ -628,12 +641,14 @@ public class Validator {
       // because a HEAD response has no body the transport surfaces them as a
       // TransportException instead of an ElasticsearchException. A 403 means Elasticsearch
       // is up but the user is not authorized to ping it, which is fine for a sink principal.
-      return e.statusCode() == 403 ? null : String.format("Error message: %s", e.getMessage());
+      return e.statusCode() == 403 ? null
+          : String.format("Error message: %s", ResponseBodyRedactor.safeMessage(e));
     } catch (ElasticsearchException e) {
       // ES is up, but user is not authorized to ping server
-      return e.status() == 403 ? null : String.format("Error message: %s", e.getMessage());
+      return e.status() == 403 ? null
+          : String.format("Error message: %s", ResponseBodyRedactor.safeMessage(e));
     } catch (Exception e) {
-      return String.format("Error message: %s", e.getMessage());
+      return String.format("Error message: %s", ResponseBodyRedactor.safeMessage(e));
     }
   }
 
