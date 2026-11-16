@@ -268,10 +268,17 @@ public class ElasticsearchClient {
     try {
       esVersionNumber = esClient.info().version().number();
     } catch (Exception e) {
-      log.warn("Could not read the Elasticsearch server version; it cannot be checked against"
+      String msg = "Could not read the Elasticsearch server version; it cannot be checked against"
           + " the minimum supported version {}. Earlier releases are unsupported and may fail"
           + " or misbehave; confirm the cluster version manually. Reading it requires the"
-          + " 'monitor' cluster privilege.", Validator.MINIMUM_SUPPORTED_ES_VERSION, e);
+          + " 'monitor' cluster privilege.";
+      // A failure that may quote the response body is described on one line, not attached.
+      if (ResponseBodyRedactor.mayQuoteResponse(e)) {
+        log.warn(msg + " Failure: {}", Validator.MINIMUM_SUPPORTED_ES_VERSION,
+            ResponseBodyRedactor.describe(e));
+      } else {
+        log.warn(msg, Validator.MINIMUM_SUPPORTED_ES_VERSION, e);
+      }
     }
     return esVersionNumber;
   }

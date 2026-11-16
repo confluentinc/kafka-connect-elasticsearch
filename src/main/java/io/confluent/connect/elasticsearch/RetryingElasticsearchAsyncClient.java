@@ -137,28 +137,8 @@ class RetryingElasticsearchAsyncClient extends ElasticsearchAsyncClient {
     sendFuture.handleAsync((response, failure) -> {
       if (failure == null) {
         result.complete(response);
-        return null;
-      }
-      if (attempt > maxRetries) {
-        result.completeExceptionally(new ConnectException(
-            String.format("Bulk request failed after %d attempt(s)", attempt), failure));
-        return null;
-      }
-      long backoffMs = RetryUtil.computeRandomRetryWaitTimeInMillis(attempt, retryBackoffMs);
-      // WARN carries only the failure summary (RetryUtil's convention — the message can
-      // embed the HTTP response body); the full stack goes to TRACE here and to the
-      // terminal ConnectException on exhaustion. The denominator counts total attempts,
-      // matching RetryUtil's (attempt/maxTotalAttempts).
-      log.warn("Bulk request of {} operation(s) failed due to {}. Retrying attempt ({}/{})"
-          + " after backoff of {} ms", request.operations().size(), failure, attempt,
-          maxRetries + 1, backoffMs);
-      log.trace("Bulk request failure detail:", failure);
-      try {
-        retryExecutor.schedule(
-            () -> attemptBulk(request, attempt + 1, result), backoffMs, TimeUnit.MILLISECONDS);
-      } catch (RejectedExecutionException e) {
-        log.warn("Could not schedule a retry for a failed bulk request", e);
-        result.completeExceptionally(failure);
+      } else {
+        retryOrFail(request, attempt, result, failure);
       }
       return null;
     }, dispatcherExecutor).exceptionally(e -> {
@@ -166,5 +146,47 @@ class RetryingElasticsearchAsyncClient extends ElasticsearchAsyncClient {
       result.completeExceptionally(e);
       return null;
     });
+  }
+
+  /**
+   * Schedules the next attempt of a failed bulk request, or fails it once the retries are spent.
+   *
+   * <p>Every failed bulk request passes here. One that may quote an HTTP response body is
+   * described on one line and never attached, here or to the failure handed to the ingester: a
+   * proxy in front of Elasticsearch can fill that body with the credentials; see
+   * {@link ResponseBodyRedactor}.
+   */
+  private void retryOrFail(
+      BulkRequest request,
+      int attempt,
+      CompletableFuture<BulkResponse> result,
+      Throwable failure
+  ) {
+    String quoted = ResponseBodyRedactor.mayQuoteResponse(failure)
+        ? ResponseBodyRedactor.describe(failure) : null;
+    if (attempt > maxRetries) {
+      String msg = String.format("Bulk request failed after %d attempt(s)", attempt);
+      result.completeExceptionally(quoted == null
+          ? new ConnectException(msg, failure) : new ConnectException(msg + " due to " + quoted));
+      return;
+    }
+    long backoffMs = RetryUtil.computeRandomRetryWaitTimeInMillis(attempt, retryBackoffMs);
+    // WARN carries only the failure summary; a failure that quotes no response has its stack
+    // at TRACE here and in the terminal ConnectException on exhaustion. The denominator
+    // counts total attempts, matching RetryUtil's (attempt/maxTotalAttempts).
+    log.warn("Bulk request of {} operation(s) failed due to {}. Retrying attempt ({}/{})"
+        + " after backoff of {} ms", request.operations().size(),
+        quoted == null ? failure : quoted, attempt, maxRetries + 1, backoffMs);
+    if (quoted == null) {
+      log.trace("Bulk request failure detail:", failure);
+    }
+    try {
+      retryExecutor.schedule(
+          () -> attemptBulk(request, attempt + 1, result), backoffMs, TimeUnit.MILLISECONDS);
+    } catch (RejectedExecutionException e) {
+      log.warn("Could not schedule a retry for a failed bulk request", e);
+      result.completeExceptionally(quoted == null
+          ? failure : new ConnectException("Bulk request failed due to " + quoted));
+    }
   }
 }

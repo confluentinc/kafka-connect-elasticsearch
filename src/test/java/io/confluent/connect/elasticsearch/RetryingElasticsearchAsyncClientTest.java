@@ -179,6 +179,23 @@ public class RetryingElasticsearchAsyncClientTest {
     assertEquals(1, client.sends.size());
   }
 
+  // A failure that may quote a response body reaches the ingester only as a one-line summary,
+  // even when its retry cannot be scheduled.
+  @Test
+  public void testRejectedRetryOfAQuotingFailureKeepsOnlyItsSummary() throws Exception {
+    ScriptedClient client = client(2);
+    client.willFail("status line [HTTP/1.1 504 Gateway Time-out]\n<Error>body</Error>");
+    retryExecutor.shutdown();
+
+    CompletableFuture<BulkResponse> result = client.bulk(request(indexOp("a")));
+
+    ExecutionException e =
+        assertThrows(ExecutionException.class, () -> result.get(10, TimeUnit.SECONDS));
+    assertEquals("Bulk request failed due to java.io.IOException: "
+        + "status line [HTTP/1.1 504 Gateway Time-out]", e.getCause().getMessage());
+    assertNull(e.getCause().getCause());
+  }
+
   // A future that never completes on its own: the same shape as a request stuck
   // in flight or a retry parked mid-backoff when close() discards it.
   @Test
