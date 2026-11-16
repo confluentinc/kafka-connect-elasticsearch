@@ -52,9 +52,14 @@ public class LogCapture extends AppenderSkeleton implements AutoCloseable {
 
   /** The messages logged at {@code level} by {@code loggerClass}. */
   public List<String> messages(Level level, Class<?> loggerClass) {
+    return messages(level, loggerClass.getName());
+  }
+
+  /** The messages logged at {@code level} by the logger named {@code loggerName}. */
+  public List<String> messages(Level level, String loggerName) {
     return events.stream()
         .filter(e -> e.getLevel().equals(level))
-        .filter(e -> e.getLoggerName().equals(loggerClass.getName()))
+        .filter(e -> e.getLoggerName().equals(loggerName))
         .map(LoggingEvent::getRenderedMessage)
         .collect(Collectors.toList());
   }

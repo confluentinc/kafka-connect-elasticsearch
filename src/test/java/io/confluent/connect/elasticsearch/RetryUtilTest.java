@@ -96,6 +96,14 @@ public class RetryUtilTest {
     verify(mockClock, times(3)).sleep(anyLong());
   }
 
+  // A zero backoff means retry immediately; it must not throw from the random range.
+  @Test
+  public void computeRetryBackoffForZeroBackoff() {
+    assertEquals(0L, RetryUtil.computeRandomRetryWaitTimeInMillis(0, 0L));
+    assertEquals(0L, RetryUtil.computeRandomRetryWaitTimeInMillis(1, 0L));
+    assertEquals(0L, RetryUtil.computeRandomRetryWaitTimeInMillis(10, 0L));
+  }
+
   // A failure without a cause, like a failed product check, must not be logged as "due to null".
   @Test
   public void retryWarningNamesAFailureThatHasNoCause() {

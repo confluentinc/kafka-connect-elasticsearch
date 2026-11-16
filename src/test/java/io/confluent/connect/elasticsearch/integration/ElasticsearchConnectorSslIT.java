@@ -19,15 +19,12 @@ import io.confluent.common.utils.IntegrationTest;
 import io.confluent.connect.elasticsearch.helper.ElasticsearchContainer;
 
 import org.apache.kafka.common.config.SslConfigs;
-import org.elasticsearch.client.security.user.User;
-import org.elasticsearch.client.security.user.privileges.Role;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.List;
 import java.util.Map;
 
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.CONNECTION_PASSWORD_CONFIG;
@@ -43,9 +40,9 @@ public class ElasticsearchConnectorSslIT extends ElasticsearchConnectorBaseIT {
 
   @BeforeClass
   public static void setupBeforeAll() {
-    Map<User, String> users = getUsers();
-    List<Role> roles = getRoles();
-    container = ElasticsearchContainer.fromSystemProperties().withSslEnabled(true).withBasicAuth(users, roles);
+    container = ElasticsearchContainer.fromSystemProperties()
+        .withSslEnabled(true)
+        .withBasicAuth(getUsers(), getRoles());
     container.start();
   }
 
@@ -80,7 +77,7 @@ public class ElasticsearchConnectorSslIT extends ElasticsearchConnectorBaseIT {
   public void testSecureConnectionHostnameVerificationDisabled() throws Throwable {
     // Use 'localhost' here that is not in self-signed cert
     String address = container.getConnectionUrl();
-    address = address.replace(container.getContainerIpAddress(), "localhost");
+    address = address.replace(container.getHost(), "localhost");
     log.info("Creating connector for {}", address);
 
     props.put(CONNECTION_URL_CONFIG, address);

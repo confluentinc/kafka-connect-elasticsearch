@@ -5,6 +5,12 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.github.tomakehurst.wiremock.client.ResponseDefinitionBuilder;
 import com.github.tomakehurst.wiremock.client.WireMock;
+import com.github.tomakehurst.wiremock.common.FileSource;
+import com.github.tomakehurst.wiremock.extension.Parameters;
+import com.github.tomakehurst.wiremock.extension.ResponseDefinitionTransformer;
+import com.github.tomakehurst.wiremock.http.HttpHeaders;
+import com.github.tomakehurst.wiremock.http.Request;
+import com.github.tomakehurst.wiremock.http.ResponseDefinition;
 
 import static com.google.common.net.HttpHeaders.CONTENT_TYPE;
 
@@ -14,6 +20,41 @@ import static com.google.common.net.HttpHeaders.CONTENT_TYPE;
 public class ElasticSearchMockUtil {
   public static final ObjectMapper MAPPER = new ObjectMapper();
 
+  private static final String PRODUCT_HEADER = "X-Elastic-Product";
+
+  /**
+   * Stamps {@code X-Elastic-Product: Elasticsearch} on every WireMock response that does
+   * not already carry one. The Elasticsearch client rejects responses without this header,
+   * surfacing them as transport failures, so a stub written with a plain
+   * {@code aResponse()}/{@code okJson()} would silently shift its test onto the
+   * transport-failure path. Registering this transformer on the mock server makes the
+   * header a property of the server rather than a convention each stub must remember.
+   */
+  public static final ResponseDefinitionTransformer PRODUCT_HEADER_TRANSFORMER =
+      new ResponseDefinitionTransformer() {
+        @Override
+        public String getName() {
+          return "elastic-product-header";
+        }
+
+        @Override
+        public boolean applyGlobally() {
+          return true;
+        }
+
+        @Override
+        public ResponseDefinition transform(Request request, ResponseDefinition response,
+            FileSource files, Parameters parameters) {
+          HttpHeaders headers = response.getHeaders();
+          if (headers != null && headers.getHeader(PRODUCT_HEADER).isPresent()) {
+            return response;
+          }
+          return ResponseDefinitionBuilder.like(response).but()
+              .withHeader(PRODUCT_HEADER, "Elasticsearch")
+              .build();
+        }
+      };
+
   /**
    * Add standard ElasticSearch version info to a JSON object
    * @param response The json object (usually a response) to
@@ -22,20 +63,19 @@ public class ElasticSearchMockUtil {
    */
   static public ObjectNode addStandardVersionInfo(ObjectNode response) {
     // Note that "version.number" is somewhat arbitrary for our testing purposes,
-    // although for some version (i.e. [7.0,7.14]) it checks for other fields,
-    // so the mock might fail in that case.
+    // but it should be at least 8.0 since the connector requires ES 8+.
     response.put("name", "KafkaESClusterNodeold_1")
         .put("cluster_name", "KafkaESCluster")
         .put("cluster_uuid", "83EJmDNrRVirBWcZDgs9ew")
         .put("tagline", "You Know, for Search")
         .putObject("version")
-        .put("number", "7.16.3")
+        .put("number", "8.19.19")
         .put("build_hash", "83EJmDNrRVirBWcZDgs9ew")
         .put("build_date", "2018-04-12T16:25:14.838Z")
         .put("build_snapshot", "false")
-        .put("lucene_version", "6.6.1")
-        .put("minimum_wire_compatibility_version", "1.1.1")
-        .put("minimum_index_compatibility_version", "2.2.2");
+        .put("lucene_version", "9.12.0")
+        .put("minimum_wire_compatibility_version", "7.17.0")
+        .put("minimum_index_compatibility_version", "7.0.0");
     return response;
   }
 
@@ -45,9 +85,8 @@ public class ElasticSearchMockUtil {
    * @return Updated ResponseBuilder
    */
   static public ResponseDefinitionBuilder addMinimalHeaders(ResponseDefinitionBuilder builder) {
-    // Now header [X-Elastic-Product]
     return builder
-        .withHeader("X-Elastic-Product", "Elasticsearch")
+        .withHeader(PRODUCT_HEADER, "Elasticsearch")
         .withHeader(CONTENT_TYPE, "application/json");
   }
 

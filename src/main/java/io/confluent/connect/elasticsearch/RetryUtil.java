@@ -64,6 +64,10 @@ public class RetryUtil {
       return initialRetryBackoffMs;
     }
     long maxRetryTime = computeRetryWaitTimeInMillis(retryAttempts, initialRetryBackoffMs);
+    // retry.backoff.ms=0 is a legal setting; nextLong(0, 0) would throw, so retry at once.
+    if (maxRetryTime <= 0) {
+      return 0;
+    }
     return ThreadLocalRandom.current().nextLong(0, maxRetryTime);
   }
 
@@ -101,10 +105,11 @@ public class RetryUtil {
    * that summarizes the function, such as "read tables" or "connect to database" or
    * "make remote request". This description will be used within exception and log messages.
    *
-   * <p>This is the one place that logs and rethrows failures of Elasticsearch client calls, which
-   * can quote an HTTP response; see {@link ResponseBodyRedactor}. Every client call goes through
-   * it, except the version probe and {@link Validator}, which use the redactor themselves. Code
-   * that logs or wraps a client exception anywhere else must use the redactor too.
+   * <p>This is where failures of synchronous Elasticsearch client calls, which can quote an HTTP
+   * response, are logged and rethrown; see {@link ResponseBodyRedactor}. Bulk requests go through
+   * {@link RetryingElasticsearchAsyncClient} instead, and the version probe and {@link Validator}
+   * use the redactor themselves. Code that logs or wraps a client exception anywhere else must use
+   * the redactor too.
    *
    * @param description      present tense description of the action, used to create the error
    *                         message; may not be null

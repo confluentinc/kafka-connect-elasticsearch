@@ -18,6 +18,7 @@ package io.confluent.connect.elasticsearch.integration;
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.any;
 import static com.github.tomakehurst.wiremock.client.WireMock.anyUrl;
+import static com.github.tomakehurst.wiremock.client.WireMock.head;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.options;
@@ -50,7 +51,6 @@ import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.net.ServerSocket;
-import java.net.SocketTimeoutException;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -60,6 +60,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.stream.Collectors;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.config.ConfigValue;
 import org.apache.kafka.connect.errors.ConnectException;
@@ -93,6 +94,9 @@ public class ErrorResponseBodyLoggingIT {
       + "<ArgumentName>Authorization</ArgumentName><ArgumentValue>Basic " + TOKEN
       + "</ArgumentValue></Error>";
   private static final String STATUS_LINE = "status line [HTTP/1.1 504 Gateway Time-out]";
+  // Package-private, so named rather than referenced.
+  private static final String BULK_RETRY_LOGGER =
+      "io.confluent.connect.elasticsearch.RetryingElasticsearchAsyncClient";
 
   @Rule
   public WireMockRule wireMock = new WireMockRule(options().dynamicPort(), false);
@@ -120,17 +124,16 @@ public class ErrorResponseBodyLoggingIT {
 
     assertNoResponseBody(logs.rendered());
     assertNoResponseBody(Collections.singletonList(stackTraceOf(failure)));
-    assertThat(failure.getCause().getMessage())
-        .contains("Failed to execute bulk request due to "
-            + "org.elasticsearch.ElasticsearchStatusException: Unable to parse response body; caused by "
+    assertThat(stackTraceOf(failure))
+        .contains("Bulk request failed after 3 attempt(s) due to "
             + "org.elasticsearch.client.ResponseException: method [POST]")
-        .contains(STATUS_LINE + " after 3 attempt(s)");
-    assertThat(logs.messages(Level.WARN, RetryUtil.class))
+        .contains(STATUS_LINE);
+    assertThat(bulkRetryWarnings())
         .isNotEmpty()
         .allSatisfy(m -> assertThat(m).contains(STATUS_LINE + ". Retrying attempt"));
   }
 
-  // A JSON body with an "error" string is parsed onto the first line of the client's exception.
+  // The error of a JSON body is kept as the failure's reason, so an echoed credential there must be masked.
   @Test
   public void jsonErrorFieldEchoIsNotLogged() {
     wireMock.stubFor(post(urlPathEqualTo("/_bulk")).atPriority(1).willReturn(aResponse()
@@ -144,7 +147,8 @@ public class ErrorResponseBodyLoggingIT {
     assertThat(stackTraceOf(failure)).doesNotContain(TOKEN);
   }
 
-  // A gateway that labels the echo as JSON makes the client try to parse it, and parse errors quote input.
+  // The Java API client decodes a 401 itself; a gateway that labels the echo as JSON makes it try to
+  // parse the body, and parse errors quote their input.
   @Test
   public void mislabelledJsonErrorBodyIsNotLogged() {
     wireMock.stubFor(post(urlPathEqualTo("/_bulk")).atPriority(1).willReturn(aResponse()
@@ -158,8 +162,8 @@ public class ErrorResponseBodyLoggingIT {
     assertNoResponseBody(Collections.singletonList(stackTraceOf(failure)));
   }
 
-  // Elasticsearch's own one-line reason is what makes a failure actionable, in the trace and in
-  // every retry warning (a parsed error has no cause, which used to read "due to null").
+  // Elasticsearch's own reason is what makes a failure actionable. The Java API client leaves a 429
+  // undecoded, so the reason is read from the JSON body for the trace and every retry warning.
   @Test
   public void parsedElasticsearchErrorKeepsItsReason() {
     wireMock.stubFor(post(urlPathEqualTo("/_bulk")).atPriority(1).willReturn(aResponse()
@@ -173,8 +177,9 @@ public class ErrorResponseBodyLoggingIT {
     ConnectException failure = failTaskOnBulkRequest();
 
     assertThat(stackTraceOf(failure))
-        .contains("type=circuit_breaking_exception, reason=Data too large");
-    assertThat(logs.messages(Level.WARN, RetryUtil.class))
+        .contains("type=circuit_breaking_exception, reason=Data too large")
+        .doesNotContain("bytes_wanted");
+    assertThat(bulkRetryWarnings())
         .isNotEmpty()
         .allSatisfy(m -> assertThat(m).contains("reason=Data too large"));
   }
@@ -189,15 +194,15 @@ public class ErrorResponseBodyLoggingIT {
 
     ConnectException failure = failTaskOnBulkRequest(props);
 
-    assertThat(failure.getCause().getCause()).isInstanceOf(SocketTimeoutException.class);
+    assertThat(stackTraceOf(failure)).contains("Caused by: java.net.SocketTimeoutException");
     assertThat(logs.rendered()).anySatisfy(e -> assertThat(e)
-        .startsWith("ERROR " + RetryUtil.class.getName())
+        .startsWith("WARN " + ElasticsearchClient.class.getName() + " Bulk request")
         .contains("Caused by: java.net.SocketTimeoutException")
         .contains("\tat "));
   }
 
-  // HLRC's version check wraps a refused connection in an ElasticsearchException although no response
-  // arrived, so nothing can be quoted and the real exception must stay attached.
+  // A refused connection has no response, so nothing can be quoted and the real exception must
+  // stay attached.
   @Test
   public void networkErrorAtStartupKeepsItsExceptionAndStackTrace() throws IOException {
     int closedPort;
@@ -211,17 +216,22 @@ public class ErrorResponseBodyLoggingIT {
         "test").close();
 
     assertThat(logs.rendered()).anySatisfy(e -> assertThat(e)
-        .startsWith("WARN " + ElasticsearchClient.class.getName() + " Failed to get ES server version")
-        .contains("Caused by: java.net.ConnectException")
+        .startsWith("WARN " + ElasticsearchClient.class.getName()
+            + " Could not read the Elasticsearch server version")
+        .contains("java.net.ConnectException")
         .contains("\tat "));
   }
 
   // Guards every path that talks to Elasticsearch, so a new log statement that attaches a client
   // exception fails here: every request gets the echo, then validation, the version probe and the
-  // task's index check all run. The positive checks prove each path logged, with the status line.
+  // task's index creation all run. The index check is a HEAD, whose response has no body, so it
+  // answers "missing" to send the task on to the PUT that creates the index. The positive checks
+  // prove each path logged, with the status line.
   @Test
   public void noPathLogsTheResponseBody() {
-    wireMock.stubFor(any(anyUrl()).atPriority(1).willReturn(gatewayEcho()));
+    wireMock.stubFor(any(anyUrl()).atPriority(2).willReturn(gatewayEcho()));
+    wireMock.stubFor(head(urlPathEqualTo("/" + TOPIC)).atPriority(1)
+        .willReturn(aResponse().withStatus(404)));
 
     List<String> validationErrors = new ArrayList<>();
     for (ConfigValue value : new Validator(props()).validate().configValues()) {
@@ -235,14 +245,24 @@ public class ErrorResponseBodyLoggingIT {
     assertThat(validationErrors).anySatisfy(e -> assertThat(e).contains(STATUS_LINE));
     assertThat(logs.rendered())
         .anySatisfy(e -> assertThat(e)
-            .startsWith("ERROR " + Validator.class.getName()
-                + " Failed to initialize Elasticsearch client due to")
+            .startsWith("WARN " + Validator.class.getName()
+                + " Could not read the Elasticsearch server version during validation")
             .contains(STATUS_LINE))
         .anySatisfy(e -> assertThat(e)
             .startsWith("WARN " + ElasticsearchClient.class.getName()
-                + " Failed to get ES server version due to")
+                + " Could not read the Elasticsearch server version")
             .contains(STATUS_LINE))
-        .anySatisfy(e -> assertThat(e).startsWith("ERROR " + RetryUtil.class.getName()));
+        .anySatisfy(e -> assertThat(e)
+            .startsWith("ERROR " + RetryUtil.class.getName() + " Failed to create index")
+            .contains(STATUS_LINE));
+  }
+
+  // Retry warnings about this test's requests only: a task from an earlier test in the same JVM can
+  // still be retrying, against a server that is gone.
+  private List<String> bulkRetryWarnings() {
+    return logs.messages(Level.WARN, BULK_RETRY_LOGGER).stream()
+        .filter(m -> m.contains("host [" + wireMock.baseUrl() + "]"))
+        .collect(Collectors.toList());
   }
 
   private static ResponseDefinitionBuilder gatewayEcho() {
